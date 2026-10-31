@@ -234,8 +234,7 @@ void RigidBody::pack(net::Message& message) const
 
 void RigidBody::unpack(net::MessageReader& messageReader)
 {
-  // Every field is read before the setters run their finite checks, so a dropped value leaves the previous one in
-  // place and the reader stays aligned for the fields after it.
+  // Each value is always read, even when its setter drops it, so the reader stays aligned.
   setVelocity(messageReader.read<glm::vec3>());
   setFriction(messageReader.read<float>());
   setDoGravity(messageReader.read<bool>());

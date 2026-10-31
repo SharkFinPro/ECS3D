@@ -5,6 +5,7 @@
 #include "ProjectSerializer.h"
 #include "TestScene.h"
 #include "WireTypes.h"
+#include "objects/components/FiniteCheck.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -108,8 +109,44 @@ namespace {
     rigidBody.unpack(reader);
   }
 
+  // The value a field holds after a payload: the payload's own when finite, otherwise the earlier one.
+  float expectedAfter(const float incoming, const float previous)
+  {
+    return std::isfinite(incoming) ? incoming : previous;
+  }
+
+  glm::vec3 expectedAfter(const glm::vec3& incoming, const glm::vec3& previous)
+  {
+    return finiteCheck::isFinite(incoming) ? incoming : previous;
+  }
+
+  void expectFieldsAfterUnpack(const char* what, const RigidBody& rigidBody, const RigidBodyFields& previous,
+                               const RigidBodyFields& incoming)
+  {
+    fixtures::expectNear(what, rigidBody.getVelocity(), expectedAfter(incoming.velocity, previous.velocity));
+    fixtures::expectNear(what, rigidBody.getAngularVelocity(),
+                         expectedAfter(incoming.angularVelocity, previous.angularVelocity));
+    EXPECT_FLOAT_EQ(rigidBody.getFriction(), expectedAfter(incoming.friction, previous.friction)) << what;
+    EXPECT_FLOAT_EQ(rigidBody.getGravity(), expectedAfter(incoming.gravity, previous.gravity)) << what;
+    EXPECT_FLOAT_EQ(rigidBody.getMass(), expectedAfter(incoming.mass, previous.mass)) << what;
+    EXPECT_EQ(rigidBody.getDoGravity(), incoming.doGravity) << what;
+  }
+
+  RigidBodyFields secondPayload()
+  {
+    RigidBodyFields next;
+    next.velocity = { 9.0f, 9.0f, 9.0f };
+    next.friction = 0.9f;
+    next.doGravity = true;
+    next.gravity = -1.0f;
+    next.angularVelocity = { 8.0f, 8.0f, 8.0f };
+    next.mass = 20.0f;
+    return next;
+  }
+
   // Applies a finite payload first - the positive control - then one whose field is non-finite, and requires
-  // every field, the corrupted one included, to keep the finite payload's value.
+  // the corrupted field to keep the earlier value while every other field takes the new payload, which also
+  // pins that the reader stayed aligned past the dropped value.
   void expectUnpackDropsNonFinite(const char* what, const std::function<void(RigidBodyFields&, float)>& corrupt)
   {
     for (const float value : nonFiniteValues)
@@ -117,35 +154,12 @@ namespace {
       RigidBody rigidBody;
       const RigidBodyFields finiteFields;
       unpackRigidBody(rigidBody, finiteFields);
-      fixtures::expectNear(what, rigidBody.getVelocity(), finiteFields.velocity);
-      EXPECT_FLOAT_EQ(rigidBody.getMass(), finiteFields.mass) << what;
+      expectFieldsAfterUnpack(what, rigidBody, finiteFields, finiteFields);
 
-      RigidBodyFields next;
-      next.velocity = { 9.0f, 9.0f, 9.0f };
-      next.friction = 0.9f;
-      next.doGravity = true;
-      next.gravity = -1.0f;
-      next.angularVelocity = { 8.0f, 8.0f, 8.0f };
-      next.mass = 20.0f;
+      RigidBodyFields next = secondPayload();
       corrupt(next, value);
       unpackRigidBody(rigidBody, next);
-
-      // The corrupted field keeps the earlier value; every other field takes the new payload, which also pins
-      // that the reader stayed aligned past the dropped value.
-      const bool velocityDropped = !std::isfinite(next.velocity.x) || !std::isfinite(next.velocity.y)
-        || !std::isfinite(next.velocity.z);
-      const bool angularDropped = !std::isfinite(next.angularVelocity.x) || !std::isfinite(next.angularVelocity.y)
-        || !std::isfinite(next.angularVelocity.z);
-
-      fixtures::expectNear(what, rigidBody.getVelocity(), velocityDropped ? finiteFields.velocity : next.velocity);
-      fixtures::expectNear(what, rigidBody.getAngularVelocity(),
-                           angularDropped ? finiteFields.angularVelocity : next.angularVelocity);
-      EXPECT_FLOAT_EQ(rigidBody.getFriction(), std::isfinite(next.friction) ? next.friction : finiteFields.friction)
-        << what;
-      EXPECT_FLOAT_EQ(rigidBody.getGravity(), std::isfinite(next.gravity) ? next.gravity : finiteFields.gravity)
-        << what;
-      EXPECT_FLOAT_EQ(rigidBody.getMass(), std::isfinite(next.mass) ? next.mass : finiteFields.mass) << what;
-      EXPECT_EQ(rigidBody.getDoGravity(), next.doGravity) << what;
+      expectFieldsAfterUnpack(what, rigidBody, finiteFields, next);
     }
   }
 
@@ -306,27 +320,76 @@ TEST(NonFiniteValues, RigidBodyLoadFromJsonDropsNonFiniteInsteadOfThrowing)
 {
   RigidBody rigidBody;
   rigidBody.setVelocity({ 1.0f, 2.0f, 3.0f });
+  rigidBody.setAngularVelocity({ 4.0f, 5.0f, 6.0f });
+  rigidBody.setFriction(0.25f);
   rigidBody.setGravity(-3.0f);
+  rigidBody.setMass(8.0f);
+  rigidBody.setDoGravity(false);
 
-  // A non-finite float saved as json null.
+  // A non-finite float saved as json null: one element of each vec3 and every scalar.
   const nlohmann::json data = {
     { "type", "RigidBody" },
     { "velocity", { nullptr, 5.0f, 6.0f } },
-    { "angularVelocity", { 0.0f, 0.0f, 4.0f } },
-    { "friction", 0.75f },
+    { "angularVelocity", { 0.0f, nullptr, 4.0f } },
+    { "friction", nullptr },
     { "doGravity", true },
     { "gravity", nullptr },
-    { "mass", 3.0f }
+    { "mass", nullptr }
   };
 
   EXPECT_NO_THROW(rigidBody.loadFromJSON(data));
 
   fixtures::expectNear("velocity", rigidBody.getVelocity(), glm::vec3(1.0f, 2.0f, 3.0f));
+  fixtures::expectNear("angular velocity", rigidBody.getAngularVelocity(), glm::vec3(4.0f, 5.0f, 6.0f));
+  EXPECT_FLOAT_EQ(rigidBody.getFriction(), 0.25f);
   EXPECT_FLOAT_EQ(rigidBody.getGravity(), -3.0f);
-  // Positive control: the finite fields of the same document were applied.
+  EXPECT_FLOAT_EQ(rigidBody.getMass(), 8.0f);
+  // Positive control: the finite field of the same document was applied.
+  EXPECT_TRUE(rigidBody.getDoGravity());
+
+  const nlohmann::json finiteData = {
+    { "type", "RigidBody" },
+    { "velocity", { 9.0f, 5.0f, 6.0f } },
+    { "angularVelocity", { 0.0f, 7.0f, 4.0f } },
+    { "friction", 0.75f },
+    { "doGravity", true },
+    { "gravity", -1.5f },
+    { "mass", 3.0f }
+  };
+
+  rigidBody.loadFromJSON(finiteData);
+
+  fixtures::expectNear("velocity", rigidBody.getVelocity(), glm::vec3(9.0f, 5.0f, 6.0f));
+  fixtures::expectNear("angular velocity", rigidBody.getAngularVelocity(), glm::vec3(0.0f, 7.0f, 4.0f));
   EXPECT_FLOAT_EQ(rigidBody.getFriction(), 0.75f);
+  EXPECT_FLOAT_EQ(rigidBody.getGravity(), -1.5f);
   EXPECT_FLOAT_EQ(rigidBody.getMass(), 3.0f);
-  fixtures::expectNear("angular velocity", rigidBody.getAngularVelocity(), glm::vec3(0.0f, 0.0f, 4.0f));
+}
+
+TEST(NonFiniteValues, RigidBodyLoadFromJsonStillThrowsOnAWrongShape)
+{
+  const nlohmann::json valid = {
+    { "type", "RigidBody" },
+    { "velocity", { 1.0f, 2.0f, 3.0f } },
+    { "angularVelocity", { 0.0f, 0.0f, 0.0f } },
+    { "friction", 0.5f },
+    { "doGravity", true },
+    { "gravity", -9.81f },
+    { "mass", 10.0f }
+  };
+
+  RigidBody control;
+  EXPECT_NO_THROW(control.loadFromJSON(valid));
+
+  auto notAnArray = valid;
+  notAnArray["velocity"] = 5.0f;
+  RigidBody shaped;
+  EXPECT_THROW(shaped.loadFromJSON(notAnArray), nlohmann::json::exception);
+
+  auto missingKey = valid;
+  missingKey.erase("mass");
+  RigidBody missing;
+  EXPECT_THROW(missing.loadFromJSON(missingKey), nlohmann::json::exception);
 }
 
 TEST(NonFiniteValues, CameraSettersIgnoreThem)
