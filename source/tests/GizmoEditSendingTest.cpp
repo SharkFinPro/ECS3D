@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include <objects/Object.h>
 #include <objects/components/Transform.h>
+#include <cstddef>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -19,6 +20,8 @@ namespace {
     GizmoEditSending sending;
 
     std::vector<nlohmann::json> perFrame;
+    std::vector<uuids::uuid> frameTargets;
+    std::vector<const Component*> frameComponents;
     std::vector<std::pair<nlohmann::json, nlohmann::json>> commits;
     std::vector<uuids::uuid> committedTargets;
 
@@ -30,8 +33,10 @@ namespace {
       object = addObject(scene, "Object");
       transform = fixtures::transformOf(object);
 
-      sending.setEditCallback([this](const uuids::uuid&, const std::shared_ptr<Component>&)
+      sending.setEditCallback([this](const uuids::uuid& id, const std::shared_ptr<Component>& component)
       {
+        frameTargets.push_back(id);
+        frameComponents.push_back(component.get());
         perFrame.push_back(transform->serialize());
       });
       sending.setEditCommittedCallback([this](const uuids::uuid& target, const nlohmann::json& before,
@@ -47,17 +52,21 @@ namespace {
       return object->getUUID();
     }
 
-    void frame(const glm::vec3& position, const bool started = false, const bool finished = false)
+    void framePose(const gizmo::Pose& pose, const bool started = false, const bool finished = false)
     {
       gizmo::Frame f;
       f.dragStarted = started;
       f.dragFinished = finished;
-
-      gizmo::Pose pose;
-      pose.position = position;
       f.local = pose;
 
       sending.apply(f, target(), transform);
+    }
+
+    void frame(const glm::vec3& position, const bool started = false, const bool finished = false)
+    {
+      gizmo::Pose pose;
+      pose.position = position;
+      framePose(pose, started, finished);
     }
   };
 }
@@ -183,4 +192,60 @@ TEST(GizmoEditSendingTest, AbandoningWithTheTransformGoneCommitsNothing)
 
   EXPECT_TRUE(rig.commits.empty());
   EXPECT_FALSE(rig.sending.dragTarget().has_value());
+}
+
+TEST(GizmoEditSendingTest, ARotationOnlyDragSendsFrameEditsAndACommit)
+{
+  Rig rig;
+  const auto beforeJson = rig.transform->serialize();
+
+  gizmo::Pose pose;
+  pose.rotation = glm::vec3(0.0f, 30.0f, 0.0f);
+  rig.framePose(pose, true);
+  pose.rotation = glm::vec3(0.0f, 60.0f, 0.0f);
+  rig.framePose(pose, false, true);
+
+  EXPECT_EQ(rig.perFrame.size(), 2u);
+  ASSERT_EQ(rig.commits.size(), 1u);
+  EXPECT_EQ(rig.commits[0].first, beforeJson);
+  EXPECT_EQ(rig.commits[0].second, rig.transform->serialize());
+  EXPECT_NE(rig.commits[0].first, rig.commits[0].second);
+  fixtures::expectNear(rig.transform->getLocalRotation(), glm::vec3(0.0f, 60.0f, 0.0f));
+  fixtures::expectNear(rig.transform->getLocalPosition(), glm::vec3(0.0f));
+}
+
+TEST(GizmoEditSendingTest, AScaleOnlyDragSendsFrameEditsAndACommit)
+{
+  Rig rig;
+  const auto beforeJson = rig.transform->serialize();
+
+  gizmo::Pose pose;
+  pose.scale = glm::vec3(1.5f, 1.0f, 1.0f);
+  rig.framePose(pose, true);
+  pose.scale = glm::vec3(2.0f, 1.0f, 1.0f);
+  rig.framePose(pose, false, true);
+
+  EXPECT_EQ(rig.perFrame.size(), 2u);
+  ASSERT_EQ(rig.commits.size(), 1u);
+  EXPECT_EQ(rig.commits[0].first, beforeJson);
+  EXPECT_EQ(rig.commits[0].second, rig.transform->serialize());
+  EXPECT_NE(rig.commits[0].first, rig.commits[0].second);
+  fixtures::expectNear(rig.transform->getLocalScale(), glm::vec3(2.0f, 1.0f, 1.0f));
+  fixtures::expectNear(rig.transform->getLocalPosition(), glm::vec3(0.0f));
+}
+
+TEST(GizmoEditSendingTest, FrameEditsCarryTheTargetAndTheTransformComponent)
+{
+  Rig rig;
+
+  rig.frame(glm::vec3(1.0f, 0.0f, 0.0f), true);
+  rig.frame(glm::vec3(2.0f, 0.0f, 0.0f), false, true);
+
+  ASSERT_EQ(rig.frameTargets.size(), 2u);
+  ASSERT_EQ(rig.frameComponents.size(), 2u);
+  for (size_t i = 0; i < rig.frameTargets.size(); ++i)
+  {
+    EXPECT_EQ(rig.frameTargets[i], rig.target());
+    EXPECT_EQ(rig.frameComponents[i], rig.transform.get());
+  }
 }

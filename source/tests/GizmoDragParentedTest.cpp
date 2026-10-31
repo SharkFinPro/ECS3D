@@ -98,6 +98,37 @@ TEST(GizmoDragTest, TranslateUnderAScaledParentDividesTheWorldDeltaByTheScale)
   EXPECT_NEAR(frame.local->position.y, 0.0f, 1e-5f);
 }
 
+TEST(GizmoDragTest, TranslateUnderARotatedNonUniformlyScaledParentUnrotatesBeforeDividingByScale)
+{
+  gizmo::ParentFrame parent;
+  parent.orientation = glm::quat(glm::radians(glm::vec3(0.0f, 90.0f, 0.0f)));
+  parent.scale = glm::vec3(2.0f, 1.0f, 3.0f);
+
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::translate;
+  gizmo::Pose local;
+  local.position = glm::vec3(1.0f, 0.0f, 0.0f);
+  placeChild(f, parent, local);
+
+  const glm::vec3 startWorld = f.input.world.position;
+  fixtures::expectNear(startWorld, glm::vec3(0.0f, 0.0f, -2.0f), 1e-4f);
+
+  const auto initial = gizmo::update(f.state, f.input);
+  const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+
+  const auto frame = dragWorldXArrow(f, xTipScreen);
+  ASSERT_TRUE(frame.local.has_value());
+
+  const glm::vec3 endWorld = composeWorldPosition(parent, frame.local->position);
+  const float worldDelta = endWorld.x - startWorld.x;
+  EXPECT_GT(worldDelta, 0.01f);
+  EXPECT_NEAR(endWorld.y, startWorld.y, 1e-4f);
+  EXPECT_NEAR(endWorld.z, startWorld.z, 1e-4f);
+
+  // Un-rotated first, the world X delta lies on the parent's local Z axis and divides by that axis's scale, 3.
+  fixtures::expectNear(frame.local->position, glm::vec3(1.0f, 0.0f, worldDelta / 3.0f), 1e-4f);
+}
+
 TEST(GizmoDragTest, TranslateKeepsTheLocalComponentWhereTheParentScaleIsZero)
 {
   gizmo::ParentFrame parent;

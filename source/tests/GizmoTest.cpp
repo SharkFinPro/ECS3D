@@ -51,6 +51,27 @@ TEST(GizmoTest, MouseRayRoundTripsThroughProject)
   EXPECT_NEAR(projected->y, pixel.y, 0.5f);
 }
 
+TEST(GizmoTest, ProjectAndMouseRayHonorTheViewportOrigin)
+{
+  GizmoFixture f;
+  f.view.viewport = gizmo::Rect{ 300.0f, 200.0f, 800.0f, 600.0f };
+
+  const auto center = gizmo::project(f.view, glm::vec3(0.0f));
+  ASSERT_TRUE(center.has_value());
+  EXPECT_NEAR(center->x, 700.0f, 0.5f);
+  EXPECT_NEAR(center->y, 500.0f, 0.5f);
+
+  const auto ray = gizmo::mouseRay(f.view, glm::vec2(700.0f, 500.0f));
+  fixtures::expectNear(ray.direction, glm::vec3(0.0f, 0.0f, -1.0f), 1e-3f);
+
+  const glm::vec2 pixel(850.0f, 400.0f);
+  const auto offCenter = gizmo::mouseRay(f.view, pixel);
+  const auto projected = gizmo::project(f.view, offCenter.origin + offCenter.direction * 10.0f);
+  ASSERT_TRUE(projected.has_value());
+  EXPECT_NEAR(projected->x, pixel.x, 0.5f);
+  EXPECT_NEAR(projected->y, pixel.y, 0.5f);
+}
+
 TEST(GizmoTest, HandleScreenLengthIsConstantAcrossDistance)
 {
   const auto measure = [](const float distance) {
@@ -97,6 +118,53 @@ TEST(GizmoTest, HoverFindsTheNearestHandle)
   f.input.mouse = *gizmo::project(f.view, xTip);
   f.input.mouseOverView = false;
   EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::none);
+}
+
+TEST(GizmoTest, ShaftHoverReachesSevenPixelsButNotNine)
+{
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::translate;
+
+  const auto initial = gizmo::update(f.state, f.input);
+  const gizmo::Line* shaft = findLine(initial, gizmo::Handle::x);
+  ASSERT_NE(shaft, nullptr);
+  const glm::vec2 midpoint = (*gizmo::project(f.view, shaft->a) + *gizmo::project(f.view, shaft->b)) * 0.5f;
+
+  f.input.mouse = midpoint + glm::vec2(0.0f, 7.0f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::x);
+
+  f.input.mouse = midpoint + glm::vec2(0.0f, 9.0f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::none);
+}
+
+TEST(GizmoTest, UniformHandleHoverReachesFivePixelsButNotSeven)
+{
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::scale;
+  const glm::vec2 center = *gizmo::project(f.view, glm::vec3(0.0f));
+
+  // Offsets toward the lower left keep the X and Y shafts out of range, so only the uniform box decides.
+  f.input.mouse = center + glm::vec2(-5.0f, 5.0f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::uniform);
+
+  f.input.mouse = center + glm::vec2(-7.0f, 7.0f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::none);
+}
+
+TEST(GizmoTest, AnEdgeOnRingTieGoesToTheFaceOnRing)
+{
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::rotate;
+  const glm::vec2 center = *gizmo::project(f.view, glm::vec3(0.0f));
+
+  // The X ring is edge-on here (a vertical line through the center) and the Z ring is face-on; the top of
+  // the Z circle lies on that line. Positive control first: below the Z circle only the X ring is in reach.
+  f.input.mouse = center + glm::vec2(0.0f, 50.0f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::x);
+
+  // Here the X ring is 0.3 px closer than the Z ring, inside the tie epsilon, so reliability decides.
+  f.input.mouse = center + glm::vec2(0.0f, -99.7f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::z);
 }
 
 TEST(GizmoTest, DegenerateViewportEmitsNothingAndNeverHovers)
