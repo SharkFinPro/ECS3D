@@ -51,8 +51,8 @@ struct AssetRecord {
 // through serialize/pack, exactly like Script::m_fields.
 class AssetRegistry {
 public:
-  // First-wins: re-registering an existing path keeps the original record. The one exception is a Prefab,
-  // whose body is updated in place (keeping its uuid) - see registerAsset.
+  // First-wins: re-registering an existing path or an existing uuid keeps the original record. The one
+  // exception is a Prefab, whose body is updated in place (keeping its uuid) - see registerAsset.
   void registerAsset(const AssetRecord& record);
 
   // Set a record's display-name override (a display-only rename; the file on disk and `path` - the
