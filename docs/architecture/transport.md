@@ -22,8 +22,9 @@ TCP backs that with a per-read progress timeout (`BodyReadTimeoutMs`, reset on e
 covering the whole frame) so a body that stalls outright still drops just that connection (applied only when the stream `CanTimeout`;
 otherwise the deadline alone bounds it). The handshake, the one
 message read before a peer is authorized, gets the much smaller `MaxHandshakeBytes`, and both backends bound the whole
-pre-authorization stage (for WebSocket, the upgrade request and the first message) with one `HandshakeTimeoutMs`
-deadline, so a silent or trickling peer is dropped. Oversize *outbound*
+pre-authorization stage with one `HandshakeTimeoutMs` deadline, so a silent or trickling peer is dropped. For
+WebSocket that stage is the upgrade request and the first message, and each blocking read is capped to the time
+left; TCP checks the deadline between reads, so a peer can hold it up to one read timeout past the deadline. Oversize *outbound*
 messages are refused at the sender, where there is something useful to say about them. Object nesting has
 its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
 `Object::unpack`/`loadChildren` and `ObjectManager::reassignUUIDs` will recurse into a wire or JSON

@@ -358,7 +358,7 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
 
     // One byte every 20 ms never leaves a read idle for the 500 ms ReceiveTimeout, and the whole request
     // would take over seven seconds. Only the deadline over the whole stage can end it sooner.
-    var writer = Task.Run(() =>
+    _ = Task.Run(() =>
     {
       var stream = trickler.GetStream();
       try
@@ -385,6 +385,22 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   }
 
   [Fact]
+  public void Handshake_DropsAPeerThatGoesSilentJustBeforeTheDeadlineWithoutWaitingAnotherTimeout()
+  {
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 2000 };
+    var port = Start(server);
+
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var peer = ConnectTcp(port);
+    Thread.Sleep(1500);
+    peer.GetStream().WriteByte((byte)'G');
+
+    // The deadline lands at 2000 ms. A read that kept the full 2000 ms timeout would only give up near 3500 ms.
+    Assert.True(ServerClosesWithin(peer, 4000), "the peer was not dropped.");
+    Assert.True(stopwatch.ElapsedMilliseconds < 2900, $"dropped after {stopwatch.ElapsedMilliseconds} ms.");
+  }
+
+  [Fact]
   public void Handshake_DropsAPeerThatUpgradesButNeverSendsTheHandshakeMessage()
   {
     var server = new WebSocketBackend { HandshakeTimeoutMs = 300 };
@@ -402,14 +418,14 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   [Fact]
   public void Handshake_LeavesAnAdmittedConnectionOpenPastTheTimeout()
   {
-    var server = new WebSocketBackend { HandshakeTimeoutMs = 1000 };
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 3000 };
     var port = Start(server);
 
     var client = Connect(port, RolePlayer);
     WaitFor(() => Authorized().Length == 1, "the player to be authorized");
     WaitFor(() => server.ServerConnectionCount() == 1, "the player to be listed");
 
-    Thread.Sleep(1600);
+    Thread.Sleep(3500);
 
     Assert.Equal(1, server.ServerConnectionCount());
     Assert.Equal(0, TransportRecorder.ClientDisconnects);

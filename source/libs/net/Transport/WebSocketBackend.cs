@@ -374,11 +374,10 @@ internal sealed class WebSocketBackend : TransportBackend
       tcp.ReceiveBufferSize = SocketBufferSize;
       var stream = tcp.GetStream();
 
-      // One deadline bounds the upgrade request and the first message together. ReceiveTimeout unblocks a
-      // blocking read against a peer that sends nothing, and the deadline caps the total against a peer that
-      // trickles bytes just fast enough that no single read times out.
+      // One deadline bounds the upgrade request and the first message together. ReadHttpHeaders caps each
+      // blocking read to the time left, so a peer that sends nothing, or trickles bytes just fast enough
+      // that no single read times out, is dropped at the deadline rather than a read timeout later.
       var handshakeTimeoutMs = HandshakeTimeoutMs;
-      tcp.ReceiveTimeout = handshakeTimeoutMs;
       var handshakeDeadline = Environment.TickCount64 + handshakeTimeoutMs;
 
       // Upgrade the raw TCP connection to WebSocket, then let the BCL handle framing from here on.
@@ -755,9 +754,20 @@ internal sealed class WebSocketBackend : TransportBackend
     {
       // Checked before each read: a per-read timeout alone never trips on a peer that sends one byte just
       // inside it each time.
-      if (deadline.HasValue && Environment.TickCount64 >= deadline.Value)
+      if (deadline.HasValue)
       {
-        return null;
+        var remaining = deadline.Value - Environment.TickCount64;
+        if (remaining <= 0)
+        {
+          return null;
+        }
+
+        // The blocking read itself must not outlast the deadline either, or a peer that sends one byte just
+        // before it and goes silent holds the upgrade for up to a whole extra timeout.
+        if (stream.CanTimeout)
+        {
+          stream.ReadTimeout = (int)Math.Min(remaining, int.MaxValue);
+        }
       }
 
       var n = stream.Read(buffer, 0, 1);
