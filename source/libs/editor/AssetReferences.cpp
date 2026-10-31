@@ -3,6 +3,7 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <objects/components/Script.h>
 #include <scenes/SceneAsset.h>
 #include <scenes/SceneManager.h>
 #include <nlohmann/json.hpp>
@@ -75,6 +76,14 @@ int countAssetReferences(const SceneManager& sceneManager, const AssetRegistry& 
 
   for (const auto& [sceneUUID, scene] : sceneManager.getScenes())
   {
+    for (const auto& script : scene->getScripts())
+    {
+      if (script->serialize().dump().find(uuidString) != std::string::npos)
+      {
+        ++count;
+      }
+    }
+
     const auto objectManager = scene->getObjectManager();
     if (!objectManager)
     {

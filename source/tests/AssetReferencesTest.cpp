@@ -252,3 +252,39 @@ TEST_F(AssetReferencesTest, ScriptAndComponentReferencesOnOneObjectCountOnce)
 
   EXPECT_EQ(count(modelUUID), 4);
 }
+
+TEST_F(AssetReferencesTest, CountsAReferenceHeldByTheSecondScriptOfAnObject)
+{
+  const auto scene = addScene("11111111-1111-1111-1111-111111111111", "Scene");
+  auto object = std::make_shared<Object>("Two");
+  auto first = std::make_shared<Script>("First");
+  first->setFields(nlohmann::json::array({
+    { { "name", "speed" }, { "type", "float" }, { "value", 1.0 } }
+  }));
+  object->addComponent(first);
+  addScriptWithAssetField(object, modelUUID);
+  scene->getObjectManager()->addObject(object);
+
+  EXPECT_EQ(count(modelUUID), 1);
+  EXPECT_EQ(count(unusedUUID), 0);
+}
+
+TEST_F(AssetReferencesTest, CountsEachSceneScriptHoldingTheAsset)
+{
+  const auto scene = addScene("11111111-1111-1111-1111-111111111111", "Scene");
+  const auto makeSceneScript = [](const std::string& className, const uuids::uuid& asset)
+  {
+    auto script = std::make_shared<Script>(className);
+    script->setFields(nlohmann::json::array({
+      { { "name", "model" }, { "type", "string" }, { "asset", "model" }, { "value", uuids::to_string(asset) } }
+    }));
+    return script;
+  };
+  EXPECT_TRUE(scene->addScript(makeSceneScript("Alpha", modelUUID)));
+  EXPECT_TRUE(scene->addScript(makeSceneScript("Beta", modelUUID)));
+  EXPECT_TRUE(scene->addScript(makeSceneScript("Gamma", textureUUID)));
+
+  EXPECT_EQ(count(modelUUID), 2);
+  EXPECT_EQ(count(textureUUID), 1);
+  EXPECT_EQ(count(unusedUUID), 0);
+}

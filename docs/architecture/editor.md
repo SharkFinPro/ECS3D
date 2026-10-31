@@ -30,7 +30,7 @@ Component and the name field are left out of this view for now, since wiring the
 object they act on) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a
 display-name rename field (a scene's name field commits once, when editing ends) and a delete button with a
 reference-count warning for the flat file assets (it counts objects whose components or script fields mention the
-uuid, in scenes and prefab bodies); the
+uuid, in scenes and prefab bodies, plus scene scripts); the
 **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused
 `ObjectInspector`, see [prefabs.md](prefabs.md)), `EditorSelection` (shared kind-tagged selection slot holding
 an ordered set of uuids rather than a single one, `Selection.h` - the back of the list is the primary, what the
