@@ -69,6 +69,16 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
     }
   }
 
+  // A uuid owns one record: a repeat under a new path is dropped whole, or its path key would outlive the
+  // record and block that path for any other asset after removeAsset.
+  if (const auto existing = m_assets.find(record.uuid); existing != m_assets.end())
+  {
+    Log::debug(LogCategory::assets, "Dropped record '" + record.path + "': uuid is already registered from '"
+      + existing->second.path + "'.");
+
+    return;
+  }
+
   m_assets.emplace(record.uuid, record);
 
   if (!record.path.empty())
