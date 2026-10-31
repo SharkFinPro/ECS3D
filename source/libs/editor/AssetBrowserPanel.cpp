@@ -1,4 +1,5 @@
 #include "AssetBrowserPanel.h"
+#include "AssetCreateFlow.h"
 #include "AssetDisplay.h"
 #include "AssetDragDrop.h"
 #include "AssetNaming.h"
@@ -64,31 +65,21 @@ namespace {
     return generator();
   }
 
-  // New scripts go in the project's own scripts/ folder; a project with no folder keeps the working dir's.
-  [[nodiscard]] std::filesystem::path scriptDirectory(const std::filesystem::path& projectRoot)
-  {
-    return projectRoot.empty() ? std::filesystem::path("scripts/UserScripts") : projectRoot / "scripts";
-  }
-
   [[nodiscard]] bool scriptFileExists(const std::filesystem::path& projectRoot, const std::string& name)
   {
     std::error_code ec;
-    const bool exists = std::filesystem::exists(scriptDirectory(projectRoot) / (name + ".cs"), ec);
+    const bool exists = std::filesystem::exists(AssetCreateFlow::scriptDirectory(projectRoot) / (name + ".cs"), ec);
     return !ec && exists;
-  }
-
-  [[nodiscard]] bool nameIsValid(const std::string& name)
-  {
-    return !name.empty() && std::ranges::none_of(name, [](const char c) {
-      return c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|';
-    });
   }
 }
 
 AssetBrowserPanel::AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache)
   : m_assetRegistry(assetRegistry),
-    m_assetCache(std::move(assetCache))
+    m_assetCache(std::move(assetCache)),
+    m_flow(std::make_unique<AssetCreateFlow>())
 {}
+
+AssetBrowserPanel::~AssetBrowserPanel() = default;
 
 void AssetBrowserPanel::setLoadSceneCallback(LoadSceneCallback callback)
 {
@@ -335,10 +326,9 @@ void AssetBrowserPanel::displayGui()
 
   // Open + draw the create-asset modal at the top level (the menu only flags it). Opening it from
   // inside the main menu bar is unreliable.
-  if (m_openCreatePopup)
+  if (m_flow->takeOpenRequest())
   {
     ImGui::OpenPopup("Create Asset");
-    m_openCreatePopup = false;
   }
 
   displayCreateAssetPopup();
@@ -418,14 +408,9 @@ void AssetBrowserPanel::displayMenuWidget()
 
 void AssetBrowserPanel::displayCreateItems()
 {
-  const auto beginCreate = [&](const PendingAsset::Type type, const std::string& source,
-                               const std::string& defaultName) {
-    m_pending = {};
-    m_pending.type = type;
-    m_pending.sourcePath = source;
-    std::strncpy(m_pending.name, defaultName.c_str(), sizeof(m_pending.name) - 1);
-    m_createError.clear();
-    m_openCreatePopup = true;
+  const auto beginCreate = [this](const AssetCreateFlow::Type type, const std::string& source,
+                                  const std::string& defaultName) {
+    m_flow->begin(type, source, defaultName);
   };
 
   auto labeledSeparator = [](const char* label)
@@ -445,7 +430,7 @@ void AssetBrowserPanel::displayCreateItems()
   {
     if (const auto picked = pickFile({ { "3D Models", "glb,gltf,obj,fbx" } }))
     {
-      beginCreate(PendingAsset::Type::Model, *picked, std::filesystem::path(*picked).stem().string());
+      beginCreate(AssetCreateFlow::Type::Model, *picked, std::filesystem::path(*picked).stem().string());
     }
   }
 
@@ -453,7 +438,7 @@ void AssetBrowserPanel::displayCreateItems()
   {
     if (const auto picked = pickFile({ { "Images", "png,jpg,jpeg,tga,bmp" } }))
     {
-      beginCreate(PendingAsset::Type::Texture, *picked, std::filesystem::path(*picked).stem().string());
+      beginCreate(AssetCreateFlow::Type::Texture, *picked, std::filesystem::path(*picked).stem().string());
     }
   }
 
@@ -461,17 +446,17 @@ void AssetBrowserPanel::displayCreateItems()
 
   if (ImGui::MenuItem("New Scene"))
   {
-    beginCreate(PendingAsset::Type::Scene, "", assetNaming::uniqueSceneName(*m_assetRegistry, "New Scene"));
+    beginCreate(AssetCreateFlow::Type::Scene, "", assetNaming::uniqueSceneName(*m_assetRegistry, "New Scene"));
   }
 
   if (ImGui::MenuItem("New Prefab"))
   {
-    beginCreate(PendingAsset::Type::Prefab, "", assetNaming::uniquePrefabName(*m_assetRegistry, "New Prefab"));
+    beginCreate(AssetCreateFlow::Type::Prefab, "", assetNaming::uniquePrefabName(*m_assetRegistry, "New Prefab"));
   }
 
   if (ImGui::MenuItem("New Script"))
   {
-    beginCreate(PendingAsset::Type::Script, "",
+    beginCreate(AssetCreateFlow::Type::Script, "",
                 assetNaming::uniqueScriptName(*m_assetRegistry, "NewScript", [this](const std::string& name) {
                   return scriptFileExists(m_assetCache->getProjectRoot(), name);
                 }));
@@ -490,10 +475,12 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   // Reserve a consistent width so the auto-resized popup doesn't jump between sources/names.
   ImGui::Dummy(ImVec2(320.0f, 0.0f));
 
-  if (!m_pending.sourcePath.empty())
+  auto& pending = m_flow->pending();
+
+  if (!pending.sourcePath.empty())
   {
     gc::rowLabel("Source");
-    ImGui::TextColored(theme::t1, "%s", std::filesystem::path(m_pending.sourcePath).filename().string().c_str());
+    ImGui::TextColored(theme::t1, "%s", std::filesystem::path(pending.sourcePath).filename().string().c_str());
   }
 
   gc::rowLabel("Name");
@@ -502,11 +489,11 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   {
     ImGui::SetKeyboardFocusHere();
   }
-  ImGui::InputText("##name", m_pending.name, sizeof(m_pending.name), ImGuiInputTextFlags_AutoSelectAll);
+  ImGui::InputText("##name", pending.name, sizeof(pending.name), ImGuiInputTextFlags_AutoSelectAll);
 
-  if (!m_createError.empty())
+  if (!m_flow->error().empty())
   {
-    ImGui::TextColored(theme::danger, "%s", m_createError.c_str());
+    ImGui::TextColored(theme::danger, "%s", m_flow->error().c_str());
   }
 
   ImGui::Spacing();
@@ -520,22 +507,11 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
   if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false))
   {
-    if (!nameIsValid(m_pending.name))
-    {
-      m_createError = "Enter a valid name (no path characters).";
-    }
-    else if (m_pending.type == PendingAsset::Type::Script &&
-             (assetNaming::isNameTaken(*m_assetRegistry, AssetType::Script, m_pending.name) ||
-              scriptFileExists(m_assetCache->getProjectRoot(), m_pending.name)))
-    {
-      m_createError = std::string("A script named ") + m_pending.name + " already exists.";
-    }
-    else if ((m_pending.type == PendingAsset::Type::Prefab || m_pending.type == PendingAsset::Type::Scene) &&
-             assetNaming::isNameTaken(*m_assetRegistry, AssetType::Prefab, m_pending.name))
-    {
-      m_createError = std::string("A scene or prefab named ") + m_pending.name + " already exists.";
-    }
-    else
+    const auto fileExists = [this](const std::string& name) {
+      return scriptFileExists(m_assetCache->getProjectRoot(), name);
+    };
+
+    if (m_flow->validate(*m_assetRegistry, fileExists))
     {
       try
       {
@@ -544,7 +520,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
       }
       catch (const std::exception& e)
       {
-        m_createError = e.what();
+        m_flow->commitFailed(e.what());
       }
 
       // Outside the boundary: the asset is created and sent by now, so a failure here is not a failed
@@ -557,7 +533,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   ImGui::SameLine();
   if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
   {
-    m_pending = {};
+    m_flow->cancel();
     ImGui::CloseCurrentPopup();
   }
 
@@ -571,25 +547,26 @@ void AssetBrowserPanel::commitAsset()
     return;
   }
 
-  const bool writesFiles = m_pending.type == PendingAsset::Type::Model ||
-                           m_pending.type == PendingAsset::Type::Texture ||
-                           m_pending.type == PendingAsset::Type::Script;
-  if (writesFiles && m_blockWrites && m_blockWrites())
+  const auto type = m_flow->pending().type;
+  if (AssetCreateFlow::writesFiles(type) && m_blockWrites && m_blockWrites())
   {
-    m_pending = {};
+    m_flow->cancel();
     return;
   }
 
-  const std::string name = m_pending.name;
+  if (type == AssetCreateFlow::Type::None)
+  {
+    return;
+  }
+
+  const std::string name = m_flow->pending().name;
   const auto assetUUID = newUUID();
-  const std::string uuid = uuids::to_string(assetUUID);
+  const auto& root = m_assetCache->getProjectRoot();
 
   // Copy an imported file into the project folder's assets dir so the GpuAssetCache can load it; then send
   // the registry record to the authoritative server. A project with no folder yet imports into the working
   // dir (the exe dir), as before project folders.
   const auto importFile = [&](const ImportKind kind) {
-    const auto& root = m_assetCache->getProjectRoot();
-
     static bool warnedNoFolder = false;
     if (root.empty() && !warnedNoFolder)
     {
@@ -598,39 +575,30 @@ void AssetBrowserPanel::commitAsset()
         "The project has no folder yet: imports are copied next to the editor, not into a project. Save it to a folder first.");
     }
 
-    const auto destination = importDestination(root, m_pending.sourcePath, name, kind);
+    const auto& sourcePath = m_flow->pending().sourcePath;
+    const auto destination = importDestination(root, sourcePath, name, kind);
     std::filesystem::create_directories(destination.absolute.parent_path());
-    std::filesystem::copy_file(m_pending.sourcePath, destination.absolute,
-                               std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(sourcePath, destination.absolute, std::filesystem::copy_options::overwrite_existing);
 
     return destination.relative;
   };
 
-  nlohmann::json addAsset;
+  std::string importedPath;
 
-  switch (m_pending.type)
+  switch (type)
   {
-    case PendingAsset::Type::Model:
-      addAsset = { { "assetType", "model" }, { "uuid", uuid }, { "path", importFile(ImportKind::model) } };
+    case AssetCreateFlow::Type::Model:
+      importedPath = importFile(ImportKind::model);
       break;
-    case PendingAsset::Type::Texture:
-      addAsset = { { "assetType", "texture" }, { "uuid", uuid }, { "path", importFile(ImportKind::texture) } };
+    case AssetCreateFlow::Type::Texture:
+      importedPath = importFile(ImportKind::texture);
       break;
-    case PendingAsset::Type::Scene:
-      addAsset = { { "assetType", "scene" }, { "uuid", uuid }, { "name", name } };
-      break;
-    case PendingAsset::Type::Prefab:
-      addAsset = { { "assetType", "prefab" }, { "uuid", uuid }, { "name", name },
-                   { "body", assetNaming::emptyPrefabBody(name, uuids::to_string(newUUID())) } };
-      break;
-    case PendingAsset::Type::Script:
+    case AssetCreateFlow::Type::Script:
     {
-      const auto& root = m_assetCache->getProjectRoot();
-      const auto directory = scriptDirectory(root);
+      const auto directory = AssetCreateFlow::scriptDirectory(root);
       std::filesystem::create_directories(directory);
-      const std::filesystem::path path = directory / (name + ".cs");
 
-      std::ofstream out(path);
+      std::ofstream out(directory / (name + ".cs"));
       out <<
         "using System;\n"
         "using System.Numerics;\n"
@@ -642,38 +610,25 @@ void AssetBrowserPanel::commitAsset()
         "    public override void variableUpdate() {}\n"
         "    public override void stop() {}\n"
         "}\n";
-
-      addAsset = { { "assetType", "script" }, { "uuid", uuid }, { "path", (root.empty() ? path : std::filesystem::path("scripts") / (name + ".cs")).generic_string() },
-                   { "className", name } };
       break;
     }
     default:
-      return;
+      break;
   }
 
-  m_onAddAsset(addAsset);
-
-  // A newly created scene becomes the active one, but not from in here: this runs inside the create
-  // popup's error boundary, and a throw from the load would leave a created-and-sent scene looking like
-  // a failed create - with the form still open, so pressing Create again would mint a second one. The
-  // caller fires it once the commit can no longer fail.
-  if (m_pending.type == PendingAsset::Type::Scene)
-  {
-    m_sceneToActivate = assetUUID;
-  }
-
-  m_pending = {};
+  m_onAddAsset(m_flow->addAssetJson(assetUUID, importedPath, root, uuids::to_string(newUUID())));
+  m_flow->committed(assetUUID);
 }
 
 void AssetBrowserPanel::activateCreatedScene()
 {
-  if (!m_sceneToActivate.has_value())
+  const auto scene = m_flow->takeSceneToActivate();
+  if (!scene.has_value())
   {
     return;
   }
 
-  const auto sceneUUID = m_sceneToActivate.value();
-  m_sceneToActivate.reset();
+  const auto sceneUUID = scene.value();
 
   // Registering a scene only makes it appear in the browser, so without this "New Scene" left the
   // previous scene loaded - its objects still in the hierarchy and still rendered - and reaching the

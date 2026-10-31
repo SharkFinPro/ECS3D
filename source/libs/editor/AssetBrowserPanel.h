@@ -6,11 +6,11 @@
 #include <nlohmann/json_fwd.hpp>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 #include <uuid.h>
 
+class AssetCreateFlow;
 class AssetRegistry;
 class GpuAssetCache;
 class EditorSelection;
@@ -25,6 +25,8 @@ public:
   using AddAssetCallback = std::function<void(const nlohmann::json& addAsset)>;
 
   AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache);
+
+  ~AssetBrowserPanel();
 
   void setLoadSceneCallback(LoadSceneCallback callback);
 
@@ -52,13 +54,6 @@ private:
   // closes, so it is outside the boundary that reports a create as having failed.
   void activateCreatedScene();
 
-  // A model/texture import or scene/script creation awaiting a name in the create popup.
-  struct PendingAsset {
-    enum class Type { None, Model, Texture, Scene, Script, Prefab } type = Type::None;
-    std::string sourcePath; // the picked file, for Model/Texture
-    char name[128] = {};
-  };
-
   const AssetRegistry* m_assetRegistry;
 
   std::shared_ptr<GpuAssetCache> m_assetCache;
@@ -74,13 +69,7 @@ private:
 
   char m_search[128] = {};
 
-  PendingAsset m_pending;
-  bool m_openCreatePopup = false;
-  std::string m_createError;
-
-  // Set by commitAsset when the thing it created was a scene, and consumed once the create popup has
-  // closed - a scene becomes active only after its creation can no longer be reported as having failed.
-  std::optional<uuids::uuid> m_sceneToActivate;
+  std::unique_ptr<AssetCreateFlow> m_flow;
 
   enum class SortType { NameAscending, NameDescending, Type };
   SortType m_sortType = SortType::NameAscending;

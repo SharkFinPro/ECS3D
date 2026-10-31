@@ -45,6 +45,7 @@ add_library(${PROJECT_NAME}
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h
   AssetNaming.h
+  AssetCreateFlow.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
   KeybindRebindFlow.h
