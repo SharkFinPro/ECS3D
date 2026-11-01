@@ -160,3 +160,41 @@ TEST(SceneEditBatch, ScratchCopyHasTheSameUuidsAndShapeAndIsIndependentOfTheSour
   EXPECT_EQ(copy->getObjectByUUID(child->getUUID()), nullptr);
   EXPECT_NE(scene.objectManager->getObjectByUUID(child->getUUID()), nullptr);
 }
+
+TEST(SceneEditBatch, ASecondOpThatDependsOnTheFirstSeesItsEffect)
+{
+  const auto scene = makeScene();
+
+  const auto createdUUID = someOtherUUID();
+  const auto childUUID = anotherUUID();
+
+  // The second op names a parent only the first op creates, so the dry run has to carry state between ops.
+  const auto batch = replication::buildBatch({
+    replication::buildAddObject("Created", nullptr, &createdUUID),
+    replication::buildAddObject("Child", &createdUUID, &childUUID)
+  });
+
+  EXPECT_EQ(applyEdit(scene, batch), SceneEditResult::applied);
+
+  const auto created = scene.objectManager->getObjectByUUID(createdUUID);
+  const auto child = scene.objectManager->getObjectByUUID(childUUID);
+  ASSERT_NE(created, nullptr);
+  ASSERT_NE(child, nullptr);
+  EXPECT_EQ(child->getParent(), created);
+}
+
+TEST(SceneEditBatch, RemovingTheSameObjectTwiceIsRefusedAsUnknownAndLeavesTheSceneUntouched)
+{
+  const auto scene = makeScene();
+  const auto a = addObject(scene, "A");
+
+  // Each op alone is fine against the original scene; the second only fails because the first already
+  // removed A, which only a dry run that accumulates effects reports as unknownObject.
+  const auto batch = replication::buildBatch({
+    replication::buildRemoveObject(a->getUUID()),
+    replication::buildRemoveObject(a->getUUID())
+  });
+
+  EXPECT_EQ(applyEdit(scene, batch), SceneEditResult::unknownObject);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(a->getUUID()), a);
+}

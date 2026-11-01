@@ -5,8 +5,11 @@
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/Transform.h"
 #include "SceneEditFixtures.h"
 
+#include <glm/vec3.hpp>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <uuid.h>
@@ -214,6 +217,55 @@ TEST(SceneEdit, ReorderObjectMovesToAnotherParentAtIndex)
   EXPECT_EQ(namesOf(destParent->getChildren()), (std::vector<std::string>{ "DestA", "Moved", "DestB" }));
 }
 
+TEST(SceneEdit, ReorderObjectIntoAnotherParentAcceptsTheEndSlotAndRefusesPastIt)
+{
+  const auto scene = makeScene();
+
+  const auto sourceParent = addObject(scene, "SourceParent");
+  const auto destParent = addObject(scene, "DestParent");
+  const auto moved = addChildObject(scene, "Moved", sourceParent);
+  addChildObject(scene, "DestA", destParent);
+  addChildObject(scene, "DestB", destParent);
+
+  const auto destUUID = destParent->getUUID();
+
+  // The target list is not shortened by the move (the object is not in it), so index 3 is past the end.
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(moved->getUUID(), &destUUID, 3)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(moved->getParent(), sourceParent);
+  EXPECT_EQ(namesOf(destParent->getChildren()), (std::vector<std::string>{ "DestA", "DestB" }));
+
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(moved->getUUID(), &destUUID, 2)),
+            SceneEditResult::applied);
+  EXPECT_EQ(moved->getParent(), destParent);
+  EXPECT_EQ(namesOf(destParent->getChildren()), (std::vector<std::string>{ "DestA", "DestB", "Moved" }));
+}
+
+TEST(SceneEdit, ReorderObjectIntoAnotherParentPreservesWorldPlacement)
+{
+  const auto scene = makeScene();
+
+  const auto sourceParent = addObject(scene, "SourceParent");
+  const auto destParent = addObject(scene, "DestParent", glm::vec3(100.0f, 0.0f, 0.0f),
+                                    glm::vec3(2.0f, 2.0f, 2.0f));
+  const auto moved = addChildObject(scene, "Moved", sourceParent);
+  transformOf(moved)->setPosition(glm::vec3(10.0f, 5.0f, -3.0f));
+  transformOf(moved)->setScale(glm::vec3(1.5f, 1.5f, 1.5f));
+
+  const auto positionBefore = transformOf(moved)->getPosition();
+  const auto scaleBefore = transformOf(moved)->getScale();
+
+  const auto destUUID = destParent->getUUID();
+  ASSERT_EQ(applyEdit(scene, replication::buildReorderObject(moved->getUUID(), &destUUID, 0)),
+            SceneEditResult::applied);
+  ASSERT_EQ(moved->getParent(), destParent);
+
+  expectNear("world position", transformOf(moved)->getPosition(), positionBefore, 1e-4f);
+  expectNear("world scale", transformOf(moved)->getScale(), scaleBefore, 1e-4f);
+  // Positive control: the local values really were rewritten, so the world match above is compensation.
+  expectNear("local position", transformOf(moved)->getLocalPosition(), glm::vec3(-45.0f, 2.5f, -1.5f), 1e-4f);
+}
+
 TEST(SceneEdit, ReorderObjectReordersTheRootList)
 {
   const auto scene = makeScene();
@@ -261,6 +313,19 @@ TEST(SceneEdit, ReportsAReorderThatWouldCycleAsRejected)
   EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(scene.object->getUUID(), &childUUID, 0)),
             SceneEditResult::rejected);
   EXPECT_EQ(scene.object->getParent(), nullptr);
+}
+
+TEST(SceneEdit, ReportsAReorderOntoItselfAsRejected)
+{
+  const auto scene = makeScene();
+
+  const auto ownUUID = scene.object->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(ownUUID, &ownUUID, 0)),
+            SceneEditResult::rejected);
+
+  EXPECT_EQ(scene.object->getParent(), nullptr);
+  EXPECT_EQ(scene.objectManager->getObjects(), (std::vector<std::shared_ptr<Object>>{ scene.object }));
+  EXPECT_TRUE(scene.object->getChildren().empty());
 }
 
 TEST(SceneEdit, ReportsAReorderToItsOwnCurrentSlotAsRejected)

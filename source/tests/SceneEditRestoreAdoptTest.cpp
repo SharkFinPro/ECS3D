@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
   using namespace sceneEditFixtures;
@@ -103,6 +104,35 @@ TEST(SceneEdit, RestoreObjectWithAdoptReclaimsPromotedChildrenUnderAParentedRest
   expectNear(transformOf(restoredX)->getLocalPosition(), { 10, 0, 0 });
 }
 
+TEST(SceneEdit, RestoreObjectWithAdoptReordersAdopteesGivenInDescendingIndexOrder)
+{
+  const auto scene = makeScene();
+
+  const auto x = addObject(scene, "X");
+  const auto c0 = addChildObject(scene, "C0", x);
+  const auto c1 = addChildObject(scene, "C1", x);
+  const auto c2 = addChildObject(scene, "C2", x);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+  const auto& recordedChildren = body.at("children");
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c2, 2, recordedChildren.at(2)),
+                                                       adoptEntry(c1, 1, recordedChildren.at(1)),
+                                                       adoptEntry(c0, 0, recordedChildren.at(0)) });
+
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, nullptr, 1, &adopt)),
+            SceneEditResult::applied);
+
+  const auto restoredX = scene.objectManager->getObjectByUUID(xUUID);
+  ASSERT_NE(restoredX, nullptr);
+  EXPECT_EQ(restoredX->getChildren(), (std::vector<std::shared_ptr<Object>>{ c0, c1, c2 }));
+}
+
 TEST(SceneEdit, RestoreObjectWithAdoptReclaimsPromotedChildrenAtTheSceneRoot)
 {
   const auto scene = makeScene();
@@ -183,8 +213,8 @@ TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenAnAdopteeIsMissing)
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
   EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
 
-  // Positive control: with c1 actually there (undoing the removeSubtree above by re-adding an equivalent
-  // child under Parent so c1UUID lives again as C1's stand-in), the same adopt shape applies fine.
+  // Positive control: the same adopt shape applies once its entry names an object that exists (a new
+  // child under Parent with its own fresh uuid), so the refusal above is the missing adoptee alone.
   const auto standIn = addChildObject(scene, "C1", parent);
   const nlohmann::json standInAdopt =
     nlohmann::json::array({ adoptEntry(standIn, 0, body.at("children").at(0)) });

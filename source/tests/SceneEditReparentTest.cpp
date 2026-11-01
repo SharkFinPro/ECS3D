@@ -39,8 +39,8 @@ TEST(SceneEdit, ReparentingOntoANonIdentityParentPreservesWorldPlacement)
             SceneEditResult::applied);
   EXPECT_EQ(scene.object->getParent(), parent);
 
-  // World placement is unchanged by the reparent. Before the fix, this came out as the parent's own
-  // position/scale/rotation composed on top of the object's now-stale local values instead.
+  // World placement is unchanged by the reparent: the local values were recomputed for the new parent
+  // rather than left as they were under the old one.
   expectNear("world position", transformOf(scene.object)->getPosition(), worldPositionBefore);
   expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore, 1e-3f);
   expectNear("world scale", transformOf(scene.object)->getScale(), worldScaleBefore);
@@ -238,8 +238,8 @@ TEST(SceneEdit, RejectsReparentOntoDescendantAndLeavesTransformUnchanged)
 
   const auto descendantUUID = child->getUUID();
 
-  // Positive control: dropping an object onto its own descendant is still rejected, and neither the
-  // hierarchy nor the transform this fix rewrites are touched by the attempt.
+  // Dropping an object onto its own descendant is rejected, and neither the hierarchy nor the transform
+  // a successful reparent would rewrite is touched by the attempt.
   EXPECT_EQ(applyEdit(scene, replication::buildReparentObject(scene.object->getUUID(), &descendantUUID)),
             SceneEditResult::rejected);
   EXPECT_EQ(scene.object->getParent(), nullptr);
