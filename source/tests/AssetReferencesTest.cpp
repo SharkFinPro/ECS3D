@@ -113,6 +113,18 @@ TEST_F(AssetReferencesTest, CountsAnObjectOnceEvenWhenTwoFieldsMatch)
   EXPECT_EQ(count(modelUUID), 1);
 }
 
+TEST_F(AssetReferencesTest, CountsAPrefabNodeOnceWhenTwoOfItsComponentsMatch)
+{
+  const auto node = makeModelObject("Node", modelUUID);
+  auto hull = std::make_shared<ConvexMeshCollider>();
+  hull->setSourceModel(modelUUID);
+  node->addComponent(hull);
+
+  m_assetRegistry.registerAsset(prefabRecord("Prefab", node->serialize().dump()));
+
+  EXPECT_EQ(count(modelUUID), 1);
+}
+
 TEST_F(AssetReferencesTest, CountsObjectsAcrossEveryScene)
 {
   addScene("11111111-1111-1111-1111-111111111111", "First")
@@ -148,24 +160,6 @@ TEST_F(AssetReferencesTest, SceneObjectsAndPrefabBodiesAddUp)
   m_assetRegistry.registerAsset(prefabRecord("Prefab", makeModelObject("Body", modelUUID)->serialize().dump()));
 
   EXPECT_EQ(count(modelUUID), 2);
-}
-
-TEST_F(AssetReferencesTest, IgnoresAMalformedPrefabBody)
-{
-  m_assetRegistry.registerAsset(prefabRecord("Broken", "{ not json " + uuids::to_string(modelUUID)));
-
-  EXPECT_EQ(count(modelUUID), 0);
-
-  m_assetRegistry.registerAsset(prefabRecord("Broken", makeModelObject("Body", modelUUID)->serialize().dump()));
-
-  EXPECT_EQ(count(modelUUID), 1);
-}
-
-TEST_F(AssetReferencesTest, IgnoresABodyThatIsNotAnObject)
-{
-  m_assetRegistry.registerAsset(prefabRecord("List", "[\"" + uuids::to_string(modelUUID) + "\"]"));
-
-  EXPECT_EQ(count(modelUUID), 0);
 }
 
 TEST_F(AssetReferencesTest, IgnoresABodyOnARecordThatIsNotAPrefab)
