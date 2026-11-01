@@ -109,14 +109,18 @@ TEST(AssetRegistry, ReRegisteringAPrefabUpdatesItsBodyInPlace)
 TEST(AssetRegistry, GivesNoPrefabBodyForAnythingElse)
 {
   AssetRegistry registry;
-  registry.registerAsset(model(modelUUID, "assets/models/cube.glb"));
-  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Broken",
-                           .body = "{ not json" });
+  registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Model, .path = "assets/models/cube.glb",
+                           .body = prefabBody("Not A Prefab") });
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                           .body = prefabBody("Block") });
 
-  // Callers skip on a null body rather than throwing in the middle of a tick.
+  // Positive control: a registered prefab does have a body.
+  EXPECT_EQ(registry.getPrefabBody(prefabUUID).at("name"), "Block");
+
+  // Callers skip on a null body rather than throwing in the middle of a tick. The model record holds a
+  // valid object body, so only its type keeps getPrefabBody from returning it.
   EXPECT_TRUE(registry.getPrefabBody(missingUUID).is_null());
   EXPECT_TRUE(registry.getPrefabBody(modelUUID).is_null());
-  EXPECT_TRUE(registry.getPrefabBody(prefabUUID).is_null());
 }
 
 TEST(AssetRegistry, RenamingChangesOnlyTheDisplayName)
@@ -231,6 +235,36 @@ TEST(AssetRegistry, BumpsItsVersionWhenTheContentsChange)
   EXPECT_GT(registry.getVersion(), afterRemove);
 }
 
+TEST(AssetRegistry, BumpsItsVersionWhenAPrefabBodyScriptPathOrScriptKindChanges)
+{
+  AssetRegistry registry;
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                           .body = prefabBody("Block") });
+
+  const auto beforePrefabUpdate = registry.getVersion();
+  registry.registerAsset({ .uuid = otherUUID, .type = AssetType::Prefab, .path = "Block",
+                           .body = prefabBody("Block v2") });
+  const auto afterPrefabUpdate = registry.getVersion();
+  EXPECT_GT(afterPrefabUpdate, beforePrefabUpdate);
+  EXPECT_EQ(registry.getPrefabBody(prefabUUID).at("name"), "Block v2");
+
+  registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Script, .className = "PlayerScript" });
+  const auto afterCompiledScript = registry.getVersion();
+  registry.registerAsset({ .uuid = missingUUID, .type = AssetType::Script,
+                           .path = "scripts/Player.cs", .className = "PlayerScript" });
+  const auto afterPathFillIn = registry.getVersion();
+  EXPECT_GT(afterPathFillIn, afterCompiledScript);
+  ASSERT_NE(registry.getByUUID(modelUUID), nullptr);
+  EXPECT_EQ(registry.getByUUID(modelUUID)->path, "scripts/Player.cs");
+
+  EXPECT_TRUE(registry.setScriptKind(modelUUID, ScriptKind::Object));
+  const auto afterKindChange = registry.getVersion();
+  EXPECT_GT(afterKindChange, afterPathFillIn);
+
+  EXPECT_FALSE(registry.setScriptKind(modelUUID, ScriptKind::Object));
+  EXPECT_EQ(registry.getVersion(), afterKindChange);
+}
+
 TEST(AssetRegistry, ClearDropsEverything)
 {
   AssetRegistry registry;
@@ -252,7 +286,10 @@ TEST(AssetRegistry, RoundTripsEveryRecordKindThroughBothPaths)
                            .path = "scripts/UserScripts/Player.cs", .className = "PlayerScript" });
   original.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
                            .body = prefabBody("Block") });
+  original.registerAsset(texture(missingUUID, "assets/textures/brick.png"));
   original.renameAsset(modelUUID, "Nicer Cube");
+  original.renameAsset(otherUUID, "Nicer Script");
+  original.renameAsset(prefabUUID, "Nicer Block");
 
   AssetRegistry fromJson;
   fromJson.loadFromJSON(original.serialize());
@@ -266,7 +303,7 @@ TEST(AssetRegistry, RoundTripsEveryRecordKindThroughBothPaths)
 
   for (const auto* registry : { &fromJson, &fromWire })
   {
-    ASSERT_EQ(registry->getAssets().size(), 3u);
+    ASSERT_EQ(registry->getAssets().size(), 4u);
 
     const auto* rebuiltModel = registry->getByUUID(modelUUID);
     ASSERT_NE(rebuiltModel, nullptr);
@@ -276,7 +313,17 @@ TEST(AssetRegistry, RoundTripsEveryRecordKindThroughBothPaths)
     const auto* rebuiltScript = registry->getByUUID(otherUUID);
     ASSERT_NE(rebuiltScript, nullptr);
     EXPECT_EQ(rebuiltScript->className, "PlayerScript");
+    EXPECT_EQ(rebuiltScript->path, "scripts/UserScripts/Player.cs");
+    EXPECT_EQ(rebuiltScript->displayName, "Nicer Script");
 
+    const auto* rebuiltTexture = registry->getByUUID(missingUUID);
+    ASSERT_NE(rebuiltTexture, nullptr);
+    EXPECT_EQ(rebuiltTexture->type, AssetType::Texture);
+    EXPECT_EQ(rebuiltTexture->path, "assets/textures/brick.png");
+
+    const auto* rebuiltPrefab = registry->getByUUID(prefabUUID);
+    ASSERT_NE(rebuiltPrefab, nullptr);
+    EXPECT_EQ(rebuiltPrefab->displayName, "Nicer Block");
     EXPECT_EQ(registry->getPrefabBody(prefabUUID).at("name"), "Block");
   }
 }

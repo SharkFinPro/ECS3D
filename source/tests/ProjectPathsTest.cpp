@@ -46,6 +46,29 @@ namespace {
   {
     EXPECT_EQ(actual.lexically_normal(), expected.lexically_normal());
   }
+
+  // Runs a test inside a scratch folder so a relative path it resolves or writes cannot touch the real CWD.
+  class ScopedCurrentPath {
+  public:
+    explicit ScopedCurrentPath(const fs::path& folder)
+      : m_previous(fs::current_path())
+    {
+      fs::create_directories(folder);
+      fs::current_path(folder);
+    }
+
+    ~ScopedCurrentPath()
+    {
+      std::error_code error;
+      fs::current_path(m_previous, error);
+    }
+
+    ScopedCurrentPath(const ScopedCurrentPath&) = delete;
+    ScopedCurrentPath& operator=(const ScopedCurrentPath&) = delete;
+
+  private:
+    fs::path m_previous;
+  };
 }
 
 TEST_F(ProjectPathsTest, FolderResolvesToItsProjectFile)
@@ -141,6 +164,19 @@ TEST_F(ProjectPathsTest, RefusesPathsThatEscape)
   EXPECT_FALSE(resolveAssetPath(m_dir, "../x").has_value());
   EXPECT_FALSE(resolveAssetPath(m_dir, "assets/../../x").has_value());
   EXPECT_FALSE(resolveAssetPath({}, "../x").has_value());
+
+#ifdef _WIN32
+  EXPECT_FALSE(resolveAssetPath(m_dir, "\\evil").has_value());
+  EXPECT_FALSE(resolveAssetPath(m_dir, "C:evil").has_value());
+#endif
+}
+
+TEST_F(ProjectPathsTest, AnEmptyFilePathStaysEmptyEvenWithAProjectRoot)
+{
+  const auto resolved = resolveAssetPath(m_dir, "");
+
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_TRUE(resolved->empty());
 }
 
 TEST_F(ProjectPathsTest, AllowsDotDotThatStaysInside)
@@ -224,6 +260,15 @@ TEST_F(ProjectPathsTest, EnsureProjectFoldersCreatesAssetsAndScripts)
   EXPECT_TRUE(ensureProjectFolders(root, error));
 }
 
+TEST_F(ProjectPathsTest, EnsureProjectFoldersReportsAFolderItCannotCreate)
+{
+  const auto file = touch("blocker");
+  std::error_code error;
+
+  EXPECT_FALSE(ensureProjectFolders(file / "x", error));
+  EXPECT_TRUE(error);
+}
+
 TEST_F(ProjectPathsTest, ImportDestinationPutsAModelUnderAssetsModels)
 {
   const auto destination = importDestination(m_dir, "C:/downloads/Rock.GLB", "boulder", ImportKind::model);
@@ -256,6 +301,17 @@ TEST_F(ProjectPathsTest, ImportDestinationSuffixesANameThatIsTaken)
 
 TEST_F(ProjectPathsTest, ImportDestinationWithNoRootIsRelativeAndOverwrites)
 {
+  const auto destination = importDestination({}, "x/rock.glb", "rock", ImportKind::model);
+
+  EXPECT_EQ(destination.relative, "assets/models/rock.glb");
+  EXPECT_EQ(destination.absolute, fs::path("assets/models/rock.glb"));
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationWithNoRootNeverLooksAtTheWorkingDirectory)
+{
+  touch("cwd/assets/models/rock.glb");
+  const ScopedCurrentPath cwd(m_dir / "cwd");
+
   const auto destination = importDestination({}, "x/rock.glb", "rock", ImportKind::model);
 
   EXPECT_EQ(destination.relative, "assets/models/rock.glb");
@@ -297,6 +353,22 @@ TEST_F(ProjectPathsTest, CopyProjectContentIgnoresEmptyOrNestedTargets)
 
   copyProjectContent(m_dir / "a", m_dir / "c", error);
   EXPECT_FALSE(error);
+  EXPECT_TRUE(fs::exists(m_dir / "c/assets/m.glb"));
+}
+
+TEST_F(ProjectPathsTest, CopyProjectContentWritesNothingForAnEmptyTarget)
+{
+  touch("a/assets/m.glb");
+  const ScopedCurrentPath cwd(m_dir / "cwd");
+  std::error_code error;
+
+  copyProjectContent(m_dir / "a", {}, error);
+
+  EXPECT_FALSE(error);
+  EXPECT_TRUE(fs::is_empty(m_dir / "cwd"));
+
+  // Positive control: a real target receives the same content.
+  copyProjectContent(m_dir / "a", m_dir / "c", error);
   EXPECT_TRUE(fs::exists(m_dir / "c/assets/m.glb"));
 }
 

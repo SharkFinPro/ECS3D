@@ -122,6 +122,10 @@ TEST_F(ProjectOriginTest, DefaultSaveFolderCleansTheName)
   EXPECT_EQ(defaultSaveFolder(m_dir, "A\\B|C"), m_dir / "ABC");
   EXPECT_EQ(defaultSaveFolder(m_dir, "  "), m_dir / "New Project");
   EXPECT_EQ(defaultSaveFolder(m_dir, "???"), m_dir / "New Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "A<B>C\"D*E"), m_dir / "ABCDE");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "A B"), m_dir / "A B");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "A\x1F"), m_dir / "A");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "Name. ."), m_dir / "Name");
 }
 
 TEST_F(ProjectOriginTest, DefaultSaveFolderKeepsNonAsciiBytes)
@@ -138,6 +142,8 @@ TEST_F(ProjectOriginTest, DefaultSaveFolderAvoidsDeviceNames)
   EXPECT_EQ(defaultSaveFolder(m_dir, "NUL.txt"), m_dir / "NUL.txt Project");
   EXPECT_EQ(defaultSaveFolder(m_dir, "Com1"), m_dir / "Com1 Project");
   EXPECT_EQ(defaultSaveFolder(m_dir, "LPT9"), m_dir / "LPT9 Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "prn"), m_dir / "prn Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "Aux"), m_dir / "Aux Project");
   EXPECT_EQ(defaultSaveFolder(m_dir, "Com0"), m_dir / "Com0");
   EXPECT_EQ(defaultSaveFolder(m_dir, "Console"), m_dir / "Console");
 }
@@ -207,10 +213,17 @@ TEST_F(ProjectOriginTest, TemplateSaveRefusesTheTemplateItsSubfoldersAndFilledFo
   touch("full/a.txt");
 
   EXPECT_FALSE(templateSaveRefusal(m_dir / "fresh", tpl).has_value());
-  EXPECT_TRUE(templateSaveRefusal(tpl, tpl).has_value());
-  EXPECT_TRUE(templateSaveRefusal(tpl / "newfolder", tpl).has_value());
-  EXPECT_TRUE(templateSaveRefusal(tpl / "assets" / "deeper", tpl).has_value());
-  EXPECT_TRUE(templateSaveRefusal(m_dir / "full", tpl).has_value());
+  EXPECT_EQ(templateSaveRefusal(tpl, tpl), "the folder is not empty");
+  EXPECT_EQ(templateSaveRefusal(m_dir / "full", tpl), "the folder is not empty");
+
+  // An empty template folder is free, so only the containment check can refuse it or anything inside it.
+  const auto emptyTemplate = m_dir / "EmptyTemplate";
+  fs::create_directories(emptyTemplate);
+  const std::string inside = "the folder is the template's own folder or lies inside it";
+  EXPECT_EQ(templateSaveRefusal(emptyTemplate, emptyTemplate), inside);
+  EXPECT_EQ(templateSaveRefusal(emptyTemplate / "newfolder", emptyTemplate), inside);
+  EXPECT_EQ(templateSaveRefusal(emptyTemplate / "assets" / "deeper", emptyTemplate), inside);
+  EXPECT_FALSE(templateSaveRefusal(m_dir / "EmptyTemplateSibling", emptyTemplate).has_value());
 }
 
 // SaveUI::saveToFolder is the sequence below around templateSaveRefusal; it needs a window, so this pins

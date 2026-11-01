@@ -57,7 +57,7 @@ TEST(ProjectFingerprint, EqualBytesGiveEqualFingerprintsAndDifferentBytesDiffer)
   EXPECT_NE(fingerprintBytes("{\"a\":1}"), fingerprintBytes("{\"a\":2}"));
 }
 
-TEST(ProjectFingerprint, ARealFileNeverHashesToZero)
+TEST(ProjectFingerprint, EmptyAndShortInputsHashToANonzeroValue)
 {
   EXPECT_NE(fingerprintBytes(""), 0u);
   EXPECT_NE(fingerprintBytes("project"), 0u);
@@ -69,6 +69,16 @@ TEST_F(ProjectFingerprintFiles, AFileMatchesTheFingerprintOfItsBytes)
   writeFile(path, "{\"scenes\":[]}");
 
   EXPECT_EQ(fingerprintProjectFile(path), fingerprintBytes("{\"scenes\":[]}"));
+}
+
+TEST_F(ProjectFingerprintFiles, AFileIsReadByteForByteIncludingLineEndings)
+{
+  const std::string content = "{\"a\":1,\r\n\"b\":2}\r\n";
+  const auto path = scratchFile("crlf.ecs3d");
+  writeFile(path, content);
+
+  EXPECT_EQ(fingerprintProjectFile(path), fingerprintBytes(content));
+  EXPECT_NE(fingerprintProjectFile(path), fingerprintBytes("{\"a\":1,\n\"b\":2}\n"));
 }
 
 TEST_F(ProjectFingerprintFiles, TwoFilesWithDifferentContentDiffer)

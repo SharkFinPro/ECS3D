@@ -8,6 +8,8 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Transform.h>
 
+#include <glm/vec3.hpp>
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -75,6 +77,15 @@ TEST_F(AssetNamingTest, TakenSuffixedSceneNameGrowsTheNumber)
   addScene("Level");
   addScene("Level (2)");
   EXPECT_EQ(assetNaming::uniqueSceneName(m_registry, "Level (2)"), "Level (3)");
+}
+
+TEST_F(AssetNamingTest, ANonNumericParenthesizedSuffixIsPartOfTheStem)
+{
+  addScene("Level (x)");
+  addScene("Level ()");
+
+  EXPECT_EQ(assetNaming::uniqueSceneName(m_registry, "Level (x)"), "Level (x) (2)");
+  EXPECT_EQ(assetNaming::uniqueSceneName(m_registry, "Level ()"), "Level () (2)");
 }
 
 TEST_F(AssetNamingTest, DisplayNameOverrideCountsAsTaken)
@@ -179,9 +190,15 @@ TEST_F(AssetNamingTest, RegistryDropsAPrefabSharingASceneName)
   const auto sceneUUID = makeUUID(20);
   const auto prefabUUID = makeUUID(21);
   m_registry.registerAsset({ .uuid = sceneUUID, .type = AssetType::Scene, .path = "Same" });
+  const auto version = m_registry.getVersion();
   m_registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Same",
                              .body = assetNaming::emptyPrefabBody("Same", uuids::to_string(makeUUID(904))) });
-  EXPECT_NE(m_registry.getByUUID(sceneUUID), nullptr);
+
+  const auto* scene = m_registry.getByUUID(sceneUUID);
+  ASSERT_NE(scene, nullptr);
+  EXPECT_EQ(scene->type, AssetType::Scene);
+  EXPECT_TRUE(scene->body.empty());
+  EXPECT_EQ(m_registry.getVersion(), version);
   EXPECT_EQ(m_registry.getByUUID(prefabUUID), nullptr);
 }
 
@@ -197,7 +214,11 @@ TEST_F(AssetNamingTest, EmptyPrefabBodyInstantiatesAsOneObjectWithATransform)
 
   EXPECT_EQ(object->getName(), "Fresh");
   EXPECT_TRUE(object->getChildren().empty());
-  EXPECT_NE(object->getComponent<Transform>(ComponentType::transform), nullptr);
+  const auto transform = object->getComponent<Transform>(ComponentType::transform);
+  ASSERT_NE(transform, nullptr);
+  EXPECT_EQ(transform->getLocalPosition(), glm::vec3(0.0f));
+  EXPECT_EQ(transform->getLocalRotation(), glm::vec3(0.0f));
+  EXPECT_EQ(transform->getLocalScale(), glm::vec3(1.0f));
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
 }
 
@@ -255,6 +276,7 @@ TEST(SceneNameField, APendingEditIsFlushedWhenAnotherAssetIsShownOrTheInspectorW
 
   EXPECT_TRUE(shouldFlushPendingSceneName(scene, 10, other, 11));
   EXPECT_TRUE(shouldFlushPendingSceneName(scene, 10, scene, 15));
+  EXPECT_TRUE(shouldFlushPendingSceneName(scene, 10, scene, 12));
 
   // Positive control: the next frame of the same scene keeps the edit pending.
   EXPECT_FALSE(shouldFlushPendingSceneName(scene, 10, scene, 11));

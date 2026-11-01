@@ -104,10 +104,12 @@ TEST(SceneRename, RenamingToTheCurrentNameSucceedsWithoutChange)
 {
   Project project;
   populate(project);
+  const auto versionBefore = project.assetRegistry.getVersion();
 
   EXPECT_TRUE(rename(project, mainUUID, "Main"));
 
   expectUntouched(project);
+  EXPECT_EQ(project.assetRegistry.getVersion(), versionBefore);
 }
 
 TEST(SceneRename, ANameAnotherSceneOwnsIsRefused)

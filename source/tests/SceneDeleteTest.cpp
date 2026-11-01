@@ -237,6 +237,7 @@ TEST(SceneDelete, AddingASceneUnderAnExistingSceneUuidIsRefused)
 {
   Project project;
   project.addTwoScenes();
+  const auto versionBefore = project.assetRegistry.getVersion();
 
   const nlohmann::json asset = {
     { "assetType", "scene" },
@@ -245,6 +246,10 @@ TEST(SceneDelete, AddingASceneUnderAnExistingSceneUuidIsRefused)
   };
   replication::applyAddAsset(project.assetRegistry, project.sceneManager, project.componentRegistry, asset);
 
+  // These two pin the registry's first-wins rule for a repeated uuid; addSceneAsset's own early return
+  // leaves the same state.
+  EXPECT_EQ(project.assetRegistry.getByPath("Replacement"), nullptr);
+  EXPECT_EQ(project.assetRegistry.getVersion(), versionBefore);
   EXPECT_EQ(project.sceneManager.getScene(otherUUID)->getName(), "Other");
   EXPECT_EQ(project.sceneManager.getScene(otherUUID)->getObjectManager()->getObjects().size(), 1u);
 
@@ -255,6 +260,7 @@ TEST(SceneDelete, AddingASceneUnderAnExistingSceneUuidIsRefused)
   };
   replication::applyAddAsset(project.assetRegistry, project.sceneManager, project.componentRegistry, fresh);
   EXPECT_NE(project.sceneManager.getScene(modelUUID), nullptr);
+  EXPECT_NE(project.assetRegistry.getByPath("Replacement"), nullptr);
 }
 
 TEST(SceneDelete, UndoOfASceneRemovalRestoresTheSceneAndRedoRemovesItAgain)
