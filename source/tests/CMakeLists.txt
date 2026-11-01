@@ -225,6 +225,7 @@ add_executable(${PROJECT_NAME}
   ServerArgumentsTest.cpp
   ClientConnectionStateTest.cpp
   InputStatePayloadTest.cpp
+  InputFocusTest.cpp
   InputViewTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
@@ -319,6 +320,9 @@ add_executable(${PROJECT_NAME}
   # The billboard math depends only on glm, compiled in rather than linking ECS3DRender, which pulls in
   # Vulkan.
   ../libs/render/Billboard.cpp
+
+  # The focus rule and its gating are plain logic; only capture() needs GLFW and ImGui.
+  ../libs/render/InputFocus.cpp
 
   # The view-block helper takes plain numbers and a uuid, so it compiles in without the capture code that
   # needs GLFW.

@@ -13,6 +13,8 @@ add_library(${PROJECT_NAME}
   HullGizmoMesh.h
   InputCapture.cpp
   InputCapture.h
+  InputFocus.cpp
+  InputFocus.h
   InputView.cpp
   InputView.h
   MissingAssetFallback.h
