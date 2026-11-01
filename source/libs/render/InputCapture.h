@@ -23,7 +23,8 @@ enum MouseButtonBit : uint8_t {
 
 struct InputSnapshot {
   std::vector<int> keys;   // currently-pressed key codes (GLFW), as the scripts' Key enum expects
-  bool focused = true;     // the main window or a detached panel window has focus; an unfocused capture carries no mouse motion or buttons
+  // The main window or a detached panel window has focus; an unfocused capture carries no mouse motion or buttons.
+  bool focused = true;
 
   // Mouse. Position is absolute (window pixels); delta is this frame's movement (cursor - previous
   // cursor); scroll is this frame's vertical wheel offset. buttons is a MouseButtonBit mask.
