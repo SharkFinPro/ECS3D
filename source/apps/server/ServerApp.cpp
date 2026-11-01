@@ -24,6 +24,7 @@
 #include <bindings/InputState.h>
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
+#include <ManagedServerTransport.h>
 #include <ManagedHost.h>
 #include <Log.h>
 #include <RemoteLogSink.h>
@@ -55,7 +56,7 @@ ServerApp::ServerApp(LaunchOptions options)
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_collisionSystem = std::make_shared<CollisionSystem>();
-  m_netServer = std::make_shared<net::NetServer>(m_host);
+  m_netServer = std::make_shared<net::NetServer>(std::make_shared<net::ManagedServerTransport>(m_host));
 
   // Feeds forwardLogToEditors: the server is headless, so this is the only way a connected editor - local
   // or remote - sees anything the server (or a script running on it, via LogBindings) logs. Edit-mode

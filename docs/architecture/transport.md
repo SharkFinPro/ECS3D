@@ -10,7 +10,11 @@ neither padding nor a pointer in it. `data`'s `WireTypes.h` holds those speciali
 and `uuids::uuid`, and any translation unit that reasons about the trait rather than just calling `write`/`read` includes
 it, since otherwise it evaluates the primary template and disagrees with the rest of the program. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
-opaque `(type byte, payload)` pairs. Both transports refuse an inbound message over
+opaque `(type byte, payload)` pairs through the `ServerTransport`/`ClientTransport` interfaces.
+`ManagedServerTransport`/`ManagedClientTransport` implement them over the `ManagedHost` delegates and are the only
+C++ that touches the CLR. That lets the headless tests drive `NetServer`/`NetClient` with a fake. If a transport call
+throws, `start`/`connect` clear the active pointer and rethrow, and a destroyed `NetServer`/`NetClient` unregisters
+itself. Both transports refuse an inbound message over
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
 WebSocket on what has actually arrived, since a fragmented message declares none. Neither backend sizes
 its read buffer to that declared length up front: TCP grows a buffer to roughly what has actually arrived
@@ -59,7 +63,7 @@ thread-safe `MessageQueue` and drained by the app loop. The transport backend (T
 selected by a single field in `Transport.cs`. `Transport.serverStart` never throws (an exception escaping an
 `[UnmanagedCallersOnly]` export terminates the process): it returns the bound port (the OS-picked one for port
 0) or a negative `ServerStartError` (-1 address in use, -2 port out of range, -3 anything else, logged on the
-transport side), mirrored by `net::ServerStartError` in `NetServer.cpp`. A backend whose listener fails to start
+transport side), mirrored by `net::ServerStartError` in `ServerTransport.h`. A backend whose listener fails to start
 is left not running, so a later start succeeds. `NetServer::start` turns a negative code into a
 `std::runtime_error` and leaves the server stopped. The transport logs through a native `setLogCallback`
 (`net::transportLog`, category `net`), falling back to the console before it is registered. A client

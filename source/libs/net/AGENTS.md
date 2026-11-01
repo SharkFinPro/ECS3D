@@ -15,9 +15,10 @@ notes are in [docs/architecture/transport.md](../../../docs/architecture/transpo
 - C# socket threads push inbound frames into the thread-safe `MessageQueue`, and the app loop drains it. Stop and
   disconnect join every socket thread before clearing the `g_activeServer`/`g_activeClient` pointers the callbacks
   read.
-- `MessageQueue.cpp`, `CommandLineSplit.cpp`, `ClientConnectionState.cpp` and `EditorConnections.cpp` compile into
-  the test suite, so they stay free of the CLR. `EditToken.h` (`net::generateEditToken`, 128 bits from
-  `std::random_device`) is header-only for the same reason.
+- `MessageQueue.cpp`, `CommandLineSplit.cpp`, `ClientConnectionState.cpp`, `EditorConnections.cpp`, `NetServer.cpp`
+  and `NetClient.cpp` compile into the test suite, so they stay free of the CLR: every managed call belongs in
+  `ManagedServerTransport`/`ManagedClientTransport`, behind `ServerTransport`/`ClientTransport`. `EditToken.h`
+  (`net::generateEditToken`, 128 bits from `std::random_device`) is header-only so the suite can include it too.
 - `ServerProcess` launches a child server from one flag string. `CommandLineSplit` splits it on Linux and macOS,
   honoring double quotes the way the Windows C runtime does.
 - The `Transport/` project builds through CMake only. A direct `dotnet build` or `dotnet publish` breaks the next CMake

@@ -1,26 +1,16 @@
 #include "NetClient.h"
-#include "TransportLog.h"
-#include <ManagedHost.h>
 #include <Log.h>
 #include <LogEntry.h>
-#include <array>
 #include <atomic>
 #include <cstddef>
 #include <limits>
 #include <span>
+#include <string>
+#include <utility>
 
 namespace net {
 
 namespace {
-  // The C# transport assembly, published next to the executable by ecs3d_add_managed_assembly.
-  const std::string kAssembly = "net/Transport/ECS3DNetTransport.dll";
-  const std::string kType = "ECS3DNetTransport.Transport, ECS3DNetTransport";
-
-  using ClientConnectFn = uint8_t(*)(const char*, int32_t, uint8_t, const char*);
-  using ClientDisconnectFn = void(*)();
-  using ClientSendFn = void(*)(uint8_t, const uint8_t*, int32_t);
-  using SetCallbackFn = void(*)(void*);
-
   // One connection per process; the C# socket thread routes inbound messages here. Atomic for the same
   // reason as NetServer's g_activeServer: written on the app thread, read on the socket thread, with no
   // other synchronization between the two.
@@ -43,9 +33,16 @@ extern "C" void ecs3dNetClientDisconnect()
   }
 }
 
-NetClient::NetClient(std::shared_ptr<ManagedHost> host)
-  : m_host(std::move(host))
+NetClient::NetClient(const std::shared_ptr<ClientTransport>& transport)
+  : m_transport(transport)
 {}
+
+// Only unregisters; the transport is not touched. The compare keeps a newer client's registration intact.
+NetClient::~NetClient()
+{
+  auto* expected = this;
+  g_activeClient.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
+}
 
 void NetClient::connect(const std::string& host, const int port, const Role role, const std::string& authToken)
 {
@@ -56,29 +53,21 @@ void NetClient::connect(const std::string& host, const int port, const Role role
 
   m_state.beginConnect();
 
-  m_connectFn = m_host->getDelegate(kAssembly, kType, "clientConnect");
-  m_disconnectFn = m_host->getDelegate(kAssembly, kType, "clientDisconnect");
-  m_sendFn = m_host->getDelegate(kAssembly, kType, "clientSend");
-  m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "clientSetReceiveCallback");
-  m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "clientSetDisconnectCallback");
-  m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
-
   g_activeClient.store(this, std::memory_order_release);
-  reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientReceive));
-  reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientDisconnect));
-  reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
-  // role + authToken are sent at the handshake; the server grants Role::editor only if its edit-mode
-  // launch gate is enabled and the token authorizes it. Same wire format for singleplayer (loopback),
-  // local-MP, and remote.
-  const uint8_t ok = reinterpret_cast<ClientConnectFn>(m_connectFn)(
-    host.c_str(),
-    static_cast<int32_t>(port),
-    static_cast<uint8_t>(role),
-    authToken.c_str()
-  );
+  const ClientCallbacks callbacks{&ecs3dNetClientReceive, &ecs3dNetClientDisconnect};
+  bool connected = false;
+  try
+  {
+    connected = m_transport->connect(host, static_cast<int32_t>(port), role, authToken, callbacks);
+  }
+  catch (...)
+  {
+    g_activeClient.store(nullptr, std::memory_order_release);
+    throw;
+  }
 
-  m_state.setConnected(ok != 0);
+  m_state.setConnected(connected);
 }
 
 void NetClient::disconnect()
@@ -95,7 +84,7 @@ void NetClient::disconnect()
   // The managed disconnect joins the client's receive thread before returning (TcpBackend/
   // WebSocketBackend ClientDisconnect), so no socket thread can still be inside enqueue/
   // enqueueDisconnect by the time the pointer below is cleared.
-  reinterpret_cast<ClientDisconnectFn>(m_disconnectFn)();
+  m_transport->disconnect();
 
   g_activeClient.store(nullptr, std::memory_order_release);
   m_state.setConnected(false);
@@ -118,11 +107,7 @@ void NetClient::send(const Message& message) const
     return;
   }
 
-  reinterpret_cast<ClientSendFn>(m_sendFn)(
-    static_cast<uint8_t>(message.getType()),
-    message.bytes().data(),
-    static_cast<int32_t>(message.size())
-  );
+  m_transport->send(static_cast<uint8_t>(message.getType()), message.bytes());
 }
 
 bool NetClient::poll(Message& message)

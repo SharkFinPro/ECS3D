@@ -224,6 +224,9 @@ add_executable(${PROJECT_NAME}
   CommandLineSplitTest.cpp
   ServerArgumentsTest.cpp
   ClientConnectionStateTest.cpp
+  FakeTransports.h
+  NetClientTest.cpp
+  NetServerTest.cpp
   InputStatePayloadTest.cpp
   InputFocusTest.cpp
   InputViewTest.cpp
@@ -250,19 +253,23 @@ add_executable(${PROJECT_NAME}
   PhysicsTestHelpers.h
   PhysicsGenericRestingFixtures.h
 
-  # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
-  # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
-  # suite that is headless by construction. That is also the constraint the arrangement rests on - do
-  # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
-  # else in net that needs covering will hit the same wall. TransportLog.cpp and ServerLog.cpp are
+  # The CLR-free pieces of ECS3DNet are compiled in rather than linked: linking the library would pull
+  # ManagedHost and the C# transport assembly into a suite that is headless by construction. That is
+  # also the constraint the arrangement rests on - do not add ECS3DNet to the link libraries below, or
+  # these objects and the library's duplicate. A net source joins them only if it makes no CLR call; the
+  # CLR calls stay in ManagedServerTransport and ManagedClientTransport. TransportLog.cpp and ServerLog.cpp are
   # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol. CommandLineSplit.cpp,
   # ClientConnectionState.cpp and EditorConnections.cpp are the CLR-free pieces split out of ServerProcess,
-  # NetClient and NetServer.
+  # NetClient and NetServer. NetServer.cpp and NetClient.cpp compile in too: they reach the C# transport
+  # only through ServerTransport/ClientTransport, and the CLR-backed ManagedServerTransport and
+  # ManagedClientTransport stay out (the tests drive a fake from FakeTransports.h).
   ../libs/net/MessageQueue.cpp
   ../libs/net/ChildProcess.cpp
   ../libs/net/CommandLineSplit.cpp
   ../libs/net/ClientConnectionState.cpp
   ../libs/net/EditorConnections.cpp
+  ../libs/net/NetServer.cpp
+  ../libs/net/NetClient.cpp
   # The Transform/RigidBody/Camera/InputUtils binding providers (and InputState, which InputUtilsBindings
   # reads) depend only on ECS3DData, so they are compiled in directly for the same reason as LogBindings.
   ../libs/scripting/bindings/TransformBindings.cpp

@@ -3,10 +3,15 @@ project(ECS3DNet)
 add_library(${PROJECT_NAME}
   ClientConnectionState.cpp
   ClientConnectionState.h
+  ClientTransport.h
   CommandLineSplit.cpp
   CommandLineSplit.h
   EditorConnections.cpp
   EditorConnections.h
+  ManagedClientTransport.cpp
+  ManagedClientTransport.h
+  ManagedServerTransport.cpp
+  ManagedServerTransport.h
   MessageQueue.cpp
   MessageQueue.h
   NetServer.cpp
@@ -16,6 +21,7 @@ add_library(${PROJECT_NAME}
   EditToken.h
   ServerLog.cpp
   ServerLog.h
+  ServerTransport.h
   ServerArguments.h
   ChildProcess.cpp
   ChildProcess.h

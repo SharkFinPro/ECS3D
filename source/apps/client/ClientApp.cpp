@@ -16,6 +16,7 @@
 #include <InputView.h>
 #include <objects/CameraSelection.h>
 #include <NetClient.h>
+#include <ManagedClientTransport.h>
 #include <ServerArguments.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
@@ -58,7 +59,7 @@ ClientApp::ClientApp(ConnectOptions options)
   }
   m_renderSystem = std::make_shared<RenderSystem>();
 
-  m_netClient = std::make_shared<net::NetClient>(m_host);
+  m_netClient = std::make_shared<net::NetClient>(std::make_shared<net::ManagedClientTransport>(m_host));
 
   connectToServer();
 
