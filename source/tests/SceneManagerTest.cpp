@@ -297,6 +297,21 @@ TEST(SceneManager, UniqueSceneNameGrowsAnAlreadySuffixedCollision)
   EXPECT_EQ(sceneManager.uniqueSceneName(thirdUUID, "Level (2)"), "Level (3)");
 }
 
+TEST(SceneManager, UniqueSceneNameKeepsANonNumericParenthesizedSuffixInTheStem)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Level (x)", componentRegistry));
+
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Level (x)"), "Level (x) (2)");
+
+  SceneManager emptyParens;
+  emptyParens.addScene(makeScene(firstUUID, "Level ()", componentRegistry));
+
+  EXPECT_EQ(emptyParens.uniqueSceneName(secondUUID, "Level ()"), "Level () (2)");
+}
+
 TEST(SceneManager, UniqueSceneNameDoesNotRenameTheSameSceneItAlreadyOwns)
 {
   const auto componentRegistry = makeRegistry();
