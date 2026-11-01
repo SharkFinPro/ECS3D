@@ -36,8 +36,8 @@ jobs:
       # Sanitize (the ecs3d-sanitize preset: ASan, plus UBSan on gcc/clang) runs on Linux gcc and clang
       # only: MSVC's ASan needs its runtime DLL on PATH and macOS is not worth the flake risk.
       # Coverage (the ecs3d-coverage preset) runs on ubuntu-24.04 with gcc-14 and publishes a report artifact:
-      # gcovr reads gcov's per-instantiation JSON only from GCC 14's format version 2, and older gcov text
-      # output drops some header template instantiations.
+      # gcovr 8.6 reads gcov's JSON (which keeps every template instantiation) only at format version 2, from
+      # GCC 14 on; older gcov falls back to text output that drops some instantiations.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
         build_type: [ Release, Debug, Sanitize, Coverage ]
@@ -59,6 +59,7 @@ jobs:
             build_type: Coverage
             c_compiler: gcc-14
             cpp_compiler: g++-14
+            gcov: gcov-14
         exclude:
           - os: windows-latest
             c_compiler: gcc
@@ -105,6 +106,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libwayland-dev libxkbcommon-dev libgl1-mesa-dev libgtk-3-dev ninja-build
+
+      - name: Check gcov writes JSON format 2
+        if: ${{ matrix.build_type == 'Coverage' }}
+        # Without it gcovr silently falls back to text output and under-reports header templates.
+        shell: bash
+        run: |
+          version=$(${{ matrix.gcov }} --version); echo "$version"
+          grep -q 'JSON format version: 2' <<<"$version" || { echo "${{ matrix.gcov }} does not report JSON format version: 2; gcovr would fall back to gcov text output" >&2; exit 1; }
 
       - name: Install Ninja (macOS)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -177,22 +186,15 @@ jobs:
         if: ${{ matrix.build_type == 'Coverage' }}
         run: pipx install gcovr==8.6
 
-      - name: Check gcov writes JSON format 2
-        if: ${{ matrix.build_type == 'Coverage' }}
-        # Without it gcovr silently falls back to text output and under-reports header templates.
-        shell: bash
-        run: |
-          gcov-14 --version | tee /dev/stderr | grep -q 'JSON format version: 2' || { echo "gcov-14 does not report JSON format version: 2; gcovr would fall back to gcov text output" >&2; exit 1; }
-
       - name: Native coverage report
         if: ${{ matrix.build_type == 'Coverage' }}
         # Branch numbers leave out exception and unreachable edges, which the compiler generates in bulk
         # and which no test can sensibly target. bash, so a gcovr failure is not hidden by the tee.
-        # gcov-14 because the image's default gcov (gcc 13) cannot read gcc-14 .gcda files.
+        # The matrix's gcov must match the compiler version: the image's default gcov belongs to a different gcc.
         shell: bash
         run: |
           mkdir -p coverage/native
-          gcovr --root . ${{ steps.strings.outputs.build_dir }} --gcov-executable gcov-14 \
+          gcovr --root . ${{ steps.strings.outputs.build_dir }} --gcov-executable ${{ matrix.gcov }} \
             --filter 'source/libs/' --filter 'source/apps/' \
             --exclude 'source/tests/' --exclude '.*/_deps/.*' \
             --exclude-throw-branches --exclude-unreachable-branches \
