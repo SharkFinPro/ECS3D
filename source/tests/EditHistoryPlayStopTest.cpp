@@ -130,9 +130,9 @@ TEST(EditHistoryPlayStop, RenameRecordedBeforePlayUndoesAndRedoesAfterStop)
   EXPECT_EQ(play.object()->getName(), "Renamed");
 }
 
-// The two refusal tests never start the scene: validation reads only the live objects, which is why the
-// tests above pass only because stop() restored them.
-TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasChangedWhatTheCommandNames)
+// The two refusal tests never start the scene: validation reads only the live objects, so they pin the
+// refusals the tests above avoid by undoing against the tree stop() restored.
+TEST(EditHistoryPlayStop, UndoIsRefusedWhenTheSceneHasChangedWhatTheCommandNames)
 {
   const auto play = makePlayScene();
   play.object()->setName("Renamed");
@@ -149,7 +149,7 @@ TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasChangedWhatTheCommandNames)
   EXPECT_EQ(*outcome.conflict, play.objectUUID);
 }
 
-TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasDestroyedTheTarget)
+TEST(EditHistoryPlayStop, UndoIsRefusedWhenTheTargetIsGone)
 {
   const auto play = makePlayScene();
   play.object()->setName("Renamed");
