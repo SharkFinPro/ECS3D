@@ -38,6 +38,9 @@ only while the viewport looks through a scene camera (in free-fly the right-drag
 camera, so forwarding it too would turn the player at the same time) **and** `RenderingManager::isSceneFocused()`
 is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD (the movement keys) reaches the game from either view.
+`input::capture` reports the snapshot as focused when the main window or any detached ImGui panel window (a
+multi-viewport platform window) has focus; an unfocused snapshot carries no mouse motion, scroll or buttons
+(`InputFocus.h`).
 Connections are bound to slots by `PlayerSlotTable` (`data/PlayerSlots`).
 A join beyond the 256 slots (0..255) is left unbound: it still receives the snapshot and can watch, but gets no
 `playerSlot` and its input is dropped until a slot frees, when its next input binds it and it is told its slot.

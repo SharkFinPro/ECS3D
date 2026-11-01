@@ -1,9 +1,36 @@
 #include "InputCapture.h"
+#include "InputFocus.h"
+#include <imgui.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <GLFW/glfw3.h>
 
 namespace input {
+
+namespace {
+
+// With ImGui multi-viewport on, detached panels are their own GLFW windows (viewports after the main one).
+bool detachedWindowFocused()
+{
+  if (!ImGui::GetCurrentContext() || !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable))
+  {
+    return false;
+  }
+
+  const auto& viewports = ImGui::GetPlatformIO().Viewports;
+  for (int i = 1; i < viewports.Size; ++i)
+  {
+    const auto handle = static_cast<GLFWwindow*>(viewports[i]->PlatformHandle);
+    if (handle && glfwGetWindowAttrib(handle, GLFW_FOCUSED) == GLFW_TRUE)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+}
 
 InputSnapshot capture(const vke::VulkanEngine& renderer)
 {
@@ -15,7 +42,8 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
     return snapshot;
   }
 
-  snapshot.focused = glfwGetWindowAttrib(window->getWindow(), GLFW_FOCUSED) == GLFW_TRUE;
+  const bool focused = anyWindowFocused(glfwGetWindowAttrib(window->getWindow(), GLFW_FOCUSED) == GLFW_TRUE,
+                                        detachedWindowFocused());
 
   // Poll the keys the ScriptBridge Key enum exposes: space, the arrow keys, and A-Z. The window only
   // reports a key as pressed while it has focus, so this naturally goes quiet when the user tabs away.
@@ -52,15 +80,7 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
   if (window->buttonIsPressed(1)) { snapshot.buttons |= mouseButtonRight; }
   if (window->buttonIsPressed(2)) { snapshot.buttons |= mouseButtonMiddle; }
 
-  // GLFW still reports the cursor and buttons while the window is unfocused; without this an unfocused
-  // window would keep steering the player's look.
-  if (!snapshot.focused)
-  {
-    snapshot.mouseDeltaX = 0.0f;
-    snapshot.mouseDeltaY = 0.0f;
-    snapshot.scrollY = 0.0f;
-    snapshot.buttons = 0;
-  }
+  applyFocus(snapshot, focused);
 
   return snapshot;
 }
