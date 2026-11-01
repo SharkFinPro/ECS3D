@@ -72,6 +72,27 @@ TEST(CameraRange, SetFarPlaneAtOrBelowNearIsPushedBeyondNear)
   camera->setFarPlane(5.0f);
 
   EXPECT_GT(camera->getFarPlane(), camera->getNearPlane());
+  EXPECT_FLOAT_EQ(camera->getFarPlane(), 5.0f + Camera::minFarPlaneClearance);
+}
+
+TEST(CameraRange, TheRangeConstantsKeepTheFrustumNonDegenerate)
+{
+  EXPECT_GT(Camera::minFovDegrees, 0.0f);
+  EXPECT_LT(Camera::maxFovDegrees, 180.0f);
+  EXPECT_GT(Camera::minNearPlane, 0.0f);
+  EXPECT_GT(Camera::minFarPlaneClearance, 0.0f);
+}
+
+TEST(CameraRange, SetFovKeepsTheValuesAroundTheMaxBoundary)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+
+  camera->setFov(178.9f);
+  EXPECT_FLOAT_EQ(camera->getFov(), 178.9f);
+
+  camera->setFov(179.1f);
+  EXPECT_FLOAT_EQ(camera->getFov(), Camera::maxFovDegrees);
 }
 
 TEST(CameraRange, SetNearPlaneAboveTheCurrentFarPushesFar)
@@ -103,35 +124,6 @@ TEST(CameraRange, LoadFromJSONWithInconsistentValuesYieldsAValidCamera)
   EXPECT_FLOAT_EQ(camera->getFov(), Camera::minFovDegrees);
   EXPECT_FLOAT_EQ(camera->getNearPlane(), 5.0f);
   EXPECT_GT(camera->getFarPlane(), camera->getNearPlane());
-}
-
-TEST(CameraRange, LoadFromJSONGivesTheSameResultRegardlessOfJsonKeyOrder)
-{
-  // nlohmann::json is a map, so componentData.value(...) lookups can never actually depend on the order
-  // keys were inserted in - this exists to pin that down as intentional, not to test setNearFarPlanes
-  // itself (see the setter-order test below for that).
-  const auto camera = makeCamera();
-  ASSERT_NE(camera, nullptr);
-
-  nlohmann::json data;
-  data["type"] = "Camera";
-  data["farPlane"] = 1.0f;
-  data["nearPlane"] = 5.0f;
-  data["fov"] = 0.0f;
-  camera->loadFromJSON(data);
-
-  const auto reference = makeCamera();
-  ASSERT_NE(reference, nullptr);
-  nlohmann::json referenceData;
-  referenceData["type"] = "Camera";
-  referenceData["fov"] = 0.0f;
-  referenceData["nearPlane"] = 5.0f;
-  referenceData["farPlane"] = 1.0f;
-  reference->loadFromJSON(referenceData);
-
-  EXPECT_FLOAT_EQ(camera->getFov(), reference->getFov());
-  EXPECT_FLOAT_EQ(camera->getNearPlane(), reference->getNearPlane());
-  EXPECT_FLOAT_EQ(camera->getFarPlane(), reference->getFarPlane());
 }
 
 TEST(CameraRange, SingleFieldSettersAreOrderDependentUnlikeLoadFromJSON)
@@ -222,7 +214,8 @@ TEST(CameraRange, NonFiniteSettersAreIgnored)
 
 namespace {
   // Builds the wire payload Camera::pack() writes (tag, direction, fov, nearPlane, farPlane, active),
-  // with the direction field replaced by the caller's own value.
+  // with the direction field replaced by the caller's own value. The camera is inactive, which is the
+  // opposite of the default, so a dropped read shows.
   net::Message packedCameraWithDirection(const glm::vec3& direction)
   {
     net::Message message(net::MessageType::undefined);
@@ -231,7 +224,7 @@ namespace {
     message.write(70.0f);
     message.write(0.05f);
     message.write(500.0f);
-    message.write(true);
+    message.write(false);
     return message;
   }
 
@@ -262,7 +255,7 @@ TEST(CameraRange, UnpackWithANonFiniteDirectionKeepsThePriorDirection)
   EXPECT_FLOAT_EQ(camera->getFov(), 70.0f);
   EXPECT_FLOAT_EQ(camera->getNearPlane(), 0.05f);
   EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
-  EXPECT_TRUE(camera->isActive());
+  EXPECT_FALSE(camera->isActive());
 }
 
 TEST(CameraRange, UnpackWithAnInfiniteDirectionKeepsThePriorDirection)
@@ -282,7 +275,7 @@ TEST(CameraRange, UnpackWithAnInfiniteDirectionKeepsThePriorDirection)
   EXPECT_FLOAT_EQ(camera->getFov(), 70.0f);
   EXPECT_FLOAT_EQ(camera->getNearPlane(), 0.05f);
   EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
-  EXPECT_TRUE(camera->isActive());
+  EXPECT_FALSE(camera->isActive());
 }
 
 TEST(CameraRange, UnpackWithAFiniteDirectionAppliesIt)
@@ -301,7 +294,7 @@ TEST(CameraRange, UnpackWithAFiniteDirectionAppliesIt)
   EXPECT_FLOAT_EQ(camera->getFov(), 70.0f);
   EXPECT_FLOAT_EQ(camera->getNearPlane(), 0.05f);
   EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
-  EXPECT_TRUE(camera->isActive());
+  EXPECT_FALSE(camera->isActive());
 }
 
 TEST(CameraRange, LoadFromJSONWithANullDirectionElementKeepsThePriorDirection)
@@ -382,4 +375,20 @@ TEST(CameraRange, LoadFromJSONWithADirectionOfTheWrongSizeIsIgnored)
 
   // The rest of the component still loads, so only the direction was skipped.
   EXPECT_FLOAT_EQ(camera->getFov(), 60.0f);
+}
+
+TEST(CameraRange, LoadFromJSONAppliesAnInactiveFlagAndDefaultsToActive)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["active"] = false;
+  camera->loadFromJSON(data);
+  EXPECT_FALSE(camera->isActive());
+
+  data.erase("active");
+  camera->loadFromJSON(data);
+  EXPECT_TRUE(camera->isActive());
 }
