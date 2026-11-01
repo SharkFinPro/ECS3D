@@ -607,6 +607,8 @@ TEST_F(SettingsStoreTest, EditorCameraSpeedClampsBelowTheMinimumOnWrite)
   editorCameraSettings::writeSpeed(store, -3.0f);
 
   EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::minSpeed);
+  // The read clamps again, so check what the write itself stored.
+  EXPECT_FLOAT_EQ(store.get<float>(editorCameraSettings::key, -1.0f), editorCameraSettings::minSpeed);
 }
 
 TEST_F(SettingsStoreTest, EditorCameraSpeedRejectsANonFiniteValue)
@@ -616,6 +618,7 @@ TEST_F(SettingsStoreTest, EditorCameraSpeedRejectsANonFiniteValue)
   editorCameraSettings::writeSpeed(store, std::numeric_limits<float>::infinity());
 
   EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::defaultSpeed);
+  EXPECT_FLOAT_EQ(store.get<float>(editorCameraSettings::key, -1.0f), editorCameraSettings::defaultSpeed);
 }
 
 TEST_F(SettingsStoreTest, GizmoSettingsFallBackToTheCompiledInDefaults)
@@ -685,6 +688,11 @@ TEST_F(SettingsStoreTest, GizmoStepsClampBelowTheMinimumOnWrite)
   EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(store), editorGizmoSettings::minTranslateStep);
   EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::minRotateStepDegrees);
   EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::minScaleStep);
+
+  EXPECT_FLOAT_EQ(store.get<float>(editorGizmoSettings::translateStepKey, -1.0f), editorGizmoSettings::minTranslateStep);
+  EXPECT_FLOAT_EQ(store.get<float>(editorGizmoSettings::rotateStepKey, -1.0f),
+                  editorGizmoSettings::minRotateStepDegrees);
+  EXPECT_FLOAT_EQ(store.get<float>(editorGizmoSettings::scaleStepKey, -1.0f), editorGizmoSettings::minScaleStep);
 }
 
 TEST_F(SettingsStoreTest, GizmoStepsRejectANonFiniteValue)
@@ -699,6 +707,12 @@ TEST_F(SettingsStoreTest, GizmoStepsRejectANonFiniteValue)
   EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(store), editorGizmoSettings::defaultTranslateStep);
   EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::defaultRotateStepDegrees);
   EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::defaultScaleStep);
+
+  EXPECT_FLOAT_EQ(store.get<float>(editorGizmoSettings::translateStepKey, -1.0f),
+                  editorGizmoSettings::defaultTranslateStep);
+  EXPECT_FLOAT_EQ(store.get<float>(editorGizmoSettings::rotateStepKey, -1.0f),
+                  editorGizmoSettings::defaultRotateStepDegrees);
+  EXPECT_FLOAT_EQ(store.get<float>(editorGizmoSettings::scaleStepKey, -1.0f), editorGizmoSettings::defaultScaleStep);
 }
 
 namespace {
