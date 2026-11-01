@@ -59,7 +59,7 @@ TEST_F(LightRendererBindingsTest, GetReturnsTheComponentsValues)
   m_light->setAmbient(0.1f);
   m_light->setDiffuse(0.2f);
   m_light->setSpecular(0.3f);
-  m_light->setDirection({ 1.0f, 0.0f, 0.0f });
+  m_light->setDirection({ 1.0f, 2.0f, 3.0f });
   m_light->setConeAngle(45.0f);
 
   const auto id = uuid();
@@ -79,8 +79,8 @@ TEST_F(LightRendererBindingsTest, GetReturnsTheComponentsValues)
   float x = 0, y = 0, z = 0;
   m_bindings.getDirection(id.c_str(), &x, &y, &z);
   EXPECT_NEAR(x, 1.0f, 1e-5f);
-  EXPECT_NEAR(y, 0.0f, 1e-5f);
-  EXPECT_NEAR(z, 0.0f, 1e-5f);
+  EXPECT_NEAR(y, 2.0f, 1e-5f);
+  EXPECT_NEAR(z, 3.0f, 1e-5f);
 
   EXPECT_NEAR(m_bindings.getConeAngle(id.c_str()), 45.0f, 1e-5f);
 }
@@ -116,6 +116,12 @@ TEST_F(LightRendererBindingsTest, SetSpotLightChangesTheComponentAndRecordsOneEd
   ASSERT_EQ(edits.size(), 1u);
   EXPECT_EQ(edits[0].first, m_object->getUUID());
   EXPECT_EQ(edits[0].second, m_light);
+
+  m_bindings.setSpotLight(id.c_str(), false);
+
+  EXPECT_FALSE(m_light->isSpotLight());
+  EXPECT_FALSE(m_bindings.getIsSpotLight(id.c_str()));
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
 }
 
 TEST_F(LightRendererBindingsTest, SetColorChangesTheComponentAndRecordsOneEdit)
@@ -221,9 +227,9 @@ TEST_F(LightRendererBindingsTest, SetDirectionChangesTheComponentAndRecordsOneEd
 {
   const auto id = uuid();
 
-  m_bindings.setDirection(id.c_str(), 0.0f, 1.0f, 0.0f);
+  m_bindings.setDirection(id.c_str(), 1.0f, 2.0f, 3.0f);
 
-  fixtures::expectNear("direction", m_light->getDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+  fixtures::expectNear("direction", m_light->getDirection(), glm::vec3(1.0f, 2.0f, 3.0f));
   EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
 }
 

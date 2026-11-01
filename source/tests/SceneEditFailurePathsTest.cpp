@@ -166,6 +166,46 @@ TEST(SceneEditFailurePaths, RestoreObjectWhoseBodyIsNotAnObjectIsMalformed)
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount + 1);
 }
 
+TEST(SceneEditFailurePaths, RestoreObjectWithANilRootUuidIsRejectedAndLeavesTheSceneUnchanged)
+{
+  const auto scene = makeScene();
+  const auto before = shapeOf(*scene.objectManager);
+  const auto objectCount = scene.objectManager->getAllObjects().size();
+
+  auto body = trivialBody();
+  body["uuid"] = uuids::to_string(uuids::uuid{});
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(body, nullptr, 0)), SceneEditResult::rejected);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount);
+  EXPECT_EQ(shapeOf(*scene.objectManager), before);
+
+  body["uuid"] = uuids::to_string(someOtherUUID());
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(body, nullptr, 0)), SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount + 1);
+  EXPECT_NE(scene.objectManager->getObjectByUUID(someOtherUUID()), nullptr);
+}
+
+TEST(SceneEditFailurePaths, RestoreObjectWithANilChildUuidIsRejectedAndLeavesTheSceneUnchanged)
+{
+  const auto scene = makeScene();
+  const auto before = shapeOf(*scene.objectManager);
+  const auto objectCount = scene.objectManager->getAllObjects().size();
+
+  auto child = trivialBody();
+  child["name"] = "Child";
+  child["uuid"] = uuids::to_string(uuids::uuid{});
+
+  auto body = trivialBody();
+  body["children"] = nlohmann::json::array({ child });
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(body, nullptr, 0)), SceneEditResult::rejected);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount);
+  EXPECT_EQ(shapeOf(*scene.objectManager), before);
+
+  body["children"][0]["uuid"] = uuids::to_string(anotherUUID());
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(body, nullptr, 0)), SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount + 2);
+  EXPECT_NE(scene.objectManager->getObjectByUUID(anotherUUID()), nullptr);
+}
+
 TEST(SceneEditFailurePaths, DuplicateObjectReportsAnObjectItCannotRebuildAsFailed)
 {
   // An empty registry cannot create even the Transform the duplicate's blob names, so rebuilding the

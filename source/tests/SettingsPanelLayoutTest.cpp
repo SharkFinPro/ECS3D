@@ -29,14 +29,14 @@ TEST(SettingsPanelLayoutTest, RowWidthScalesWithEveryInput)
   EXPECT_NEAR(buttonRowWidth(scaledLabels, 5.0f, 10.0f), 1.25f * buttonRowWidth(labels, 4.0f, 8.0f), 1e-3f);
 }
 
-TEST(SettingsPanelLayoutTest, ThreeTypicalButtonsAtOneTwentyFivePercentExceedTheOldFixedWidth)
+TEST(SettingsPanelLayoutTest, ThreeTypicalButtonsAtOneTwentyFivePercentHaveTheExpectedRowWidth)
 {
   constexpr float scale = 1.25f;
   // A 16 px monospace font, the size the editor uses at 125% display scale.
   constexpr float charWidth = 9.6f;
   const std::array<float, 3> labels = { 6 * charWidth, 6 * charWidth, 5 * charWidth };
 
-  EXPECT_GT(buttonRowWidth(labels, 4.0f * scale, 8.0f * scale), 210.0f);
+  EXPECT_NEAR(buttonRowWidth(labels, 4.0f * scale, 8.0f * scale), 213.2f, 1e-3f);
 }
 
 TEST(SettingsPanelLayoutTest, DefaultSizeGrowsWithFontSize)
@@ -46,6 +46,14 @@ TEST(SettingsPanelLayoutTest, DefaultSizeGrowsWithFontSize)
 
   EXPECT_GT(large.x, small.x);
   EXPECT_GT(large.y, small.y);
+}
+
+TEST(SettingsPanelLayoutTest, DefaultSizeWithoutContentOrViewportIsTheEmMinimums)
+{
+  const auto size = settingsWindowDefaultSize(0.0f, 10.0f, 0.0f, 0.0f);
+
+  EXPECT_FLOAT_EQ(size.x, 585.0f);
+  EXPECT_FLOAT_EQ(size.y, 400.0f);
 }
 
 TEST(SettingsPanelLayoutTest, DefaultSizeIsNeverNarrowerThanContent)

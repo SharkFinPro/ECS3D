@@ -137,6 +137,25 @@ namespace {
     EXPECT_EQ(count(call("start", a, "Mover")), 1);
   }
 
+  TEST_F(ScriptSystemTest, AScriptAttachedBeforeTheSceneRunsIsStartedByTheFirstVariableUpdate)
+  {
+    const auto a = addScriptedObject("A", { "Mover" });
+    scriptSystem.attachAll(manager());
+    ASSERT_EQ(count(call("attach", a, "Mover")), 1);
+    ASSERT_EQ(count(call("start", a, "Mover")), 0);
+
+    scriptSystem.variableUpdate(manager());
+
+    EXPECT_EQ(count(call("start", a, "Mover")), 1);
+    EXPECT_EQ(count(call("variable", a, "Mover")), 1);
+    EXPECT_LT(indexOf(call("start", a, "Mover")), indexOf(call("variable", a, "Mover")));
+
+    scriptSystem.variableUpdate(manager());
+
+    EXPECT_EQ(count(call("start", a, "Mover")), 1);
+    EXPECT_EQ(count(call("variable", a, "Mover")), 2);
+  }
+
   TEST_F(ScriptSystemTest, RemovingAScriptComponentStopsAndDetachesItOnTheNextTick)
   {
     const auto a = addScriptedObject("A", { "Mover" });

@@ -51,14 +51,6 @@ internal sealed class TcpBackend : TransportBackend
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
   private int _nextConnId;
 
-  // Bounds how long an accepted socket may sit unauthorized before it is dropped. Without this, a peer
-  // that opens a connection and sends nothing holds a thread and a socket - and, before this change,
-  // a spot on the broadcast list - forever.
-  private const int DefaultHandshakeTimeoutMs = 5000;
-
-  // Instance copy of the default above, internal so ECS3DManagedTests can change it.
-  internal int HandshakeTimeoutMs = DefaultHandshakeTimeoutMs;
-
   // How long one socket send to one peer may block that peer's own sender thread before the peer is
   // dropped. It applies per underlying send, not per message, so a peer that drips a few bytes at a time is
   // caught by MaxQueuedSendBytes instead. The tick thread never waits on it: it only queues. Two seconds

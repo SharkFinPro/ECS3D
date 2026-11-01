@@ -5,6 +5,7 @@
 #include "RingBufferSink.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -152,22 +153,107 @@ TEST_F(LogTest, IsEnabledFollowsTheMinimumLevelInBothDirections)
   EXPECT_TRUE(Log::isEnabled(LogLevel::trace));
 }
 
-TEST_F(LogTest, WritingWithNoSinksRegisteredDoesNotCrashOrRecordAnything)
+TEST_F(LogTest, AnEntryWrittenBeforeASinkIsAddedIsNeverDeliveredToIt)
 {
   Log::write(LogLevel::error, LogCategory::server, "nowhere to go");
 
   const auto sink = addRingBuffer();
   EXPECT_TRUE(sink->snapshot().empty());
+
+  // Positive control: the sink is live, so the empty result is about the earlier write.
+  Log::write(LogLevel::error, LogCategory::server, "delivered");
+  ASSERT_EQ(sink->snapshot().size(), 1u);
+  EXPECT_EQ(sink->snapshot()[0].message, "delivered");
 }
 
-TEST_F(LogTest, ConstructingAndWritingToAConsoleSinkDoesNotThrow)
+TEST_F(LogTest, TheConvenienceWritersUseTheirOwnLevel)
+{
+  const auto sink = addRingBuffer();
+  Log::setMinimumLevel(LogLevel::trace);
+
+  Log::trace(LogCategory::engine, "t");
+  Log::debug(LogCategory::assets, "d");
+  Log::info(LogCategory::physics, "i");
+  Log::warn(LogCategory::net, "w");
+  Log::error(LogCategory::script, "e");
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 5u);
+
+  EXPECT_EQ(entries[0].level, LogLevel::trace);
+  EXPECT_EQ(entries[0].category, LogCategory::engine);
+  EXPECT_EQ(entries[0].message, "t");
+  EXPECT_EQ(entries[1].level, LogLevel::debug);
+  EXPECT_EQ(entries[1].category, LogCategory::assets);
+  EXPECT_EQ(entries[1].message, "d");
+  EXPECT_EQ(entries[2].level, LogLevel::info);
+  EXPECT_EQ(entries[2].category, LogCategory::physics);
+  EXPECT_EQ(entries[2].message, "i");
+  EXPECT_EQ(entries[3].level, LogLevel::warn);
+  EXPECT_EQ(entries[3].category, LogCategory::net);
+  EXPECT_EQ(entries[3].message, "w");
+  EXPECT_EQ(entries[4].level, LogLevel::error);
+  EXPECT_EQ(entries[4].category, LogCategory::script);
+  EXPECT_EQ(entries[4].message, "e");
+}
+
+TEST_F(LogTest, AConsoleSinkRoutesInfoToStdoutAndWarningsToStderr)
 {
   ConsoleSink sink;
 
-  EXPECT_NO_THROW(sink.write(LogEntry{ std::chrono::system_clock::now(), LogLevel::info, LogCategory::engine,
-                                        "hello" }));
-  EXPECT_NO_THROW(sink.write(LogEntry{ std::chrono::system_clock::now(), LogLevel::error, LogCategory::engine,
-                                        "hello" }));
+  testing::internal::CaptureStdout();
+  testing::internal::CaptureStderr();
+
+  sink.write(LogEntry{ std::chrono::system_clock::now(), LogLevel::debug, LogCategory::assets, "quiet" });
+  sink.write(LogEntry{ std::chrono::system_clock::now(), LogLevel::info, LogCategory::engine, "hello" });
+  sink.write(LogEntry{ std::chrono::system_clock::now(), LogLevel::warn, LogCategory::net, "careful" });
+  sink.write(LogEntry{ std::chrono::system_clock::now(), LogLevel::error, LogCategory::server, "broken" });
+
+  const std::string standardError = testing::internal::GetCapturedStderr();
+  const std::string standardOutput = testing::internal::GetCapturedStdout();
+
+  EXPECT_EQ(standardOutput, "[debug][assets] quiet\n[info][engine] hello\n");
+  EXPECT_EQ(standardError, "[warn][net] careful\n[error][server] broken\n");
+}
+
+TEST_F(LogTest, ConcurrentSinkChangesDoNotDisturbWriters)
+{
+  // Without the lock the damage is a data race on the sink list, so this reliably fails only under the sanitize
+  // preset (ThreadSanitizer/AddressSanitizer); a plain Release run catches it only by a lucky crash.
+  constexpr int writerCount = 4;
+  constexpr int perWriter = 400;
+
+  const auto stable = addRingBuffer(static_cast<std::size_t>(writerCount) * perWriter);
+
+  std::atomic<bool> done = false;
+  std::vector<std::thread> threads;
+  for (int t = 0; t < writerCount; ++t)
+  {
+    threads.emplace_back([t] {
+      for (int i = 0; i < perWriter; ++i)
+      {
+        Log::write(LogLevel::info, LogCategory::engine, std::to_string(t) + ":" + std::to_string(i));
+      }
+    });
+  }
+
+  std::thread churn([&done] {
+    while (!done)
+    {
+      const auto transient = std::make_shared<RingBufferSink>(4);
+      Log::addSink(transient);
+      Log::removeSink(transient);
+    }
+  });
+
+  for (auto& thread : threads)
+  {
+    thread.join();
+  }
+  done = true;
+  churn.join();
+
+  EXPECT_EQ(stable->snapshot().size(), static_cast<std::size_t>(writerCount) * perWriter);
 }
 
 TEST_F(LogTest, ConcurrentWritersLoseNothing)
@@ -222,21 +308,23 @@ TEST_F(LogTest, ConcurrentWritersLoseNothing)
   }
 }
 
-TEST(LogEntryToString, CoversEveryLogLevel)
+TEST(LogEntryToString, NamesEveryLogLevel)
 {
-  for (const auto level :
-       { LogLevel::trace, LogLevel::debug, LogLevel::info, LogLevel::warn, LogLevel::error })
-  {
-    EXPECT_FALSE(toString(level).empty());
-  }
+  EXPECT_EQ(toString(LogLevel::trace), "trace");
+  EXPECT_EQ(toString(LogLevel::debug), "debug");
+  EXPECT_EQ(toString(LogLevel::info), "info");
+  EXPECT_EQ(toString(LogLevel::warn), "warn");
+  EXPECT_EQ(toString(LogLevel::error), "error");
 }
 
-TEST(LogEntryToString, CoversEveryLogCategory)
+TEST(LogEntryToString, NamesEveryLogCategory)
 {
-  for (const auto category : { LogCategory::engine, LogCategory::assets, LogCategory::physics, LogCategory::net,
-                                LogCategory::script, LogCategory::editor, LogCategory::server,
-                                LogCategory::client })
-  {
-    EXPECT_FALSE(toString(category).empty());
-  }
+  EXPECT_EQ(toString(LogCategory::engine), "engine");
+  EXPECT_EQ(toString(LogCategory::assets), "assets");
+  EXPECT_EQ(toString(LogCategory::physics), "physics");
+  EXPECT_EQ(toString(LogCategory::net), "net");
+  EXPECT_EQ(toString(LogCategory::script), "script");
+  EXPECT_EQ(toString(LogCategory::editor), "editor");
+  EXPECT_EQ(toString(LogCategory::server), "server");
+  EXPECT_EQ(toString(LogCategory::client), "client");
 }

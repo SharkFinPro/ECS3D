@@ -548,7 +548,7 @@ namespace {
 
   // Result of walking a restoreObject body before anything is built: whether any node's uuid is missing
   // or failed to parse (malformed - the wire and the sender disagree about the payload), whether any
-  // node's uuid already names a live object (collides - refuse rather than corrupt the uuid-keyed
+  // node's uuid is nil or already names a live object (collides - refuse rather than corrupt the uuid-keyed
   // lookups everything else relies on), and the body's own height (0 for a leaf), so the caller can add
   // it to a target depth before building anything.
   struct RestoreBodyWalk {
@@ -575,8 +575,10 @@ namespace {
       return { .malformed = true };
     }
 
+    // The nil uuid is never a usable identity: the root would keep it (restoreSubtree does not register it)
+    // while a descendant would be silently renumbered, so refuse it anywhere in the body, like the create ops.
     RestoreBodyWalk result;
-    result.collides = objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
+    result.collides = nodeUUID->is_nil() || objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
       || !seenInThisBody.insert(nodeUUID.value()).second;
 
     if (node.contains("children"))

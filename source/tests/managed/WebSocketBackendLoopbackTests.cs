@@ -33,6 +33,7 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   private readonly List<WebSocketBackend> _servers = new();
   private readonly List<WebSocketBackend> _clients = new();
   private readonly List<RawPeer> _peers = new();
+  private readonly List<TcpClient> _tcpPeers = new();
 
   public WebSocketBackendLoopbackTests()
   {
@@ -51,6 +52,11 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     foreach (var peer in _peers)
     {
       peer.Dispose();
+    }
+
+    foreach (var tcpPeer in _tcpPeers)
+    {
+      try { tcpPeer.Dispose(); } catch { /* best effort */ }
     }
 
     foreach (var server in _servers)
@@ -245,6 +251,61 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     return Authorized()[expectedCount - 1].ConnId;
   }
 
+  // A bare socket the test writes to byte by byte, so it controls exactly when the upgrade request and the
+  // first message arrive.
+  private TcpClient ConnectTcp(int port)
+  {
+    var tcp = new TcpClient { NoDelay = true };
+    _tcpPeers.Add(tcp);
+    tcp.Connect(IPAddress.Loopback, port);
+    return tcp;
+  }
+
+  // The padding makes the request long enough that trickling it takes far longer than any wait below.
+  private static byte[] UpgradeRequest()
+  {
+    var request =
+      "GET / HTTP/1.1\r\n" +
+      "Host: 127.0.0.1\r\n" +
+      "Upgrade: websocket\r\n" +
+      "Connection: Upgrade\r\n" +
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      "Sec-WebSocket-Version: 13\r\n" +
+      $"X-Padding: {new string('a', 200)}\r\n\r\n";
+    return Encoding.ASCII.GetBytes(request);
+  }
+
+  // True once the server closed the socket (end of stream or a reset); false if it was still open when the
+  // wait ran out. Bytes the server sends meanwhile, such as the 101 response, are read and ignored.
+  private static bool ServerClosesWithin(TcpClient tcp, int timeoutMs)
+  {
+    var stream = tcp.GetStream();
+    var deadline = Environment.TickCount64 + timeoutMs;
+    var buffer = new byte[512];
+
+    while (Environment.TickCount64 < deadline)
+    {
+      stream.ReadTimeout = (int)Math.Max(1, deadline - Environment.TickCount64);
+      try
+      {
+        if (stream.Read(buffer, 0, buffer.Length) == 0)
+        {
+          return true;
+        }
+      }
+      catch (IOException error) when (error.InnerException is SocketException { SocketErrorCode: SocketError.TimedOut })
+      {
+        return false;
+      }
+      catch (IOException)
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   [Fact]
   public void Handshake_ReportsTheGrantedRoleAndRefusesAWrongEditorToken()
   {
@@ -269,6 +330,108 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     Assert.Equal(2, granted.Select(a => a.ConnId).Distinct().Count());
     AssertStays(() => TransportRecorder.ServerDisconnected.Count, 0, "disconnects for connections never admitted");
     Assert.Equal(1, TransportRecorder.ClientDisconnects);
+  }
+
+  [Fact]
+  public void Handshake_DropsAPeerThatNeverSendsAnUpgradeRequestOnceTheTimeoutPasses()
+  {
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 200 };
+    var port = Start(server);
+
+    var silent = ConnectTcp(port);
+
+    // Far under the production default, so a backend that ignored the field fails this wait, with seconds of
+    // room for a stalled runner past the 200 ms it should take.
+    Assert.True(ServerClosesWithin(silent, 4000), "the silent peer was not dropped.");
+    Assert.Empty(Authorized());
+    Assert.Equal(0, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void Handshake_DropsAPeerThatTricklesTheUpgradeRequestSlowerThanTheTimeoutOverall()
+  {
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 500 };
+    var port = Start(server);
+
+    var trickler = ConnectTcp(port);
+    var request = UpgradeRequest();
+
+    // One byte every 20 ms never leaves a read idle for the 500 ms ReceiveTimeout, and the whole request
+    // would take over seven seconds. Only the deadline over the whole stage can end it sooner.
+    _ = Task.Run(() =>
+    {
+      var stream = trickler.GetStream();
+      try
+      {
+        foreach (var b in request)
+        {
+          stream.WriteByte(b);
+          Thread.Sleep(20);
+        }
+      }
+      catch (IOException)
+      {
+        // The server closed the socket mid-request, which is the outcome under test.
+      }
+      catch (ObjectDisposedException)
+      {
+        // The test finished and disposed the socket.
+      }
+    });
+
+    Assert.True(ServerClosesWithin(trickler, 3000), "the trickling peer was not dropped.");
+    Assert.Empty(Authorized());
+    Assert.Equal(0, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void Handshake_DropsAPeerThatGoesSilentJustBeforeTheDeadlineWithoutWaitingAnotherTimeout()
+  {
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 2000 };
+    var port = Start(server);
+
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var peer = ConnectTcp(port);
+    Thread.Sleep(1500);
+    peer.GetStream().WriteByte((byte)'G');
+
+    // The deadline lands at 2000 ms. A read that kept the full 2000 ms timeout would only give up near 3500 ms.
+    Assert.True(ServerClosesWithin(peer, 4000), "the peer was not dropped.");
+    Assert.True(stopwatch.ElapsedMilliseconds < 2900, $"dropped after {stopwatch.ElapsedMilliseconds} ms.");
+  }
+
+  [Fact]
+  public void Handshake_DropsAPeerThatUpgradesButNeverSendsTheHandshakeMessage()
+  {
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 300 };
+    var port = Start(server);
+
+    var peer = ConnectTcp(port);
+    var request = UpgradeRequest();
+    peer.GetStream().Write(request, 0, request.Length);
+
+    Assert.True(ServerClosesWithin(peer, 4000), "the peer that never sent the handshake message was not dropped.");
+    Assert.Empty(Authorized());
+    Assert.Equal(0, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void Handshake_LeavesAnAdmittedConnectionOpenPastTheTimeout()
+  {
+    var server = new WebSocketBackend { HandshakeTimeoutMs = 3000 };
+    var port = Start(server);
+
+    var client = Connect(port, RolePlayer);
+    WaitFor(() => Authorized().Length == 1, "the player to be authorized");
+    WaitFor(() => server.ServerConnectionCount() == 1, "the player to be listed");
+
+    Thread.Sleep(3500);
+
+    Assert.Equal(1, server.ServerConnectionCount());
+    Assert.Equal(0, TransportRecorder.ClientDisconnects);
+
+    TransportRecorder.ClientSend(client, 5, new byte[] { 1, 2 });
+    WaitFor(() => TransportRecorder.ServerReceived.Count == 1, "the server to receive a message after the timeout");
   }
 
   [Fact]

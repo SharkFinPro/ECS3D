@@ -3,6 +3,7 @@
 #include "ComponentRegistry.h"
 #include "scenes/SceneAsset.h"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -100,6 +101,24 @@ namespace {
     ASSERT_EQ(script->getFields().size(), 2u);
     EXPECT_EQ(findField(script, "label").at("type"), "string");
     EXPECT_EQ(findField(script, "label").at("value"), "Edited");
+  }
+
+  TEST_F(ScriptSystemTest, SyncFieldsToDataKeepsTheSavedValuesWhenAGetterFaultsTheInstance)
+  {
+    state.exposedByClass["Mover"] = exposedFieldsJson;
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Mover");
+    scriptSystem.start(manager());
+    state.floats["speed"] = 4.0f;
+    scriptSystem.syncFieldsToData(manager());
+    ASSERT_FLOAT_EQ(findField(script, "speed").at("value").get<float>(), 4.0f);
+    const auto saved = script->getFields();
+
+    state.floats["speed"] = 9.0f;
+    state.readFieldHook = [this](const std::string&) { state.unhealthyClasses.insert("Mover"); };
+    scriptSystem.syncFieldsToData(manager());
+
+    EXPECT_EQ(script->getFields(), saved);
   }
 
   TEST_F(ScriptSystemTest, ApplyScriptFieldEditWritesAStringToAnAttachedInstance)
@@ -238,6 +257,12 @@ namespace {
       file << "class " << name << " {}";
     }
 
+    void touchScript(const std::string& name) const
+    {
+      const auto path = scriptsDir / name;
+      std::filesystem::last_write_time(path, std::filesystem::last_write_time(path) + std::chrono::seconds(10));
+    }
+
   private:
     std::filesystem::path makeDir()
     {
@@ -276,6 +301,73 @@ namespace {
 
     EXPECT_EQ(count("reload"), 1);
     EXPECT_EQ(count(call("attach", a, "Mover")), 2);
+  }
+
+  TEST_F(ScriptSystemHotReloadTest, EditingAnExistingScriptInPlaceReloads)
+  {
+    writeScript("Existing.cs");
+    const auto a = addScriptedObject("A", { "Mover" });
+    reloading.start(manager());
+    reloading.fixedUpdate(manager(), 0.6f);
+    ASSERT_EQ(count("reload"), 0);
+
+    touchScript("Existing.cs");
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 1);
+    EXPECT_EQ(count(call("attach", a, "Mover")), 2);
+
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 1);
+  }
+
+  TEST_F(ScriptSystemHotReloadTest, DeletingAScriptReloads)
+  {
+    writeScript("Existing.cs");
+    writeScript("Doomed.cs");
+    addScriptedObject("A", { "Mover" });
+    reloading.start(manager());
+    reloading.fixedUpdate(manager(), 0.6f);
+    ASSERT_EQ(count("reload"), 0);
+
+    std::filesystem::remove(scriptsDir / "Doomed.cs");
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 1);
+  }
+
+  TEST_F(ScriptSystemHotReloadTest, TheDirectoryIsOnlyCheckedOnceAHalfSecondHasAccumulated)
+  {
+    writeScript("Existing.cs");
+    addScriptedObject("A", { "Mover" });
+    reloading.start(manager());
+    writeScript("Added.cs");
+
+    reloading.fixedUpdate(manager(), 0.49f);
+
+    EXPECT_EQ(count("reload"), 0);
+
+    reloading.fixedUpdate(manager(), 0.02f);
+
+    EXPECT_EQ(count("reload"), 1);
+  }
+
+  TEST_F(ScriptSystemHotReloadTest, ALiveFieldValueIsSavedBeforeTheReloadRecompiles)
+  {
+    state.exposedByClass["Mover"] = exposedFieldsJson;
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Mover", nlohmann::json::array({
+      { { "name", "speed" }, { "type", "float" }, { "value", 1.0 } } }));
+    writeScript("Existing.cs");
+    reloading.start(manager());
+    state.floats["speed"] = 7.5f;
+
+    writeScript("Added.cs");
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    ASSERT_EQ(count("reload"), 1);
+    EXPECT_FLOAT_EQ(findField(script, "speed").at("value").get<float>(), 7.5f);
   }
 
   TEST_F(ScriptSystemHotReloadTest, AnUnchangedDirectoryNeverReloads)
@@ -588,6 +680,23 @@ namespace {
       { { "name", "speed" }, { "type", "float" }, { "value", 7.5 } } });
     script->setFields(edited);
     reloading.applyScriptFieldEdit(object->getUUID(), "Mover", edited);
+    writeScript("Added.cs");
+
+    ASSERT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+
+    EXPECT_FLOAT_EQ(findField(script, "speed").at("value").get<float>(), 7.5f);
+  }
+
+  TEST_F(StoppedSceneReloadTest, ALiveFieldValueIsSavedBeforeAStoppedReloadRecompiles)
+  {
+    state.exposedByClass["Mover"] = exposedFieldsJson;
+    const auto object = std::make_shared<Object>("Scripted");
+    stoppedScene->getObjectManager()->addObject(object);
+    const auto script = addScript(object, "Mover", nlohmann::json::array({
+      { { "name", "speed" }, { "type", "float" }, { "value", 1.0 } } }));
+    reloading.warmUp();
+    reloading.attachAll(*stoppedScene);
+    state.floats["speed"] = 7.5f;
     writeScript("Added.cs");
 
     ASSERT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));

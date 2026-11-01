@@ -38,6 +38,18 @@ public class SceneScriptTests : IDisposable
     }
   }
 
+  public class Greeter : SceneScript
+  {
+    public int Loaded { get; private set; }
+    public int Joined { get; private set; }
+
+    public void Ping() => Loaded += 100;
+
+    public override void onSceneLoaded() => Loaded++;
+
+    public override void onPlayerJoined(int slot) => Joined++;
+  }
+
   public class ObjectListener : ScriptBase
   {
     public List<object?> Received { get; } = new();
@@ -228,6 +240,21 @@ public class SceneScriptTests : IDisposable
     Assert.False(Bridge.TryInvokeScript(SceneUuid, nameof(Round), round, "stop", none, out _));
     Assert.Equal(0, round.StartCalls);
     Assert.Equal(100, round.FixedCalls);
+  }
+
+  [Fact]
+  public void InvokeByNameRefusesTheSceneEventVirtualsEvenWhenTheScriptOverridesThem()
+  {
+    var greeter = new Greeter();
+    Bridge.AddInstance(SceneUuid, nameof(Greeter), greeter);
+    var none = Array.Empty<object?>();
+
+    Assert.True(Bridge.TryInvokeScript(SceneUuid, nameof(Greeter), greeter, "Ping", none, out _));
+    Assert.False(Bridge.TryInvokeScript(SceneUuid, nameof(Greeter), greeter, "onSceneLoaded", none, out _));
+    Assert.False(Bridge.TryInvokeScript(SceneUuid, nameof(Greeter), greeter, "onPlayerJoined",
+                                        new object?[] { 1 }, out _));
+    Assert.Equal(100, greeter.Loaded);
+    Assert.Equal(0, greeter.Joined);
   }
 
   [Fact]

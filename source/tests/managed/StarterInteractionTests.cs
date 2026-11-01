@@ -334,6 +334,20 @@ public unsafe class StarterInteractionTests : IDisposable
     Assert.Empty(collected);
   }
 
+  [Theory]
+  [InlineData("")]
+  [InlineData("  ")]
+  public void Collectible_ABlankEventNameFallsBackToCollected(string blank)
+  {
+    var coin = NewCollectible();
+    SetField(coin, "m_eventName", blank);
+    var collected = Listen(StarterEvents.Collected);
+
+    coin.onCollisionEnter("p1");
+
+    Assert.Single(collected);
+  }
+
   // ---- LaserPointer ----
 
   private static LaserPointer NewLaser(string marker = "Marker", bool logChanges = true)

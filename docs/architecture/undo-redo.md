@@ -37,15 +37,17 @@ command also carries the prefab asset's body as it was at record time, since `As
 prefab's body be replaced in place under the same uuid - a re-save between undo and redo - and
 `validateForRedo` refuses rather than silently instantiating whatever the registry holds now). Redoing that way - rather
 than replaying a captured subtree - means a duplicate's or prefab instance's descendants get fresh uuids
-each time it is recreated, the same limitation `addObject`'s redo already has (it does not restore the
-original uuid either): today the editor waits for the server to confirm a structural edit and rebuild the
-snapshot rather than applying it to its own view up front, so `RecordEdits` has no way to learn what uuids
-the server will mint for those descendants at the moment it derives the command, before the edit is even
-sent. **Every
+each time it is recreated, while the created root keeps its uuid: the three creating ops (`addObject`,
+`duplicateObject`, `instantiatePrefab`) must name the uuid of what they create, `RecordEdits` records no command
+for one that does not (absent, unparseable or nil), and each redo re-sends the op with that same uuid
+(`EditCommand::buildRedoJSON`), so the entry left on the undo stack still targets a live object. The editor
+waits for the server to confirm a structural edit and rebuild the snapshot rather than applying it to its own
+view up front, so the descendants' uuids are not known when the command is derived. **Every
 editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (component edit, scene edit, add
 asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
 before state from the replicated view while that view still holds it, and records what comes back; an edit
-nothing faithful can be derived for (a stale view, an op with no matching kind) is logged at debug and
+nothing faithful can be derived for (a stale view, an op with no matching kind, a creating op with no
+usable uuid) is logged at debug and
 skipped rather than refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),

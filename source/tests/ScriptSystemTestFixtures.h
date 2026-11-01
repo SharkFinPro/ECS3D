@@ -55,6 +55,8 @@ namespace scriptSystemFixtures {
     // Run inside start/stop (uuid, class name), standing in for a script that spawns objects.
     std::function<void(const std::string&, const std::string&)> startHook;
     std::function<void(const std::string&, const std::string&)> stopHook;
+    // Run inside getFieldFloat (field name), standing in for a getter that faults the instance mid-read.
+    std::function<void(const std::string&)> readFieldHook;
     std::map<std::string, std::string> exposedByClass;
     std::map<std::string, float> floats;
     std::map<std::string, int> ints;
@@ -177,6 +179,11 @@ namespace scriptSystemFixtures {
 
     [[nodiscard]] float getFieldFloat(const char*, const char*, const char* fieldName) const override
     {
+      if (m_state.readFieldHook)
+      {
+        m_state.readFieldHook(fieldName);
+      }
+
       return m_state.floats[fieldName];
     }
 

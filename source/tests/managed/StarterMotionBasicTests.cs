@@ -80,8 +80,11 @@ public unsafe class StarterMotionBasicTests : IDisposable
            k * (Vector3.Dot(k, v) * (1.0f - MathF.Cos(theta)));
   }
 
-  // Runs fixedUpdate ticks, feeding each written rotation back as the next read, as the engine would.
-  private static void SpinTicks(Spinner spinner, int ticks, float dt)
+  // Runs fixedUpdate ticks, feeding each written rotation back as the next read, as the engine would. A nonzero
+  // readNoise offsets every read component, standing in for a store that does not return exactly what was set.
+  private static void SpinTicks(Spinner spinner, int ticks, float dt) => SpinTicks(spinner, ticks, dt, 0f);
+
+  private static void SpinTicks(Spinner spinner, int ticks, float dt, float readNoise)
   {
     for (var tick = 0; tick < ticks; tick++)
     {
@@ -89,7 +92,7 @@ public unsafe class StarterMotionBasicTests : IDisposable
       spinner.fixedUpdate(dt);
       var written = Vec3Calls("Transform.setRotation");
       Assert.Single(written);
-      FakeNatives.Set("Transform.getLocalRotation", written[0]);
+      FakeNatives.Set("Transform.getLocalRotation", written[0] + new Vector3(readNoise));
     }
   }
 
@@ -145,6 +148,18 @@ public unsafe class StarterMotionBasicTests : IDisposable
 
     var v = new Vector3(1f, 2f, 3f);
     AssertVec(Rodrigues(v, new Vector3(0f, 1f, 0f), 135.0f), StarterUtils.rotate(CurrentRotation(), v));
+  }
+
+  [Fact]
+  public void Spinner_KeepsItsOwnOrientationWhenTheReadBackIsOnlyWithinToleranceOfWhatItWrote()
+  {
+    var spinner = NewScript<Spinner>(("m_degreesPerSecond", 45.0f));
+
+    SpinTicks(spinner, 16, 0.1f, 9e-4f);
+
+    // Reseeding from the noisy read every tick would add its offset to the turn each time (about 1e-3 here).
+    var v = new Vector3(1f, 2f, 3f);
+    AssertVec(Rodrigues(v, new Vector3(0f, 1f, 0f), 72.0f), StarterUtils.rotate(CurrentRotation(), v), 3e-4f);
   }
 
   [Fact]

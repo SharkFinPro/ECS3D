@@ -50,9 +50,8 @@ namespace {
     target.objectManager->unpack(reader);
   }
 
-  // The setters refuse a non-finite value, so one can no longer be planted through them. It reaches an
-  // object the way a corrupt or hostile peer would deliver it instead: straight off the wire, which
-  // unpack deliberately does not validate - that is what packStateDelta's own guard exists to catch.
+  // Delivers a transform the way a peer would: straight off the wire. Transform::unpack drops a non-finite
+  // vector and keeps the previous one, like every setter.
   // Argument order follows Transform::unpack: position, rotation, scale.
   void unpackTransform(const std::shared_ptr<Object>& object, const glm::vec3& position,
                        const glm::vec3& rotation, const glm::vec3& scale)
@@ -237,7 +236,7 @@ TEST(StateDelta, AnEmptySceneStillPacksACount)
   EXPECT_EQ(reader.read<uint32_t>(), 0u);
 }
 
-TEST(StateDelta, NeverCarriesANonFiniteTransformReadOffTheWire)
+TEST(StateDelta, TheTransformSettersNeverLetANonFiniteValueReachTheDelta)
 {
   const auto source = makeScene();
 
@@ -256,8 +255,8 @@ TEST(StateDelta, NeverCarriesANonFiniteTransformReadOffTheWire)
   unpackTransform(spinning, { 0, 0, 0 }, { 0, notFinite, 0 }, { 1, 1, 1 });
   unpackTransform(scaled, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, unbounded });
 
-  // Transform::unpack drops a non-finite vector and keeps the previous one, so the bad value never
-  // reaches the scene and every object still goes out with finite data.
+  // The bad value never reaches the scene, so every object still goes out with finite data. packStateDelta's
+  // own finite check is therefore defensive: no public path can make it fire.
   EXPECT_EQ(transformOf(notANumber)->getLocalPosition(), glm::vec3(0, 0, 0));
   EXPECT_EQ(transformOf(infinite)->getLocalPosition(), glm::vec3(0, 0, 0));
   EXPECT_EQ(transformOf(spinning)->getLocalRotation(), glm::vec3(0, 0, 0));
@@ -314,6 +313,15 @@ TEST_F(StateDeltaLogTest, LogsAnErrorOnceAndSkipsAnObjectWhoseTransformHasAForei
   EXPECT_EQ(entries[0].level, LogLevel::error);
   EXPECT_EQ(entries[0].category, LogCategory::server);
   EXPECT_NE(entries[0].message.find(uuids::to_string(misowned->getUUID())), std::string::npos);
+
+  // Once repaired the object drops out of the reported set, so breaking it again is worth a second entry.
+  transformOf(misowned)->setOwner(misowned.get());
+  ASSERT_EQ(entryUuids(deltaOf(source)).size(), 2u);
+  ASSERT_EQ(sink->snapshot().size(), 1u);
+
+  transformOf(misowned)->setOwner(healthy.get());
+  ASSERT_EQ(entryUuids(deltaOf(source)).size(), 1u);
+  EXPECT_EQ(sink->snapshot().size(), 2u);
 }
 
 TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)
@@ -424,12 +432,10 @@ TEST(StateDelta, AnEmptyPayloadThrowsRatherThanReadingACountThatIsNotThere)
   EXPECT_THROW(replication::unpackStateDelta(*target.objectManager, message), std::runtime_error);
 }
 
-TEST(StateDelta, TransformPackOrderMatchesUnpack)
+TEST(StateDelta, TransformUnpackReadsPositionRotationScaleInThatOrderAndPackWritesIt)
 {
-  // Transform::pack and Transform::unpack are each other's only correct reader/writer, so a round trip
-  // through both would pass even if the two disagreed on order the same way position/scale disagreeing
-  // with position/rotation/scale would - a symmetric swap. This builds the payload by hand instead, in
-  // the order pack is supposed to use (position, rotation, scale, matching Transform::serialize and
+  // A round trip through pack and unpack would pass if both swapped the same two members, so each side is
+  // pinned against hand-written order (position, rotation, scale, matching Transform::serialize and
   // packStateDelta), with three distinct vectors so a swap between any two lands on the wrong member.
   const auto scene = makeScene();
   const auto object = addObject(scene, "Object");
@@ -446,4 +452,13 @@ TEST(StateDelta, TransformPackOrderMatchesUnpack)
   EXPECT_EQ(transform->getLocalPosition(), glm::vec3(1, 2, 3));
   EXPECT_EQ(transform->getLocalRotation(), glm::vec3(4, 5, 6));
   EXPECT_EQ(transform->getLocalScale(), glm::vec3(7, 8, 9));
+
+  net::Message packed(net::MessageType::editComponent);
+  transform->pack(packed);
+
+  net::MessageReader packedReader(packed);
+  EXPECT_EQ(packedReader.read<ComponentType>(), ComponentType::transform);
+  EXPECT_EQ(packedReader.read<glm::vec3>(), glm::vec3(1, 2, 3));
+  EXPECT_EQ(packedReader.read<glm::vec3>(), glm::vec3(4, 5, 6));
+  EXPECT_EQ(packedReader.read<glm::vec3>(), glm::vec3(7, 8, 9));
 }
