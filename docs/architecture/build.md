@@ -67,6 +67,7 @@ the flat-shaded models.
 
 `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang)
 with the Vulkan SDK, then runs the suite through the `check` target; two more Linux rows (gcc, clang) run the
-`ecs3d-sanitize` preset's suite under ASan+UBSan, and one Linux gcc row runs `ecs3d-coverage` and uploads a
-gcovr/cobertura `coverage-report` artifact. A newer push to a pull request cancels that pull request's previous
-run.
+`ecs3d-sanitize` preset's suite under ASan+UBSan, and one row on ubuntu-24.04 with gcc-14 runs
+`ecs3d-coverage` and uploads a gcovr/cobertura `coverage-report` artifact (gcovr reads gcov's per-instantiation
+JSON only from GCC 14, so older gcc rows would drop some header template instantiations). A newer push to a pull
+request cancels that pull request's previous run.
