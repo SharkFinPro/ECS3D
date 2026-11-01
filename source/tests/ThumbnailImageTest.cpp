@@ -245,9 +245,26 @@ TEST(ThumbnailImageTest, SourceSidesAbove65535AreRejected)
 {
   const std::vector<std::uint8_t> wide(65536u * 4u, 255);
 
-  EXPECT_FALSE(letterbox(std::span(wide).first(65535u * 4u), 65535, 1, PixelFormat::rgba8).empty());
+  const auto sliver = letterbox(std::span(wide).first(65535u * 4u), 65535, 1, PixelFormat::rgba8);
+  ASSERT_FALSE(sliver.empty());
+  // The one source row survives the shrink as a single output row in the middle of the bars.
+  EXPECT_EQ(pixelAt(sliver, 320, 178), barColor);
+  expectColorNear(pixelAt(sliver, 320, 179), {255, 255, 255}, 1);
+  EXPECT_EQ(pixelAt(sliver, 320, 180), barColor);
   EXPECT_TRUE(letterbox(wide, 65536, 1, PixelFormat::rgba8).empty());
   EXPECT_TRUE(letterbox(wide, 1, 65536, PixelFormat::rgba8).empty());
+}
+
+TEST(ThumbnailImageTest, AnOddHorizontalRemainderGivesTheSpareColumnToTheRightBar)
+{
+  const auto image = letterbox(solidRgba(359, 360, red), 359, 360, PixelFormat::rgba8);
+
+  expectOutputSize(image);
+  // 359 x 360 stays 359 wide, leaving 281 bar columns: 140 on the left, 141 on the right.
+  EXPECT_EQ(pixelAt(image, 139, 180), barColor);
+  expectColorNear(pixelAt(image, 140, 180), red, 1);
+  expectColorNear(pixelAt(image, 498, 180), red, 1);
+  EXPECT_EQ(pixelAt(image, 499, 180), barColor);
 }
 
 TEST(ThumbnailImageTest, BgraInputSwapsRedAndBlue)
@@ -273,6 +290,11 @@ TEST(ThumbnailImageTest, EmptyOrInconsistentInputGivesAnEmptyResult)
   const auto good = solidRgba(8, 8, red);
 
   EXPECT_FALSE(letterbox(good, 8, 8, PixelFormat::rgba8).empty());
+
+  // Only a buffer shorter than width * height * 4 is inconsistent; extra trailing bytes are ignored.
+  auto oversized = good;
+  oversized.resize(good.size() + 16, 0);
+  EXPECT_FALSE(letterbox(oversized, 8, 8, PixelFormat::rgba8).empty());
   EXPECT_TRUE(letterbox({}, 8, 8, PixelFormat::rgba8).empty());
   EXPECT_TRUE(letterbox(good, 0, 8, PixelFormat::rgba8).empty());
   EXPECT_TRUE(letterbox(good, 8, 0, PixelFormat::rgba8).empty());
@@ -307,6 +329,34 @@ TEST(ThumbnailImageTest, PngHasTheSignatureAndTheTargetSize)
   };
   EXPECT_EQ(bigEndian(16), thumbnailWidth);
   EXPECT_EQ(bigEndian(20), thumbnailHeight);
+}
+
+TEST(ThumbnailImageTest, ABgraSourceEncodesWithRedAndBlueSwapped)
+{
+  std::vector<std::uint8_t> pixels(4 * 4 * 4);
+  for (std::size_t i = 0; i < pixels.size(); i += 4)
+  {
+    pixels[i] = 10;
+    pixels[i + 1] = 20;
+    pixels[i + 2] = 30;
+    pixels[i + 3] = 255;
+  }
+
+  const auto png = makeThumbnailPng(pixels, 4, 4, PixelFormat::bgra8);
+  ASSERT_FALSE(png.empty());
+
+  int decodedWidth = 0;
+  int decodedHeight = 0;
+  int components = 0;
+  stbi_uc* decoded =
+    stbi_load_from_memory(png.data(), static_cast<int>(png.size()), &decodedWidth, &decodedHeight, &components, 3);
+  ASSERT_NE(decoded, nullptr);
+
+  const std::size_t center = (180 * static_cast<std::size_t>(thumbnailWidth) + 320) * 3;
+  EXPECT_EQ(decoded[center], 30);
+  EXPECT_EQ(decoded[center + 1], 20);
+  EXPECT_EQ(decoded[center + 2], 10);
+  stbi_image_free(decoded);
 }
 
 TEST(ThumbnailImageTest, PngDecodesToExactlyTheLetterboxedPixels)

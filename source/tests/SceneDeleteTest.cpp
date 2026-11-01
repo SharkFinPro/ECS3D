@@ -237,6 +237,7 @@ TEST(SceneDelete, AddingASceneUnderAnExistingSceneUuidIsRefused)
 {
   Project project;
   project.addTwoScenes();
+  const auto versionBefore = project.assetRegistry.getVersion();
 
   const nlohmann::json asset = {
     { "assetType", "scene" },
@@ -245,6 +246,8 @@ TEST(SceneDelete, AddingASceneUnderAnExistingSceneUuidIsRefused)
   };
   replication::applyAddAsset(project.assetRegistry, project.sceneManager, project.componentRegistry, asset);
 
+  EXPECT_EQ(project.assetRegistry.getByPath("Replacement"), nullptr);
+  EXPECT_EQ(project.assetRegistry.getVersion(), versionBefore);
   EXPECT_EQ(project.sceneManager.getScene(otherUUID)->getName(), "Other");
   EXPECT_EQ(project.sceneManager.getScene(otherUUID)->getObjectManager()->getObjects().size(), 1u);
 

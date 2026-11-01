@@ -7,6 +7,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
   class SharedAssetLoadsTest : public testing::Test {
@@ -131,6 +132,41 @@ TEST_F(SharedAssetLoadsTest, KeyedFailureLogsOnceNamingTheLabelNotTheKey)
   ASSERT_EQ(entries.size(), 1u);
   EXPECT_NE(entries[0].message.find("assets/models/m.glb"), std::string::npos);
   EXPECT_EQ(entries[0].message.find("key-1234"), std::string::npos);
+}
+
+TEST_F(SharedAssetLoadsTest, DrainReleasesEverySuccessAndForgetsFailuresToo)
+{
+  int goodCalls = 0;
+  int badCalls = 0;
+  const auto good = [&goodCalls] {
+    return std::make_shared<int>(++goodCalls);
+  };
+  const auto bad = [&badCalls]() -> std::shared_ptr<int> {
+    ++badCalls;
+    throw std::runtime_error("nope");
+  };
+
+  const auto first = m_loads.get("good.glb", good);
+  EXPECT_EQ(m_loads.get("bad.glb", bad), nullptr);
+  ASSERT_NE(first, nullptr);
+
+  std::vector<std::shared_ptr<int>> released;
+  m_loads.drain([&released](std::shared_ptr<int> asset) { released.push_back(std::move(asset)); });
+
+  ASSERT_EQ(released.size(), 1u);
+  EXPECT_EQ(released[0], first);
+
+  // Positive control: the load map is empty again, so both paths load afresh.
+  const auto second = m_loads.get("good.glb", good);
+  EXPECT_NE(second, first);
+  EXPECT_EQ(goodCalls, 2);
+  EXPECT_EQ(m_loads.get("bad.glb", bad), nullptr);
+  EXPECT_EQ(badCalls, 2);
+
+  std::vector<std::shared_ptr<int>> releasedAgain;
+  m_loads.drain([&releasedAgain](std::shared_ptr<int> asset) { releasedAgain.push_back(std::move(asset)); });
+  ASSERT_EQ(releasedAgain.size(), 1u);
+  EXPECT_EQ(releasedAgain[0], second);
 }
 
 TEST_F(SharedAssetLoadsTest, KeyedSuccessIsCachedPerKey)

@@ -35,26 +35,28 @@ TEST(ProjectIdentityCheck, ARemoteServerOnTheBuiltInProjectIsAMismatch)
 
 TEST(ProjectIdentityCheck, AnEditorWithNoProjectHasNothingToForget)
 {
-  ProjectIdentityCheck positive;
-  positive.setOwnProject(ownProject, false);
-  ASSERT_TRUE(positive.observeSnapshot(otherProject));
-
   ProjectIdentityCheck check;
   check.setOwnProject(0, false);
 
   EXPECT_FALSE(check.observeSnapshot(otherProject));
+
+  // Positive control: the same snapshot is reported once the editor does hold a project.
+  check.setOwnProject(ownProject, false);
+  check.reset();
+  EXPECT_TRUE(check.observeSnapshot(otherProject));
 }
 
 TEST(ProjectIdentityCheck, ASpawnedServerIsTrustedEvenWhenTheFingerprintsDiffer)
 {
-  ProjectIdentityCheck remote;
-  remote.setOwnProject(ownProject, false);
-  ASSERT_TRUE(remote.observeSnapshot(otherProject));
+  ProjectIdentityCheck check;
+  check.setOwnProject(ownProject, true);
 
-  ProjectIdentityCheck spawned;
-  spawned.setOwnProject(ownProject, true);
+  EXPECT_FALSE(check.observeSnapshot(otherProject));
 
-  EXPECT_FALSE(spawned.observeSnapshot(otherProject));
+  // Positive control: the same snapshot is reported once the server is no longer spawned by the editor.
+  check.setOwnProject(ownProject, false);
+  check.reset();
+  EXPECT_TRUE(check.observeSnapshot(otherProject));
 }
 
 TEST(ProjectIdentityCheck, OnlyTheFirstSnapshotOfAConnectionIsChecked)
