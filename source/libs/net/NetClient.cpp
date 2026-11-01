@@ -37,6 +37,13 @@ NetClient::NetClient(const std::shared_ptr<ClientTransport>& transport)
   : m_transport(transport)
 {}
 
+// Only unregisters; the transport is not touched. The compare keeps a newer client's registration intact.
+NetClient::~NetClient()
+{
+  auto* expected = this;
+  g_activeClient.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
+}
+
 void NetClient::connect(const std::string& host, const int port, const Role role, const std::string& authToken)
 {
   if (m_state.isConnected())
@@ -49,7 +56,16 @@ void NetClient::connect(const std::string& host, const int port, const Role role
   g_activeClient.store(this, std::memory_order_release);
 
   const ClientCallbacks callbacks{&ecs3dNetClientReceive, &ecs3dNetClientDisconnect};
-  const bool connected = m_transport->connect(host, static_cast<int32_t>(port), role, authToken, callbacks);
+  bool connected = false;
+  try
+  {
+    connected = m_transport->connect(host, static_cast<int32_t>(port), role, authToken, callbacks);
+  }
+  catch (...)
+  {
+    g_activeClient.store(nullptr, std::memory_order_release);
+    throw;
+  }
 
   m_state.setConnected(connected);
 }

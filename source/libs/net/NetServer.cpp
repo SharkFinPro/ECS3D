@@ -47,6 +47,14 @@ NetServer::NetServer(const std::shared_ptr<ServerTransport>& transport)
   : m_transport(transport)
 {}
 
+// Only unregisters; the transport is not touched, so a server destroyed while started leaves its sockets
+// to whoever owns the transport. The compare keeps a newer server's registration intact.
+NetServer::~NetServer()
+{
+  auto* expected = this;
+  g_activeServer.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
+}
+
 void NetServer::start(const int port, const bool editMode, const std::string& authToken)
 {
   if (m_started)
@@ -61,7 +69,17 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   g_activeServer.store(this, std::memory_order_release);
 
   const ServerCallbacks callbacks{&ecs3dNetServerReceive, &ecs3dNetServerDisconnect, &ecs3dNetServerAuthorized};
-  const auto result = m_transport->start(static_cast<int32_t>(port), m_editMode, authToken, callbacks);
+  int32_t result = 0;
+  try
+  {
+    result = m_transport->start(static_cast<int32_t>(port), m_editMode, authToken, callbacks);
+  }
+  catch (...)
+  {
+    g_activeServer.store(nullptr, std::memory_order_release);
+    throw;
+  }
+
   if (result < 0)
   {
     g_activeServer.store(nullptr, std::memory_order_release);

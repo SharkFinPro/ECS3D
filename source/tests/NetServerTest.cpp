@@ -150,6 +150,23 @@ TEST_F(NetServerTest, AFailedStartCanBeRetried)
   EXPECT_TRUE(server->poll(message, sender));
 }
 
+TEST_F(NetServerTest, AThrowingTransportLeavesTheServerStoppedAndUnreachable)
+{
+  transport->throwOnStart = true;
+  EXPECT_THROW(server->start(3000, false, ""), std::runtime_error);
+
+  EXPECT_EQ(server->port(), 0);
+  receive(1, snapshotType, {1});
+  net::Message message;
+  int32_t sender = 0;
+  EXPECT_FALSE(server->poll(message, sender));
+
+  transport->throwOnStart = false;
+  server->start(3000, false, "");
+  receive(1, snapshotType, {1});
+  EXPECT_TRUE(server->poll(message, sender));
+}
+
 TEST_F(NetServerTest, ASecondStartWhileStartedDoesNotCallTheTransportAgain)
 {
   server->start(0, false, "");

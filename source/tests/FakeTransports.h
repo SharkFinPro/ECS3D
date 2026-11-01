@@ -5,6 +5,7 @@
 #include <ServerTransport.h>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,7 @@ public:
   };
 
   int32_t startResult = 1;
+  bool throwOnStart = false;
   int32_t connectionCountResult = 0;
 
   std::vector<StartCall> startCalls;
@@ -48,6 +50,12 @@ public:
   {
     startCalls.push_back({port, editMode, authToken});
     callbacks = registered;
+
+    if (throwOnStart)
+    {
+      throw std::runtime_error("transport assembly missing");
+    }
+
     return startResult;
   }
 
@@ -91,6 +99,7 @@ public:
   };
 
   bool connectResult = true;
+  bool throwOnConnect = false;
 
   // Models the receive thread waking and reporting the drop before the managed disconnect returns.
   bool reportDisconnectInsideDisconnect = false;
@@ -106,6 +115,12 @@ public:
   {
     connectCalls.push_back({host, port, role, authToken});
     callbacks = registered;
+
+    if (throwOnConnect)
+    {
+      throw std::runtime_error("transport assembly missing");
+    }
+
     return connectResult;
   }
 

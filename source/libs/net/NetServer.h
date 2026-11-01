@@ -15,6 +15,8 @@ class NetServer {
 public:
   explicit NetServer(const std::shared_ptr<ServerTransport>& transport);
 
+  ~NetServer();
+
   // editMode enables granting Role::editor at the handshake; authToken (if non-empty) is the token an
   // editor must then present to be authorized. Throws std::runtime_error, leaving the server stopped, when
   // the transport cannot listen on port (taken, out of range, or any other failure).

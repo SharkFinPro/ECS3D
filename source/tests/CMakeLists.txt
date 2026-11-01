@@ -252,11 +252,11 @@ add_executable(${PROJECT_NAME}
   PhysicsTestHelpers.h
   PhysicsGenericRestingFixtures.h
 
-  # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
-  # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
-  # suite that is headless by construction. That is also the constraint the arrangement rests on - do
-  # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
-  # else in net that needs covering will hit the same wall. TransportLog.cpp and ServerLog.cpp are
+  # The CLR-free pieces of ECS3DNet are compiled in rather than linked: linking the library would pull
+  # ManagedHost and the C# transport assembly into a suite that is headless by construction. That is
+  # also the constraint the arrangement rests on - do not add ECS3DNet to the link libraries below, or
+  # these objects and the library's duplicate. A net source joins them only if it makes no CLR call; the
+  # CLR calls stay in ManagedServerTransport and ManagedClientTransport. TransportLog.cpp and ServerLog.cpp are
   # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol. CommandLineSplit.cpp,
   # ClientConnectionState.cpp and EditorConnections.cpp are the CLR-free pieces split out of ServerProcess,
   # NetClient and NetServer. NetServer.cpp and NetClient.cpp compile in too: they reach the C# transport

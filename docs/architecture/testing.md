@@ -18,8 +18,10 @@ needs `fixtures::` or a using-declaration. **Build a scene through these rather 
 
 Tests (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
 `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
-window, GPU or server. `net/MessageQueue.cpp` (and the CLR-free `net/CommandLineSplit.cpp`, `net/ClientConnectionState.cpp`, `net/EditorConnections.cpp`, `net/NetServer.cpp` and `net/NetClient.cpp`, which reach the transport through an interface the tests fake) are compiled straight into the target rather than linked,
-because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
+window, GPU or server. The CLR-free sources of `ECS3DNet` are compiled straight into the target rather than linked:
+`net/MessageQueue.cpp`, `net/CommandLineSplit.cpp`, `net/ClientConnectionState.cpp` and `net/EditorConnections.cpp`.
+`net/NetServer.cpp` and `net/NetClient.cpp` join them because they reach the transport only through an interface,
+which the tests fake; the CLR-backed `Managed*Transport` classes stay out. See the comment in the test
 `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp`, `RestPose.cpp` and `ShutdownSignal.cpp` are compiled in the same
 way, as is
 `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is

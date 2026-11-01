@@ -10,7 +10,11 @@ neither padding nor a pointer in it. `data`'s `WireTypes.h` holds those speciali
 and `uuids::uuid`, and any translation unit that reasons about the trait rather than just calling `write`/`read` includes
 it, since otherwise it evaluates the primary template and disagrees with the rest of the program. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
-opaque `(type byte, payload)` pairs through the `ServerTransport`/`ClientTransport` interfaces; `ManagedServerTransport`/`ManagedClientTransport` implement them over the `ManagedHost` delegates and are the only C++ that touches the CLR, which lets the headless tests drive `NetServer`/`NetClient` with a fake. Both transports refuse an inbound message over
+opaque `(type byte, payload)` pairs through the `ServerTransport`/`ClientTransport` interfaces.
+`ManagedServerTransport`/`ManagedClientTransport` implement them over the `ManagedHost` delegates and are the only
+C++ that touches the CLR. That lets the headless tests drive `NetServer`/`NetClient` with a fake. If a transport call
+throws, `start`/`connect` clear the active pointer and rethrow, and a destroyed `NetServer`/`NetClient` unregisters
+itself. Both transports refuse an inbound message over
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
 WebSocket on what has actually arrived, since a fragmented message declares none. Neither backend sizes
 its read buffer to that declared length up front: TCP grows a buffer to roughly what has actually arrived

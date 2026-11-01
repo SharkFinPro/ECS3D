@@ -14,6 +14,8 @@ class NetClient {
 public:
   explicit NetClient(const std::shared_ptr<ClientTransport>& transport);
 
+  ~NetClient();
+
   void connect(const std::string& host, int port, Role role, const std::string& authToken);
 
   void disconnect();

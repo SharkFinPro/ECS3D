@@ -66,6 +66,23 @@ TEST_F(NetClientTest, AFailedConnectLeavesTheClientDisconnectedAndSendsNothing)
   EXPECT_EQ(transport->disconnectCalls, 0);
 }
 
+TEST_F(NetClientTest, AThrowingTransportLeavesTheClientDisconnectedAndUnreachable)
+{
+  transport->throwOnConnect = true;
+  EXPECT_THROW(client->connect("localhost", 3000, net::Role::player, ""), std::runtime_error);
+
+  EXPECT_FALSE(client->isConnected());
+  const uint8_t bytes[] = {1};
+  transport->callbacks.receive(snapshotType, bytes, 1);
+  net::Message message;
+  EXPECT_FALSE(client->poll(message));
+
+  transport->throwOnConnect = false;
+  client->connect("localhost", 3000, net::Role::player, "");
+  transport->callbacks.receive(snapshotType, bytes, 1);
+  EXPECT_TRUE(client->poll(message));
+}
+
 TEST_F(NetClientTest, AFailedConnectCanBeRetried)
 {
   transport->connectResult = false;
