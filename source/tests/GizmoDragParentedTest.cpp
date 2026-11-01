@@ -125,6 +125,7 @@ TEST(GizmoDragTest, TranslateUnderARotatedNonUniformlyScaledParentUnrotatesBefor
   EXPECT_NEAR(endWorld.y, startWorld.y, 1e-4f);
   EXPECT_NEAR(endWorld.z, startWorld.z, 1e-4f);
 
+  // The swapped-order mutant is caught by local x (1 -> 2/3) as well as z.
   // Un-rotated first, the world X delta lies on the parent's local Z axis and divides by that axis's scale, 3.
   fixtures::expectNear(frame.local->position, glm::vec3(1.0f, 0.0f, worldDelta / 3.0f), 1e-4f);
 }

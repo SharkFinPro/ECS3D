@@ -165,6 +165,10 @@ TEST(GizmoTest, AnEdgeOnRingTieGoesToTheFaceOnRing)
   // Here the X ring is 0.3 px closer than the Z ring, inside the tie epsilon, so reliability decides.
   f.input.mouse = center + glm::vec2(0.0f, -99.7f);
   EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::z);
+
+  // Two pixels inside the Z circle the X ring is clearly nearer, outside the tie epsilon, so distance wins.
+  f.input.mouse = center + glm::vec2(0.0f, -98.0f);
+  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::x);
 }
 
 TEST(GizmoTest, DegenerateViewportEmitsNothingAndNeverHovers)
