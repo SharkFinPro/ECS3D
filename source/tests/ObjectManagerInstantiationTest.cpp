@@ -254,6 +254,7 @@ TEST(ObjectManager, SerializeThenLoadPreservesUuidsAcrossTheWholeSubtree)
   const auto serialized = original.objectManager->serialize();
 
   const auto loaded = makeScene();
+  // ObjectManager's own restore path; the SceneAsset loader is covered by SerializationRoundTrip.
   loaded.objectManager->restoreFromJSON(serialized.at("objects"));
 
   const auto loadedRoot = loaded.objectManager->getObjectByUUID(rootUUID);

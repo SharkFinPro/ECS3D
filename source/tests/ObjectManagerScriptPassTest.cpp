@@ -237,11 +237,11 @@ TEST(ObjectManager, AnObjectSpawnedDuringAScriptPassOfARunningSceneStartsImmedia
   }
 
   collider->setScale(glm::vec3(4));
-  EXPECT_EQ(collider->getLocalScale(), glm::vec3(4));
 
+  // stop() only visits objects already in the manager's list, so the pending one must be flushed first.
   scene.objectManager->flushPendingAdditions();
   scene.objectManager->stop();
 
-  // The run must not have edited what the scene would save.
+  // The revert is what proves the deferred branch started the object; the write above holds either way.
   EXPECT_EQ(collider->getLocalScale(), glm::vec3(1));
 }
