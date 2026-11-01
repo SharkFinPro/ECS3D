@@ -57,22 +57,6 @@ namespace objectManagerFixtures {
 
     return true;
   }
-
-  // Loads a manager's own serialize() output the way SceneAsset::loadObjects does: each root object is
-  // reconstructed with its authored uuid, then its children are attached the same way loadChildren does.
-  inline void loadObjects(const Scene& scene, const nlohmann::json& objectsData)
-  {
-    for (const auto& objectData : objectsData)
-    {
-      auto object = std::make_shared<Object>(objectData, scene.objectManager.get());
-      scene.objectManager->addObject(object);
-
-      if (objectData.contains("children"))
-      {
-        object->loadChildren(objectData.at("children"));
-      }
-    }
-  }
 }
 
 #endif // OBJECTMANAGERFIXTURES_H

@@ -3,9 +3,11 @@
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/collisions/BoxCollider.h"
 #include "ObjectManagerFixtures.h"
 
 #include <algorithm>
+#include <glm/vec3.hpp>
 #include <memory>
 #include <string>
 #include <vector>
@@ -187,4 +189,59 @@ TEST(ObjectManager, AddObjectOutsideAScriptPassIsStillImmediate)
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
   EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
   EXPECT_EQ(scene.objectManager->getObjectByUUID(object->getUUID()), object);
+}
+
+TEST(ObjectManager, AnInnerScriptPassGuardEndingKeepsAdditionsDeferredWhileTheOuterOneLives)
+{
+  const auto scene = makeScene();
+  const ObjectManager::ScriptPassGuard outer(*scene.objectManager);
+
+  {
+    const ObjectManager::ScriptPassGuard inner(*scene.objectManager);
+  }
+
+  const auto spawned = std::make_shared<Object>("Spawned");
+  scene.objectManager->addObject(spawned);
+
+  EXPECT_TRUE(scene.objectManager->getAllObjects().empty());
+  ASSERT_EQ(scene.objectManager->getPendingAdditions().size(), 1u);
+}
+
+TEST(ObjectManager, AdditionsAreImmediateOnceEveryNestedGuardHasEnded)
+{
+  const auto scene = makeScene();
+
+  {
+    const ObjectManager::ScriptPassGuard outer(*scene.objectManager);
+    const ObjectManager::ScriptPassGuard inner(*scene.objectManager);
+  }
+
+  scene.objectManager->addObject(std::make_shared<Object>("Direct"));
+
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+  EXPECT_TRUE(scene.objectManager->getPendingAdditions().empty());
+}
+
+TEST(ObjectManager, AnObjectSpawnedDuringAScriptPassOfARunningSceneStartsImmediately)
+{
+  const auto scene = makeScene();
+  scene.objectManager->start();
+
+  const auto object = std::make_shared<Object>("Spawned");
+  const auto collider = std::make_shared<BoxCollider>();
+  object->addComponent(collider);
+
+  {
+    const ObjectManager::ScriptPassGuard guard(*scene.objectManager);
+    scene.objectManager->addObject(object);
+  }
+
+  collider->setScale(glm::vec3(4));
+  EXPECT_EQ(collider->getLocalScale(), glm::vec3(4));
+
+  scene.objectManager->flushPendingAdditions();
+  scene.objectManager->stop();
+
+  // The run must not have edited what the scene would save.
+  EXPECT_EQ(collider->getLocalScale(), glm::vec3(1));
 }

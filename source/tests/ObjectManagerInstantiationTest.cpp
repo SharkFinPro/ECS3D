@@ -254,7 +254,7 @@ TEST(ObjectManager, SerializeThenLoadPreservesUuidsAcrossTheWholeSubtree)
   const auto serialized = original.objectManager->serialize();
 
   const auto loaded = makeScene();
-  loadObjects(loaded, serialized.at("objects"));
+  loaded.objectManager->restoreFromJSON(serialized.at("objects"));
 
   const auto loadedRoot = loaded.objectManager->getObjectByUUID(rootUUID);
   ASSERT_NE(loadedRoot, nullptr);

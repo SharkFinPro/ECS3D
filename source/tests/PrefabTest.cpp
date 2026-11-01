@@ -25,8 +25,7 @@
 // Integration coverage for the data-layer half of prefab instantiation: registering a body, cloning it
 // into a scene through the instantiatePrefab sceneEdit op, and the update-in-place/detached-instance
 // contract AGENTS.md describes. Per-instance overrides and prefab->instance propagation don't exist yet
-// (deliberately deferred), and TransientObject lives in the editor library this suite cannot link, so the
-// editing-a-prefab-in-the-inspector half is covered only as far as the data calls it makes.
+// (deliberately deferred). TransientObjectTest and PrefabBodyEditsTest cover the editing-a-prefab half.
 namespace {
   using replication::SceneEditResult;
 
@@ -134,7 +133,7 @@ TEST(Prefab, InstantiatingBuildsTheWholeSubtreeFromTheRegisteredBody)
   ASSERT_EQ(scene.objectManager->getObjects().size(), 1u);
   const auto instance = scene.objectManager->getObjects().front();
 
-  // instantiate lands the whole subtree at the scene root - there is no target-parent field on the op.
+  // With no parent uuid on the op, the whole subtree lands at the scene root.
   EXPECT_EQ(instance->getParent(), nullptr);
   EXPECT_EQ(instance->getName(), "Block");
   fixtures::expectNear(fixtures::positionOf(instance), glm::vec3(1, 2, 3));
@@ -271,6 +270,7 @@ TEST(Prefab, TheStoredBodyRoundTripsThroughAScratchObjectManagerPreservingUuids)
   // Re-serialize and re-register under the same name - the same "Save as Prefab" path a real edit takes.
   // The asset uuid has to survive (this record names a different one) and the body it hands back has to
   // match what was just serialized.
+  scratchObject->setName("Renamed Block");
   const auto reserialized = scratchObject->serialize();
   registry.registerAsset({ .uuid = otherAssetUUID, .type = AssetType::Prefab, .path = "Block",
                            .body = reserialized.dump() });
@@ -278,5 +278,6 @@ TEST(Prefab, TheStoredBodyRoundTripsThroughAScratchObjectManagerPreservingUuids)
   ASSERT_EQ(registry.getAssets().size(), 1u);
   ASSERT_NE(registry.getByUUID(prefabUUID), nullptr);
   EXPECT_EQ(registry.getByUUID(otherAssetUUID), nullptr);
+  EXPECT_EQ(registry.getPrefabBody(prefabUUID).at("name"), "Renamed Block");
   EXPECT_EQ(canonicalBody(registry.getPrefabBody(prefabUUID)), canonicalBody(reserialized));
 }

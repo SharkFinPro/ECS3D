@@ -501,7 +501,7 @@ TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
       {
         if (component.at("type") == "Transform")
         {
-          // A null float now loads as a rejected value, so a missing required key is what breaks the load.
+          // A missing required key is what breaks the load.
           component.erase("position");
           injected = true;
           break;
@@ -512,8 +512,8 @@ TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
 
   ASSERT_TRUE(injected);
 
-  // Positive control: the same blob without the null loads, so the throw below is about the missing key rather
-  // than about a blob that was never loadable.
+  // Positive control: the same blob, before the key is erased, loads, so the throw below is about the missing
+  // key rather than about a blob that was never loadable.
   const auto control = makeProject();
   EXPECT_NO_THROW(control.serializer->deserialize(blob));
   EXPECT_EQ(control.sceneManager->getScenes().size(), 1u);

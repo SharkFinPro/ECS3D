@@ -165,6 +165,10 @@ TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableExactly)
   const auto wireNames = wireTableNames();
   const auto registeredNames = registry.registeredNames();
 
+  // namesMissingFrom needs sorted input, which registeredNames promises.
+  EXPECT_TRUE(std::ranges::is_sorted(registeredNames));
+  EXPECT_GT(registeredNames.size(), 1u);
+
   const auto registeredButNotOnWire = namesMissingFrom(wireNames, registeredNames);
   const auto onWireButNeverRegistered = namesMissingFrom(registeredNames, wireNames);
 
