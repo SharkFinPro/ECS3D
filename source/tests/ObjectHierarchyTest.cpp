@@ -201,6 +201,56 @@ TEST(ObjectHierarchy, ReparentOntoAChainOneLevelPastTheDepthLimitIsRejected)
   EXPECT_EQ(leaf->getParent(), nullptr);
 }
 
+namespace {
+  void reorderUnder(const Hierarchy& hierarchy, const std::shared_ptr<Object>& object,
+                    const std::shared_ptr<Object>& parent)
+  {
+    const auto parentUUID = parent->getUUID();
+    replication::applySceneEdit(*hierarchy.objectManager,
+                                replication::buildReorderObject(object->getUUID(), &parentUUID, 0));
+  }
+
+  // A root with one child, so moving it counts the child's level too.
+  std::shared_ptr<Object> rootWithOneChild(const Hierarchy& hierarchy)
+  {
+    const auto root = addObject(hierarchy, "Moved");
+    addChildObject(hierarchy, "MovedChild", root);
+
+    return root;
+  }
+}
+
+TEST(ObjectHierarchy, ReparentingASubtreeCountsItsHeightAgainstTheDepthLimit)
+{
+  const auto hierarchy = makeHierarchy();
+  const auto moved = rootWithOneChild(hierarchy);
+
+  // Positive control: the moved object itself lands at maxObjectDepth - 1 and its child at the limit.
+  const auto fitting = chainOfDepth(hierarchy, maxObjectDepth - 2);
+  reparent(hierarchy, moved, fitting);
+  ASSERT_EQ(moved->getParent(), fitting);
+
+  const auto tooDeep = chainOfDepth(hierarchy, maxObjectDepth - 1);
+  reparent(hierarchy, moved, tooDeep);
+
+  EXPECT_EQ(moved->getParent(), fitting);
+}
+
+TEST(ObjectHierarchy, ReorderingASubtreeUnderANewParentCountsItsHeightAgainstTheDepthLimit)
+{
+  const auto hierarchy = makeHierarchy();
+  const auto moved = rootWithOneChild(hierarchy);
+
+  const auto fitting = chainOfDepth(hierarchy, maxObjectDepth - 2);
+  reorderUnder(hierarchy, moved, fitting);
+  ASSERT_EQ(moved->getParent(), fitting);
+
+  const auto tooDeep = chainOfDepth(hierarchy, maxObjectDepth - 1);
+  reorderUnder(hierarchy, moved, tooDeep);
+
+  EXPECT_EQ(moved->getParent(), fitting);
+}
+
 TEST(ObjectHierarchy, AddObjectUnderAParentOneBelowTheDepthLimitIsApplied)
 {
   const auto hierarchy = makeHierarchy();

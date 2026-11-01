@@ -129,6 +129,10 @@ TEST(BillboardTest, NothingToDrawAtOrInsideTheNearPlaneOrBehindTheCamera)
   EXPECT_FALSE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -0.05f), 60.0f, 0.1f, 0.05f).has_value());
 
   EXPECT_TRUE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -0.11f), 60.0f, 0.1f, 0.05f).has_value());
+
+  // Exactly on the plane counts as at it. 0.125 is exact in binary, so depth equals the plane bit for bit.
+  EXPECT_FALSE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -0.125f), 60.0f, 0.125f, 0.05f).has_value());
+  EXPECT_TRUE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -0.126f), 60.0f, 0.125f, 0.05f).has_value());
 }
 
 TEST(BillboardTest, NonFiniteInputsProduceNothing)
@@ -141,6 +145,7 @@ TEST(BillboardTest, NonFiniteInputsProduceNothing)
   EXPECT_FALSE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -inf), 60.0f, 0.1f, 0.05f).has_value());
   EXPECT_FALSE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -10.0f), nan, 0.1f, 0.05f).has_value());
   EXPECT_FALSE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -10.0f), inf, 0.1f, 0.05f).has_value());
+  EXPECT_FALSE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -10.0f), 60.0f, nan, 0.05f).has_value());
 
   EXPECT_TRUE(billboardWorldSize(view, glm::vec3(0.0f, 0.0f, -10.0f), 60.0f, 0.1f, 0.05f).has_value());
 }

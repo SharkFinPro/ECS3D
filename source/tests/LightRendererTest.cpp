@@ -143,3 +143,53 @@ TEST(LightRenderer, AnOutOfRangeConeAngleIsClampedOffTheWire)
 
   EXPECT_FLOAT_EQ(light->getConeAngle(), LightRenderer::maxConeAngleDegrees);
 }
+
+TEST(LightRenderer, TheConeRangeConstantsKeepTheShadowFrustumNonDegenerate)
+{
+  EXPECT_GT(LightRenderer::minConeAngleDegrees, 0.0f);
+  EXPECT_LT(LightRenderer::maxConeAngleDegrees, 90.0f);
+}
+
+TEST(LightRenderer, SetConeAngleKeepsTheValuesAroundTheMaxBoundary)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  light->setConeAngle(88.9f);
+  EXPECT_FLOAT_EQ(light->getConeAngle(), 88.9f);
+
+  light->setConeAngle(89.1f);
+  EXPECT_FLOAT_EQ(light->getConeAngle(), LightRenderer::maxConeAngleDegrees);
+}
+
+TEST(LightRenderer, EveryFieldRoundTripsThroughThePackedWireFormat)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  light->setSpotLight(true);
+  light->setColor({ 0.25f, 0.5f, 0.75f });
+  light->setAmbient(0.1f);
+  light->setDiffuse(0.2f);
+  light->setSpecular(0.9f);
+  light->setDirection({ 1, 0, 0 });
+  light->setConeAngle(30.0f);
+
+  net::Message message(net::MessageType::undefined);
+  light->pack(message);
+
+  net::MessageReader reader(message);
+  EXPECT_EQ(reader.read<ComponentType>(), ComponentType::lightRenderer);
+
+  const auto loaded = makeLight();
+  ASSERT_NE(loaded, nullptr);
+  loaded->unpack(reader);
+
+  EXPECT_TRUE(loaded->isSpotLight());
+  EXPECT_EQ(loaded->getColor(), glm::vec3(0.25f, 0.5f, 0.75f));
+  EXPECT_FLOAT_EQ(loaded->getAmbient(), 0.1f);
+  EXPECT_FLOAT_EQ(loaded->getDiffuse(), 0.2f);
+  EXPECT_FLOAT_EQ(loaded->getSpecular(), 0.9f);
+  EXPECT_EQ(loaded->getDirection(), glm::vec3(1, 0, 0));
+  EXPECT_FLOAT_EQ(loaded->getConeAngle(), 30.0f);
+}

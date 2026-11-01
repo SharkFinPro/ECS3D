@@ -188,8 +188,8 @@ TEST(ObjectComponentsChanged, ATruncatedMessageIsRefused)
   serverObject->addComponent(std::make_shared<RigidBody>());
   const auto full = replication::buildObjectComponentsChanged(*serverObject);
 
-  // Every byte but the component's own body - enough to claim a component the reader then runs out
-  // reading, the same truncation shape ObjectSpawnTest's firstBytes helper exercises for objectSpawned.
+  // Every byte but the last four (the trailing child count) - enough to claim a component the reader then
+  // runs out reading, the same truncation shape ObjectSpawnTest's firstBytes helper exercises for objectSpawned.
   net::Message truncated(net::MessageType::objectComponentsChanged);
   const auto bytes = full.bytes();
   ASSERT_GT(bytes.size(), 4u);
@@ -310,6 +310,8 @@ TEST(ObjectComponentsChanged, ALoadFailureNamesTheObjectAndTheComponentThatBroke
     EXPECT_NE(message.find("Lamp"), std::string::npos) << message;
     EXPECT_NE(message.find(uuid), std::string::npos) << message;
     EXPECT_NE(message.find("Transform"), std::string::npos) << message;
+    // The underlying cause survives the wrapper.
+    EXPECT_NE(message.find("position"), std::string::npos) << message;
   }
 
   const nlohmann::json brokenScript = {
@@ -330,5 +332,6 @@ TEST(ObjectComponentsChanged, ALoadFailureNamesTheObjectAndTheComponentThatBroke
     const std::string message = error.what();
     EXPECT_NE(message.find("Lamp"), std::string::npos) << message;
     EXPECT_NE(message.find("Script"), std::string::npos) << message;
+    EXPECT_NE(message.find("string"), std::string::npos) << message;
   }
 }

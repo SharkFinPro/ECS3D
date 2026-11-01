@@ -443,16 +443,13 @@ TEST(ObjectNameField, AHeldNameIsReleasedWhenTheServerNeverAnswers)
   driver.type("ny");
   driver.leaveField();
 
-  for (int i = 0; i < ObjectNameField::echoHoldFrames - 2; ++i)
+  for (int i = 0; i < ObjectNameField::echoHoldFrames - 1; ++i)
   {
     driver.idleFrame();
   }
   EXPECT_EQ(driver.buffer(), "Sunny");
 
-  for (int i = 0; i < 3; ++i)
-  {
-    driver.idleFrame();
-  }
+  driver.idleFrame();
   EXPECT_EQ(driver.buffer(), "Sun");
   EXPECT_EQ(driver.sent().size(), 1u);
 }

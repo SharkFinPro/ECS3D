@@ -177,6 +177,8 @@ namespace {
     rigidBody->setFriction(0.4f);
     rigidBody->setGravity(9.81f);
     rigidBody->setDoGravity(false);
+    rigidBody->setVelocity({ 1.0f, 2.0f, 3.0f });
+    rigidBody->setAngularVelocity({ 0.5f, 0.0f, -0.5f });
     body->addComponent(rigidBody);
 
     const auto boxCollider = std::make_shared<BoxCollider>();
@@ -216,11 +218,11 @@ namespace {
     child->addComponent(playerController);
 
     const auto camera = std::make_shared<Camera>();
-    camera->setDirection({ 0.0f, 0.0f, -1.0f });
+    camera->setDirection({ 1.0f, 0.0f, 0.0f });
     camera->setFov(70.0f);
     camera->setNearPlane(0.05f);
     camera->setFarPlane(500.0f);
-    camera->setActive(true);
+    camera->setActive(false);
     child->addComponent(camera);
   }
 
@@ -243,6 +245,8 @@ namespace {
     const auto light = std::make_shared<LightRenderer>();
     light->setColor({ 0.25f, 0.5f, 0.75f });
     light->setAmbient(0.1f);
+    light->setDiffuse(0.2f);
+    light->setSpecular(0.9f);
     light->setSpotLight(true);
     light->setConeAngle(25.0f);
     lamp->addComponent(light);
@@ -643,4 +647,69 @@ TEST(SerializationRoundTrip, UnpackingADifferentSceneReplacesTheObjectsAManagerA
   EXPECT_EQ(target.objectManager->getObjectByUUID(oldFirst->getUUID()), nullptr);
   EXPECT_EQ(target.objectManager->getObjectByUUID(oldSecond->getUUID()), nullptr);
   EXPECT_NE(target.objectManager->getObjectByUUID(newFirst->getUUID()), nullptr);
+}
+
+namespace {
+  std::shared_ptr<Object> findByName(const Project& project, const std::string& name)
+  {
+    for (const auto& object : project.sceneManager->getCurrentScene()->getObjectManager()->getAllObjects())
+    {
+      if (object->getName() == name)
+      {
+        return object;
+      }
+    }
+
+    return nullptr;
+  }
+
+  // Serialize is checked on its own: a round trip compares serialize with serialize, so a constant it wrote
+  // would come back identical.
+  void expectNonDefaultComponentFields(const Project& project)
+  {
+    const auto child = findByName(project, "Child");
+    ASSERT_NE(child, nullptr);
+    const auto camera = child->getComponent<Camera>(ComponentType::camera);
+    ASSERT_NE(camera, nullptr);
+    EXPECT_FALSE(camera->isActive());
+    EXPECT_NEAR(camera->getDirection().x, 1.0f, 1e-5f);
+    EXPECT_NEAR(camera->getDirection().z, 0.0f, 1e-5f);
+
+    const auto serialized = camera->serialize();
+    EXPECT_FALSE(serialized.at("active").get<bool>());
+    EXPECT_NEAR(serialized.at("direction").at(0).get<float>(), 1.0f, 1e-5f);
+    EXPECT_NEAR(serialized.at("direction").at(2).get<float>(), 0.0f, 1e-5f);
+
+    const auto body = findByName(project, "Body");
+    ASSERT_NE(body, nullptr);
+    const auto rigidBody = body->getComponent<RigidBody>(ComponentType::rigidBody);
+    ASSERT_NE(rigidBody, nullptr);
+    EXPECT_EQ(rigidBody->getVelocity(), glm::vec3(1.0f, 2.0f, 3.0f));
+    EXPECT_EQ(rigidBody->getAngularVelocity(), glm::vec3(0.5f, 0.0f, -0.5f));
+
+    const auto lamp = findByName(project, "Lamp");
+    ASSERT_NE(lamp, nullptr);
+    const auto light = lamp->getComponent<LightRenderer>(ComponentType::lightRenderer);
+    ASSERT_NE(light, nullptr);
+    EXPECT_FLOAT_EQ(light->getDiffuse(), 0.2f);
+    EXPECT_FLOAT_EQ(light->getSpecular(), 0.9f);
+  }
+}
+
+TEST(SerializationRoundTrip, NonDefaultCameraRigidBodyAndLightFieldsSurviveBothPaths)
+{
+  const auto original = makeProject();
+  buildProject(original);
+  expectNonDefaultComponentFields(original);
+
+  const auto fromJson = makeProject();
+  fromJson.serializer->deserialize(original.serializer->serialize());
+  expectNonDefaultComponentFields(fromJson);
+
+  net::Message message(net::MessageType::snapshot);
+  original.packer->pack(message);
+
+  const auto fromBinary = makeProject();
+  fromBinary.packer->unpack(message);
+  expectNonDefaultComponentFields(fromBinary);
 }

@@ -296,6 +296,27 @@ TEST(ObjectSpawn, RefusesAJsonChainOneLevelDeeperThanTheDepthLimitAndLeavesNothi
   EXPECT_TRUE(target.objectManager->getAllObjects().empty());
 }
 
+TEST(ObjectSpawn, RestoresASceneFileChainExactlyAtTheDepthLimit)
+{
+  const auto source = makeScene();
+  const auto objects = nlohmann::json::array({ chainOfDepth(source, maxObjectDepth)->serialize() });
+
+  const auto target = makeScene();
+  target.objectManager->restoreFromJSON(objects);
+
+  EXPECT_EQ(target.objectManager->getAllObjects().size(), maxObjectDepth + 1);
+}
+
+TEST(ObjectSpawn, RestoreRefusesASceneFileChainOneLevelPastTheDepthLimit)
+{
+  const auto source = makeScene();
+  const auto objects = nlohmann::json::array({ chainOfDepth(source, maxObjectDepth + 1)->serialize() });
+
+  // This path reaches Object::loadChildren directly, without the uuid reassignment that guards instantiate.
+  const auto target = makeScene();
+  EXPECT_THROW(target.objectManager->restoreFromJSON(objects), std::runtime_error);
+}
+
 TEST(ObjectSpawn, DuplicatesALeafBodyUnderAParentOneBelowTheDepthLimit)
 {
   const auto scene = makeScene();
