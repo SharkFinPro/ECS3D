@@ -36,6 +36,7 @@ public class BridgeLifecycleTests : IDisposable
   public BridgeLifecycleTests()
   {
     Bridge.ResetForTests();
+    Bridge.Events.clear();
   }
 
   public void Dispose()

@@ -258,8 +258,8 @@ public sealed class TcpBackendLoopbackTests : IDisposable
 
     // The body is the type byte, the role byte and the token, so a 4094 byte token makes exactly 4096.
     Connect(port, RolePlayer, new string('a', 4094));
-    WaitFor(() => server.ServerConnectionCount() == 1, "the handshake at the ceiling to be admitted", WaitMs,
-      RecorderState);
+    WaitFor(() => server.ServerConnectionCount() == 1, "the handshake at the ceiling to be admitted",
+      state: RecorderState);
     Assert.Empty(TransportRecorder.ServerDisconnected);
 
     using var oversized = new TcpClient();
@@ -286,7 +286,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     using var trickler = new TcpClient { NoDelay = true };
     trickler.Connect(IPAddress.Loopback, port);
     var stream = trickler.GetStream();
-    var frame = TcpBackend.FrameBytes(HandshakeType, new byte[] { RolePlayer, (byte)'a', (byte)'b', (byte)'c' });
+    var frame = TcpBackend.FrameBytes(HandshakeType, new[] { RolePlayer, (byte)'a', (byte)'b', (byte)'c' });
     var writer = Task.Run(() =>
     {
       try
@@ -458,7 +458,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
 
     TransportRecorder.ClientSend(client, 5, Array.Empty<byte>());
     WaitFor(() => TransportRecorder.ServerReceived.Count == 1, "the server to receive the empty message",
-      WaitMs, RecorderState);
+      state: RecorderState);
     var received = TransportRecorder.ServerReceived.Single();
     Assert.Equal(clientId, received.ConnId);
     Assert.Equal(5, received.Type);
@@ -466,7 +466,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
 
     TransportRecorder.ServerBroadcast(server, 6, Array.Empty<byte>());
     WaitFor(() => TransportRecorder.ClientReceived.Count == 1, "the client to receive the empty broadcast",
-      WaitMs, RecorderState);
+      state: RecorderState);
     Assert.Equal(6, TransportRecorder.ClientReceived.Single().Type);
     Assert.Equal(0, TransportRecorder.ClientReceived.Single().Length);
     Assert.Equal(1, server.ServerConnectionCount());
@@ -582,9 +582,9 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 7) == bigMessages,
       "the healthy peer to receive every large message", 15000);
 
-    // The stalled peer's socket is full of unread bytes, so the sender really was writing to it rather than
-    // the frames having gone nowhere.
-    WaitFor(() => ((NetworkStream)stalled.Stream).DataAvailable, "the stalled peer to have unread data");
+    // Unread data only shows that bytes reached the stalled peer. That the broadcast never blocked is
+    // guarded by the healthy peer receiving every message in time, above.
+    WaitFor(() => stalled.Stream.DataAvailable, "the stalled peer to have unread data");
 
     // The positive proof that the broadcasts did not wait out the timeout: the stalled peer is still
     // connected, because its sender is still inside its first send.

@@ -653,8 +653,8 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 7) == bigMessages,
       "the healthy peer to receive every large message", 15000);
 
-    // The stalled peer's socket is full of unread bytes, so the sender really was writing to it rather than
-    // the messages having gone nowhere.
+    // Unread data only shows that bytes reached the stalled peer. That the broadcast never blocked is
+    // guarded by the healthy peer receiving every message in time, above.
     WaitFor(() => stalled.HasUnreadData, "the stalled peer to have unread data");
 
     // The positive proof that the broadcasts did not wait out the timeout: the stalled peer is still

@@ -150,6 +150,32 @@ public class FrameCodecTests
     Assert.False(TcpBackend.ReadFrame(stream, out _, out _, deadline: deadline));
   }
 
+  [Fact]
+  public void ReadFrame_GivesUpOnAHeaderThatTricklesPastTheDeadline()
+  {
+    // One header byte per 300 ms against a 400 ms deadline: the deadline expires after the second byte,
+    // well before the fourth arrives, so only the check inside the header read can stop it.
+    var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
+    var deadline = Environment.TickCount64 + 400;
+
+    using var stream = new TrickleHeaderStream(frame, 300);
+    Assert.False(TcpBackend.ReadFrame(stream, out _, out _, deadline: deadline));
+    Assert.True(stream.Position < 4, $"The header read went on to byte {stream.Position}.");
+  }
+
+  private sealed class TrickleHeaderStream(byte[] bytes, int delayMs) : MemoryStream(bytes)
+  {
+    public override int Read(Span<byte> buffer)
+    {
+      if (Position > 0)
+      {
+        System.Threading.Thread.Sleep(delayMs);
+      }
+
+      return base.Read(buffer.Slice(0, Math.Min(1, buffer.Length)));
+    }
+  }
+
   private sealed class SlowAfterHeaderStream(byte[] bytes, int delayMs) : MemoryStream(bytes)
   {
     public override int Read(Span<byte> buffer)
