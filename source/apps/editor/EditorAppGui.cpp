@@ -174,11 +174,12 @@ void EditorApp::updateDockSpace() const
 {
   static bool dockPercentsSetup = false;
   static bool dockLocationsSetup = false;
-  static bool minimumSizesSetup = false;
 
   // A restored layout already holds the dock tree and splits; only the per-panel floors are not saved in it.
   if (m_layoutRestored)
   {
+    static bool minimumSizesSetup = false;
+
     if (!minimumSizesSetup)
     {
       applyDockMinimumSizes();
