@@ -170,6 +170,7 @@ add_executable(${PROJECT_NAME}
   FirstPersonTemplateAssetsTest.cpp
   PhysicsPlaygroundSampleTest.cpp
   PhysicsPlaygroundSamplePhysicsTest.cpp
+  PhysicsPlaygroundSamplePyramidTest.cpp
   PhysicsPlaygroundSampleRaceTest.cpp
   PhysicsPlaygroundSampleSpawnerTest.cpp
   PhysicsPlaygroundTestHelpers.h
