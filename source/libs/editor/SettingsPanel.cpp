@@ -159,7 +159,7 @@ void SettingsPanel::displayGui()
     m_focusRequested = false;
   }
 
-  // FirstUseEver, so a layout saved in imgui.ini wins over this default.
+  // FirstUseEver, so a layout saved in the settings store wins over this default.
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
   const auto defaultSize = settingsWindowDefaultSize(settingsContentWidth(), ImGui::GetFontSize(),
                                                      viewport->Size.x, viewport->Size.y);

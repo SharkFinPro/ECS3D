@@ -27,6 +27,8 @@ catalogue, and the bijective `KeybindTable`) - the headless keybind model, the n
 (the windowing library) spelled out as literals so this library still depends on nothing but json and ECS3DLog -
 `EditorCameraSettings` (clamped get/set for the editor viewport's free-fly camera speed, applied to
 `vke::Camera::setSpeed`), `EditorViewportSettings` (the viewport grid's show/hide preference, default shown),
+`EditorLayoutSettings` (the ImGui ini text under `editor.layout.imgui`, plus `hasDockLayout`, which decides whether
+a saved string holds a dock tree),
 `EditorGizmoSettings` (clamped get/set for the viewport gizmo's snap toggle and translate/rotate/scale step
 sizes; returns plain values rather than a `gizmo::Snap`, which keeps settings below the editor lib in the
 dependency direction under Build System), and `RecentProjects` (the recent-projects list the editor and the

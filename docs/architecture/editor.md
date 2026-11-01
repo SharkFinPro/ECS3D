@@ -40,7 +40,7 @@ which `ObjectGUIManager` tracks itself each frame since collapsed nodes and the 
 screen order" means; the range, row-action targets and sort rules live in the headless `ObjectTreeOrder.h`; the
 viewport has its own rule, described under Viewport gizmos below), `SettingsPanel` (the "Settings" window — a
 section nav beside the selected section's content, opening centered at a font-relative default size on first use
-(a saved `imgui.ini` layout wins; `SettingsPanelLayout.h` holds that math) with the Keybinds columns sized from
+(a saved panel layout wins; `SettingsPanelLayout.h` holds that math) with the Keybinds columns sized from
 their content, reading and writing `ECS3DSettings` directly since
 preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Viewport drags
 the free-fly camera speed (`EditorCameraSettings`, applied to `vke::Camera::setSpeed` immediately) and the
@@ -96,3 +96,13 @@ kilobytes. In a multi-object selection the hull keys `vertices`, `indices` and `
 per gesture, and Rebuild hull is disabled while those keys differ. A model drop on such a selection still sends
 the edit, and an edit that leaves the primary unchanged propagates only its disagreeing hull keys. Depends on
 `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`.
+
+The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
+`EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`
+(`EditorLayoutSettings`). It restores the text in the style-setup hook, before the first frame, and saves it when
+ImGui sets `WantSaveIniSettings` and again on shutdown. When the saved text holds a dock tree
+(`editorLayoutSettings::hasDockLayout`), `updateDockSpace` skips the default dock percents and locations and applies
+only the per-panel minimum sizes; with no saved layout the defaults apply as on a first run.
+`saveLayout` never replaces a stored dock tree with text that has none (`shouldReplaceLayout`). A panel missing from a
+restored layout, such as one added in a later build, opens floating rather than in its default dock; the per-panel
+minimum sizes still apply.
