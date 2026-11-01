@@ -138,6 +138,7 @@ private:
   // rather than through the server. Built before the renderer, since the stored theme has to be on the
   // tokens before the first applyStyle().
   std::unique_ptr<SettingsStore> m_settings;
+  bool m_layoutRestored = false;
   std::unique_ptr<SettingsPanel> m_settingsPanel;
 
   // Feeds the Console panel: registered with Log so the panel can show script errors and server output
@@ -381,9 +382,14 @@ private:
   // controls, disabled on a read-only server.
   void displayGizmoControls() const;
 
+  void restoreLayout();
+  void saveLayoutIfRequested();
+  void saveLayout();
+
   void updateDockSpace() const;
 
   void applyDockLocations() const;
+  void applyDockMinimumSizes() const;
 
   // False while the viewport has no usable size yet, so the caller retries on a later frame.
   [[nodiscard]] bool applyDockPercents() const;

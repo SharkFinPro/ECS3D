@@ -174,6 +174,20 @@ void EditorApp::updateDockSpace() const
 {
   static bool dockPercentsSetup = false;
   static bool dockLocationsSetup = false;
+  static bool minimumSizesSetup = false;
+
+  // A restored layout already holds the dock tree and splits; only the per-panel floors are not saved in it.
+  if (m_layoutRestored)
+  {
+    if (!minimumSizesSetup)
+    {
+      applyDockMinimumSizes();
+
+      minimumSizesSetup = true;
+    }
+
+    return;
+  }
 
   if (!dockLocationsSetup && dockPercentsSetup)
   {
@@ -204,6 +218,13 @@ void EditorApp::applyDockLocations() const
   gui->dockBottom("Assets");
   gui->dockBottom("Project Errors");
   gui->dockBottom("Console");
+
+  applyDockMinimumSizes();
+}
+
+void EditorApp::applyDockMinimumSizes() const
+{
+  const auto gui = m_renderer->getImGuiInstance();
 
   // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
   // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small

@@ -33,6 +33,7 @@
 #include <Keybinds.h>
 #include <EditorCameraSettings.h>
 #include <EditorGizmoSettings.h>
+#include <EditorLayoutSettings.h>
 #include <KeybindDispatcher.h>
 #include <ViewportGizmo.h>
 #include <Gizmo.h>
@@ -352,6 +353,9 @@ EditorApp::~EditorApp()
   // here rather than left to outlive what it captures.
   m_renderer->getRenderingManager()->setSceneOverlay({});
 
+  saveLayout();
+  m_settings->flush();
+
   if (m_netClient)
   {
     m_netClient->disconnect();
@@ -399,6 +403,8 @@ void EditorApp::run()
 
     m_keybindDispatcher->update();
 
+    saveLayoutIfRequested();
+
     m_settings->update();
 
     updateGui();
@@ -421,7 +427,11 @@ void EditorApp::createRenderer()
     },
     .imGui {
       .maxTextures = 100,
-      .styleSetup = setupImGuiStyle
+      .styleSetup = [this]()
+      {
+        setupImGuiStyle();
+        restoreLayout();
+      }
     }
   };
 
@@ -552,4 +562,46 @@ void EditorApp::setupImGuiStyle()
   // Otherwise dragging inside a window's body moves the window, so undocking the scene view into its own
   // OS window would drag that window instead of a gizmo handle under the cursor.
   ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
+}
+
+void EditorApp::restoreLayout()
+{
+  // No imgui.ini: the layout lives in the user's settings, so it follows the user rather than the build folder.
+  ImGui::GetIO().IniFilename = nullptr;
+
+  const auto layout = editorLayoutSettings::readImGuiLayout(*m_settings);
+
+  if (!editorLayoutSettings::hasDockLayout(layout))
+  {
+    return;
+  }
+
+  ImGui::LoadIniSettingsFromMemory(layout.c_str(), layout.size());
+
+  m_layoutRestored = true;
+}
+
+void EditorApp::saveLayoutIfRequested()
+{
+  ImGuiIO& io = ImGui::GetIO();
+
+  // ImGui leaves the flag for the application to clear when it has no ini file.
+  if (!io.WantSaveIniSettings)
+  {
+    return;
+  }
+
+  io.WantSaveIniSettings = false;
+
+  saveLayout();
+}
+
+void EditorApp::saveLayout()
+{
+  ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
+
+  size_t size = 0;
+  const char* text = ImGui::SaveIniSettingsToMemory(&size);
+
+  editorLayoutSettings::writeImGuiLayout(*m_settings, std::string(text, size));
 }
