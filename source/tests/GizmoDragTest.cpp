@@ -52,17 +52,20 @@ TEST(GizmoDragTest, TranslateSnapsToTheConfiguredStep)
   GizmoFixture f;
   f.state.mode = gizmo::Mode::translate;
   f.input.snap.enabled = true;
+  // Off the grid, so snapping the delta and snapping the absolute position land on different values.
+  f.input.local.position = glm::vec3(0.2f, 0.0f, 0.0f);
+  f.input.world.position = f.input.local.position;
 
   const auto initial = gizmo::update(f.state, f.input);
   const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
   beginDragOnHandle(f, xTipScreen);
 
+  // About 0.71 world units, which the 0.5 step rounds to one step.
   f.input.mouse = xTipScreen + glm::vec2(37.0f, 0.0f);
   const auto frame = gizmo::update(f.state, f.input);
 
   ASSERT_TRUE(frame.local.has_value());
-  const float amount = frame.local->position.x;
-  EXPECT_NEAR(std::round(amount / 0.5f) * 0.5f, amount, 1e-4f);
+  EXPECT_NEAR(frame.local->position.x, 0.2f + 0.5f, 1e-3f);
 }
 
 TEST(GizmoDragTest, SuppressSnapLeavesTheMoveUnsnapped)
@@ -240,9 +243,8 @@ TEST(GizmoDragTest, RotateSnapsToTheConfiguredStep)
   ASSERT_TRUE(frame.local.has_value());
   const float angleDeg = rotationAngleDegrees(glm::quat(glm::radians(frame.local->rotation)));
 
-  EXPECT_NEAR(angleDeg, std::round(angleDeg / 15.0f) * 15.0f, 0.5f);
-  // Positive control: the unsnapped sweep really was ~50 degrees, so the snap above actually moved it.
-  EXPECT_GT(std::abs(angleDeg - 50.0f), 2.0f);
+  // The sweep is about 50 degrees, which the 15 degree step rounds to 45.
+  EXPECT_NEAR(angleDeg, 45.0f, 0.5f);
 }
 
 TEST(GizmoDragTest, RotateSignMatchesTheScreenSweepDirection)
@@ -304,15 +306,26 @@ TEST(GizmoDragTest, NearestEquivalentEulerMatchesTheBriefExample)
 
 TEST(GizmoDragTest, NearestEquivalentEulerAlwaysRepresentsTheSameRotation)
 {
-  const std::vector<std::pair<glm::vec3, glm::vec3>> cases = {
-    { glm::vec3(180.0f, 10.0f, 180.0f), glm::vec3(0.0f, 170.0f, 0.0f) },
-    { glm::vec3(-170.0f, 91.0f, 5.0f), glm::vec3(190.0f, 89.0f, -175.0f) },
-    { glm::vec3(20.0f, -95.0f, -10.0f), glm::vec3(-340.0f, 265.0f, 350.0f) },
+  struct Case {
+    glm::vec3 eulerDegrees;
+    glm::vec3 reference;
+    glm::vec3 expected;
   };
 
-  for (const auto& [eulerDegrees, reference] : cases)
+  const std::vector<Case> cases = {
+    { glm::vec3(180.0f, 10.0f, 180.0f), glm::vec3(0.0f, 170.0f, 0.0f), glm::vec3(0.0f, 170.0f, 0.0f) },
+    { glm::vec3(-170.0f, 91.0f, 5.0f), glm::vec3(190.0f, 89.0f, -175.0f), glm::vec3(10.0f, 89.0f, -175.0f) },
+    { glm::vec3(20.0f, -95.0f, -10.0f), glm::vec3(-340.0f, 265.0f, 350.0f), glm::vec3(-340.0f, 265.0f, 350.0f) },
+  };
+
+  for (const auto& [eulerDegrees, reference, expected] : cases)
   {
     const glm::vec3 result = gizmo::nearestEquivalentEuler(eulerDegrees, reference);
+
+    fixtures::expectNear(result, expected, 1e-3f);
+    EXPECT_LE(std::abs(result.x - reference.x), 180.0f + 1e-3f);
+    EXPECT_LE(std::abs(result.y - reference.y), 180.0f + 1e-3f);
+    EXPECT_LE(std::abs(result.z - reference.z), 180.0f + 1e-3f);
 
     const glm::quat inputQuat(glm::radians(eulerDegrees));
     const glm::quat resultQuat(glm::radians(result));
