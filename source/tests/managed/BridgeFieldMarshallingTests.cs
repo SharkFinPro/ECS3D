@@ -315,13 +315,17 @@ public class BridgeFieldMarshallingTests
   }
 
   [Fact]
-  public void TryConvertFieldValue_LeavesANonStringFieldUntouchedWhenAStringIsRefused()
+  public void TryConvertFieldValue_RefusesAValueThatDoesNotFitTheFieldType()
   {
-    // Positive control is TryConvertFieldValue_AssignsAStringToAStringField above.
-    var instance = new SampleFields();
+    // Positive control is TryConvertFieldValue_ConvertsBetweenConvertibleTypes above: a float that fits
+    // an int converts, and ChangeType throws OverflowException for these rather than InvalidCastException.
+    Assert.True(Bridge.TryConvertFieldValue(typeof(int), 12f, out var fits));
+    Assert.Equal(12, fits);
 
-    Assert.False(Bridge.TryConvertFieldValue(
-      Bridge.FindExposedField(instance, "count")!.FieldType, "12", out _));
-    Assert.Equal(7, instance.count);
+    Assert.False(Bridge.TryConvertFieldValue(typeof(int), 1e10f, out var tooBig));
+    Assert.Null(tooBig);
+
+    Assert.False(Bridge.TryConvertFieldValue(typeof(int), float.NaN, out var notANumber));
+    Assert.Null(notANumber);
   }
 }

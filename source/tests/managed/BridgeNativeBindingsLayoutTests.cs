@@ -10,14 +10,13 @@ namespace ECS3DManagedTests;
 
 // Each *Bindings struct (TransformBindings, RigidBodyBindings, ...) is a [StructLayout(Sequential)] block
 // of native function pointers, mirrored field-for-field by a native C++ struct of the same name - see the
-// "add new fields at the END" comments beside each one. A stray non-pointer-sized field, or one inserted
-// out of order under a build that widens/narrows it, would silently misalign every field after it against
-// the native side instead of failing to compile. This asserts that invariant - a Bindings struct's total
-// size must equal (field count * pointer size), which only holds if every field is itself a single
-// pointer-sized value (a delegate* unmanaged<...>) - for every struct in the ScriptBridge assembly whose
-// name ends in "Bindings", discovered by reflection rather than a hardcoded list, so a newly added
-// provider (e.g. a future PlayerControllerBindings) is covered automatically instead of needing this file
-// edited too.
+// "add new fields at the END" comments beside each one. A stray non-pointer field would silently misalign
+// every field after it against the native side instead of failing to compile. This asserts that every field
+// is a function pointer and that the struct's total size equals (field count * pointer size), for every
+// struct in the ScriptBridge assembly whose name ends in "Bindings", discovered by reflection rather than a
+// hardcoded list, so a newly added provider (e.g. a future PlayerControllerBindings) is covered
+// automatically instead of needing this file edited too. It cannot see two function pointers swapped:
+// their order is pinned by the native-side layout, not here.
 public unsafe class BridgeNativeBindingsLayoutTests
 {
   // sizeof(T) (used below) needs T known as an unmanaged type at compile time, which a reflection-driven
@@ -42,10 +41,12 @@ public unsafe class BridgeNativeBindingsLayoutTests
   [MemberData(nameof(BindingsStructs))]
   public void BindingsStruct_IsEntirelyFunctionPointers(Type bindingsType)
   {
-    var fieldCount = bindingsType
-      .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Length;
+    var fields = bindingsType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-    Assert.Equal(fieldCount * IntPtr.Size, SizeOf(bindingsType));
+    // A stray byte pads out to a full pointer, so the size check alone cannot see it; the field type can.
+    Assert.All(fields, field => Assert.True(field.FieldType.IsFunctionPointer,
+      $"{bindingsType.Name}.{field.Name} is {field.FieldType}, not a function pointer."));
+    Assert.Equal(fields.Length * IntPtr.Size, SizeOf(bindingsType));
   }
 
   // Guards the Theory above against a broken or over-narrow discovery filter (e.g. a typo'd suffix, or

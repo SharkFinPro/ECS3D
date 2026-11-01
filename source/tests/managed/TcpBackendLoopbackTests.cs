@@ -228,8 +228,8 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     WaitFor(() => TransportRecorder.ClientDisconnects == 1, "the refused client to be told", RefusalWaitMs,
       RecorderState);
 
-    Connect(port, RoleEditor, "secret");
-    Connect(port, RolePlayer);
+    var editor = Connect(port, RoleEditor, "secret");
+    var player = Connect(port, RolePlayer);
     WaitFor(() => Authorized().Length == 2, "the two accepted connections to be authorized");
     WaitFor(() => server.ServerConnectionCount() == 2, "both accepted connections to be listed");
 
@@ -238,6 +238,76 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     Assert.DoesNotContain(granted, a => a.ConnId == refusedId);
     Assert.Equal(3, granted.Select(a => a.ConnId).Append(refusedId).Distinct().Count());
     Assert.Single(TransportRecorder.ServerDisconnected);
+
+    // The connect order need not match the callback order, so tie each id to its role through the
+    // messages the connections themselves send.
+    TransportRecorder.ClientSend(editor, 21, new byte[] { 1 });
+    TransportRecorder.ClientSend(player, 22, new byte[] { 2 });
+    WaitFor(() => TransportRecorder.ServerReceived.Count == 2, "both connections' messages to arrive");
+
+    var received = TransportRecorder.ServerReceived.ToArray();
+    Assert.Equal(granted.Single(a => a.Role == RoleEditor).ConnId, received.Single(m => m.Type == 21).ConnId);
+    Assert.Equal(granted.Single(a => a.Role == RolePlayer).ConnId, received.Single(m => m.Type == 22).ConnId);
+  }
+
+  [Fact]
+  public void Handshake_RefusesAFrameOverTheHandshakeCeilingButAdmitsOneAtIt()
+  {
+    var server = new TcpBackend { HandshakeTimeoutMs = NoHandshakeTimeoutMs };
+    var port = Start(server);
+
+    // The body is the type byte, the role byte and the token, so a 4094 byte token makes exactly 4096.
+    Connect(port, RolePlayer, new string('a', 4094));
+    WaitFor(() => server.ServerConnectionCount() == 1, "the handshake at the ceiling to be admitted",
+      state: RecorderState);
+    Assert.Empty(TransportRecorder.ServerDisconnected);
+
+    using var oversized = new TcpClient();
+    oversized.Connect(IPAddress.Loopback, port);
+    var frame = TcpBackend.FrameBytes(HandshakeType, new byte[5000]);
+    oversized.GetStream().Write(frame, 0, frame.Length);
+
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the oversized handshake to be dropped",
+      RefusalWaitMs, RecorderState);
+    Assert.True(TransportRecorder.LogContains("Refused a 5001 byte frame; the limit here is 4096."),
+      RecorderState());
+    Assert.Single(TransportRecorder.ServerAuthorized);
+    Assert.Equal(1, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void Handshake_DropsAPeerThatTricklesItPastTheDeadline()
+  {
+    // One byte every 300 ms keeps each read well inside the 1200 ms receive timeout, so only the overall
+    // deadline can end it; the nine bytes take about 2.4 s to send.
+    var server = new TcpBackend { HandshakeTimeoutMs = 1200 };
+    var port = Start(server);
+
+    using var trickler = new TcpClient { NoDelay = true };
+    trickler.Connect(IPAddress.Loopback, port);
+    var stream = trickler.GetStream();
+    var frame = TcpBackend.FrameBytes(HandshakeType, new[] { RolePlayer, (byte)'a', (byte)'b', (byte)'c' });
+    var writer = Task.Run(() =>
+    {
+      try
+      {
+        foreach (var b in frame)
+        {
+          stream.Write(new[] { b }, 0, 1);
+          Thread.Sleep(300);
+        }
+      }
+      catch (Exception)
+      {
+        // The server dropped the connection mid-trickle, which is what the test waits for.
+      }
+    });
+
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the trickled handshake to be dropped",
+      RefusalWaitMs, RecorderState);
+    Assert.True(writer.Wait(RefusalWaitMs));
+    Assert.Empty(TransportRecorder.ServerAuthorized);
+    Assert.Equal(0, server.ServerConnectionCount());
   }
 
   [Fact]
@@ -342,6 +412,67 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   }
 
   [Fact]
+  public void SendToMany_ReachesEveryNamedLiveConnectionOnceAndSkipsAStaleId()
+  {
+    var server = new TcpBackend();
+    var port = Start(server);
+
+    var peers = new RawPeer[3];
+    var ids = new int[3];
+    for (var i = 0; i < peers.Length; ++i)
+    {
+      peers[i] = ConnectRaw(port);
+      var expectedCount = i + 1;
+      WaitFor(() => server.ServerConnectionCount() == expectedCount, $"peer {expectedCount} to join");
+      ids[i] = Authorized()[i].ConnId;
+    }
+
+    const int staleId = 99999;
+    TransportRecorder.ServerSendToMany(server, new[] { ids[0], ids[2], staleId, ids[0] }, 11, new byte[] { 1 });
+    TransportRecorder.ServerBroadcast(server, 12, new byte[] { 2 });
+
+    // Frames arrive in order on a stream: a named peer sees 11 then a single 12, so a duplicated id sends it
+    // nothing extra; the unnamed peer sees only the broadcast.
+    Assert.True(TcpBackend.ReadFrame(peers[0].Stream, out var firstA, out _));
+    Assert.True(TcpBackend.ReadFrame(peers[0].Stream, out var secondA, out _));
+    Assert.Equal(new byte[] { 11, 12 }, new[] { firstA, secondA });
+
+    Assert.True(TcpBackend.ReadFrame(peers[2].Stream, out var firstC, out _));
+    Assert.True(TcpBackend.ReadFrame(peers[2].Stream, out var secondC, out _));
+    Assert.Equal(new byte[] { 11, 12 }, new[] { firstC, secondC });
+
+    Assert.True(TcpBackend.ReadFrame(peers[1].Stream, out var firstB, out _));
+    Assert.Equal(12, firstB);
+    Assert.Equal(3, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void EmptyPayloads_TravelInBothDirections()
+  {
+    var server = new TcpBackend();
+    var port = Start(server);
+
+    var client = Connect(port, RolePlayer);
+    WaitFor(() => server.ServerConnectionCount() == 1, "the client to join");
+    var clientId = Authorized()[0].ConnId;
+
+    TransportRecorder.ClientSend(client, 5, Array.Empty<byte>());
+    WaitFor(() => TransportRecorder.ServerReceived.Count == 1, "the server to receive the empty message",
+      state: RecorderState);
+    var received = TransportRecorder.ServerReceived.Single();
+    Assert.Equal(clientId, received.ConnId);
+    Assert.Equal(5, received.Type);
+    Assert.Equal(0, received.Length);
+
+    TransportRecorder.ServerBroadcast(server, 6, Array.Empty<byte>());
+    WaitFor(() => TransportRecorder.ClientReceived.Count == 1, "the client to receive the empty broadcast",
+      state: RecorderState);
+    Assert.Equal(6, TransportRecorder.ClientReceived.Single().Type);
+    Assert.Equal(0, TransportRecorder.ClientReceived.Single().Length);
+    Assert.Equal(1, server.ServerConnectionCount());
+  }
+
+  [Fact]
   public void SendToMany_DeliversASnapshotSizedFrameToOneConnectionOnly()
   {
     var server = new TcpBackend();
@@ -434,7 +565,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var healthy = ConnectAndAwait(server, port, 1);
 
     // A tiny receive buffer and no reads, so the messages below cannot fit in the kernel's buffers.
-    ConnectRaw(port, receiveBufferBytes: 1024);
+    var stalled = ConnectRaw(port, receiveBufferBytes: 1024);
     WaitFor(() => server.ServerConnectionCount() == 2, "the stalled peer to join");
     var stalledId = Authorized()[1].ConnId;
 
@@ -450,6 +581,10 @@ public sealed class TcpBackendLoopbackTests : IDisposable
 
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 7) == bigMessages,
       "the healthy peer to receive every large message", 15000);
+
+    // Unread data only shows that bytes reached the stalled peer. That the broadcast never blocked is
+    // guarded by the healthy peer receiving every message in time, above.
+    WaitFor(() => stalled.Stream.DataAvailable, "the stalled peer to have unread data");
 
     // The positive proof that the broadcasts did not wait out the timeout: the stalled peer is still
     // connected, because its sender is still inside its first send.
@@ -569,8 +704,17 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var client = new TcpBackend();
     _clients.Add(client);
 
-    Assert.Equal(0, client.ClientConnect("127.0.0.1", FreePort(), RolePlayer, ""));
-    Assert.True(TransportRecorder.LogContains("Client failed to connect"));
+    // Bound but never listening, so the port stays unused for the whole attempt. A slow refusal logs the
+    // timeout instead of the failure.
+    using (var holder = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+    {
+      holder.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+      var heldPort = ((IPEndPoint)holder.LocalEndPoint!).Port;
+
+      Assert.Equal(0, client.ClientConnect("127.0.0.1", heldPort, RolePlayer, ""));
+      Assert.True(TransportRecorder.LogContains("Client failed to connect") ||
+                  TransportRecorder.LogContains("timed out"), RecorderState());
+    }
 
     var server = new TcpBackend();
     var port = Start(server);

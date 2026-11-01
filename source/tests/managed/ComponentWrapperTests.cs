@@ -157,15 +157,16 @@ public class ComponentWrapperTests : IDisposable
   {
     var body = new RigidBody(Id);
 
+    // Opposite values, so reading one native through the other's wrapper shows.
     FakeNatives.Set("RigidBody.isFalling", true);
-    FakeNatives.Set("RigidBody.getDoGravity", true);
+    FakeNatives.Set("RigidBody.getDoGravity", false);
     Assert.True(body.isFalling());
-    Assert.True(body.getDoGravity());
+    Assert.False(body.getDoGravity());
 
     FakeNatives.Set("RigidBody.isFalling", false);
-    FakeNatives.Set("RigidBody.getDoGravity", false);
+    FakeNatives.Set("RigidBody.getDoGravity", true);
     Assert.False(body.isFalling());
-    Assert.False(body.getDoGravity());
+    Assert.True(body.getDoGravity());
 
     FakeNatives.Calls.Clear();
     body.setDoGravity(true);

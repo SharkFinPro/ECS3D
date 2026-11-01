@@ -49,15 +49,6 @@ public sealed unsafe class TransportExportsTests : IDisposable
     TransportRecorder.Unregister();
   }
 
-  private static int FreePort()
-  {
-    var listener = new TcpListener(IPAddress.Any, 0);
-    listener.Start();
-    var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-    listener.Stop();
-    return port;
-  }
-
   private static void WaitFor(Func<bool> condition, string what)
   {
     var deadline = Environment.TickCount64 + WaitMs;
@@ -74,25 +65,35 @@ public sealed unsafe class TransportExportsTests : IDisposable
     return serverConnectionCount();
   }
 
-  // Probed on Any because the backend binds Any. The port could be taken between the probe and the call,
-  // which the export reports as -1, so the window is kept small by probing right before it.
-  private static byte StartEditServerAndConnectPlayer(string serverTokenText)
+  private static int StartEditServer(string serverTokenText)
   {
     delegate* unmanaged<int, byte, IntPtr, int> serverStart = &Transport.serverStart;
-    delegate* unmanaged<IntPtr, int, byte, IntPtr, byte> clientConnect = &Transport.clientConnect;
 
-    var port = FreePort();
     var serverToken = Marshal.StringToCoTaskMemUTF8(serverTokenText);
-    var clientToken = Marshal.StringToCoTaskMemUTF8("");
-    var host = Marshal.StringToCoTaskMemUTF8("127.0.0.1");
     try
     {
-      Assert.Equal(port, serverStart(port, 1, serverToken));
-      return clientConnect(host, port, 0, clientToken);
+      var port = serverStart(0, 1, serverToken);
+      Assert.True(port > 0, $"serverStart reported {port}.");
+      return port;
     }
     finally
     {
       Marshal.FreeCoTaskMem(serverToken);
+    }
+  }
+
+  private static byte ConnectClient(int port, byte role, string tokenText)
+  {
+    delegate* unmanaged<IntPtr, int, byte, IntPtr, byte> clientConnect = &Transport.clientConnect;
+
+    var clientToken = Marshal.StringToCoTaskMemUTF8(tokenText);
+    var host = Marshal.StringToCoTaskMemUTF8("127.0.0.1");
+    try
+    {
+      return clientConnect(host, port, role, clientToken);
+    }
+    finally
+    {
       Marshal.FreeCoTaskMem(clientToken);
       Marshal.FreeCoTaskMem(host);
     }
@@ -167,7 +168,8 @@ public sealed unsafe class TransportExportsTests : IDisposable
     delegate* unmanaged<void> serverStop = &Transport.serverStop;
     delegate* unmanaged<void> clientDisconnect = &Transport.clientDisconnect;
 
-    Assert.Equal(1, StartEditServerAndConnectPlayer("secret"));
+    var port = StartEditServer("secret");
+    Assert.Equal(1, ConnectClient(port, 0, ""));
 
     WaitFor(() => ConnectionCount() == 1, "the client to be listed");
     WaitFor(() => TransportRecorder.ServerAuthorized.Count == 1, "the client to be authorized");
@@ -200,6 +202,33 @@ public sealed unsafe class TransportExportsTests : IDisposable
     WaitFor(() => ConnectionCount() == 0, "the server to drop the connection");
 
     serverStop();
+  }
+
+  [Fact]
+  public void Exports_AuthorizeAnEditorOnlyWithTheServersTokenAndReportTheEditorRole()
+  {
+    delegate* unmanaged<void> clientDisconnect = &Transport.clientDisconnect;
+
+    var port = StartEditServer("secret");
+
+    // The connect itself succeeds at the TCP level; the refusal arrives as the server dropping the socket.
+    Assert.Equal(1, ConnectClient(port, 1, "wrong"));
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the wrong-token editor to be dropped");
+    WaitFor(() => TransportRecorder.ClientDisconnects == 1, "the refused client to be told");
+    Assert.Empty(TransportRecorder.ServerAuthorized);
+    Assert.Equal(0, ConnectionCount());
+    clientDisconnect();
+
+    Assert.Equal(1, ConnectClient(port, 1, "secret"));
+    WaitFor(() => TransportRecorder.ServerAuthorized.Count == 1, "the right-token editor to be authorized");
+    WaitFor(() => ConnectionCount() == 1, "the editor to be listed");
+
+    var (connId, role) = TransportRecorder.ServerAuthorized.Single();
+    Assert.Equal(1, role);
+
+    ClientSendMessage(5, new byte[] { 1 });
+    WaitFor(() => TransportRecorder.ServerReceived.Count == 1, "the editor's message to arrive");
+    Assert.Equal(connId, TransportRecorder.ServerReceived.Single().ConnId);
   }
 
   [Fact]

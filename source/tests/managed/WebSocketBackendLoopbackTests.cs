@@ -73,6 +73,7 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   {
     private readonly ClientWebSocket _socket = new();
     private HttpMessageInvoker? _invoker;
+    private Socket? _tcp;
 
     public RawPeer(int port, byte role, string token, int? receiveBufferBytes, bool sendHandshake)
     {
@@ -102,6 +103,7 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
           try
           {
             await socket.ConnectAsync(context.DnsEndPoint, ct).ConfigureAwait(false);
+            _tcp = socket;
             return new NetworkStream(socket, ownsSocket: true);
           }
           catch
@@ -123,6 +125,9 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
         Send(handshake);
       }
     }
+
+    // True once bytes are waiting in this peer's kernel receive buffer, unread by the WebSocket.
+    public bool HasUnreadData => _tcp is { Connected: true } tcp && tcp.Available > 0;
 
     public void Send(byte[] bytes, bool endOfMessage = true)
     {
@@ -320,8 +325,8 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     WaitFor(() => TransportRecorder.ClientDisconnects == 1, "the refused client to be told");
     Assert.Empty(Authorized());
 
-    Connect(port, RoleEditor, "secret");
-    Connect(port, RolePlayer);
+    var editor = Connect(port, RoleEditor, "secret");
+    var player = Connect(port, RolePlayer);
     WaitFor(() => Authorized().Length == 2, "the two accepted connections to be authorized");
     WaitFor(() => server.ServerConnectionCount() == 2, "both accepted connections to be listed");
 
@@ -330,6 +335,16 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     Assert.Equal(2, granted.Select(a => a.ConnId).Distinct().Count());
     AssertStays(() => TransportRecorder.ServerDisconnected.Count, 0, "disconnects for connections never admitted");
     Assert.Equal(1, TransportRecorder.ClientDisconnects);
+
+    // The connect order need not match the callback order, so tie each id to its role through the
+    // messages the connections themselves send.
+    TransportRecorder.ClientSend(editor, 21, new byte[] { 1 });
+    TransportRecorder.ClientSend(player, 22, new byte[] { 2 });
+    WaitFor(() => TransportRecorder.ServerReceived.Count == 2, "both connections' messages to arrive");
+
+    var received = TransportRecorder.ServerReceived.ToArray();
+    Assert.Equal(granted.Single(a => a.Role == RoleEditor).ConnId, received.Single(m => m.Type == 21).ConnId);
+    Assert.Equal(granted.Single(a => a.Role == RolePlayer).ConnId, received.Single(m => m.Type == 22).ConnId);
   }
 
   [Fact]
@@ -502,6 +517,36 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   }
 
   [Fact]
+  public void SendToMany_ReachesEveryNamedLiveConnectionOnceAndSkipsAStaleId()
+  {
+    var server = new WebSocketBackend();
+    var port = Start(server);
+
+    var peers = new RawPeer[3];
+    var ids = new int[3];
+    for (var i = 0; i < peers.Length; ++i)
+    {
+      peers[i] = ConnectRaw(port);
+      var expectedCount = i + 1;
+      WaitFor(() => server.ServerConnectionCount() == expectedCount, $"peer {expectedCount} to join");
+      ids[i] = Authorized()[i].ConnId;
+    }
+
+    const int staleId = 99999;
+    TransportRecorder.ServerSendToMany(server, new[] { ids[0], ids[2], staleId, ids[0] }, 11, new byte[] { 1 });
+    TransportRecorder.ServerBroadcast(server, 12, new byte[] { 2 });
+
+    // Messages arrive in order on a connection: a named peer sees 11 then a single 12, so a duplicated id sends
+    // it nothing extra; the unnamed peer sees only the broadcast.
+    Assert.Equal(new byte[] { 11, 1 }, peers[0].Receive());
+    Assert.Equal(new byte[] { 12, 2 }, peers[0].Receive());
+    Assert.Equal(new byte[] { 11, 1 }, peers[2].Receive());
+    Assert.Equal(new byte[] { 12, 2 }, peers[2].Receive());
+    Assert.Equal(new byte[] { 12, 2 }, peers[1].Receive());
+    Assert.Equal(3, server.ServerConnectionCount());
+  }
+
+  [Fact]
   public void SendToMany_DeliversASnapshotSizedFrameToOneConnectionOnly()
   {
     var server = new WebSocketBackend();
@@ -591,7 +636,7 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     var healthy = ConnectAndAwait(server, port, 1);
 
     // A tiny receive buffer and no reads, so the messages below cannot fit in the kernel's buffers.
-    ConnectRaw(port, receiveBufferBytes: 1024);
+    var stalled = ConnectRaw(port, receiveBufferBytes: 1024);
     WaitFor(() => server.ServerConnectionCount() == 2, "the stalled peer to join");
     var stalledId = Authorized()[1].ConnId;
 
@@ -607,6 +652,10 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
 
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 7) == bigMessages,
       "the healthy peer to receive every large message", 15000);
+
+    // Unread data only shows that bytes reached the stalled peer. That the broadcast never blocked is
+    // guarded by the healthy peer receiving every message in time, above.
+    WaitFor(() => stalled.HasUnreadData, "the stalled peer to have unread data");
 
     // The positive proof that the broadcasts did not wait out the timeout: the stalled peer is still
     // connected, because its sender is still inside its first send.
@@ -684,9 +733,17 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     var client = new WebSocketBackend();
     _clients.Add(client);
 
-    // A refused connect surfaces as a general failure, or as the timeout if the OS is slow to refuse.
-    Assert.Equal(0, client.ClientConnect("127.0.0.1", FreePort(), RolePlayer, ""));
-    Assert.True(TransportRecorder.LogContains("Client failed to connect") || TransportRecorder.LogContains("timed out"));
+    // A refused connect surfaces as a general failure, or as the timeout if the OS is slow to refuse. The
+    // port is held by a bound socket that never listens, so nothing else can take it during the attempt.
+    using (var holder = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+    {
+      holder.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+      var heldPort = ((IPEndPoint)holder.LocalEndPoint!).Port;
+
+      Assert.Equal(0, client.ClientConnect("127.0.0.1", heldPort, RolePlayer, ""));
+      Assert.True(TransportRecorder.LogContains("Client failed to connect") ||
+                  TransportRecorder.LogContains("timed out"));
+    }
 
     var server = new WebSocketBackend();
     var port = Start(server);
