@@ -277,3 +277,118 @@ TEST(MultiSelectEdit, ScriptFieldsDifferingOnlyInDisplayNameAreNotMixed)
   EXPECT_NE(std::ranges::find(mixed, std::string("fields.speed")), mixed.end());
   EXPECT_FALSE(componentFieldDelta::changedTopLevelKeys(scriptA->serialize(), scriptB->serialize()).empty());
 }
+
+// The contract is "differs from the first on ANY other form", so a disagreement only the last form has
+// still counts - two forms cannot tell any-of from all-of apart.
+TEST(MultiSelectEdit, MixedTopLevelKeysReportsADisagreementOnlyTheLastFormHas)
+{
+  const nlohmann::json same = { { "mass", 5.0 }, { "friction", 0.4 } };
+  const nlohmann::json odd = { { "mass", 9.0 }, { "friction", 0.4 } };
+
+  const auto mixed = componentFieldDelta::mixedTopLevelKeys({ same, same, odd });
+  EXPECT_EQ(mixed, (std::vector<std::string>{ "mass" }));
+
+  // Positive control: no form disagrees, nothing is mixed.
+  EXPECT_TRUE(componentFieldDelta::mixedTopLevelKeys({ same, same, same }).empty());
+}
+
+TEST(MultiSelectEdit, MixedTopLevelKeysReportsAScriptFieldOnlyTheLastFormDiffersOn)
+{
+  fixtures::Scene scene;
+  const auto a = addMoverScript(fixtures::addObject(scene, "A"), 1.0f, 5.0f);
+  const auto b = addMoverScript(fixtures::addObject(scene, "B"), 1.0f, 5.0f);
+  const auto c = addMoverScript(fixtures::addObject(scene, "C"), 8.0f, 5.0f);
+
+  const auto mixed = componentFieldDelta::mixedTopLevelKeys({ a->serialize(), b->serialize(), c->serialize() });
+  EXPECT_EQ(mixed, (std::vector<std::string>{ "fields.speed" }));
+}
+
+TEST(MultiSelectEdit, AFormMissingAKeyOrAScriptFieldEntryCountsAsDisagreeing)
+{
+  const nlohmann::json full = { { "mass", 5.0 }, { "friction", 0.4 } };
+  const nlohmann::json withoutFriction = { { "mass", 5.0 } };
+  EXPECT_EQ(componentFieldDelta::mixedTopLevelKeys({ full, withoutFriction }),
+            (std::vector<std::string>{ "friction" }));
+
+  const nlohmann::json speedAndPower = {
+    { "fields", nlohmann::json::array({
+      { { "name", "speed" }, { "value", 1.0 } },
+      { { "name", "power" }, { "value", 5.0 } } }) }
+  };
+  const nlohmann::json speedOnly = {
+    { "fields", nlohmann::json::array({ { { "name", "speed" }, { "value", 1.0 } } }) }
+  };
+  EXPECT_EQ(componentFieldDelta::mixedTopLevelKeys({ speedAndPower, speedOnly }),
+            (std::vector<std::string>{ "fields.power" }));
+
+  const nlohmann::json noFields = { { "other", 1 } };
+  EXPECT_EQ(componentFieldDelta::mixedTopLevelKeys({ speedAndPower, noFields }),
+            (std::vector<std::string>{ "fields.speed", "fields.power" }));
+}
+
+// Script classes are told apart by signature, in the order they first appear on the first object.
+TEST(MultiSelectEdit, CommonSignaturesKeepScriptClassesApartInFirstAppearanceOrder)
+{
+  fixtures::Scene scene;
+  const auto a = fixtures::addObject(scene, "A");
+  const auto b = fixtures::addObject(scene, "B");
+
+  const auto otherA = std::make_shared<Script>("Other");
+  const auto moverA = std::make_shared<Script>("Mover");
+  a->addComponent(otherA);
+  a->addComponent(moverA);
+
+  const auto moverB = std::make_shared<Script>("Mover");
+  const auto otherB = std::make_shared<Script>("Other");
+  b->addComponent(moverB);
+  b->addComponent(otherB);
+
+  EXPECT_EQ(componentFieldDelta::commonComponentSignatures({ a, b }),
+            (std::vector<std::string>{ "Transform", "Script:Other", "Script:Mover" }));
+
+  EXPECT_EQ(componentFieldDelta::findComponentBySignature(a, "Script:Other"), otherA);
+  EXPECT_EQ(componentFieldDelta::findComponentBySignature(b, "Script:Other"), otherB);
+  EXPECT_EQ(componentFieldDelta::findComponentBySignature(b, "Script:Mover"), moverB);
+  EXPECT_EQ(componentFieldDelta::findComponentBySignature(b, "Script:Absent"), nullptr);
+}
+
+// Only an entry the target already has takes the new value; the rest of the target is left as it was.
+TEST(MultiSelectEdit, ApplyingAScriptFieldDeltaNeverAddsAnEntryTheTargetLacks)
+{
+  const auto fields = [](const nlohmann::json& entries) { return nlohmann::json{ { "fields", entries } }; };
+  const auto entry = [](const char* name, const double value) {
+    return nlohmann::json{ { "name", name }, { "type", "float" }, { "value", value } };
+  };
+
+  const auto before = fields(nlohmann::json::array({ entry("speed", 1.0) }));
+  const auto after = fields(nlohmann::json::array({ entry("speed", 2.0) }));
+  const auto target = fields(nlohmann::json::array({ entry("power", 9.0) }));
+
+  const auto merged = componentFieldDelta::applyKeyDelta(target, before, after, { "fields" });
+
+  ASSERT_EQ(merged.at("fields").size(), 1u);
+  EXPECT_EQ(merged.at("fields").at(0).at("name"), "power");
+  EXPECT_DOUBLE_EQ(merged.at("fields").at(0).at("value").get<double>(), 9.0);
+
+  // Positive control: a target that does have the entry takes the new value.
+  const auto withSpeed = fields(nlohmann::json::array({ entry("speed", 7.0), entry("power", 9.0) }));
+  const auto mergedWithSpeed = componentFieldDelta::applyKeyDelta(withSpeed, before, after, { "fields" });
+  EXPECT_DOUBLE_EQ(mergedWithSpeed.at("fields").at(0).at("value").get<double>(), 2.0);
+  EXPECT_DOUBLE_EQ(mergedWithSpeed.at("fields").at(1).at("value").get<double>(), 9.0);
+}
+
+// A target whose "fields" is absent or not an array has no entries to merge into, so it takes the value whole.
+TEST(MultiSelectEdit, ApplyingAScriptFieldDeltaReplacesATargetWithoutAnEntryArray)
+{
+  const auto entries = nlohmann::json::array({ { { "name", "speed" }, { "type", "float" }, { "value", 2.0 } } });
+  const auto before = nlohmann::json{ { "fields", nlohmann::json::array({
+    { { "name", "speed" }, { "type", "float" }, { "value", 1.0 } } }) } };
+  const auto after = nlohmann::json{ { "fields", entries } };
+
+  const auto missing = componentFieldDelta::applyKeyDelta(nlohmann::json::object(), before, after, { "fields" });
+  EXPECT_EQ(missing.at("fields"), entries);
+
+  const auto notAnArray = componentFieldDelta::applyKeyDelta(nlohmann::json{ { "fields", 5 } }, before, after,
+                                                              { "fields" });
+  EXPECT_EQ(notAnArray.at("fields"), entries);
+}

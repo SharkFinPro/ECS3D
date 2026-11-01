@@ -130,8 +130,8 @@ TEST(EditHistoryPlayStop, RenameRecordedBeforePlayUndoesAndRedoesAfterStop)
   EXPECT_EQ(play.object()->getName(), "Renamed");
 }
 
-// The two refusal tests never stop the scene: they show validation is sensitive to the live scene, which
-// is why the tests above pass only because stop() restored it.
+// The two refusal tests never start the scene: validation reads only the live objects, which is why the
+// tests above pass only because stop() restored them.
 TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasChangedWhatTheCommandNames)
 {
   const auto play = makePlayScene();
@@ -140,7 +140,6 @@ TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasChangedWhatTheCommandNames)
   edits::EditHistory authored;
   authored.record(edits::EditCommand::renameObject(play.objectUUID, "Object", "Renamed"));
 
-  play.scene->start();
   play.object()->setName("Hacked");
 
   const auto outcome = authored.undo(play.objects());
@@ -158,7 +157,6 @@ TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasDestroyedTheTarget)
   edits::EditHistory authored;
   authored.record(edits::EditCommand::renameObject(play.objectUUID, "Object", "Renamed"));
 
-  play.scene->start();
   play.objects().removeObject(play.object());
   play.objects().deleteObjectsMarkedForDeletion();
 

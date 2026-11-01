@@ -374,6 +374,32 @@ TEST(RecordEdits, AnAddAssetOfAPrefabOverAFileAssetsPathIsNotRecorded)
   EXPECT_TRUE(edits::commandForAddAsset(fresh, scene.assetRegistry).has_value());
 }
 
+// The registry would never apply a file asset under a prefab's name, so isolating the incoming type from
+// the existing record's type is what keeps a replaceAsset of the wrong type off the stack.
+TEST(RecordEdits, AnAddAssetOfAFileTypeOverAPrefabsNameIsNotRecorded)
+{
+  AssetScene scene;
+
+  scene.assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Prefab,
+                                      .path = "Block", .body = oldPrefabBody });
+
+  const nlohmann::json model = {
+    { "assetType", "model" },
+    { "uuid", uuidString(anotherUUID()) },
+    { "path", "Block" }
+  };
+  EXPECT_FALSE(edits::commandForAddAsset(model, scene.assetRegistry).has_value());
+
+  // Positive control: a prefab over that same name is a replacement.
+  const nlohmann::json prefab = {
+    { "assetType", "prefab" },
+    { "uuid", uuidString(anotherUUID()) },
+    { "name", "Block" },
+    { "body", newPrefabBody }
+  };
+  EXPECT_TRUE(edits::commandForAddAsset(prefab, scene.assetRegistry).has_value());
+}
+
 TEST(RecordEdits, RenameAndRemoveAssetRefuseMalformedOps)
 {
   AssetScene scene;

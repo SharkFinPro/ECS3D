@@ -1236,7 +1236,7 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
       const auto& data = std::get<AddObjectData>(m_data);
 
       // "before" an addition is that its parent (if any) is there to add under; the object itself is not
-      // expected to exist yet (redo mints a fresh uuid on the object - see buildRedoJSON).
+      // expected to exist yet (redo re-sends the op under the same uuid - see buildRedoJSON).
       if (data.parentUUID && !objectManager.getObjectByUUID(*data.parentUUID))
       {
         return { ValidationFailure::targetMissing, *data.parentUUID };
