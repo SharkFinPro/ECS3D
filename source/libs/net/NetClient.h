@@ -2,18 +2,17 @@
 #define NETCLIENT_H
 
 #include "ClientConnectionState.h"
+#include "ClientTransport.h"
 #include "MessageQueue.h"
 #include <cstdint>
 #include <memory>
 #include <string>
 
-class ManagedHost;
-
 namespace net {
 
 class NetClient {
 public:
-  explicit NetClient(std::shared_ptr<ManagedHost> host);
+  explicit NetClient(const std::shared_ptr<ClientTransport>& transport);
 
   void connect(const std::string& host, int port, Role role, const std::string& authToken);
 
@@ -38,19 +37,11 @@ public:
   [[nodiscard]] bool takeConnectionLost();
 
 private:
-  std::shared_ptr<ManagedHost> m_host;
+  std::shared_ptr<ClientTransport> m_transport;
 
   MessageQueue m_inbox;
 
   ClientConnectionState m_state;
-
-  // Resolved [UnmanagedCallersOnly] entrypoints in the C# transport assembly.
-  void* m_connectFn = nullptr;
-  void* m_disconnectFn = nullptr;
-  void* m_sendFn = nullptr;
-  void* m_setCallbackFn = nullptr;
-  void* m_setDisconnectCallbackFn = nullptr;
-  void* m_setLogCallbackFn = nullptr;
 };
 
 }

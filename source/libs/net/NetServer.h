@@ -3,18 +3,17 @@
 
 #include "EditorConnections.h"
 #include "MessageQueue.h"
+#include "ServerTransport.h"
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
-class ManagedHost;
-
 namespace net {
 
 class NetServer {
 public:
-  explicit NetServer(std::shared_ptr<ManagedHost> host);
+  explicit NetServer(const std::shared_ptr<ServerTransport>& transport);
 
   // editMode enables granting Role::editor at the handshake; authToken (if non-empty) is the token an
   // editor must then present to be authorized. Throws std::runtime_error, leaving the server stopped, when
@@ -30,7 +29,7 @@ public:
 
   // Sends to every connection currently authorized as Role::editor, and no one else - for data a play
   // client should never see, like the server's own log (MessageType::serverLog). A no-op if there are
-  // none. One call into the transport for the whole fan-out (serverSendToMany), which queues the message per
+  // none. One call into the transport for the whole fan-out (sendToMany), which queues the message per
   // connection, so a stalled editor cannot block the authoritative tick thread.
   void sendToEditors(const Message& message) const;
 
@@ -76,7 +75,7 @@ public:
 private:
   void sendToMany(const std::vector<int32_t>& connIds, const Message& message) const;
 
-  std::shared_ptr<ManagedHost> m_host;
+  std::shared_ptr<ServerTransport> m_transport;
 
   MessageQueue m_inbox;
 
@@ -86,17 +85,6 @@ private:
   bool m_editMode = false;
   bool m_started = false;
   int m_port = 0;
-
-  // Resolved [UnmanagedCallersOnly] entrypoints in the C# transport assembly.
-  void* m_startFn = nullptr;
-  void* m_stopFn = nullptr;
-  void* m_broadcastFn = nullptr;
-  void* m_connectionCountFn = nullptr;
-  void* m_setCallbackFn = nullptr;
-  void* m_setDisconnectCallbackFn = nullptr;
-  void* m_setAuthorizedCallbackFn = nullptr;
-  void* m_setLogCallbackFn = nullptr;
-  void* m_sendToManyFn = nullptr;
 };
 
 }

@@ -1,9 +1,6 @@
 #include "NetServer.h"
-#include "TransportLog.h"
-#include <ManagedHost.h>
 #include <Log.h>
 #include <LogEntry.h>
-#include <array>
 #include <atomic>
 #include <cstddef>
 #include <limits>
@@ -15,29 +12,6 @@
 namespace net {
 
 namespace {
-  // The C# transport assembly, published next to the executable by ecs3d_add_managed_assembly.
-  const std::string kAssembly = "net/Transport/ECS3DNetTransport.dll";
-  const std::string kType = "ECS3DNetTransport.Transport, ECS3DNetTransport";
-
-  // Matches ECS3DNetTransport.ServerStartError (Transport.cs): what serverStart returns on failure.
-  enum class ServerStartError : int32_t
-  {
-    addressInUse = -1,
-    invalidPort = -2,
-    failed = -3,
-  };
-
-  // Returns the bound port, or a ServerStartError.
-  using ServerStartFn = int32_t(*)(int32_t, uint8_t, const char*);
-  using ServerStopFn = void(*)();
-  using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
-  // connIds/connIdCount name the specific connections to send to (never every
-  // connection like ServerBroadcastFn) - one call for the whole fan-out. The transport queues the message
-  // per connection, so the call never blocks on a slow peer.
-  using ServerSendToManyFn = void(*)(const int32_t*, int32_t, uint8_t, const uint8_t*, int32_t);
-  using ServerConnectionCountFn = int32_t(*)();
-  using SetCallbackFn = void(*)(void*);
-
   // One authoritative server per process; the C# socket thread routes inbound messages here. Atomic
   // because it is written on the tick thread (start/stop) and read on the socket threads with no other
   // synchronization between them - a plain pointer here would be a data race even though the callbacks
@@ -69,8 +43,8 @@ extern "C" void ecs3dNetServerAuthorized(const int32_t connId, const uint8_t rol
   }
 }
 
-NetServer::NetServer(std::shared_ptr<ManagedHost> host)
-  : m_host(std::move(host))
+NetServer::NetServer(const std::shared_ptr<ServerTransport>& transport)
+  : m_transport(transport)
 {}
 
 void NetServer::start(const int port, const bool editMode, const std::string& authToken)
@@ -84,24 +58,10 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   // Role::editor at the handshake, and only if it presents authToken (when one is configured).
   m_editMode = editMode;
 
-  m_startFn = m_host->getDelegate(kAssembly, kType, "serverStart");
-  m_stopFn = m_host->getDelegate(kAssembly, kType, "serverStop");
-  m_broadcastFn = m_host->getDelegate(kAssembly, kType, "serverBroadcast");
-  m_sendToManyFn = m_host->getDelegate(kAssembly, kType, "serverSendToMany");
-  m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
-  m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
-  m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
-  m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
-  m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
-
   g_activeServer.store(this, std::memory_order_release);
-  reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
-  reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
-  reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
-  reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
-  const auto result = reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0,
-                                                                  authToken.c_str());
+  const ServerCallbacks callbacks{&ecs3dNetServerReceive, &ecs3dNetServerDisconnect, &ecs3dNetServerAuthorized};
+  const auto result = m_transport->start(static_cast<int32_t>(port), m_editMode, authToken, callbacks);
   if (result < 0)
   {
     g_activeServer.store(nullptr, std::memory_order_release);
@@ -140,7 +100,7 @@ void NetServer::stop()
   // enqueueDisconnect/authorize by the time the pointer below is cleared. Clearing it after, rather than
   // before, matters only for a stray callback that could otherwise race the object's destruction; the
   // join is what actually makes that impossible.
-  reinterpret_cast<ServerStopFn>(m_stopFn)();
+  m_transport->stop();
 
   g_activeServer.store(nullptr, std::memory_order_release);
   m_started = false;
@@ -164,12 +124,7 @@ void NetServer::broadcast(const Message& message) const
     return;
   }
 
-  // The C# transport sends to every connected client.
-  reinterpret_cast<ServerBroadcastFn>(m_broadcastFn)(
-    static_cast<uint8_t>(message.getType()),
-    message.bytes().data(),
-    static_cast<int32_t>(message.size())
-  );
+  m_transport->broadcast(static_cast<uint8_t>(message.getType()), message.bytes());
 }
 
 void NetServer::sendToEditors(const Message& message) const
@@ -207,15 +162,7 @@ void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& m
     return;
   }
 
-  // One call for the whole fan-out (rather than one per connection) so the transport snapshots its
-  // connection list once; the transport queues per connection and never blocks on a slow peer.
-  reinterpret_cast<ServerSendToManyFn>(m_sendToManyFn)(
-    connIds.data(),
-    static_cast<int32_t>(connIds.size()),
-    static_cast<uint8_t>(message.getType()),
-    message.bytes().data(),
-    static_cast<int32_t>(message.size())
-  );
+  m_transport->sendToMany(connIds, static_cast<uint8_t>(message.getType()), message.bytes());
 }
 
 int NetServer::connectionCount() const
@@ -225,7 +172,7 @@ int NetServer::connectionCount() const
     return 0;
   }
 
-  return reinterpret_cast<ServerConnectionCountFn>(m_connectionCountFn)();
+  return m_transport->connectionCount();
 }
 
 bool NetServer::poll(Message& message, int32_t& senderId)

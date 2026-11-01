@@ -48,6 +48,7 @@
 #include <components/PlayerControllerEditor.h>
 #include <components/CameraEditor.h>
 #include <NetClient.h>
+#include <ManagedClientTransport.h>
 #include <ServerArguments.h>
 #include <ServerProcess.h>
 #include <EditToken.h>
@@ -137,7 +138,7 @@ EditorApp::EditorApp(LaunchOptions options)
 
   setupSceneOverlay();
 
-  m_netClient = std::make_shared<net::NetClient>(m_host);
+  m_netClient = std::make_shared<net::NetClient>(std::make_shared<net::ManagedClientTransport>(m_host));
 
   connectToServer();
 
