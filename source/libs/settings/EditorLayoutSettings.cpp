@@ -56,4 +56,9 @@ namespace editorLayoutSettings {
 
     return false;
   }
+
+  bool shouldReplaceLayout(const std::string_view stored, const std::string_view candidate)
+  {
+    return !hasDockLayout(stored) || hasDockLayout(candidate);
+  }
 }

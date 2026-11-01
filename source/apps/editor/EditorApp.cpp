@@ -583,6 +583,8 @@ void EditorApp::restoreLayout()
 
 void EditorApp::saveLayoutIfRequested()
 {
+  ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
+
   ImGuiIO& io = ImGui::GetIO();
 
   // ImGui leaves the flag for the application to clear when it has no ini file.
@@ -603,5 +605,10 @@ void EditorApp::saveLayout()
   size_t size = 0;
   const char* text = ImGui::SaveIniSettingsToMemory(&size);
 
-  editorLayoutSettings::writeImGuiLayout(*m_settings, std::string(text, size));
+  const std::string candidate(text, size);
+
+  if (editorLayoutSettings::shouldReplaceLayout(editorLayoutSettings::readImGuiLayout(*m_settings), candidate))
+  {
+    editorLayoutSettings::writeImGuiLayout(*m_settings, candidate);
+  }
 }

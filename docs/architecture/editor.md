@@ -103,3 +103,6 @@ The panel layout (window placement, detached panels and the dock tree) is a user
 ImGui sets `WantSaveIniSettings` and again on shutdown. When the saved text holds a dock tree
 (`editorLayoutSettings::hasDockLayout`), `updateDockSpace` skips the default dock percents and locations and applies
 only the per-panel minimum sizes; with no saved layout the defaults apply as on a first run.
+`saveLayout` never replaces a stored dock tree with text that has none (`shouldReplaceLayout`). A panel missing from a
+restored layout, such as one added in a later build, opens floating rather than in its default dock; the per-panel
+minimum sizes still apply.

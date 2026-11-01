@@ -15,6 +15,9 @@ namespace editorLayoutSettings {
 
   // True when the ini text holds a dock tree, so restoring it replaces the default dock layout.
   [[nodiscard]] bool hasDockLayout(std::string_view iniText);
+
+  // A stored dock tree is never overwritten by text without one, so a save from an unready context cannot wipe it.
+  [[nodiscard]] bool shouldReplaceLayout(std::string_view stored, std::string_view candidate);
 }
 
 #endif  // EDITORLAYOUTSETTINGS_H

@@ -148,3 +148,17 @@ TEST(EditorLayoutDockDetection, DockSpaceOutsideTheDockSectionDoesNotCount)
   EXPECT_FALSE(editorLayoutSettings::hasDockLayout("[Window][A]\nDockSpace ID=0x1\n"));
   EXPECT_TRUE(editorLayoutSettings::hasDockLayout("[Window][A]\nSize=1,1\n[Docking][Data]\nDockSpace ID=0x1\n"));
 }
+
+TEST(EditorLayoutReplacement, TextWithoutADockTreeNeverReplacesOneWithIt)
+{
+  EXPECT_FALSE(editorLayoutSettings::shouldReplaceLayout(savedLayout, windowOnlyLayout));
+  EXPECT_FALSE(editorLayoutSettings::shouldReplaceLayout(savedLayout, ""));
+  EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout(savedLayout, savedLayout + "x"));
+}
+
+TEST(EditorLayoutReplacement, AnythingIsWrittenOverAStoredLayoutWithoutADockTree)
+{
+  EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout("", windowOnlyLayout));
+  EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout(windowOnlyLayout, windowOnlyLayout));
+  EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout("", savedLayout));
+}
