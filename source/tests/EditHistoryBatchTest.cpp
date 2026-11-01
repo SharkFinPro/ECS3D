@@ -9,6 +9,7 @@
 #include "objects/ObjectManager.h"
 #include "EditHistoryFixtures.h"
 
+#include <cstddef>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -327,4 +328,102 @@ TEST(EditHistoryBatch, ClearDropsGroupedEntriesAndLabelsFromBothStacks)
   EXPECT_FALSE(history.nextRedoLabel(*scene.objectManager).has_value());
   EXPECT_FALSE(history.nextUndoKind().has_value());
   EXPECT_FALSE(history.nextRedoKind().has_value());
+}
+
+// The multi-command path does its own redo clearing; the one-command positive control above goes through
+// record() instead.
+TEST(EditHistoryBatch, AMultiCommandGroupClearsTheRedoStack)
+{
+  auto scene = makeScene();
+  const auto a = addObject(scene, "A");
+  const auto b = addObject(scene, "B");
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildRenameObject(scene.object->getUUID(), "Renamed")),
+            replication::SceneEditResult::applied);
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
+  ASSERT_TRUE(history.undo(*scene.objectManager).ok());
+  ASSERT_EQ(history.redoDepth(), 1u);
+  ASSERT_EQ(history.undoDepth(), 0u);
+
+  history.recordBatch({ edits::EditCommand::renameObject(a->getUUID(), "A", "A2"),
+                        edits::EditCommand::renameObject(b->getUUID(), "B", "B2") });
+
+  EXPECT_EQ(history.redoDepth(), 0u);
+  EXPECT_EQ(history.undoDepth(), 1u);
+}
+
+TEST(EditHistoryBatch, TheDepthCapCountsGroupedEntriesAsOneEach)
+{
+  auto scene = makeScene();
+  const auto a = addObject(scene, "A");
+  const auto b = addObject(scene, "B");
+
+  edits::EditHistory history;
+  const auto group = [&] {
+    history.recordBatch({ edits::EditCommand::renameObject(a->getUUID(), "A", "A2"),
+                          edits::EditCommand::renameObject(b->getUUID(), "B", "B2") });
+  };
+
+  for (std::size_t i = 0; i < edits::EditHistory::maxDepth; ++i)
+  {
+    group();
+  }
+  EXPECT_EQ(history.undoDepth(), edits::EditHistory::maxDepth);
+
+  group();
+  EXPECT_EQ(history.undoDepth(), edits::EditHistory::maxDepth);
+}
+
+// The "Delete N Objects" and "Duplicate N Objects" labels need every command in the group to agree; one
+// stray kind falls back to the generic count.
+TEST(EditHistoryBatch, AMixedGroupIsLabelledAsGenericEdits)
+{
+  auto scene = makeScene();
+  const auto a = addObject(scene, "A");
+  const auto b = addObject(scene, "B");
+
+  const auto removeA = edits::EditCommand::removeObject(a->getUUID(), std::nullopt, 1, a->serialize());
+  const auto renameB = edits::EditCommand::renameObject(b->getUUID(), "B", "B2");
+  const auto duplicateB = edits::EditCommand::duplicateObject(b->getUUID(), someOtherUUID(), std::nullopt, 3);
+
+  edits::EditHistory removeAndRename;
+  removeAndRename.recordBatch({ removeA, renameB });
+  EXPECT_EQ(*removeAndRename.nextUndoLabel(*scene.objectManager), "2 Edits");
+
+  edits::EditHistory duplicateAndRename;
+  duplicateAndRename.recordBatch({ duplicateB, renameB });
+  EXPECT_EQ(*duplicateAndRename.nextUndoLabel(*scene.objectManager), "2 Edits");
+
+  edits::EditHistory removeAndDuplicate;
+  removeAndDuplicate.recordBatch({ removeA, duplicateB });
+  EXPECT_EQ(*removeAndDuplicate.nextUndoLabel(*scene.objectManager), "2 Edits");
+}
+
+// A group's kind is the last command's, on either stack.
+TEST(EditHistoryBatch, AGroupsKindIsItsLastCommandsKindOnBothStacks)
+{
+  auto scene = makeScene();
+  const auto a = addObject(scene, "A");
+  const auto b = addObject(scene, "B");
+  const auto duplicateUUID = someOtherUUID();
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRenameObject(a->getUUID(), "A2")),
+            replication::SceneEditResult::applied);
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildDuplicateObject(b->getUUID(), &duplicateUUID)),
+            replication::SceneEditResult::applied);
+
+  edits::EditHistory history;
+  history.recordBatch({ edits::EditCommand::renameObject(a->getUUID(), "A", "A2"),
+                        edits::EditCommand::duplicateObject(b->getUUID(), duplicateUUID, std::nullopt, 3) });
+
+  ASSERT_TRUE(history.nextUndoKind().has_value());
+  EXPECT_EQ(*history.nextUndoKind(), edits::CommandKind::duplicateObject);
+
+  ASSERT_TRUE(history.undo(*scene.objectManager).ok());
+  ASSERT_TRUE(history.nextRedoKind().has_value());
+  EXPECT_EQ(*history.nextRedoKind(), edits::CommandKind::duplicateObject);
 }
