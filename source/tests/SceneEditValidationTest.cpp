@@ -6,6 +6,7 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "SceneEditFixtures.h"
@@ -110,6 +111,60 @@ TEST(SceneEdit, AppliesAnAddComponentDataBlobForTheMatchingType)
   EXPECT_TRUE(scene.object->getComponents().contains(ComponentType::rigidBody));
 }
 
+TEST(SceneEdit, AppliesAnAddComponentDataBlobForAColliderUnderItsSubTypeKey)
+{
+  const auto scene = makeScene();
+
+  const auto boxBlob = BoxCollider().serialize();
+
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "Box", &boxBlob)),
+            SceneEditResult::applied);
+  EXPECT_NE(scene.object->getComponent<BoxCollider>(ComponentType::collider), nullptr);
+}
+
+TEST(SceneEdit, ReportsAnAddComponentDataBlobWhoseColliderSubTypeDoesNotMatchAsMalformed)
+{
+  const auto scene = makeScene();
+
+  const auto sphereBlob = SphereCollider().serialize();
+
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "Box", &sphereBlob)),
+            SceneEditResult::malformedEdit);
+  EXPECT_EQ(scene.object->getComponent<BoxCollider>(ComponentType::collider), nullptr);
+
+  // A collider blob with no subType, or a non-string one, names no registry key at all.
+  auto noSubType = BoxCollider().serialize();
+  noSubType.erase("subType");
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "Box", &noSubType)),
+            SceneEditResult::malformedEdit);
+
+  auto numericSubType = BoxCollider().serialize();
+  numericSubType["subType"] = 5;
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "Box", &numericSubType)),
+            SceneEditResult::malformedEdit);
+  EXPECT_EQ(scene.object->getComponent<BoxCollider>(ComponentType::collider), nullptr);
+}
+
+TEST(SceneEdit, ReportsAnAddComponentDataBlobWithoutAStringTypeAsMalformed)
+{
+  const auto scene = makeScene();
+
+  auto numericType = RigidBody().serialize();
+  numericType["type"] = 5;
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "RigidBody", &numericType)),
+            SceneEditResult::malformedEdit);
+
+  auto noType = RigidBody().serialize();
+  noType.erase("type");
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "RigidBody", &noType)),
+            SceneEditResult::malformedEdit);
+  EXPECT_FALSE(scene.object->getComponents().contains(ComponentType::rigidBody));
+
+  const auto positive = RigidBody().serialize();
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "RigidBody", &positive)),
+            SceneEditResult::applied);
+}
+
 TEST(SceneEdit, ReportsRemovingAComponentTheObjectDoesNotCarryAsUnknown)
 {
   const auto scene = makeScene();
@@ -189,6 +244,28 @@ TEST(SceneEdit, ReportsAPrefabBodyThisBuildCannotInstantiateAsFailed)
   EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(someOtherUUID()), &assetRegistry),
             SceneEditResult::failed);
   EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+}
+
+TEST(SceneEdit, ReportsAStoredPrefabBodyMissingItsComponentsAsFailedNotMalformed)
+{
+  const auto scene = makeScene();
+
+  // Parses as json but is not an object body: reading it throws a json exception, which the outer
+  // handler would report as a malformed edit even though the wire edit is fine.
+  const nlohmann::json body = {
+    { "name", "Block" },
+    { "uuid", uuids::to_string(someOtherUUID()) },
+    { "scripts", nlohmann::json::array() },
+    { "children", nlohmann::json::array() }
+  };
+
+  AssetRegistry assetRegistry;
+  assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Prefab, .path = "Broken",
+                                .body = body.dump() });
+
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(someOtherUUID()), &assetRegistry),
+            SceneEditResult::failed);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
 }
 

@@ -102,6 +102,10 @@ TEST(EditCommand, ADeleteLabelFallsBackWhenTheRecordedSubtreeHasNoUsableName)
             "Delete Object");
   EXPECT_EQ(labelOf(edits::EditCommand::removeObject(testUUID(1), std::nullopt, 0, numericName), scene),
             "Delete Object");
+  EXPECT_EQ(labelOf(edits::EditCommand::removeObject(testUUID(1), std::nullopt, 0,
+                                                     nlohmann::json{ { "name", "" } }),
+                    scene),
+            "Delete Object");
   EXPECT_EQ(labelOf(edits::EditCommand::removeObject(testUUID(1), std::nullopt, 0, nlohmann::json::array()),
                     scene),
             "Delete Object");
@@ -134,6 +138,7 @@ TEST(EditCommand, ComponentLabelsFallBackToAGenericNameWhenTheDescriptorIsBlank)
 
   EXPECT_EQ(labelOf(edits::EditCommand::addComponent(id, "Script", "Mover"), scene), "Add Script Mover");
   EXPECT_EQ(labelOf(edits::EditCommand::addComponent(id, "RigidBody"), scene), "Add RigidBody");
+  EXPECT_EQ(labelOf(edits::EditCommand::addComponent(id, "RigidBody", "Mover"), scene), "Add RigidBody");
   EXPECT_EQ(labelOf(edits::EditCommand::addComponent(id, ""), scene), "Add Component");
 
   EXPECT_EQ(labelOf(edits::EditCommand::removeComponent(id, script), scene), "Remove Script Mover");

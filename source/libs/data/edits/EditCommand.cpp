@@ -629,7 +629,8 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
     case CommandKind::removeObject:
     {
       const auto& data = std::get<RemoveObjectData>(m_data);
-      return "Delete " + jsonFieldOr(data.removedSubtreeJSON, "name", "Object");
+      const auto name = jsonFieldOr(data.removedSubtreeJSON, "name", "Object");
+      return "Delete " + (name.empty() ? std::string("Object") : name);
     }
     case CommandKind::reparentObject:
     {

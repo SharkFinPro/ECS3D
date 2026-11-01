@@ -6,6 +6,8 @@
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/RigidBody.h"
+#include "objects/components/Script.h"
 #include "objects/components/Transform.h"
 
 #include <Protocol.h>
@@ -117,6 +119,71 @@ TEST_F(MissedComponentEditLogTest, LogsAnErrorEntryForAPartiallyAppliedEdit)
   EXPECT_EQ(entries[0].level, LogLevel::error);
   EXPECT_EQ(entries[0].category, LogCategory::editor);
   EXPECT_NE(entries[0].message.find("out of sync"), std::string::npos);
+  EXPECT_NE(entries[0].message.find(uuids::to_string(scene.object->getUUID())), std::string::npos);
+  EXPECT_NE(entries[0].message.find("Transform"), std::string::npos);
+}
+
+TEST_F(MissedComponentEditLogTest, LogsAnErrorEntryWithPlaceholdersForAPayloadTooBrokenToName)
+{
+  const auto sink = addRingBuffer();
+
+  const auto scene = makeScene();
+  const net::Message empty(net::MessageType::editComponent);
+
+  const auto result = replication::applyComponentEdit(*scene.objectManager, empty);
+  ASSERT_EQ(result, replication::ComponentEditResult::malformedPayload);
+
+  replication::logMissedComponentEdit(result, empty, LogCategory::editor);
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::error);
+  EXPECT_NE(entries[0].message.find("an unreadable component"), std::string::npos);
+  EXPECT_NE(entries[0].message.find("an unreadable object"), std::string::npos);
+  EXPECT_NE(entries[0].message.find("the payload does not parse"), std::string::npos);
+}
+
+TEST_F(MissedComponentEditLogTest, LogsADebugEntryForAnUnknownComponent)
+{
+  const auto sink = addRingBuffer();
+
+  const auto scene = makeScene();
+
+  // An edit of a RigidBody the object does not carry.
+  const auto rigidBody = std::make_shared<RigidBody>();
+  const auto edit = replication::buildComponentEdit(scene.object->getUUID(), rigidBody);
+
+  const auto result = replication::applyComponentEdit(*scene.objectManager, edit);
+  ASSERT_EQ(result, replication::ComponentEditResult::unknownComponent);
+
+  replication::logMissedComponentEdit(result, edit, LogCategory::client);
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::debug);
+  EXPECT_NE(entries[0].message.find("Rigid Body"), std::string::npos);
+  EXPECT_NE(entries[0].message.find(uuids::to_string(scene.object->getUUID())), std::string::npos);
+  EXPECT_NE(entries[0].message.find("the object has no such component"), std::string::npos);
+}
+
+TEST_F(MissedComponentEditLogTest, NamesAScriptEditByItsClassName)
+{
+  const auto sink = addRingBuffer();
+
+  const auto scene = makeScene();
+  const auto script = std::make_shared<Script>("Mover");
+  const auto elsewhere = makeScene();
+
+  // The scene has no object with that uuid, so the edit is skipped; the log still names the script.
+  const auto edit = replication::buildComponentEdit(elsewhere.object->getUUID(), script);
+  const auto result = replication::applyComponentEdit(*scene.objectManager, edit);
+  ASSERT_EQ(result, replication::ComponentEditResult::unknownObject);
+
+  replication::logMissedComponentEdit(result, edit, LogCategory::client);
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_NE(entries[0].message.find("Script (Mover)"), std::string::npos);
 }
 
 TEST_F(MissedComponentEditLogTest, LogsNothingForAnAppliedEdit)
