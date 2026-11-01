@@ -8,6 +8,8 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Transform.h>
 
+#include <glm/vec3.hpp>
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>

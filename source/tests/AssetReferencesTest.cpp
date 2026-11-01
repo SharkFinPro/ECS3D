@@ -125,6 +125,19 @@ TEST_F(AssetReferencesTest, CountsAPrefabNodeOnceWhenTwoOfItsComponentsMatch)
   EXPECT_EQ(count(modelUUID), 1);
 }
 
+TEST_F(AssetReferencesTest, CountsAPrefabNodeWhoseOnlyMatchIsAColliderSourceModel)
+{
+  const auto node = makeModelObject("Node", unusedUUID);
+  auto hull = std::make_shared<ConvexMeshCollider>();
+  hull->setSourceModel(modelUUID);
+  node->addComponent(hull);
+
+  m_assetRegistry.registerAsset(prefabRecord("Prefab", node->serialize().dump()));
+
+  EXPECT_EQ(count(modelUUID), 1);
+  EXPECT_EQ(count(textureUUID), 0);
+}
+
 TEST_F(AssetReferencesTest, CountsObjectsAcrossEveryScene)
 {
   addScene("11111111-1111-1111-1111-111111111111", "First")

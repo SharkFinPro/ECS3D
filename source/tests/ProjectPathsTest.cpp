@@ -359,7 +359,6 @@ TEST_F(ProjectPathsTest, CopyProjectContentIgnoresEmptyOrNestedTargets)
 TEST_F(ProjectPathsTest, CopyProjectContentWritesNothingForAnEmptyTarget)
 {
   touch("a/assets/m.glb");
-  fs::create_directories(m_dir / "cwd");
   const ScopedCurrentPath cwd(m_dir / "cwd");
   std::error_code error;
 
