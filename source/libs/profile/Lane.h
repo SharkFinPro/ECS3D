@@ -25,7 +25,8 @@ namespace profile {
     Lane(const Lane&) = delete;
     Lane& operator=(const Lane&) = delete;
 
-    // Replaces any lane already bound to this thread.
+    // Replaces any lane already bound to this thread. Unbind or destroy a lane on the thread it is bound to: destroying
+    // it elsewhere leaves that thread's pointer dangling.
     void bindToThisThread();
     static void unbindThisThread();
 
@@ -42,7 +43,7 @@ namespace profile {
     // Scopes folded into their parent by the node or depth cap.
     [[nodiscard]] uint64_t overflowCount() const;
 
-    // Scopes still open when their sample closed.
+    // Recorded scopes still open when their sample closed; folded ones are already in overflowCount().
     [[nodiscard]] uint64_t abandonedScopeCount() const;
 
     // Used by Scope. A folded scope gets a ticket whose depth field is zero, so its exit stays tied to its own

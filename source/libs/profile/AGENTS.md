@@ -9,6 +9,9 @@ the suite pins their edge cases.
   stack and the per-sample accumulators fixed-size arrays.
 - One lane belongs to one thread. Read and write it only on that thread; nothing in it is synchronized.
 - Wrap phases in a scope, never per-object work inside a loop, so a scope's cost stays small next to what it times.
+- `ECS3D_PROFILE_SCOPE` expands to two statements: use it once per line, as a statement in a braced block, never as
+  the body of an unbraced `if` or `for`.
+- Unbind or destroy a lane on the thread it is bound to; destroying it elsewhere leaves that thread's pointer dangling.
 - Never place a scope inside an OpenMP parallel region: the worker threads have no bound lane, so it would silently
   record nothing.
 - A change to the ticket encoding must keep a stale `exit` harmless: the sample sequence and the depth both have to

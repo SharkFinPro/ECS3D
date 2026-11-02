@@ -13,17 +13,20 @@ fixed history of the results. It uses only the standard library and links no oth
 - A **node** is a scope's place in the nesting. `ScopeTree` interns nodes at run time: node 0 is the root, and the same
   name under two parents is two nodes.
 - A **sample** is one unit of work, usually one frame or tick, between `Lane::beginSample()` and `endSample(true)`. It
-  records its wall time and the micros and call count of every node, then goes into the
-  lane's `History`, a fixed ring that overwrites the oldest sample. Micros are saturating `uint32_t` and
-  call counts saturating `uint16_t`.
+  records its wall time and the micros and call count of every node, then goes into the lane's `History`, a fixed
+  ring that overwrites the oldest sample. Micros are saturating `uint32_t` and call counts saturating `uint16_t`.
 - A **lane** is one thread's record: a tree and a history.
 
 ## Binding
 
 `Lane::bindToThisThread()` points a thread-local at the lane. A `Scope` records into the lane bound to the thread it
 runs on and does nothing on a thread with no lane, while profiling is disabled, or when the lane has no open sample.
-Binding again replaces the lane, and destroying a lane unbinds it. A lane is read and written only on its own thread,
-and it must outlive the scopes that record into it.
+Binding again replaces the lane, and destroying a lane unbinds it. A lane is read and written only on its own
+thread, and it must outlive the scopes that record into it. Unbind or destroy a lane on the thread it is bound to;
+destroying it on another thread leaves that thread's pointer dangling.
+
+The macro expands to two statements, so use `ECS3D_PROFILE_SCOPE` once per line, as a statement in a braced block, and
+never as the body of an unbraced `if` or `for`.
 
 ## Caps
 

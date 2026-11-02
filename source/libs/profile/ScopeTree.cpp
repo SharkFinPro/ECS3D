@@ -1,5 +1,7 @@
 #include "ScopeTree.h"
 
+#include <utility>
+
 namespace profile {
   ScopeTree::ScopeTree()
   {
@@ -23,10 +25,13 @@ namespace profile {
     }
 
     const auto id = static_cast<NodeId>(m_nodes.size());
-    m_nodes.emplace_back();
-    m_nodes.back().parent = parent;
-    m_nodes.back().name = name;
-    m_nodes.back().children.reserve(4);
+    m_nodes[parent].children.reserve(m_nodes[parent].children.size() + 1);
+
+    Node node;
+    node.parent = parent;
+    node.name = name;
+    node.children.reserve(4);
+    m_nodes.push_back(std::move(node));
     m_nodes[parent].children.push_back(id);
     return id;
   }

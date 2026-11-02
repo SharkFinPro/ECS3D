@@ -4,9 +4,12 @@
 #include "ProfileScope.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <memory>
+#include <new>
 #include <string>
 #include <thread>
 #include <vector>
@@ -309,28 +312,56 @@ TEST(ProfileLane, MicrosAndCallsSaturateInsteadOfWrapping)
   EXPECT_EQ(rig.newest().nodeCalls[1], std::numeric_limits<uint16_t>::max());
 }
 
-TEST(ProfileLane, BindingAnotherLaneReplacesTheFirstAndDestroyingUnbinds)
+TEST(ProfileLane, BindingAnotherLaneReplacesTheFirst)
 {
   const auto name = id("test.binding");
   LaneRig first;
   first.lane.beginSample();
 
   {
-    LaneRig second;
-    second.lane.beginSample();
-    const Scope scope(name);
+    profile::Lane second("second", 4);
+    second.bindToThisThread();
+    second.beginSample();
+    { const Scope scope(name); }
 
-    EXPECT_EQ(second.lane.tree().size(), 2u);
+    EXPECT_EQ(second.tree().size(), 2u);
     EXPECT_EQ(first.lane.tree().size(), 1u);
   }
+}
 
-  { const Scope scope(name); }
+// A second lane is built at the destroyed lane's address, so a pointer left bound would reach it.
+TEST(ProfileLane, DestroyingTheBoundLaneUnbindsIt)
+{
+  alignas(profile::Lane) std::byte storage[sizeof(profile::Lane)];
 
-  EXPECT_EQ(first.lane.tree().size(), 1u);
+  auto* dead = new (storage) profile::Lane("dead", 4);
+  dead->bindToThisThread();
+  dead->~Lane();
 
-  first.lane.bindToThisThread();
+  auto* successor = new (storage) profile::Lane("successor", 4);
+  successor->beginSample();
+  { const Scope scope(id("test.unbinds")); }
 
-  { const Scope scope(name); }
+  EXPECT_EQ(successor->tree().size(), 1u);
 
-  EXPECT_EQ(first.lane.tree().size(), 2u);
+  successor->bindToThisThread();
+
+  { const Scope scope(id("test.unbinds")); }
+
+  EXPECT_EQ(successor->tree().size(), 2u);
+  successor->~Lane();
+}
+
+TEST(ProfileLane, DestroyingALaneThatIsNotBoundLeavesTheBindingAlone)
+{
+  LaneRig bound;
+  bound.lane.beginSample();
+
+  {
+    const profile::Lane other("other", 4);
+  }
+
+  { const Scope scope(id("test.unbound")); }
+
+  EXPECT_EQ(bound.lane.tree().size(), 2u);
 }
