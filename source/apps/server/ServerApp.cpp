@@ -278,14 +278,17 @@ void ServerApp::run()
                                              maxFixedStepsPerFrame);
     m_timeAccumulator = plan.remainingAccumulator;
 
-    m_lane.addCounter(m_counters.ticks, plan.steps);
-    m_lane.addCounter(m_counters.droppedSteps, droppedStepCount(plan.droppedSeconds, m_fixedUpdateDt));
+    // A step only counts as a tick when the scene runs; a stopped or paused one plans steps that do nothing.
+    const bool running = sceneRunning();
+    const int countedTicks = running ? plan.steps : 0;
+    const int droppedSteps = droppedStepCount(plan.droppedSeconds, m_fixedUpdateDt);
+    m_lane.addCounter(m_counters.ticks, countedTicks);
+    m_lane.addCounter(m_counters.droppedSteps, droppedSteps);
+    m_statsCursor.ticks += static_cast<uint64_t>(countedTicks);
+    m_statsCursor.droppedSteps += static_cast<uint64_t>(droppedSteps);
 
-    const bool ticked = plan.steps > 0;
-    for (int step = 0; step < plan.steps; ++step)
+    const auto runStep = [this]
     {
-      ECS3D_PROFILE_SCOPE("Server tick");
-
       fixedUpdate(m_fixedUpdateDt);
 
       // The tick's scripts have read this tick's mouse motion + key edges; zero the accumulated delta/scroll
@@ -293,6 +296,20 @@ void ServerApp::run()
       // wasPressed/ReleasedThisTick reflect only genuinely new changes.
       InputState::clearMouseDeltas();
       InputState::commitInputEdges();
+    };
+
+    const bool ticked = plan.steps > 0;
+    for (int step = 0; step < plan.steps; ++step)
+    {
+      if (running)
+      {
+        ECS3D_PROFILE_SCOPE("Server tick");
+        runStep();
+      }
+      else
+      {
+        runStep();
+      }
     }
 
     // Only stream a delta when the sim actually advanced. The server is headless (no vsync), so without
@@ -329,14 +346,13 @@ void ServerApp::run()
 
     logStatsIfDue(std::chrono::steady_clock::now());
 
-    const auto currentScene = m_sceneManager->getCurrentScene();
-    m_lane.addCounter(m_counters.objects,
-                      currentScene ? static_cast<int64_t>(currentScene->getObjectManager()->getAllObjects().size()) : 0);
-
     const double openSeconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - m_sampleOpenedAt).count();
     if (shouldCloseServerSample(ticked, openSeconds, m_fixedUpdateDt))
     {
+      const auto currentScene = m_sceneManager->getCurrentScene();
+      m_lane.addCounter(m_counters.objects,
+                        currentScene ? static_cast<int64_t>(currentScene->getObjectManager()->getAllObjects().size()) : 0);
       m_lane.endSample(true);
     }
 
@@ -398,6 +414,11 @@ void ServerApp::logSimulationChange(const bool simulating)
   m_simulating = simulating;
   Log::info(LogCategory::server, simulating ? "A client connected - simulation resumed."
                                             : "No clients connected - simulation paused until one joins.");
+}
+
+bool ServerApp::sceneRunning() const
+{
+  return m_sceneManager->getCurrentScene() && m_sceneManager->getSceneStatus() == SceneStatus::running;
 }
 
 bool ServerApp::scriptsLive() const
@@ -490,11 +511,12 @@ void ServerApp::notifyObjectEvents(const std::vector<uuids::uuid>& spawned,
 
 void ServerApp::fixedUpdate(const float dt) const
 {
-  const auto scene = m_sceneManager->getCurrentScene();
-  if (!scene || m_sceneManager->getSceneStatus() != SceneStatus::running)
+  if (!sceneRunning())
   {
     return;
   }
+
+  const auto scene = m_sceneManager->getCurrentScene();
 
   // The number crunching, in order: scripts read input (variableUpdate) then queue forces, physics
   // integrates, collisions resolve. variableUpdate runs before fixedUpdate so input-driven force is

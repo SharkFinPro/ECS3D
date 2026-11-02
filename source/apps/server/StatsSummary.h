@@ -19,17 +19,17 @@
 struct StatsInput
 {
   double coveredSeconds = 0.0;
-  double tickAvgMs = 0.0;
-  double tickP50Ms = 0.0;
-  double tickP95Ms = 0.0;
-  double tickP99Ms = 0.0;
-  double tickMaxMs = 0.0;
+  double tickAvgMicros = 0.0;
+  double tickP50Micros = 0.0;
+  double tickP95Micros = 0.0;
+  double tickP99Micros = 0.0;
+  double tickMaxMicros = 0.0;
   int64_t ticks = 0;
   int64_t droppedSteps = 0;
-  double scriptsMs = 0.0;
-  double physicsMs = 0.0;
-  double collisionsMs = 0.0;
-  double replicationMs = 0.0;
+  double scriptsMicros = 0.0;
+  double physicsMicros = 0.0;
+  double collisionsMicros = 0.0;
+  double replicationMicros = 0.0;
   int64_t objects = 0;
 };
 
@@ -49,9 +49,13 @@ namespace statsDetail {
     return std::to_string(scaled / scale) + "." + fraction;
   }
 
-  [[nodiscard]] inline std::string ms(const double value)
+  // Milliseconds with two decimals from microseconds, rounded once on the integer hundredths.
+  [[nodiscard]] inline std::string ms(const double micros)
   {
-    return fixed(value, 2);
+    const auto hundredths = static_cast<int64_t>(std::llround(std::max(micros, 0.0) / 10.0));
+    std::string fraction = std::to_string(hundredths % 100);
+    fraction.insert(0, 2 - fraction.size(), '0');
+    return std::to_string(hundredths / 100) + "." + fraction;
   }
 }
 
@@ -60,11 +64,11 @@ namespace statsDetail {
   using statsDetail::fixed;
   using statsDetail::ms;
 
-  return "stats " + fixed(in.coveredSeconds, 1) + "s: tick avg " + ms(in.tickAvgMs) + " p50 " + ms(in.tickP50Ms) +
-         " p95 " + ms(in.tickP95Ms) + " p99 " + ms(in.tickP99Ms) + " max " + ms(in.tickMaxMs) + " ms | ticks " +
+  return "stats " + fixed(in.coveredSeconds, 1) + "s: tick avg " + ms(in.tickAvgMicros) + " p50 " + ms(in.tickP50Micros) +
+         " p95 " + ms(in.tickP95Micros) + " p99 " + ms(in.tickP99Micros) + " max " + ms(in.tickMaxMicros) + " ms | ticks " +
          std::to_string(in.ticks) + " | dropped steps " + std::to_string(in.droppedSteps) +
-         " | per tick period: scripts " + ms(in.scriptsMs) + " physics " + ms(in.physicsMs) + " collisions " +
-         ms(in.collisionsMs) + " replication " + ms(in.replicationMs) + " ms | objects " + std::to_string(in.objects);
+         " | per tick period: scripts " + ms(in.scriptsMicros) + " physics " + ms(in.physicsMicros) + " collisions " +
+         ms(in.collisionsMicros) + " replication " + ms(in.replicationMicros) + " ms | objects " + std::to_string(in.objects);
 }
 
 [[nodiscard]] inline std::string idleStatsLine()
@@ -79,12 +83,29 @@ struct StatsCounters
   uint8_t objects = 0;
 };
 
-// What the previous summary already covered.
+// What the previous summary already covered, plus running totals the caller keeps current. The totals are not read
+// from the history, which caps how many samples a long interval can see.
 struct StatsCursor
 {
   uint64_t sequence = 0;
   uint64_t tickPushed = 0;
+  uint64_t ticks = 0;
+  uint64_t droppedSteps = 0;
+  uint64_t reportedTicks = 0;
+  uint64_t reportedDroppedSteps = 0;
 };
+
+// How many of the newest samples have a sequence above `sequence`.
+[[nodiscard]] inline std::size_t samplesSince(const profile::History& history, const uint64_t sequence)
+{
+  std::size_t count = 0;
+  while (count < history.size() && history.at(history.size() - 1 - count).sequence > sequence)
+  {
+    ++count;
+  }
+
+  return count;
+}
 
 // The node named `name` directly under `parent`, without creating one.
 [[nodiscard]] inline std::optional<profile::NodeId> findStatsNode(const profile::ScopeTree& tree,
@@ -102,21 +123,20 @@ struct StatsCursor
   return std::nullopt;
 }
 
-// Summarizes the samples closed and the "Server tick" durations pushed since `cursor`, then advances it.
+// Summarizes the samples closed and the "Server tick" durations pushed since `cursor`, then advances it. Tick and
+// dropped-step counts are the change in the cursor's running totals.
 [[nodiscard]] inline StatsInput gatherStats(const profile::Lane& lane, const StatsCounters& counters,
                                             StatsCursor& cursor)
 {
   StatsInput in;
   const auto& history = lane.history();
 
-  std::size_t window = 0;
-  if (history.size() > 0)
-  {
-    const auto newest = history.newest().sequence;
-    window = static_cast<std::size_t>(std::min<uint64_t>(newest - std::min(cursor.sequence, newest), history.size()));
-    cursor.sequence = newest;
-  }
+  in.ticks = static_cast<int64_t>(cursor.ticks - cursor.reportedTicks);
+  in.droppedSteps = static_cast<int64_t>(cursor.droppedSteps - cursor.reportedDroppedSteps);
+  cursor.reportedTicks = cursor.ticks;
+  cursor.reportedDroppedSteps = cursor.droppedSteps;
 
+  const auto window = samplesSince(history, cursor.sequence);
   if (window > 0)
   {
     const auto& first = history.at(history.size() - window);
@@ -124,17 +144,13 @@ struct StatsCursor
     const auto spanNanos = last.startNanos + static_cast<int64_t>(last.wallMicros) * 1000 - first.startNanos;
     in.coveredSeconds = static_cast<double>(spanNanos) / 1e9;
     in.objects = last.counters[counters.objects];
-
-    for (std::size_t i = history.size() - window; i < history.size(); ++i)
-    {
-      in.ticks += history.at(i).counters[counters.ticks];
-      in.droppedSteps += history.at(i).counters[counters.droppedSteps];
-    }
+    cursor.sequence = last.sequence;
   }
 
   if (const auto* ring = lane.tracked())
   {
-    const auto fresh = static_cast<std::size_t>(std::min<uint64_t>(ring->totalPushed() - cursor.tickPushed, ring->size()));
+    const auto fresh =
+      static_cast<std::size_t>(std::min<uint64_t>(ring->totalPushed() - cursor.tickPushed, ring->size()));
     cursor.tickPushed = ring->totalPushed();
 
     auto values = ring->values();
@@ -147,17 +163,17 @@ struct StatsCursor
         sum += micros;
       }
 
-      in.tickAvgMs = static_cast<double>(sum) / static_cast<double>(values.size()) / 1000.0;
-      in.tickP50Ms = profile::percentile(values, 50.0) / 1000.0;
-      in.tickP95Ms = profile::percentile(values, 95.0) / 1000.0;
-      in.tickP99Ms = profile::percentile(values, 99.0) / 1000.0;
-      in.tickMaxMs = *std::max_element(values.begin(), values.end()) / 1000.0;
+      in.tickAvgMicros = static_cast<double>(sum) / static_cast<double>(values.size());
+      in.tickP50Micros = profile::percentile(values, 50.0);
+      in.tickP95Micros = profile::percentile(values, 95.0);
+      in.tickP99Micros = profile::percentile(values, 99.0);
+      in.tickMaxMicros = *std::max_element(values.begin(), values.end());
     }
   }
 
-  const auto averageMs = [&](const std::optional<profile::NodeId> node)
+  const auto averageMicros = [&](const std::optional<profile::NodeId> node)
   {
-    return node ? profile::summarizeNode(history, *node, window).average / 1000.0 : 0.0;
+    return node ? profile::summarizeNode(history, *node, window).average : 0.0;
   };
 
   const auto& tree = lane.tree();
@@ -167,10 +183,10 @@ struct StatsCursor
     return serverTick ? findStatsNode(tree, *serverTick, name) : std::nullopt;
   };
 
-  in.scriptsMs = averageMs(under("Scripts"));
-  in.physicsMs = averageMs(under("Physics"));
-  in.collisionsMs = averageMs(under("Collisions"));
-  in.replicationMs = averageMs(findStatsNode(tree, 0, "Replication"));
+  in.scriptsMicros = averageMicros(under("Scripts"));
+  in.physicsMicros = averageMicros(under("Physics"));
+  in.collisionsMicros = averageMicros(under("Collisions"));
+  in.replicationMicros = averageMicros(findStatsNode(tree, 0, "Replication"));
   return in;
 }
 

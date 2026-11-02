@@ -178,6 +178,9 @@ private:
 
   void finishProjectLoad() const;
 
+  // Whether the current scene is running, the only state in which a fixed step does any work.
+  [[nodiscard]] bool sceneRunning() const;
+
   // Scripts are live from the scene's start until its stop, paused included.
   [[nodiscard]] bool scriptsLive() const;
 

@@ -5,6 +5,7 @@
 #include "StatsSummary.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -27,6 +28,26 @@ namespace {
 
     void advance(const profile::Clock::duration duration) { now += duration; }
 
+    // Mirrors what ServerApp does each iteration: the sample counter and the running total.
+    void addTicks(const int count)
+    {
+      lane.addCounter(counters.ticks, count);
+      cursor.ticks += static_cast<uint64_t>(count);
+    }
+
+    void addDropped(const int count)
+    {
+      lane.addCounter(counters.droppedSteps, count);
+      cursor.droppedSteps += static_cast<uint64_t>(count);
+    }
+
+    void closeSampleOf(const profile::Clock::duration duration)
+    {
+      lane.beginSample();
+      advance(duration);
+      lane.endSample(true);
+    }
+
     void timed(const char* name, const profile::Clock::duration duration)
     {
       const profile::Scope scope(profile::internName(name));
@@ -44,17 +65,17 @@ TEST(StatsSummary, FormatsTheLineExactly)
 {
   StatsInput in;
   in.coveredSeconds = 10.0;
-  in.tickAvgMs = 2.1;
-  in.tickP50Ms = 2.0;
-  in.tickP95Ms = 3.0;
-  in.tickP99Ms = 4.4;
-  in.tickMaxMs = 9.8;
+  in.tickAvgMicros = 2100;
+  in.tickP50Micros = 2000;
+  in.tickP95Micros = 3000;
+  in.tickP99Micros = 4400;
+  in.tickMaxMicros = 9800;
   in.ticks = 500;
   in.droppedSteps = 0;
-  in.scriptsMs = 1.2;
-  in.physicsMs = 0.2;
-  in.collisionsMs = 0.5;
-  in.replicationMs = 0.2;
+  in.scriptsMicros = 1200;
+  in.physicsMicros = 200;
+  in.collisionsMicros = 500;
+  in.replicationMicros = 200;
   in.objects = 120;
 
   EXPECT_EQ(formatStatsLine(in),
@@ -65,9 +86,9 @@ TEST(StatsSummary, FormatsTheLineExactly)
 TEST(StatsSummary, RoundsToTheNearestHundredthAndPadsTheFraction)
 {
   StatsInput in;
-  in.tickAvgMs = 1.239;
-  in.tickP50Ms = 0.004;
-  in.tickP95Ms = 12.0;
+  in.tickAvgMicros = 1239;
+  in.tickP50Micros = 4;
+  in.tickP95Micros = 12000;
 
   const auto line = formatStatsLine(in);
 
@@ -84,8 +105,8 @@ TEST(StatsSummary, GatherSummarizesSamplesTicksAndNodes)
   StatsRig rig;
 
   rig.lane.beginSample();
-  rig.lane.addCounter(rig.counters.ticks, 1);
-  rig.lane.addCounter(rig.counters.droppedSteps, 1);
+  rig.addTicks(1);
+  rig.addDropped(1);
   rig.lane.addCounter(rig.counters.objects, 5);
   {
     const profile::Scope tick(profile::internName("Server tick"));
@@ -99,8 +120,8 @@ TEST(StatsSummary, GatherSummarizesSamplesTicksAndNodes)
   rig.advance(5ms);
 
   rig.lane.beginSample();
-  rig.lane.addCounter(rig.counters.ticks, 1);
-  rig.lane.addCounter(rig.counters.droppedSteps, 2);
+  rig.addTicks(1);
+  rig.addDropped(2);
   rig.lane.addCounter(rig.counters.objects, 7);
   {
     const profile::Scope tick(profile::internName("Server tick"));
@@ -117,15 +138,15 @@ TEST(StatsSummary, GatherSummarizesSamplesTicksAndNodes)
   EXPECT_EQ(in.ticks, 2);
   EXPECT_EQ(in.droppedSteps, 3);
   EXPECT_EQ(in.objects, 7);
-  EXPECT_NEAR(in.tickAvgMs, 6.0, 1e-9);
-  EXPECT_NEAR(in.tickP50Ms, 4.0, 1e-9);
-  EXPECT_NEAR(in.tickP95Ms, 8.0, 1e-9);
-  EXPECT_NEAR(in.tickP99Ms, 8.0, 1e-9);
-  EXPECT_NEAR(in.tickMaxMs, 8.0, 1e-9);
-  EXPECT_NEAR(in.scriptsMs, 2.0, 1e-9);
-  EXPECT_NEAR(in.physicsMs, 2.0, 1e-9);
-  EXPECT_NEAR(in.collisionsMs, 0.5, 1e-9);
-  EXPECT_NEAR(in.replicationMs, 0.5, 1e-9);
+  EXPECT_NEAR(in.tickAvgMicros, 6000, 1e-6);
+  EXPECT_NEAR(in.tickP50Micros, 4000, 1e-6);
+  EXPECT_NEAR(in.tickP95Micros, 8000, 1e-6);
+  EXPECT_NEAR(in.tickP99Micros, 8000, 1e-6);
+  EXPECT_NEAR(in.tickMaxMicros, 8000, 1e-6);
+  EXPECT_NEAR(in.scriptsMicros, 2000, 1e-6);
+  EXPECT_NEAR(in.physicsMicros, 2000, 1e-6);
+  EXPECT_NEAR(in.collisionsMicros, 500, 1e-6);
+  EXPECT_NEAR(in.replicationMicros, 500, 1e-6);
 }
 
 TEST(StatsSummary, GatherCoversOnlyWhatFollowsThePreviousSummary)
@@ -133,7 +154,7 @@ TEST(StatsSummary, GatherCoversOnlyWhatFollowsThePreviousSummary)
   StatsRig rig;
 
   rig.lane.beginSample();
-  rig.lane.addCounter(rig.counters.ticks, 3);
+  rig.addTicks(3);
   {
     const profile::Scope tick(profile::internName("Server tick"));
     rig.advance(10ms);
@@ -142,7 +163,7 @@ TEST(StatsSummary, GatherCoversOnlyWhatFollowsThePreviousSummary)
   const auto first = gatherStats(rig.lane, rig.counters, rig.cursor);
 
   rig.lane.beginSample();
-  rig.lane.addCounter(rig.counters.ticks, 1);
+  rig.addTicks(1);
   {
     const profile::Scope tick(profile::internName("Server tick"));
     rig.advance(2ms);
@@ -151,9 +172,9 @@ TEST(StatsSummary, GatherCoversOnlyWhatFollowsThePreviousSummary)
   const auto second = gatherStats(rig.lane, rig.counters, rig.cursor);
 
   EXPECT_EQ(first.ticks, 3);
-  EXPECT_NEAR(first.tickMaxMs, 10.0, 1e-9);
+  EXPECT_NEAR(first.tickMaxMicros, 10000, 1e-6);
   EXPECT_EQ(second.ticks, 1);
-  EXPECT_NEAR(second.tickMaxMs, 2.0, 1e-9);
+  EXPECT_NEAR(second.tickMaxMicros, 2000, 1e-6);
 }
 
 TEST(StatsSummary, GatherReportsNoTicksWhenSamplesClosedWithoutOne)
@@ -168,7 +189,7 @@ TEST(StatsSummary, GatherReportsNoTicksWhenSamplesClosedWithoutOne)
 
   EXPECT_EQ(in.ticks, 0);
   EXPECT_NEAR(in.coveredSeconds, 0.02, 1e-9);
-  EXPECT_DOUBLE_EQ(in.tickMaxMs, 0.0);
+  EXPECT_DOUBLE_EQ(in.tickMaxMicros, 0.0);
 }
 
 TEST(StatsSummary, GatherWithNothingRecordedIsAllZero)
@@ -179,7 +200,7 @@ TEST(StatsSummary, GatherWithNothingRecordedIsAllZero)
 
   EXPECT_EQ(in.ticks, 0);
   EXPECT_DOUBLE_EQ(in.coveredSeconds, 0.0);
-  EXPECT_DOUBLE_EQ(in.tickAvgMs, 0.0);
+  EXPECT_DOUBLE_EQ(in.tickAvgMicros, 0.0);
 }
 
 TEST(StatsSummary, ANodeThatNeverAppearedPrintsZero)
@@ -187,7 +208,7 @@ TEST(StatsSummary, ANodeThatNeverAppearedPrintsZero)
   StatsRig rig;
 
   rig.lane.beginSample();
-  rig.lane.addCounter(rig.counters.ticks, 1);
+  rig.addTicks(1);
   {
     const profile::Scope tick(profile::internName("Server tick"));
     rig.timed("Physics", 4ms);
@@ -196,10 +217,10 @@ TEST(StatsSummary, ANodeThatNeverAppearedPrintsZero)
 
   const auto in = gatherStats(rig.lane, rig.counters, rig.cursor);
 
-  EXPECT_NEAR(in.physicsMs, 4.0, 1e-9);
-  EXPECT_DOUBLE_EQ(in.scriptsMs, 0.0);
-  EXPECT_DOUBLE_EQ(in.collisionsMs, 0.0);
-  EXPECT_DOUBLE_EQ(in.replicationMs, 0.0);
+  EXPECT_NEAR(in.physicsMicros, 4000, 1e-6);
+  EXPECT_DOUBLE_EQ(in.scriptsMicros, 0.0);
+  EXPECT_DOUBLE_EQ(in.collisionsMicros, 0.0);
+  EXPECT_DOUBLE_EQ(in.replicationMicros, 0.0);
   EXPECT_NE(formatStatsLine(in).find("scripts 0.00 physics 4.00 collisions 0.00 replication 0.00"), std::string::npos);
 }
 
@@ -208,7 +229,7 @@ TEST(StatsSummary, GatherKeepsOnlyTheTickDurationsTheRingStillHolds)
   StatsRig rig(2);
 
   rig.lane.beginSample();
-  rig.lane.addCounter(rig.counters.ticks, 3);
+  rig.addTicks(3);
   for (const auto duration : { 30ms, 2ms, 4ms })
   {
     const profile::Scope tick(profile::internName("Server tick"));
@@ -219,6 +240,106 @@ TEST(StatsSummary, GatherKeepsOnlyTheTickDurationsTheRingStillHolds)
   const auto in = gatherStats(rig.lane, rig.counters, rig.cursor);
 
   EXPECT_EQ(in.ticks, 3);
-  EXPECT_NEAR(in.tickMaxMs, 4.0, 1e-9);
-  EXPECT_NEAR(in.tickAvgMs, 3.0, 1e-9);
+  EXPECT_NEAR(in.tickMaxMicros, 4000, 1e-6);
+  EXPECT_NEAR(in.tickAvgMicros, 3000, 1e-6);
+}
+
+TEST(StatsSummary, RoundsFromIntegerMicrosecondsAtACarryAndAHalf)
+{
+  StatsInput in;
+  in.tickAvgMicros = 1005;
+  in.tickP50Micros = 1999;
+  in.tickP95Micros = 1004;
+  in.tickP99Micros = 123456789;
+  in.tickMaxMicros = 9999;
+
+  const auto line = formatStatsLine(in);
+
+  EXPECT_NE(line.find("tick avg 1.01 p50 2.00 p95 1.00 p99 123456.79 max 10.00"), std::string::npos) << line;
+}
+
+TEST(StatsSummary, AnAverageOfMicrosecondsRoundsOnTheHundredths)
+{
+  StatsInput in;
+  in.scriptsMicros = 1004.9;
+  in.physicsMicros = 1005.1;
+
+  const auto line = formatStatsLine(in);
+
+  EXPECT_NE(line.find("scripts 1.00 physics 1.01"), std::string::npos) << line;
+}
+
+TEST(StatsSummary, TicksAndDroppedStepsAreTheChangeInTheRunningTotals)
+{
+  StatsRig rig;
+
+  rig.addTicks(7);
+  rig.addDropped(2);
+  const auto first = gatherStats(rig.lane, rig.counters, rig.cursor);
+  rig.addTicks(5);
+  const auto second = gatherStats(rig.lane, rig.counters, rig.cursor);
+
+  EXPECT_EQ(first.ticks, 7);
+  EXPECT_EQ(first.droppedSteps, 2);
+  EXPECT_EQ(second.ticks, 5);
+  EXPECT_EQ(second.droppedSteps, 0);
+}
+
+TEST(StatsSummary, ATickTotalBeyondTheHistoryIsNotUndercounted)
+{
+  StatsRig rig;
+
+  for (int i = 0; i < 20; ++i)
+  {
+    rig.lane.beginSample();
+    rig.addTicks(2);
+    rig.advance(1ms);
+    rig.lane.endSample(true);
+  }
+
+  const auto in = gatherStats(rig.lane, rig.counters, rig.cursor);
+
+  EXPECT_EQ(rig.lane.history().size(), 16u);
+  EXPECT_EQ(in.ticks, 40);
+}
+
+TEST(StatsSummary, AWrappedHistoryCoversWhatItHoldsThenOnlyTheNewSamples)
+{
+  StatsRig rig;
+
+  for (int i = 0; i < 20; ++i)
+  {
+    rig.closeSampleOf(1ms);
+    rig.advance(1ms);
+  }
+
+  const auto first = gatherStats(rig.lane, rig.counters, rig.cursor);
+
+  for (int i = 0; i < 3; ++i)
+  {
+    rig.closeSampleOf(1ms);
+    rig.advance(1ms);
+  }
+
+  const auto second = gatherStats(rig.lane, rig.counters, rig.cursor);
+
+  // 16 samples of 1 ms spaced 2 ms apart span 31 ms; 3 span 5 ms.
+  EXPECT_NEAR(first.coveredSeconds, 0.031, 1e-9);
+  EXPECT_NEAR(second.coveredSeconds, 0.005, 1e-9);
+}
+
+TEST(StatsSummary, SamplesSinceCountsBySequenceNotByDistanceFromTheNewest)
+{
+  profile::History history(8);
+  for (const uint64_t sequence : { 1u, 2u, 5u, 9u })
+  {
+    profile::Sample sample;
+    sample.sequence = sequence;
+    history.push(sample);
+  }
+
+  EXPECT_EQ(samplesSince(history, 0), 4u);
+  EXPECT_EQ(samplesSince(history, 2), 2u);
+  EXPECT_EQ(samplesSince(history, 5), 1u);
+  EXPECT_EQ(samplesSince(history, 9), 0u);
 }
