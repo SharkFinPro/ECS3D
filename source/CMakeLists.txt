@@ -25,6 +25,7 @@ if (ECS3D_PRECOMPILED_HEADERS)
   set(_ecs3d_pch_render <vulkan/vulkan_raii.hpp> <imgui.h>)
 
   target_precompile_headers(ECS3DLog PRIVATE ${_ecs3d_pch_std})
+  target_precompile_headers(ECS3DProfile PRIVATE ${_ecs3d_pch_std})
   target_precompile_headers(ECS3DSettings PRIVATE ${_ecs3d_pch_std} <nlohmann/json.hpp>)
 
   foreach (_target ECS3DData ECS3DNet ECS3DSim ECS3DScripting ECS3DServer)

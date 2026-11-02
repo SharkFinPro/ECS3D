@@ -10,6 +10,9 @@ Top-level config: C++23, `bin/` output (executables and shared libraries) when t
 MSVC (the Microsoft Visual C++ compiler) export-all-symbols. `compile_commands.json` is exported by default for the
 Ninja and Makefile generators, and an explicit false value such as `-DCMAKE_EXPORT_COMPILE_COMMANDS=OFF` opts out. Then `add_subdirectory(source)`.
 
+`ECS3D_PROFILER_SCOPES` (default ON, defined by `ECS3DProfile`) compiles the `ECS3D_PROFILE_SCOPE` timers in; it is
+separate from `ECS3D_PROFILE`, which only sets flags for external profilers.
+
 Module scanning is off (`CMAKE_CXX_SCAN_FOR_MODULES`, root `CMakeLists.txt`). Nothing uses C++20
 modules, and on MSVC the scan cost about an eighth of a clean build.
 
