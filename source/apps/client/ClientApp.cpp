@@ -21,6 +21,7 @@
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <Log.h>
+#include <ProfileScope.h>
 #include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -93,31 +94,53 @@ bool ClientApp::isActive() const
 
 void ClientApp::run()
 {
+  struct LaneBinding {
+    explicit LaneBinding(profile::Lane& target) : lane(target) { lane.bindToThisThread(); }
+    ~LaneBinding()
+    {
+      lane.endSample(true);
+      profile::Lane::unbindThisThread();
+    }
+    profile::Lane& lane;
+  } binding(m_profileLane);
+
   while (isActive())
   {
-    net::Message message;
-    while (m_netClient->poll(message))
+    // The previous iteration's render() falls inside its own sample.
+    m_profileLane.endSample(true);
+    m_profileLane.beginSample();
+
     {
-      // A malformed message costs the message, not the session. Without this the exception escapes run()
-      // and main exits, so one bad packet closes the window.
-      try
+      ECS3D_PROFILE_SCOPE("Network in");
+
+      net::Message message;
+      while (m_netClient->poll(message))
       {
-        applyMessage(message);
+        // A malformed message costs the message, not the session. Without this the exception escapes run()
+        // and main exits, so one bad packet closes the window.
+        try
+        {
+          applyMessage(message);
+        }
+        catch (const std::exception& e)
+        {
+          Log::error(LogCategory::client, std::string("Failed to apply a message from the server: ") + e.what());
+          m_connectionNotice = "Received a malformed message; see the log for details.";
+        }
       }
-      catch (const std::exception& e)
+
+      if (m_netClient->takeConnectionLost())
       {
-        Log::error(LogCategory::client, std::string("Failed to apply a message from the server: ") + e.what());
-        m_connectionNotice = "Received a malformed message; see the log for details.";
+        m_connectionNotice = "Connection to the server was lost.";
+        Log::error(LogCategory::client, m_connectionNotice);
       }
     }
 
-    if (m_netClient->takeConnectionLost())
     {
-      m_connectionNotice = "Connection to the server was lost.";
-      Log::error(LogCategory::client, m_connectionNotice);
-    }
+      ECS3D_PROFILE_SCOPE("Input");
 
-    sendInput();
+      sendInput();
+    }
 
     displayConnectionNotice();
 
@@ -273,18 +296,26 @@ void ClientApp::createRenderer()
 
 void ClientApp::variableUpdate() const
 {
-  RenderSystem::setGridVisible(*m_assetCache, false);
-
-  if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);
+    ECS3D_PROFILE_SCOPE("Scene prep");
 
-    // Render through this client's own player camera (the object with our PlayerController slot + a
-    // Camera); nullopt falls back to the scene's first active camera / free-fly.
-    m_renderSystem->updateCamera(*scene->getObjectManager(), *m_assetCache, resolvePlayerCamera());
+    RenderSystem::setGridVisible(*m_assetCache, false);
+
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);
+
+      // Render through this client's own player camera (the object with our PlayerController slot + a
+      // Camera); nullopt falls back to the scene's first active camera / free-fly.
+      m_renderSystem->updateCamera(*scene->getObjectManager(), *m_assetCache, resolvePlayerCamera());
+    }
   }
 
-  m_renderer->render();
+  {
+    ECS3D_PROFILE_SCOPE("Renderer");
+
+    m_renderer->render();
+  }
 }
 
 void ClientApp::applyMessage(const net::Message& message) const
@@ -325,6 +356,8 @@ void ClientApp::applyMessage(const net::Message& message) const
 
 void ClientApp::handleSnapshot(const net::Message& message) const
 {
+  ECS3D_PROFILE_SCOPE("Snapshot apply");
+
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
 

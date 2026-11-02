@@ -40,6 +40,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
 )
 
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  ECS3DProfile
+)
+
 # CollisionSystem holds the migrated sweep-and-prune (CollisionManager). The GJK/EPA that arrived with it
 # (Collider.cpp, Simplex, Polytope) now sits behind collisions/NarrowPhase, which CollisionSystem calls
 # into. Both were transplanted nearly verbatim. PhysicsSystem carries the physics bodies

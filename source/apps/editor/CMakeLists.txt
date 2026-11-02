@@ -20,6 +20,7 @@ add_executable(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
   ECS3DLog
+  ECS3DProfile
   ECS3DRender
   ECS3DEditorLib
   ECS3DNet

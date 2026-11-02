@@ -92,9 +92,10 @@
   itself there. **Still include what you use** - the precompiled header is not a substitute.
 - **Dependency direction (must hold unless a deliberate change updates this section):** `log` -> nothing.
   `protocol` -> nothing. `profile` -> nothing. `settings` -> log (+ json). `data` -> protocol + log
-  (+ json/glm/uuid). `sim` -> data. `render` -> data + VulkanEngine. `editor` -> data + render + settings + nfd + log.
-  `net`/`scripting` -> data + clrHost + log. `clrHost` -> log. Apps compose these. **Do not add a Vulkan or ImGui include
-  to `data`**, and do not make the server link render or editor: those invariants keep the server headless.
+  (+ json/glm/uuid). `sim` -> data + profile. `render` -> data + VulkanEngine. `editor` -> data + render + settings +
+  nfd + log. `net`/`scripting` -> data + clrHost + log. `clrHost` -> log. Apps compose these. **Do not add a Vulkan or
+  ImGui include to `data`**, and do not make the server link render or editor: those invariants keep the server
+  headless.
 - Detail (managed publishing, precompiled headers, module scanning, project layout, tests):
   [build.md](docs/architecture/build.md), [project-layout.md](docs/architecture/project-layout.md),
   [testing.md](docs/architecture/testing.md).
@@ -171,10 +172,10 @@ Folders with their own `AGENTS.md`: `source/libs/{data,sim,render,editor,net,pro
 
 - **ECS3DServer** (`apps/server`) - the headless authoritative simulation. Links Data, Sim, Scripting, Net, ClrHost
   and Log. Generates the built-in default project when started without `--project`.
-- **ECS3DClient** (`apps/client`) - the lightweight view. Links Data, Render, Net, ClrHost and Log. Spawns a local
+- **ECS3DClient** (`apps/client`) - the lightweight view. Links Data, Render, Net, ClrHost, Profile and Log. Spawns a local
   server for singleplayer; `--host` connects to an existing one.
-- **ECS3DEditor** (`apps/editor`) - a client plus the ImGui tooling. Links Data, Render, EditorLib, Net, ClrHost
-  and Log. Spawns its own `--edit` server with a generated token unless `--host` names one.
+- **ECS3DEditor** (`apps/editor`) - a client plus the ImGui tooling. Links Data, Render, EditorLib, Net, ClrHost,
+  Profile and Log. Spawns its own `--edit` server with a generated token unless `--host` names one.
 - **ECS3DLauncher** (`apps/launcher`) - the standalone C# project hub, built by `dotnet publish` through CMake.
 - Every app logs through `Log` to the console and to `<user data dir>/logs/<app>.log`. The command-line flags,
   the edit token and the spawned servers' logs are in [apps.md](docs/architecture/apps.md).

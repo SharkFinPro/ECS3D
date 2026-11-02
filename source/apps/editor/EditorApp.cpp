@@ -55,6 +55,7 @@
 #include <EditToken.h>
 #include <ManagedHost.h>
 #include <Log.h>
+#include <ProfileScope.h>
 #include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/camera/Camera.h>
@@ -375,40 +376,66 @@ bool EditorApp::isActive() const
 
 void EditorApp::run()
 {
+  struct LaneBinding {
+    explicit LaneBinding(profile::Lane& target) : lane(target) { lane.bindToThisThread(); }
+    ~LaneBinding()
+    {
+      lane.endSample(true);
+      profile::Lane::unbindThisThread();
+    }
+    profile::Lane& lane;
+  } binding(m_profileLane);
+
   while (isActive())
   {
-    net::Message message;
-    while (m_netClient->poll(message))
+    // The previous iteration's render() falls inside its own sample.
+    m_profileLane.endSample(true);
+    m_profileLane.beginSample();
+
     {
-      // A malformed message costs the message, not the session. Without this the exception escapes run()
-      // and main exits, losing whatever was being edited.
-      try
+      ECS3D_PROFILE_SCOPE("Network in");
+
+      net::Message message;
+      while (m_netClient->poll(message))
       {
-        applyMessage(message);
+        // A malformed message costs the message, not the session. Without this the exception escapes run()
+        // and main exits, losing whatever was being edited.
+        try
+        {
+          applyMessage(message);
+        }
+        catch (const std::exception& e)
+        {
+          logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
+        }
       }
-      catch (const std::exception& e)
+
+      if (m_netClient->takeConnectionLost())
       {
-        logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
+        logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
+        m_serverEditable = false;
       }
     }
 
-    if (m_netClient->takeConnectionLost())
     {
-      logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
-      m_serverEditable = false;
+      ECS3D_PROFILE_SCOPE("Input");
+
+      sendInput();
+
+      handlePicking();
+
+      m_keybindDispatcher->update();
     }
-
-    sendInput();
-
-    handlePicking();
-
-    m_keybindDispatcher->update();
 
     saveLayoutIfRequested();
 
     m_settings->update();
 
-    updateGui();
+    {
+      ECS3D_PROFILE_SCOPE("Editor UI");
+
+      updateGui();
+    }
 
     variableUpdate();
   }
@@ -507,23 +534,31 @@ void EditorApp::variableUpdate()
   const auto scene = m_sceneManager->getCurrentScene();
   const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
 
-  if (objectManager)
   {
-    m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
+    ECS3D_PROFILE_SCOPE("Scene prep");
+
+    if (objectManager)
+    {
+      m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
+    }
+
+    dropStaleViewCamera(objectManager);
+    applyViewCamera(objectManager);
+
+    RenderSystem::setGridVisible(*m_assetCache, shouldShowGrid(editorViewportSettings::readShowGrid(*m_settings),
+                                                               objectManager && m_viewCameraObject));
+
+    if (objectManager && shouldDrawLightGizmos(m_sceneStatus, m_renderer->getRenderingManager()->isRayTracingEnabled()))
+    {
+      m_renderSystem->drawLightGizmos(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
+    }
   }
 
-  dropStaleViewCamera(objectManager);
-  applyViewCamera(objectManager);
-
-  RenderSystem::setGridVisible(*m_assetCache, shouldShowGrid(editorViewportSettings::readShowGrid(*m_settings),
-                                                             objectManager && m_viewCameraObject));
-
-  if (objectManager && shouldDrawLightGizmos(m_sceneStatus, m_renderer->getRenderingManager()->isRayTracingEnabled()))
   {
-    m_renderSystem->drawLightGizmos(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
-  }
+    ECS3D_PROFILE_SCOPE("Renderer");
 
-  m_renderer->render();
+    m_renderer->render();
+  }
 }
 
 void EditorApp::dropStaleViewCamera(const ObjectManager* objectManager)

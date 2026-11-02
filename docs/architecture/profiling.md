@@ -95,3 +95,17 @@ ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ti
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.
   With it off, `ECS3D_PROFILE_SCOPE` expands to nothing. It is separate from `ECS3D_PROFILE`.
 - `profile::setEnabled(false)` is a global runtime switch (default on) that makes every `Scope` a no-op.
+
+## Client and editor lanes
+
+`ClientApp` and `EditorApp` each own a `Lane` (`"client"`, `"editor"`, 4096 samples) that `run()` binds to the main
+thread and unbinds on every exit path. One sample spans one `run()` iteration: the loop closes the previous sample and
+opens the next at its top, so the previous iteration's `render()` falls inside its own sample. Top-level scopes are
+`Network in` (with `Snapshot apply` nested under it), `Input`, `Scene prep` and `Renderer`; the editor adds `Editor UI`.
+Nothing reads these lanes yet. The app wiring has no headless test.
+
+## Collision phases
+
+`CollisionSystem` records `Broad phase` (building the edge list, bounding boxes, sort and dynamic flags), `Narrow
+phase` (the whole OpenMP loop, timed once from the calling thread) and `Response` (pair assembly through
+`recordCollisionEvents`). A scope never opens inside the parallel region, and with no lane bound they do nothing.
