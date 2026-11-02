@@ -234,6 +234,10 @@ void ServerApp::run()
     installShutdownSignalHandlers();
   }
 
+  // Boot time before the loop must be neither replayed as ticks nor counted as dropped steps.
+  m_previousTime = std::chrono::steady_clock::now();
+  m_lastStatsTime = m_previousTime;
+
   m_lane.bindToThisThread();
   struct LaneUnbinder
   {
