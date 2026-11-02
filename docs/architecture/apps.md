@@ -46,13 +46,13 @@ while playing) the same way it already undoes an edited Transform.
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project` (folder or file; both it and `--port` are also passed to the spawned server)/`--console`/`--server-console`
   (opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`. Links
-  Data+Render+Net+ClrHost+Log. Spawns a local server for singleplayer; `--host` connects to an existing
+  Data+Render+Net+ClrHost+Profile+Log. Spawns a local server for singleplayer; `--host` connects to an existing
   server instead.
 - **ECS3DEditor** (`apps/editor`) — client + ImGui tooling (object tree, inspector, asset browser, scene
   controls, the viewport transform gizmo, save/load). `--host`/`--port`/`--project` (folder or file; both it and `--port` are also passed to the spawned server)/`--token` (edit token when attaching to an existing
   edit server)/`--console`/`--server-console` (`--console` opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`. By default spawns its own `--edit` server with a generated
-  token. Links Data+Render+EditorLib+Net+ClrHost+Log. It also registers a `RingBufferSink` for its Console panel, since
+  token. Links Data+Render+EditorLib+Net+ClrHost+Profile+Log. It also registers a `RingBufferSink` for its Console panel, since
   it is the only app with a panel to show one.
 - Each app's `main` registers a `ConsoleSink` with `Log` before anything else runs, then a `FileSink`
   writing to `<user data dir>/logs/<app>.log` (`editor`, `client` or `server`); `--log-file <path>`

@@ -162,8 +162,8 @@ add_executable(${PROJECT_NAME}
   PrefabTest.cpp
   FixedTimestepTest.cpp
   ProfileHistoryTest.cpp
-  ProfileOverheadTest.cpp
   ProfileLaneTest.cpp
+  ProfileOverheadTest.cpp
   ProfileStatsTest.cpp
   InertiaTensorBehaviorTest.cpp
   InertiaTensorTests.cpp

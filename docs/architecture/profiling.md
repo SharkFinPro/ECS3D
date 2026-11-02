@@ -65,6 +65,12 @@ fewer. `Summary` holds `last`, `average`, `p95`, `max` and `samples`; an empty h
 - A **hitch** is a wall time more than twice the window's nearest-rank 50th percentile (the lower middle value for an
   even window); a zero there never counts. `countHitches` counts them over the window.
 
+## Switches
+
+- `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.
+  With it off, `ECS3D_PROFILE_SCOPE` expands to nothing. It is separate from `ECS3D_PROFILE`.
+- `profile::setEnabled(false)` is a global runtime switch (default on) that makes every `Scope` a no-op.
+
 ## Client and editor lanes
 
 `ClientApp` and `EditorApp` each own a `Lane` (`"client"`, `"editor"`, 4096 samples) that `run()` binds to the main
@@ -78,9 +84,3 @@ Nothing reads these lanes yet. The app wiring has no headless test.
 `CollisionSystem` records `Broad phase` (building the edge list, bounding boxes, sort and dynamic flags), `Narrow
 phase` (the whole OpenMP loop, timed once from the calling thread) and `Response` (pair assembly through
 `recordCollisionEvents`). A scope never opens inside the parallel region, and with no lane bound they do nothing.
-
-## Switches
-
-- `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.
-  With it off, `ECS3D_PROFILE_SCOPE` expands to nothing. It is separate from `ECS3D_PROFILE`.
-- `profile::setEnabled(false)` is a global runtime switch (default on) that makes every `Scope` a no-op.

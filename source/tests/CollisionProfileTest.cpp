@@ -10,6 +10,7 @@
 #include <glm/vec3.hpp>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -28,6 +29,19 @@ namespace {
 
     profile::Clock::time_point now = profile::Clock::time_point{} + std::chrono::seconds(1);
   };
+
+  std::optional<profile::NodeId> rootNode(const profile::Lane& lane, const std::string_view name)
+  {
+    for (const auto node : lane.tree().children(0))
+    {
+      if (profile::nameOf(lane.tree().name(node)) == name)
+      {
+        return node;
+      }
+    }
+
+    return std::nullopt;
+  }
 
   uint16_t callsAtRoot(const profile::Lane& lane, const std::string_view name)
   {
@@ -77,6 +91,9 @@ TEST(CollisionProfile, RecordsEachPhaseOnceFromTheCallingThread)
   EXPECT_GE(callsAtRoot(lane, "Broad phase"), 1);
   EXPECT_EQ(callsAtRoot(lane, "Narrow phase"), 1);
   EXPECT_EQ(callsAtRoot(lane, "Response"), 1);
+  const auto narrow = rootNode(lane, "Narrow phase");
+  ASSERT_TRUE(narrow.has_value());
+  EXPECT_TRUE(lane.tree().children(*narrow).empty());
   EXPECT_EQ(lane.abandonedScopeCount(), 0u);
   EXPECT_EQ(lane.overflowCount(), 0u);
 }
