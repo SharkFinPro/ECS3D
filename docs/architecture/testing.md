@@ -16,7 +16,7 @@ needs `fixtures::` or a using-declaration. **Build a scene through these rather 
 
 ## Native suite
 
-Tests (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
+Tests (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings`, `ECS3DProfile` and
 `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
 window, GPU or server. The CLR-free sources of `ECS3DNet` are compiled straight into the target rather than linked:
 `net/MessageQueue.cpp`, `net/CommandLineSplit.cpp`, `net/ClientConnectionState.cpp` and `net/EditorConnections.cpp`.

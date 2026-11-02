@@ -160,6 +160,9 @@ add_executable(${PROJECT_NAME}
   ObjectNameFieldTest.cpp
   PrefabTest.cpp
   FixedTimestepTest.cpp
+  ProfileHistoryTest.cpp
+  ProfileLaneTest.cpp
+  ProfileStatsTest.cpp
   InertiaTensorBehaviorTest.cpp
   InertiaTensorTests.cpp
   PhysicsIntegrationTest.cpp
@@ -362,6 +365,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
   ECS3DLog
   ECS3DNetProtocol
+  ECS3DProfile
   ECS3DSettings
   ECS3DSim
   GTest::gtest_main
