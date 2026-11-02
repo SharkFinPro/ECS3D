@@ -48,9 +48,11 @@ it interns a new node, and it never throws: an allocation failure folds the scop
   `std::length_error`), and `addCounter(id, value)` sums into the open sample; it is ignored with no open sample or an
   unknown id. Counters reset in `beginSample` and are stored in `Sample::counters`.
 - `Lane::trackScope(name, capacity)` makes every completed recorded scope with that name, at any depth, also push its
-  micros into a `DurationRing`, a fixed ring read through `Lane::tracked()` (null until tracking starts); `totalPushed()`
-  counts every push since construction, even after the ring wraps. The ring is allocated by `trackScope`, so `exit` stays
-  allocation-free, and the check is a `NameId` compare. Folded scopes record nothing, so they push nothing.
+  micros into a `DurationRing`, a fixed ring read through `Lane::tracked()` (null until tracking starts).
+  `totalPushed()` counts every push since construction, even after the ring wraps.
+- The ring is allocated by `trackScope`, so `exit` stays allocation-free, and the check is a `NameId` compare. Folded
+  scopes record nothing, so they push nothing. Calling `trackScope` again replaces the ring and its name, so a pointer
+  from an earlier `tracked()` call is no longer valid.
 
 ## Statistics
 
@@ -59,9 +61,9 @@ fewer. `Summary` holds `last`, `average`, `p95`, `max` and `samples`; an empty h
 `summarizeNode` gives zeros for a node id at or past `maxNodes`.
 
 - `percentile(values, p)` is nearest rank: the sorted value at 1-based rank `ceil(p / 100 * n)`, clamped to `[1, n]`,
-  and 0 for no values. The 95th percentile of 1..20 is 19.
-- A **hitch** is a wall time more than twice the window's median; a median of zero never counts. `countHitches`
-  counts them over the window.
+  and 0 for no values; a NaN `p` is treated as 0. The 95th percentile of 1..20 is 19.
+- A **hitch** is a wall time more than twice the window's nearest-rank 50th percentile (the lower middle value for an
+  even window); a zero there never counts. `countHitches` counts them over the window.
 
 ## Server lane
 
