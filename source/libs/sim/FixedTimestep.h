@@ -8,6 +8,8 @@ public:
   struct Plan {
     int steps = 0;
     float remainingAccumulator = 0.0f;
+    // The time advance discarded past the cap; zero when nothing was dropped.
+    float droppedSeconds = 0.0f;
   };
 
   // accumulator/dt/fixedDt are seconds already banked / just elapsed / one fixed step. A call never

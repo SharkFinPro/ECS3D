@@ -19,6 +19,7 @@ add_executable(${PROJECT_NAME}
   RestPose.cpp
   RestPose.h
   ServerPolicy.h
+  StatsSummary.h
   ShutdownSignal.cpp
   ShutdownSignal.h
 )
@@ -32,6 +33,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DNet
   ECS3DClrHost
   ECS3DLog
+  ECS3DProfile
 )
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport + ScriptBridge).

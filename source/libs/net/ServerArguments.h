@@ -35,6 +35,25 @@ namespace net {
   return value;
 }
 
+// The value of a --stats-interval flag: a whole string of decimal digits naming seconds from 0 to 3600 (0 turns the
+// summary off). Anything else is nullopt.
+[[nodiscard]] inline std::optional<int> parseStatsIntervalArgument(const std::string_view text)
+{
+  if (text.empty() || text.front() < '0' || text.front() > '9')
+  {
+    return std::nullopt;
+  }
+
+  int value = 0;
+  const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+  if (error != std::errc() || end != text.data() + text.size() || value > 3600)
+  {
+    return std::nullopt;
+  }
+
+  return value;
+}
+
 }
 
 #endif //SERVERARGUMENTS_H

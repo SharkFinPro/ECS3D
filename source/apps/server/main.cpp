@@ -37,6 +37,24 @@ namespace
     return *port;
   }
 
+  // Consumes the value after --stats-interval at index (advancing index past it).
+  int parseStatsIntervalOption(const int argc, char** argv, int& index)
+  {
+    if (index + 1 >= argc)
+    {
+      throw std::invalid_argument("--stats-interval needs a value (0-3600 seconds).");
+    }
+
+    const std::string text = argv[++index];
+    const auto seconds = net::parseStatsIntervalArgument(text);
+    if (!seconds)
+    {
+      throw std::invalid_argument("Invalid --stats-interval value '" + text + "': expected a number from 0 to 3600.");
+    }
+
+    return *seconds;
+  }
+
   // --edit is the launch-capability gate that allows editor connections; absent it the server is a
   // pure play server. --token, when set, is the secret an editor must present to be authorized;
   // main generates one for an --edit server given none. --open-edit implies --edit and skips that, so any
@@ -57,6 +75,10 @@ namespace
       else if (arg == "--port")
       {
         options.port = parsePortOption(argc, argv, i);
+      }
+      else if (arg == "--stats-interval")
+      {
+        options.statsIntervalSeconds = parseStatsIntervalOption(argc, argv, i);
       }
       else if (arg == "--edit")
       {

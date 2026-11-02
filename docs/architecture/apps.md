@@ -31,6 +31,8 @@ while playing) the same way it already undoes an edited Transform.
   `--edit` (allow editor connections), `--open-edit` (`--edit` with no token required, development only),
   `--ephemeral` (exit when the last connection drops — a spawned local server), `--token`,
   `--simulate-when-empty` (keep ticking with no one connected rather than pausing until a join),
+  `--stats-interval` (seconds between stats log lines, a whole number 0-3600 parsed by
+  `net::parseStatsIntervalArgument`, default 10, 0 disables; a missing or invalid value logs an error and exits 1),
   `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
   Ctrl+C and Ctrl+Break (SIGINT and SIGTERM on POSIX) request an orderly stop through `ShutdownSignal`, which
   `run()` polls through `shouldKeepRunning`: the loop exits, live scripts are stopped and the shutdown is logged.

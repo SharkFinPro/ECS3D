@@ -63,6 +63,25 @@ fewer. `Summary` holds `last`, `average`, `p95`, `max` and `samples`; an empty h
 - A **hitch** is a wall time more than twice the window's median; a median of zero never counts. `countHitches`
   counts them over the window.
 
+## Server lane
+
+`ServerApp` owns a lane named `server` (512 samples), bound to the thread that runs `run()` and unbound when `run()`
+ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ticks`, `droppedSteps` and `objects`.
+
+- **Sample rule:** each `run()` iteration begins a sample (a no-op while one is open). `shouldCloseServerSample` in
+  `ServerPolicy.h` closes it when the iteration ran a step or the sample is a fixed step (20 ms) old, so idle spins
+  fold into one sample. The 1 ms sleep is outside every scope.
+- **Counters:** `ticks` adds the iteration's steps, `droppedSteps` adds the whole steps `FixedTimestep` discarded past
+  its cap (`Plan::droppedSeconds`), and `objects` adds the current scene's object count once as the sample closes.
+- **Scopes:** `Network in`, `Server tick` (each step, including the input-state calls) holding `Scripts`
+  (`variableUpdate`, `fixedUpdate`), `Physics`, `Collisions` and `Script events`; `Replication` (`Structural`,
+  `State delta`) at the top level; `Snapshot`, `Log forwarding`, `Script reload check` and `Stats`.
+- **Summary line:** every `--stats-interval` seconds `logStatsIfDue` logs one line built by `StatsSummary.h` from the
+  samples closed and the `Server tick` durations pushed since the previous line: tick average, p50, p95, p99 and max in
+  milliseconds, ticks, dropped steps, the per-sample average of `Scripts`, `Physics`, `Collisions` and `Replication`,
+  and the object count. The covered seconds can be less than the interval when the history is shorter. When no tick ran
+  it logs `stats: idle (no ticks)` once per idle streak.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.

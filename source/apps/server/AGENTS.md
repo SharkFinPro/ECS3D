@@ -10,6 +10,8 @@ full notes are in [docs/architecture/apps.md](../../../docs/architecture/apps.md
   authorized as `Role::editor`, through `isMutationAuthorized` in `ServerPolicy.h`. The test suite includes that
   header, so policy decisions belong there. It also includes `StructuralChanges.h`, which holds the order
   `broadcastStructuralChanges` replicates a tick's spawns, destroys and component changes in.
+- The server lane's sample-close rule lives in `ServerPolicy.h` and the stats line text in `StatsSummary.h`; the suite
+  includes both. See [profiling.md](../../../docs/architecture/profiling.md).
 - A loaded scene starts stopped until the editor presses play; a play server starts its scene itself.
 - Structural changes from a tick replicate after it: `broadcastStructuralChanges` flushes queued script spawns and
   deletions, then sends the incremental messages.

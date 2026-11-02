@@ -10,6 +10,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/Object.h>
+#include <ProfileScope.h>
 #include <ScriptSystem.h>
 #include "StructuralChanges.h"
 #include <bindings/BindingContext.h>
@@ -33,6 +34,8 @@ namespace {
 
 net::Message ServerApp::buildSnapshot() const
 {
+  ECS3D_PROFILE_SCOPE("Snapshot");
+
   // Refresh each Script's field blob from its live C# instance so the snapshot carries current values.
   // This reaches into the script bridge, so guard it: a field-sync hiccup must NOT stop the snapshot
   // from going out (that would leave the client with no scene at all).
