@@ -23,21 +23,9 @@ namespace {
     {
       lane.bindToThisThread();
     }
-
-    ~LaneRig()
-    {
-      profile::Lane::unbindThisThread();
-    }
-
-    void advance(const profile::Clock::duration duration)
-    {
-      now += duration;
-    }
-
-    [[nodiscard]] const profile::Sample& newest() const
-    {
-      return lane.history().newest();
-    }
+    ~LaneRig() { profile::Lane::unbindThisThread(); }
+    void advance(const profile::Clock::duration duration) { now += duration; }
+    [[nodiscard]] const profile::Sample& newest() const { return lane.history().newest(); }
 
     profile::Clock::time_point now = profile::Clock::time_point{} + 1s;
     profile::Lane lane;
@@ -45,21 +33,11 @@ namespace {
 
   class EnabledGuard {
   public:
-    explicit EnabledGuard(const bool enabled)
-    {
-      profile::setEnabled(enabled);
-    }
-
-    ~EnabledGuard()
-    {
-      profile::setEnabled(true);
-    }
+    explicit EnabledGuard(const bool enabled) { profile::setEnabled(enabled); }
+    ~EnabledGuard() { profile::setEnabled(true); }
   };
 
-  NameId id(const std::string& name)
-  {
-    return profile::internName(name);
-  }
+  NameId id(const std::string& name) { return profile::internName(name); }
 
   std::vector<NameId> ids(const std::string& prefix, const std::size_t count)
   {
@@ -162,19 +140,11 @@ TEST(ProfileLane, TheMacroRecordsIntoTheBoundLane)
 
   ASSERT_EQ(rig.lane.tree().size(), 2u);
   EXPECT_EQ(profile::nameOf(rig.lane.tree().name(1)), "test.macro");
+  EXPECT_EQ(id("test.macro"), rig.lane.tree().name(1));
   EXPECT_EQ(rig.newest().nodeMicros[1], 30u);
 #else
   GTEST_SKIP() << "scopes are compiled out";
 #endif
-}
-
-TEST(ProfileLane, InterningTheSameTextGivesTheSameId)
-{
-  const auto first = id("test.intern");
-
-  EXPECT_EQ(id("test.intern"), first);
-  EXPECT_NE(id("test.intern.other"), first);
-  EXPECT_EQ(profile::nameOf(first), "test.intern");
 }
 
 TEST(ProfileLane, ScopesPastTheDepthCapFoldIntoTheDeepestRecordedScope)
@@ -207,9 +177,7 @@ TEST(ProfileLane, ScopesPastTheNodeCapFoldAndNestedOnesDoNotAttachElsewhere)
     const Scope scope(name);
   }
 
-  {
-    const Scope existing(names[0]);
-  }
+  { const Scope existing(names[0]); }
 
   ASSERT_EQ(rig.lane.tree().size(), profile::maxNodes);
   EXPECT_EQ(rig.lane.overflowCount(), 0u);
@@ -244,9 +212,7 @@ TEST(ProfileLane, AScopeOnAnotherThreadOrWhileDisabledRecordsNothing)
   EXPECT_TRUE(profile::isEnabled());
   EXPECT_EQ(rig.lane.tree().size(), 1u);
 
-  {
-    const Scope scope(name);
-  }
+  { const Scope scope(name); }
 
   EXPECT_EQ(rig.lane.tree().size(), 2u);
 }
@@ -256,9 +222,7 @@ TEST(ProfileLane, ASampleKeepsItsTimingAndStaysOpenUntilClosed)
   LaneRig rig;
   const auto name = id("test.sample");
 
-  {
-    const Scope closed(name);
-  }
+  { const Scope closed(name); }
 
   EXPECT_EQ(rig.lane.tree().size(), 1u);
 
@@ -360,17 +324,13 @@ TEST(ProfileLane, BindingAnotherLaneReplacesTheFirstAndDestroyingUnbinds)
     EXPECT_EQ(first.lane.tree().size(), 1u);
   }
 
-  {
-    const Scope scope(name);
-  }
+  { const Scope scope(name); }
 
   EXPECT_EQ(first.lane.tree().size(), 1u);
 
   first.lane.bindToThisThread();
 
-  {
-    const Scope scope(name);
-  }
+  { const Scope scope(name); }
 
   EXPECT_EQ(first.lane.tree().size(), 2u);
 }

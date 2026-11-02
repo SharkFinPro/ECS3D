@@ -130,24 +130,18 @@ namespace profile {
     }
 
     const uint64_t foldedTicket = m_sequence << 8;
-
-    if (m_foldedOpen > 0 || m_depth >= maxDepth)
-    {
-      ++m_overflow;
-      ++m_foldedOpen;
-      return foldedTicket;
-    }
-
-    const NodeId parent = m_depth > 0 ? m_stack[m_depth - 1].node : NodeId{0};
     std::optional<NodeId> node;
 
-    try
+    if (m_foldedOpen == 0 && m_depth < maxDepth)
     {
-      node = m_tree.child(parent, name);
-    }
-    catch (...)
-    {
-      node = std::nullopt;
+      try
+      {
+        node = m_tree.child(m_depth > 0 ? m_stack[m_depth - 1].node : NodeId{0}, name);
+      }
+      catch (...)
+      {
+        // An allocation failure folds the scope like a cap.
+      }
     }
 
     if (!node)

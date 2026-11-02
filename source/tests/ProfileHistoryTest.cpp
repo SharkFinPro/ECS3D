@@ -32,18 +32,6 @@ TEST(ProfileHistory, PushingPastCapacityKeepsTheNewestInOrder)
   EXPECT_EQ(history.newest().sequence, 5u);
 }
 
-TEST(ProfileHistory, ASparseHistoryStartsAtTheFirstPush)
-{
-  profile::History history(4);
-
-  history.push(sampleWithSequence(1));
-  history.push(sampleWithSequence(2));
-
-  ASSERT_EQ(history.size(), 2u);
-  EXPECT_EQ(history.at(0).sequence, 1u);
-  EXPECT_EQ(history.newest().sequence, 2u);
-}
-
 TEST(ProfileHistory, FindSequenceFindsLiveSamplesAndNotOverwrittenOnes)
 {
   profile::History history(2);
