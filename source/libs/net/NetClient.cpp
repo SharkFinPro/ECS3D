@@ -104,9 +104,11 @@ void NetClient::send(const Message& message) const
   {
     Log::error(LogCategory::net, "Refusing to send a " + std::to_string(message.size())
       + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    m_traffic.countRefused();
     return;
   }
 
+  m_traffic.countOut(message.getType(), message.size(), 1);
   m_transport->send(static_cast<uint8_t>(message.getType()), message.bytes());
 }
 
@@ -127,6 +129,7 @@ void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t l
 
   Message message(static_cast<MessageType>(type), payload);
 
+  m_traffic.countIn(message.getType(), message.size());
   m_inbox.push(std::move(message));
 }
 

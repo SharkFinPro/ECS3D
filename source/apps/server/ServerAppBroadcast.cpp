@@ -20,7 +20,11 @@
 #include <ServerLog.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <algorithm>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <exception>
 #include <string>
 
@@ -30,11 +34,19 @@ namespace {
     return std::to_string(sceneCount) + " scene(s), " + std::to_string(bytes) + " bytes, currentScene='"
       + (currentScene ? uuids::to_string(currentScene->getUUID()) : std::string{}) + "'.";
   }
+
+  template <typename T>
+  T saturatedTo(const uint64_t value)
+  {
+    return static_cast<T>(std::min<uint64_t>(value, std::numeric_limits<T>::max()));
+  }
 }
 
-net::Message ServerApp::buildSnapshot() const
+net::Message ServerApp::buildSnapshot(uint32_t& buildMicros) const
 {
   ECS3D_PROFILE_SCOPE("Snapshot");
+
+  const auto buildStart = std::chrono::steady_clock::now();
 
   // Refresh each Script's field blob from its live C# instance so the snapshot carries current values.
   // This reaches into the script bridge, so guard it: a field-sync hiccup must NOT stop the snapshot
@@ -67,17 +79,24 @@ net::Message ServerApp::buildSnapshot() const
   // but tightly packed instead of JSON. ProjectSerializer stays the JSON path for file save/load.
   net::Message message(net::MessageType::snapshot);
   m_projectPacker->pack(message);
+
+  buildMicros = saturatedTo<uint32_t>(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::steady_clock::now() - buildStart).count()));
   return message;
 }
 
-void ServerApp::broadcastSnapshot() const
+void ServerApp::broadcastSnapshot(const net::SnapshotReason reason) const
 {
-  const auto message = buildSnapshot();
+  uint32_t buildMicros = 0;
+  const auto message = buildSnapshot(buildMicros);
 
   Log::info(LogCategory::server, "Broadcasting snapshot: "
     + describeSnapshot(m_sceneManager->getScenes().size(), message.size(), m_sceneManager->getCurrentScene().get()));
 
   m_netServer->broadcast(message);
+
+  m_snapshotLog.record({reason, saturatedTo<uint32_t>(message.size()), buildMicros,
+                        saturatedTo<uint16_t>(static_cast<uint64_t>(std::max(m_netServer->connectionCount(), 0)))});
 
   broadcastSceneStatus();
 }
@@ -86,12 +105,15 @@ void ServerApp::sendJoinReply(const int32_t connId) const
 {
   m_netServer->sendTo(connId, replication::buildEditStatus(m_options.editMode));
 
-  const auto message = buildSnapshot();
+  uint32_t buildMicros = 0;
+  const auto message = buildSnapshot(buildMicros);
 
   Log::info(LogCategory::server, "Sending snapshot to connection " + std::to_string(connId) + ": "
     + describeSnapshot(m_sceneManager->getScenes().size(), message.size(), m_sceneManager->getCurrentScene().get()));
 
   m_netServer->sendTo(connId, message);
+
+  m_snapshotLog.record({net::SnapshotReason::join, saturatedTo<uint32_t>(message.size()), buildMicros, 1});
 
   m_netServer->sendTo(connId, replication::buildSceneStatus(m_sceneManager->getSceneStatus()));
 }

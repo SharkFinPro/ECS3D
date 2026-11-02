@@ -3,6 +3,7 @@
 #include "FakeTransports.h"
 #include <NetClient.h>
 #include <Protocol.h>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -216,4 +217,30 @@ TEST_F(NetClientTest, ADropAfterAReconnectIsReportedAsLost)
   EXPECT_FALSE(client->isConnected());
   EXPECT_TRUE(client->takeConnectionLost());
   EXPECT_EQ(transport->connectCalls.size(), 2u);
+}
+
+TEST_F(NetClientTest, SentMessagesAreCountedOnceConnectedAndNotBefore)
+{
+  client->send(messageWith(net::MessageType::inputState, {1, 2}));
+  EXPECT_EQ(client->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::inputState)], 0u);
+
+  client->connect("localhost", 3000, net::Role::player, "");
+  client->send(messageWith(net::MessageType::inputState, {1, 2}));
+
+  const auto out = client->traffic().totalOut();
+  EXPECT_EQ(out.messages[static_cast<std::size_t>(net::MessageType::inputState)], 1u);
+  EXPECT_EQ(out.bytes[static_cast<std::size_t>(net::MessageType::inputState)], 3u);
+}
+
+TEST_F(NetClientTest, ReceivedMessagesAreCountedWithTheirTypeByte)
+{
+  client->connect("localhost", 3000, net::Role::player, "");
+  const uint8_t bytes[] = {1, 2, 3};
+
+  transport->callbacks.receive(deltaType, bytes, 3);
+  transport->callbacks.receive(deltaType, nullptr, 0);
+
+  const auto in = client->traffic().totalIn();
+  EXPECT_EQ(in.messages[static_cast<std::size_t>(net::MessageType::stateDelta)], 2u);
+  EXPECT_EQ(in.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)], 5u);
 }

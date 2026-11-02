@@ -94,3 +94,14 @@ it, and skips a thread that is the caller (joining that thread would deadlock). 
 clears that pointer, no socket thread remains that could still call back into it; both pointers are
 `std::atomic` because they are written on the app thread and read on the socket threads with no other
 synchronization between them.
+
+## Traffic counters
+
+`NetServer` and `NetClient` each own a `net::TrafficCounters` (`traffic()`), which keeps monotonic per-`MessageType`
+message and byte totals for each direction plus a count of sends refused as too large. Outbound bytes are counted where
+a message is handed to the transport (payload plus the type byte, times the recipients); inbound ones in `enqueue`, on
+the socket threads. TCP adds 4 framing bytes per message that the counters do not include. A `broadcast` counts
+`connectionCount()` recipients, which includes a connection still in its handshake, so it can overstate slightly. The
+counters are relaxed atomics read as monotonic totals: a reader diffs two reads, as the server's stats line does, which
+also reports sends refused as too large. The refusal path is tested through `TrafficCounters` only, because a real
+oversize message is impractical in a unit test.

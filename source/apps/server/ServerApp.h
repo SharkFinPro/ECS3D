@@ -4,6 +4,7 @@
 #include <Protocol.h>
 #include <PlayerSlots.h>
 #include <Lane.h>
+#include <SnapshotLog.h>
 #include "StatsSummary.h"
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
@@ -89,6 +90,7 @@ private:
   profile::Lane m_lane;
   StatsCounters m_counters;
   StatsCursor m_statsCursor;
+  mutable net::SnapshotLog m_snapshotLog;
   std::chrono::steady_clock::time_point m_sampleOpenedAt;
   std::chrono::steady_clock::time_point m_lastStatsTime;
   bool m_statsIdle = false;
@@ -229,11 +231,11 @@ private:
   // the scripts. Paused scenes are left alone.
   void pollScriptChangesWhileStopped(float dt) const;
 
-  void broadcastSnapshot() const;
+  void broadcastSnapshot(net::SnapshotReason reason) const;
 
   // The full project state as a snapshot message, after refreshing the script fields and script class assets
   // it carries.
-  [[nodiscard]] net::Message buildSnapshot() const;
+  [[nodiscard]] net::Message buildSnapshot(uint32_t& buildMicros) const;
 
   // Answers a join: the edit status (so an editor can show a read-only cue and disable its editing UI), the
   // snapshot and the scene status, to connId alone.

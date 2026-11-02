@@ -80,7 +80,109 @@ TEST(StatsSummary, FormatsTheLineExactly)
 
   EXPECT_EQ(formatStatsLine(in),
             "stats 10.0s: tick avg 2.10 p50 2.00 p95 3.00 p99 4.40 max 9.80 ms | ticks 500 | dropped steps 0 | "
-            "per tick period: scripts 1.20 physics 0.20 collisions 0.50 replication 0.20 ms | objects 120");
+            "per tick period: scripts 1.20 physics 0.20 collisions 0.50 replication 0.20 ms | objects 120 | "
+            "sent 0 B recv 0 B | conns 0 | snapshots 0");
+}
+
+TEST(StatsSummary, TheLineEndsWithTrafficConnectionsAndTheLargestSnapshot)
+{
+  StatsInput in;
+  in.objects = 85;
+  in.sentBytes = 626688;
+  in.recvBytes = 31744;
+  in.topSent = {StatsInput::TypeBytes{net::MessageType::stateDelta, 612352},
+                StatsInput::TypeBytes{net::MessageType::serverLog, 12288}};
+  in.connections = 2;
+  in.snapshots = 1;
+  in.largestSnapshot = {net::SnapshotReason::sceneEdit, 422400, 900, 2};
+
+  const auto line = formatStatsLine(in);
+
+  EXPECT_NE(line.find("objects 85 | sent 612.0 KB (stateDelta 598.0 KB, serverLog 12.0 KB) recv 31.0 KB | conns 2 | "
+                      "snapshots 1 (largest 412.5 KB, sceneEdit)"),
+            std::string::npos) << line;
+}
+
+TEST(StatsSummary, ByteSizesSwitchUnitAtTheBoundaries)
+{
+  EXPECT_EQ(statsDetail::byteSize(0), "0 B");
+  EXPECT_EQ(statsDetail::byteSize(1023), "1023 B");
+  EXPECT_EQ(statsDetail::byteSize(1024), "1.0 KB");
+  EXPECT_EQ(statsDetail::byteSize(1536), "1.5 KB");
+  EXPECT_EQ(statsDetail::byteSize(1048575), "1023.9 KB");
+  EXPECT_EQ(statsDetail::byteSize(1048576), "1.0 MB");
+  EXPECT_EQ(statsDetail::byteSize(5 * 1048576 + 524288), "5.5 MB");
+}
+
+TEST(StatsSummary, NoParenthesisWhenNothingWasSentAndOneEntryWhenOneTypeWas)
+{
+  StatsInput none;
+  EXPECT_NE(formatStatsLine(none).find("| sent 0 B recv"), std::string::npos);
+
+  StatsInput one;
+  one.sentBytes = 2048;
+  one.topSent[0] = {net::MessageType::snapshot, 2048};
+  const auto line = formatStatsLine(one);
+
+  EXPECT_NE(line.find("sent 2.0 KB (snapshot 2.0 KB) recv"), std::string::npos) << line;
+  EXPECT_EQ(line.find(", "), std::string::npos) << line;
+}
+
+TEST(StatsSummary, GatherTakesTrafficAsTheChangeSinceThePreviousSummary)
+{
+  StatsRig rig;
+  NetStatsSample sample;
+  sample.out.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)] = 5000;
+  sample.out.bytes[static_cast<std::size_t>(net::MessageType::serverLog)] = 300;
+  sample.out.bytes[static_cast<std::size_t>(net::MessageType::snapshot)] = 100;
+  sample.in.bytes[static_cast<std::size_t>(net::MessageType::inputState)] = 70;
+  sample.connections = 2;
+
+  const auto first = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+
+  sample.out.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)] += 1000;
+  sample.in.bytes[static_cast<std::size_t>(net::MessageType::inputState)] += 30;
+  sample.connections = 1;
+  const auto second = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+
+  EXPECT_EQ(first.sentBytes, 5400u);
+  EXPECT_EQ(first.recvBytes, 70u);
+  EXPECT_EQ(first.topSent[0].type, net::MessageType::stateDelta);
+  EXPECT_EQ(first.topSent[0].bytes, 5000u);
+  EXPECT_EQ(first.topSent[1].type, net::MessageType::serverLog);
+  EXPECT_EQ(first.topSent[1].bytes, 300u);
+  EXPECT_EQ(first.connections, 2);
+  EXPECT_EQ(second.sentBytes, 1000u);
+  EXPECT_EQ(second.recvBytes, 30u);
+  EXPECT_EQ(second.topSent[0].bytes, 1000u);
+  EXPECT_EQ(second.topSent[1].bytes, 0u);
+  EXPECT_EQ(second.connections, 1);
+}
+
+TEST(StatsSummary, GatherNamesTheLargestSnapshotRecordedSincePreviousSummary)
+{
+  StatsRig rig;
+  net::SnapshotLog log;
+  NetStatsSample sample;
+  sample.snapshots = &log;
+
+  log.record({net::SnapshotReason::join, 9000, 1, 1});
+  const auto first = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+
+  log.record({net::SnapshotReason::sceneControl, 100, 1, 2});
+  log.record({net::SnapshotReason::assetChange, 400, 1, 2});
+  log.record({net::SnapshotReason::sceneEdit, 200, 1, 2});
+  const auto second = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+  const auto third = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+
+  EXPECT_EQ(first.snapshots, 1);
+  EXPECT_EQ(first.largestSnapshot.reason, net::SnapshotReason::join);
+  EXPECT_EQ(second.snapshots, 3);
+  EXPECT_EQ(second.largestSnapshot.bytes, 400u);
+  EXPECT_EQ(second.largestSnapshot.reason, net::SnapshotReason::assetChange);
+  EXPECT_EQ(third.snapshots, 0);
+  EXPECT_NE(formatStatsLine(second).find("snapshots 3 (largest 400 B, assetChange)"), std::string::npos);
+  EXPECT_NE(formatStatsLine(third).find("snapshots 0"), std::string::npos);
 }
 
 TEST(StatsSummary, RoundsToTheNearestHundredthAndPadsTheFraction)
@@ -342,4 +444,77 @@ TEST(StatsSummary, SamplesSinceCountsBySequenceNotByDistanceFromTheNewest)
   EXPECT_EQ(samplesSince(history, 2), 2u);
   EXPECT_EQ(samplesSince(history, 5), 1u);
   EXPECT_EQ(samplesSince(history, 9), 0u);
+}
+
+TEST(StatsSummary, RefusedSendsAppearAfterRecvOnlyWhenThereWereSome)
+{
+  StatsRig rig;
+  NetStatsSample sample;
+  sample.out.refused = 3;
+
+  const auto first = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+  const auto second = gatherStats(rig.lane, rig.counters, rig.cursor, sample);
+
+  EXPECT_EQ(first.refused, 3u);
+  EXPECT_NE(formatStatsLine(first).find("recv 0 B refused 3 | conns"), std::string::npos) << formatStatsLine(first);
+  EXPECT_EQ(second.refused, 0u);
+  EXPECT_EQ(formatStatsLine(second).find("refused"), std::string::npos);
+}
+
+TEST(StatsSummary, AnIdleLineWithNoActivityIsTheBareNotice)
+{
+  StatsInput in;
+  in.connections = 2;
+
+  EXPECT_FALSE(hasNetActivity(in));
+  EXPECT_EQ(idleStatsLine(in), "stats: idle (no ticks)");
+}
+
+TEST(StatsSummary, AnIdleLineWithTrafficOrSnapshotsReportsThem)
+{
+  StatsInput sent;
+  sent.sentBytes = 2048;
+  sent.topSent[0] = {net::MessageType::snapshot, 2048};
+  sent.connections = 1;
+  sent.snapshots = 1;
+  sent.largestSnapshot = {net::SnapshotReason::sceneEdit, 2000, 5, 1};
+
+  EXPECT_EQ(idleStatsLine(sent),
+            "stats: idle (no ticks) | sent 2.0 KB (snapshot 2.0 KB) recv 0 B | conns 1 | "
+            "snapshots 1 (largest 1.9 KB, sceneEdit)");
+
+  StatsInput received;
+  received.recvBytes = 5;
+  EXPECT_EQ(idleStatsLine(received), "stats: idle (no ticks) | sent 0 B recv 5 B | conns 0 | snapshots 0");
+}
+
+TEST(StatsSummary, TheTopTwoSentTypesAreRightWhateverOrderTheyArriveIn)
+{
+  StatsRig rig;
+  NetStatsSample ascending;
+  ascending.out.bytes[static_cast<std::size_t>(net::MessageType::join)] = 10;
+  ascending.out.bytes[static_cast<std::size_t>(net::MessageType::snapshot)] = 20;
+  ascending.out.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)] = 30;
+  ascending.out.bytes[static_cast<std::size_t>(net::MessageType::inputState)] = 40;
+
+  const auto in = gatherStats(rig.lane, rig.counters, rig.cursor, ascending);
+
+  EXPECT_EQ(in.topSent[0].type, net::MessageType::inputState);
+  EXPECT_EQ(in.topSent[0].bytes, 40u);
+  EXPECT_EQ(in.topSent[1].type, net::MessageType::stateDelta);
+  EXPECT_EQ(in.topSent[1].bytes, 30u);
+}
+
+TEST(StatsSummary, TiedSentTypesKeepTheLowerEnumValueFirst)
+{
+  StatsRig rig;
+  NetStatsSample tied;
+  tied.out.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)] = 50;
+  tied.out.bytes[static_cast<std::size_t>(net::MessageType::snapshot)] = 50;
+  tied.out.bytes[static_cast<std::size_t>(net::MessageType::serverLog)] = 50;
+
+  const auto in = gatherStats(rig.lane, rig.counters, rig.cursor, tied);
+
+  EXPECT_EQ(in.topSent[0].type, net::MessageType::snapshot);
+  EXPECT_EQ(in.topSent[1].type, net::MessageType::stateDelta);
 }

@@ -19,6 +19,8 @@ notes are in [docs/architecture/transport.md](../../../docs/architecture/transpo
   and `NetClient.cpp` compile into the test suite, so they stay free of the CLR: every managed call belongs in
   `ManagedServerTransport`/`ManagedClientTransport`, behind `ServerTransport`/`ClientTransport`. `EditToken.h`
   (`net::generateEditToken`, 128 bits from `std::random_device`) is header-only so the suite can include it too.
+- Appending a `MessageType` also updates `messageTypeCount`, the `static_assert`'s last enumerator and
+  `messageTypeName` in `Protocol.h`; nothing fails if one is missed.
 - `ServerProcess` launches a child server from one flag string. `CommandLineSplit` splits it on Linux and macOS,
   honoring double quotes the way the Windows C runtime does.
 - The `Transport/` project builds through CMake only. A direct `dotnet build` or `dotnet publish` breaks the next CMake

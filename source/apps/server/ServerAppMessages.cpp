@@ -331,7 +331,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
 
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
   // every view reflects it immediately.
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::sceneControl);
 }
 
 void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scene, const bool wasStopped) const

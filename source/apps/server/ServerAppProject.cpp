@@ -68,7 +68,7 @@ void ServerApp::finishProjectLoad() const
       + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, stopped).");
   }
 
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::projectLoad);
 }
 
 void ServerApp::startScriptsLogged(SceneAsset& scene) const
@@ -125,5 +125,5 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   Log::info(LogCategory::server, "Switched to scene '" + scene->getName() + "' ("
     + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, stopped).");
 
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::sceneControl);
 }

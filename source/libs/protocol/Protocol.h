@@ -10,6 +10,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -67,6 +68,42 @@ enum class MessageType : uint8_t {
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An
   // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
 };
+
+// One past the last enumerator. The assert only pins this to the enumerator it names, so it cannot notice a newly
+// appended type: appending a MessageType means updating messageTypeCount, the assert's last enumerator and
+// messageTypeName together. A type left out is counted in bucket 0 and named "unknown".
+inline constexpr std::size_t messageTypeCount = 20;
+static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::possessSlot) + 1,
+              "messageTypeCount must be one past the last MessageType");
+
+[[nodiscard]] constexpr std::string_view messageTypeName(const MessageType type) noexcept
+{
+  switch (type)
+  {
+    case MessageType::undefined: return "undefined";
+    case MessageType::join: return "join";
+    case MessageType::snapshot: return "snapshot";
+    case MessageType::stateDelta: return "stateDelta";
+    case MessageType::inputState: return "inputState";
+    case MessageType::editComponent: return "editComponent";
+    case MessageType::sceneEdit: return "sceneEdit";
+    case MessageType::sceneControl: return "sceneControl";
+    case MessageType::loadProject: return "loadProject";
+    case MessageType::addAsset: return "addAsset";
+    case MessageType::editStatus: return "editStatus";
+    case MessageType::sceneStatus: return "sceneStatus";
+    case MessageType::objectSpawned: return "objectSpawned";
+    case MessageType::objectDestroyed: return "objectDestroyed";
+    case MessageType::playerSlot: return "playerSlot";
+    case MessageType::renameAsset: return "renameAsset";
+    case MessageType::removeAsset: return "removeAsset";
+    case MessageType::serverLog: return "serverLog";
+    case MessageType::objectComponentsChanged: return "objectComponentsChanged";
+    case MessageType::possessSlot: return "possessSlot";
+  }
+
+  return "unknown";
+}
 
 // The editor's mutation path, called out as its own function so the transport-side enforcement and any
 // other caller read the same list the comment above documents, rather than a second one that can drift.

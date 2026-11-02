@@ -20,6 +20,9 @@ add_library(${PROJECT_NAME}
   NetClient.h
   EditToken.h
   ServerLog.cpp
+  SnapshotLog.h
+  TrafficCounters.cpp
+  TrafficCounters.h
   ServerLog.h
   ServerTransport.h
   ServerArguments.h

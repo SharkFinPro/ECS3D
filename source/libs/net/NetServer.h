@@ -4,6 +4,7 @@
 #include "EditorConnections.h"
 #include "MessageQueue.h"
 #include "ServerTransport.h"
+#include "TrafficCounters.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -74,12 +75,16 @@ public:
   // authorized as a player, one still mid-handshake, and one that has since disconnected.
   [[nodiscard]] bool isEditor(int32_t connectionId) const;
 
+  [[nodiscard]] const TrafficCounters& traffic() const { return m_traffic; }
+
 private:
   void sendToMany(const std::vector<int32_t>& connIds, const Message& message) const;
 
   std::shared_ptr<ServerTransport> m_transport;
 
   MessageQueue m_inbox;
+
+  mutable TrafficCounters m_traffic;
 
   // Editor authorizations and dropped connection ids, shared between the socket and tick threads.
   EditorConnections m_connections;

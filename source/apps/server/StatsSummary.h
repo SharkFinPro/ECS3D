@@ -4,8 +4,12 @@
 #include <Lane.h>
 #include <ProfileStats.h>
 #include <ProfileScope.h>
+#include <Protocol.h>
+#include <SnapshotLog.h>
+#include <TrafficCounters.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +35,30 @@ struct StatsInput
   double collisionsMicros = 0.0;
   double replicationMicros = 0.0;
   int64_t objects = 0;
+
+  struct TypeBytes
+  {
+    net::MessageType type = net::MessageType::undefined;
+    uint64_t bytes = 0;
+  };
+
+  // Traffic since the previous summary; topSent holds the two largest outbound types, empty entries last.
+  uint64_t sentBytes = 0;
+  uint64_t recvBytes = 0;
+  uint64_t refused = 0;
+  std::array<TypeBytes, 2> topSent{};
+  int64_t connections = 0;
+  int64_t snapshots = 0;
+  net::SnapshotRecord largestSnapshot;
+};
+
+// The network figures a summary reads, passed in as plain values so gatherStats needs no server.
+struct NetStatsSample
+{
+  net::TrafficTotals out;
+  net::TrafficTotals in;
+  int64_t connections = 0;
+  const net::SnapshotLog* snapshots = nullptr;
 };
 
 namespace statsDetail {
@@ -57,6 +85,63 @@ namespace statsDetail {
     fraction.insert(0, 2 - fraction.size(), '0');
     return std::to_string(hundredths / 100) + "." + fraction;
   }
+
+  // 1024-based, one truncated decimal, so a size just under a unit never rounds up to the next one.
+  [[nodiscard]] inline std::string byteSize(const uint64_t bytes)
+  {
+    const auto withUnit = [](const uint64_t tenths, const char* unit)
+    {
+      return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10) + " " + unit;
+    };
+
+    if (bytes < 1024)
+    {
+      return std::to_string(bytes) + " B";
+    }
+
+    if (bytes < 1024 * 1024)
+    {
+      return withUnit(bytes * 10 / 1024, "KB");
+    }
+
+    return withUnit(bytes * 10 / (1024 * 1024), "MB");
+  }
+
+  [[nodiscard]] inline std::string sentText(const StatsInput& in)
+  {
+    std::string text = "sent " + byteSize(in.sentBytes);
+    std::string types;
+    for (const auto& entry : in.topSent)
+    {
+      if (entry.bytes > 0)
+      {
+        types += (types.empty() ? "" : ", ") + std::string(net::messageTypeName(entry.type)) + " " +
+                 byteSize(entry.bytes);
+      }
+    }
+
+    return types.empty() ? text : text + " (" + types + ")";
+  }
+
+  [[nodiscard]] inline std::string snapshotText(const StatsInput& in)
+  {
+    std::string text = "snapshots " + std::to_string(in.snapshots);
+    if (in.snapshots > 0)
+    {
+      text += " (largest " + byteSize(in.largestSnapshot.bytes) + ", " +
+              std::string(net::snapshotReasonName(in.largestSnapshot.reason)) + ")";
+    }
+
+    return text;
+  }
+
+  // Everything after the tick figures: traffic since the previous summary, connections and snapshots.
+  [[nodiscard]] inline std::string netText(const StatsInput& in)
+  {
+    return sentText(in) + " recv " + byteSize(in.recvBytes) +
+           (in.refused > 0 ? " refused " + std::to_string(in.refused) : std::string{}) + " | conns " +
+           std::to_string(in.connections) + " | " + snapshotText(in);
+  }
 }
 
 [[nodiscard]] inline std::string formatStatsLine(const StatsInput& in)
@@ -64,16 +149,28 @@ namespace statsDetail {
   using statsDetail::fixed;
   using statsDetail::ms;
 
-  return "stats " + fixed(in.coveredSeconds, 1) + "s: tick avg " + ms(in.tickAvgMicros) + " p50 " + ms(in.tickP50Micros) +
-         " p95 " + ms(in.tickP95Micros) + " p99 " + ms(in.tickP99Micros) + " max " + ms(in.tickMaxMicros) + " ms | ticks " +
-         std::to_string(in.ticks) + " | dropped steps " + std::to_string(in.droppedSteps) +
-         " | per tick period: scripts " + ms(in.scriptsMicros) + " physics " + ms(in.physicsMicros) + " collisions " +
-         ms(in.collisionsMicros) + " replication " + ms(in.replicationMicros) + " ms | objects " + std::to_string(in.objects);
+  return "stats " + fixed(in.coveredSeconds, 1) + "s: tick avg " + ms(in.tickAvgMicros) + " p50 " +
+         ms(in.tickP50Micros) + " p95 " + ms(in.tickP95Micros) + " p99 " + ms(in.tickP99Micros) + " max " +
+         ms(in.tickMaxMicros) + " ms | ticks " + std::to_string(in.ticks) + " | dropped steps " +
+         std::to_string(in.droppedSteps) + " | per tick period: scripts " + ms(in.scriptsMicros) + " physics " +
+         ms(in.physicsMicros) + " collisions " + ms(in.collisionsMicros) + " replication " +
+         ms(in.replicationMicros) + " ms | objects " + std::to_string(in.objects) + " | " + statsDetail::netText(in);
 }
 
 [[nodiscard]] inline std::string idleStatsLine()
 {
   return "stats: idle (no ticks)";
+}
+
+// Whether an interval moved any bytes or recorded a snapshot, which an idle line then reports.
+[[nodiscard]] inline bool hasNetActivity(const StatsInput& in)
+{
+  return in.sentBytes > 0 || in.recvBytes > 0 || in.refused > 0 || in.snapshots > 0;
+}
+
+[[nodiscard]] inline std::string idleStatsLine(const StatsInput& in)
+{
+  return hasNetActivity(in) ? idleStatsLine() + " | " + statsDetail::netText(in) : idleStatsLine();
 }
 
 struct StatsCounters
@@ -93,6 +190,9 @@ struct StatsCursor
   uint64_t droppedSteps = 0;
   uint64_t reportedTicks = 0;
   uint64_t reportedDroppedSteps = 0;
+  net::TrafficTotals reportedOut;
+  net::TrafficTotals reportedIn;
+  uint64_t reportedSnapshots = 0;
 };
 
 // How many of the newest samples have a sequence above `sequence`.
@@ -161,6 +261,59 @@ namespace statsDetail {
     in.tickMaxMicros = *std::max_element(values.begin(), values.end());
   }
 
+  [[nodiscard]] inline uint64_t totalBytes(const net::TrafficTotals& totals)
+  {
+    uint64_t sum = 0;
+    for (const auto bytes : totals.bytes)
+    {
+      sum += bytes;
+    }
+
+    return sum;
+  }
+
+  inline void fillTrafficFigures(const NetStatsSample& net, StatsCursor& cursor, StatsInput& in)
+  {
+    in.sentBytes = totalBytes(net.out) - totalBytes(cursor.reportedOut);
+    in.recvBytes = totalBytes(net.in) - totalBytes(cursor.reportedIn);
+    in.refused = net.out.refused - cursor.reportedOut.refused;
+    in.connections = net.connections;
+
+    for (std::size_t i = 0; i < net::messageTypeCount; ++i)
+    {
+      const StatsInput::TypeBytes entry{static_cast<net::MessageType>(i),
+                                        net.out.bytes[i] - cursor.reportedOut.bytes[i]};
+      if (entry.bytes > in.topSent[0].bytes)
+      {
+        in.topSent[1] = in.topSent[0];
+        in.topSent[0] = entry;
+      }
+      else if (entry.bytes > in.topSent[1].bytes)
+      {
+        in.topSent[1] = entry;
+      }
+    }
+
+    cursor.reportedOut = net.out;
+    cursor.reportedIn = net.in;
+  }
+
+  inline void fillSnapshotFigures(const net::SnapshotLog& log, StatsCursor& cursor, StatsInput& in)
+  {
+    in.snapshots = static_cast<int64_t>(log.totalRecorded() - cursor.reportedSnapshots);
+    const auto fresh = static_cast<std::size_t>(
+      std::min<uint64_t>(log.totalRecorded() - cursor.reportedSnapshots, log.size()));
+    cursor.reportedSnapshots = log.totalRecorded();
+
+    for (std::size_t i = log.size() - fresh; i < log.size(); ++i)
+    {
+      if (log.at(i).bytes > in.largestSnapshot.bytes || i == log.size() - fresh)
+      {
+        in.largestSnapshot = log.at(i);
+      }
+    }
+  }
+
   inline void fillNodeAverages(const profile::Lane& lane, const std::size_t window, StatsInput& in)
   {
     const auto& history = lane.history();
@@ -186,7 +339,7 @@ namespace statsDetail {
 // Summarizes the samples closed and the "Server tick" durations pushed since `cursor`, then advances it. Tick and
 // dropped-step counts are the change in the cursor's running totals.
 [[nodiscard]] inline StatsInput gatherStats(const profile::Lane& lane, const StatsCounters& counters,
-                                            StatsCursor& cursor)
+                                            StatsCursor& cursor, const NetStatsSample& net = {})
 {
   StatsInput in;
 
@@ -207,6 +360,12 @@ namespace statsDetail {
   }
 
   statsDetail::fillNodeAverages(lane, window, in);
+  statsDetail::fillTrafficFigures(net, cursor, in);
+  if (net.snapshots != nullptr)
+  {
+    statsDetail::fillSnapshotFigures(*net.snapshots, cursor, in);
+  }
+
   return in;
 }
 
