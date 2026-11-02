@@ -4,6 +4,7 @@
 #include "ProfileStats.h"
 
 #include <cstdint>
+#include <limits>
 #include <numeric>
 #include <vector>
 
@@ -64,6 +65,12 @@ TEST(ProfileStats, PercentileNearestRankIsExactAtBoundaries)
   EXPECT_EQ(profile::percentile(values, 95.0), 95u);
   EXPECT_EQ(profile::percentile(values, 96.0), 96u);
   EXPECT_EQ(profile::percentile(values, 1.0), 1u);
+}
+
+TEST(ProfileStats, PercentileOfNaNIsTheSmallestValue)
+{
+  EXPECT_EQ(profile::percentile({3, 1, 2}, std::numeric_limits<double>::quiet_NaN()), 1u);
+  EXPECT_EQ(profile::percentile({3, 1, 2}, 100.0), 3u);
 }
 
 TEST(ProfileStats, PercentileDoesNotNeedSortedInput)

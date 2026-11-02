@@ -8,10 +8,10 @@
 #include <vector>
 
 namespace profile {
-  // Nearest rank: rank = ceil(p / 100 * n), 1-based, clamped to [1, n]. Empty input gives 0.
+  // Nearest rank: rank = ceil(p / 100 * n), 1-based, clamped to [1, n]. Empty input gives 0; NaN counts as 0.
   [[nodiscard]] uint32_t percentile(std::vector<uint32_t> values, double p);
 
-  // More than twice the median; a median of zero never counts.
+  // More than twice the reference value (a nearest-rank 50th percentile); a reference of zero never counts.
   [[nodiscard]] bool isHitch(uint32_t micros, uint32_t medianMicros);
 
   struct Summary {
@@ -26,7 +26,7 @@ namespace profile {
   [[nodiscard]] Summary summarizeWall(const History& history, std::size_t window);
   [[nodiscard]] Summary summarizeNode(const History& history, NodeId node, std::size_t window);
 
-  // Wall time against the window's median.
+  // Wall time against the window's nearest-rank 50th percentile.
   [[nodiscard]] std::size_t countHitches(const History& history, std::size_t window);
 }
 

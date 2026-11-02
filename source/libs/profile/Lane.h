@@ -46,7 +46,8 @@ namespace profile {
     void addCounter(uint8_t id, int64_t value);
 
     // Every completed recorded scope with this name, at any depth, also pushes its micros into a ring of this capacity.
-    // The ring is allocated here so exit never allocates.
+    // The ring is allocated here so exit never allocates. Calling this again replaces the ring and its name, so a
+    // pointer from an earlier tracked() call is no longer valid.
     void trackScope(NameId name, std::size_t capacity);
     [[nodiscard]] const DurationRing* tracked() const;
 

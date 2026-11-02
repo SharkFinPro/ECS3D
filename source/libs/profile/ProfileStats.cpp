@@ -49,6 +49,11 @@ namespace profile {
 
     std::sort(values.begin(), values.end());
 
+    if (std::isnan(p))
+    {
+      return values.front();
+    }
+
     const auto n = static_cast<double>(values.size());
     const auto rank = std::clamp(std::ceil(p * n / 100.0), 1.0, n);
     return values[static_cast<std::size_t>(rank) - 1];

@@ -419,6 +419,7 @@ TEST(ProfileLane, MoreCountersThanTheCapThrow)
 
   EXPECT_THROW(static_cast<void>(rig.lane.counterId("one.too.many")), std::length_error);
   EXPECT_EQ(rig.lane.counterId("counter0"), 0u);
+  EXPECT_EQ(rig.lane.counterId("counter7"), 7u);
 }
 
 TEST(ProfileLane, ATrackedScopeRingCollectsEveryNestedInstanceAndWraps)
