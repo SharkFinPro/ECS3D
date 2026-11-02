@@ -7,6 +7,7 @@ the suite pins their edge cases.
 - The library depends on the standard library only. Do not link `ECS3DLog`, json or glm into it.
 - `Lane::enter` and `Lane::exit` must not allocate, except when interning a new node, and must not throw. Keep the
   stack and the per-sample accumulators fixed-size arrays.
+  The tracked-scope ring is allocated by `trackScope`, never in `exit`.
 - One lane belongs to one thread. Read and write it only on that thread; nothing in it is synchronized.
 - Wrap phases in a scope, never per-object work inside a loop, so a scope's cost stays small next to what it times.
 - `ECS3D_PROFILE_SCOPE` expands to two statements: use it once per line, as a statement in a braced block, never as
