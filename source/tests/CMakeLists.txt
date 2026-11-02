@@ -162,7 +162,6 @@ add_executable(${PROJECT_NAME}
   FixedTimestepTest.cpp
   ProfileHistoryTest.cpp
   ProfileLaneTest.cpp
-  ProfileStatsTest.cpp
   InertiaTensorBehaviorTest.cpp
   InertiaTensorTests.cpp
   PhysicsIntegrationTest.cpp

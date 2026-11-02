@@ -74,23 +74,3 @@ TEST(ProfileHistory, BadAccessThrows)
   EXPECT_THROW(static_cast<void>(history.at(1)), std::out_of_range);
   EXPECT_THROW(profile::History(0), std::invalid_argument);
 }
-
-TEST(ProfileDurationRing, WrapsAndReturnsOldestToNewest)
-{
-  profile::DurationRing ring(3);
-
-  EXPECT_EQ(ring.size(), 0u);
-  EXPECT_TRUE(ring.values().empty());
-
-  for (uint32_t micros = 1; micros <= 5; ++micros)
-  {
-    ring.push(micros * 10);
-  }
-
-  ASSERT_EQ(ring.size(), 3u);
-  EXPECT_EQ(ring.at(0), 30u);
-  EXPECT_EQ(ring.at(2), 50u);
-  EXPECT_EQ(ring.values(), (std::vector<uint32_t>{30, 40, 50}));
-  EXPECT_THROW(static_cast<void>(ring.at(3)), std::out_of_range);
-  EXPECT_THROW(profile::DurationRing(0), std::invalid_argument);
-}

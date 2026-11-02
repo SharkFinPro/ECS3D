@@ -13,11 +13,10 @@ fixed history of the results. It uses only the standard library and links no oth
 - A **node** is a scope's place in the nesting. `ScopeTree` interns nodes at run time: node 0 is the root, and the same
   name under two parents is two nodes.
 - A **sample** is one unit of work, usually one frame or tick, between `Lane::beginSample()` and `endSample(true)`. It
-  records its wall time, the micros and call count of every node, and up to eight named counters, then goes into the
-  lane's `History`, a fixed ring that overwrites the oldest sample. Nodes are saturating `uint32_t` micros and
-  `uint16_t` call counts.
-- A **lane** is one thread's record: a tree, a history, counters and an optional tracked scope. `trackScope` also
-  pushes the duration of every completed scope with that name, at any depth, into a `DurationRing`.
+  records its wall time and the micros and call count of every node, then goes into the
+  lane's `History`, a fixed ring that overwrites the oldest sample. Micros are saturating `uint32_t` and
+  call counts saturating `uint16_t`.
+- A **lane** is one thread's record: a tree and a history.
 
 ## Binding
 
@@ -45,14 +44,3 @@ it interns a new node, and it never throws: an allocation failure folds the scop
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.
   With it off, `ECS3D_PROFILE_SCOPE` expands to nothing. It is separate from `ECS3D_PROFILE`.
 - `profile::setEnabled(false)` is a global runtime switch (default on) that makes every `Scope` a no-op.
-
-## Statistics
-
-`ProfileStats.h` works over the newest `window` samples of a `History`, or all of them when there are fewer.
-
-- `percentile` uses the nearest-rank method: rank is `ceil(p / 100 * n)`, one-based, clamped to `[1, n]`; no values
-  give 0.
-- `Summary` holds the last value, the average, the 95th percentile, the maximum and the sample count, for wall time
-  (`summarizeWall`) or one node's micros (`summarizeNode`).
-- A hitch is a sample whose value is more than twice the median (`isHitch`); a median of zero never counts.
-  `countHitches` compares wall time against the window's median.

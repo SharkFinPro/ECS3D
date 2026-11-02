@@ -3,11 +3,11 @@
 #include <algorithm>
 #include <limits>
 #include <optional>
-#include <stdexcept>
 #include <utility>
 
 namespace profile {
   namespace {
+    // Low byte of a ticket is the stack depth; the rest is the sample sequence.
     constexpr uint64_t depthMask = 0xFF;
 
     template <typename T>
@@ -19,11 +19,6 @@ namespace profile {
     int64_t toNanos(const Clock::duration duration)
     {
       return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
-    }
-
-    uint32_t toMicros(const Clock::duration duration)
-    {
-      return saturateTo<uint32_t>(toNanos(duration) / 1000);
     }
   }
 
@@ -67,7 +62,6 @@ namespace profile {
     m_sampleStart = m_now();
     m_nodeNanos.fill(0);
     m_nodeCalls.fill(0);
-    m_counterValues.fill(0);
     m_depth = 0;
     m_foldedOpen = 0;
   }
@@ -79,12 +73,10 @@ namespace profile {
       return;
     }
 
-    const auto end = m_now();
-
     Sample sample;
     sample.sequence = m_sequence;
     sample.startNanos = toNanos(m_sampleStart - m_created);
-    sample.wallMicros = toMicros(end - m_sampleStart);
+    sample.wallMicros = saturateTo<uint32_t>(toNanos(m_now() - m_sampleStart) / 1000);
 
     for (std::size_t i = 0; i < maxNodes; ++i)
     {
@@ -92,7 +84,6 @@ namespace profile {
       sample.nodeCalls[i] = saturateTo<uint16_t>(m_nodeCalls[i]);
     }
 
-    sample.counters = m_counterValues;
     m_history.push(sample);
 
     m_abandoned += m_depth;
@@ -104,44 +95,6 @@ namespace profile {
   bool Lane::sampleOpen() const
   {
     return m_open;
-  }
-
-  uint8_t Lane::counterId(const std::string_view name)
-  {
-    for (std::size_t i = 0; i < m_counterNames.size(); ++i)
-    {
-      if (m_counterNames[i] == name)
-      {
-        return static_cast<uint8_t>(i);
-      }
-    }
-
-    if (m_counterNames.size() >= maxCounters)
-    {
-      throw std::length_error("too many profile counters");
-    }
-
-    m_counterNames.emplace_back(name);
-    return static_cast<uint8_t>(m_counterNames.size() - 1);
-  }
-
-  void Lane::addCounter(const uint8_t id, const int64_t value)
-  {
-    if (m_open && id < m_counterNames.size())
-    {
-      m_counterValues[id] += value;
-    }
-  }
-
-  void Lane::trackScope(const NameId name, const std::size_t capacity)
-  {
-    m_tracked = std::make_unique<DurationRing>(capacity);
-    m_trackedName = name;
-  }
-
-  const DurationRing* Lane::tracked() const
-  {
-    return m_tracked.get();
   }
 
   const std::string& Lane::name() const
@@ -236,13 +189,7 @@ namespace profile {
     const auto frame = m_stack[m_depth - 1];
     --m_depth;
 
-    const auto elapsed = m_now() - frame.start;
-    m_nodeNanos[frame.node] += toNanos(elapsed);
+    m_nodeNanos[frame.node] += toNanos(m_now() - frame.start);
     ++m_nodeCalls[frame.node];
-
-    if (m_tracked && m_tree.name(frame.node) == m_trackedName)
-    {
-      m_tracked->push(toMicros(elapsed));
-    }
   }
 }

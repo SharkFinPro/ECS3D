@@ -9,10 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <string>
-#include <string_view>
-#include <vector>
 
 namespace profile {
   inline constexpr std::size_t maxDepth = 8;
@@ -32,22 +29,11 @@ namespace profile {
     void bindToThisThread();
     static void unbindThisThread();
 
-    // Opens a sample unless one is open.
     void beginSample();
 
     // close == false keeps the sample open; close == true finalizes and pushes it.
     void endSample(bool close);
     [[nodiscard]] bool sampleOpen() const;
-
-    // Throws std::length_error past maxCounters.
-    [[nodiscard]] uint8_t counterId(std::string_view name);
-
-    // Ignored when no sample is open.
-    void addCounter(uint8_t id, int64_t value);
-
-    // Every completed scope with this name, at any depth, also pushes its duration into a ring of this capacity.
-    void trackScope(NameId name, std::size_t capacity);
-    [[nodiscard]] const DurationRing* tracked() const;
 
     [[nodiscard]] const std::string& name() const;
     [[nodiscard]] const History& history() const;
@@ -59,8 +45,8 @@ namespace profile {
     // Scopes still open when their sample closed.
     [[nodiscard]] uint64_t abandonedScopeCount() const;
 
-    // Used by Scope. A ticket is zero when nothing was opened (no sample); a folded scope gets a ticket whose depth
-    // field is zero, so its exit stays tied to its own sample.
+    // Used by Scope. A folded scope gets a ticket whose depth field is zero, so its exit stays tied to its own
+    // sample; a ticket of zero means no sample was open.
     [[nodiscard]] uint64_t enter(NameId name) noexcept;
     void exit(uint64_t ticket) noexcept;
 
@@ -86,15 +72,10 @@ namespace profile {
     Clock::time_point m_sampleStart;
     std::array<int64_t, maxNodes> m_nodeNanos{};
     std::array<uint32_t, maxNodes> m_nodeCalls{};
-    std::array<int64_t, maxCounters> m_counterValues{};
 
     std::array<Frame, maxDepth> m_stack{};
     std::size_t m_depth = 0;
     std::size_t m_foldedOpen = 0;
-
-    std::vector<std::string> m_counterNames;
-    std::unique_ptr<DurationRing> m_tracked;
-    NameId m_trackedName = 0;
 
     uint64_t m_overflow = 0;
     uint64_t m_abandoned = 0;

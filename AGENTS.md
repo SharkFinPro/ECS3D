@@ -57,7 +57,7 @@
 | `CMakePresets.json` | Configure presets `ecs3d-debug`, `-release`, `-sanitize`, `-coverage`, `-profile`, each writing to `cmake-build-<preset>`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | The engine libraries. `libs/CMakeLists.txt` fetches the shared dependencies and the managed-assembly helpers, then adds each library. |
 | `source/libs/log/` | `ECS3DLog` - the `Log` facade, its sinks (console, file, ring buffer, remote), `LogFilter` and the per-user data directory. |
-| `source/libs/profile/` | `ECS3DProfile` - scope timers recorded into per-thread lanes, sample history and statistics. Depends on nothing. |
+| `source/libs/profile/` | `ECS3DProfile` - scope timers recorded into per-thread lanes and a sample history. Depends on nothing. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (interface library): `Protocol.h`, the wire format (`MessageType`, `Message`/`MessageReader`, `Role`, ports). |
 | `source/libs/settings/` | `ECS3DSettings` - per-user editor preferences (`SettingsStore`), the keybind model and the recent-projects list. **Not** project data. |
 | `source/libs/data/` | `ECS3DData` - component data, `Object`/`ObjectManager`, scenes, assets, prefabs, serialization, replication payloads, the convex hull builder and the undo/redo model. **No Vulkan, no ImGui.** |
@@ -136,7 +136,7 @@ Each design note is the single home for its topic. A folder's `AGENTS.md` loads 
 | Viewport gizmos | the transform gizmo, picking, light gizmos, scene drops | [viewport-gizmos.md](docs/architecture/viewport-gizmos.md) |
 | Camera and input | `Camera`, player input forwarding, possession | [camera-and-input.md](docs/architecture/camera-and-input.md) |
 | Server log forwarding | `RemoteLogSink`, `serverLog`, the Console panel | [logging.md](docs/architecture/logging.md) |
-| Profiling | a `profile::Lane`, the scope macro, the history or its statistics | [profiling.md](docs/architecture/profiling.md) |
+| Profiling | a `profile::Lane`, the scope macro or the history | [profiling.md](docs/architecture/profiling.md) |
 | Log, settings, data, render | those libraries' components and helpers | [library-reference.md](docs/architecture/library-reference.md) |
 | Build | managed publishing, precompiled headers, module scanning | [build.md](docs/architecture/build.md) |
 | Project layout | asset path resolution, project roots, templates, save and import | [project-layout.md](docs/architecture/project-layout.md) |

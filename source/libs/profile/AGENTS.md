@@ -1,8 +1,8 @@
 # AGENTS.md - ECS3DProfile
 
 Agents load this file when they read a file in `source/libs/profile/`. It holds what a change here must keep. Read
-[docs/architecture/profiling.md](../../../docs/architecture/profiling.md) before changing the lane, the ticket scheme
-or the statistics: the suite pins their edge cases.
+[docs/architecture/profiling.md](../../../docs/architecture/profiling.md) before changing the lane or the ticket scheme:
+the suite pins their edge cases.
 
 - The library depends on the standard library only. Do not link `ECS3DLog`, json or glm into it.
 - `Lane::enter` and `Lane::exit` must not allocate, except when interning a new node, and must not throw. Keep the
