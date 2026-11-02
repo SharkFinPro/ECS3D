@@ -128,3 +128,33 @@ TEST(FixedTimestep, FeedingTheRemainderBackInTakesEveryStepOfTheTimeThatPassed)
   EXPECT_EQ(totalSteps, 5);
   EXPECT_FLOAT_EQ(accumulator, 0.0625f);
 }
+
+TEST(FixedTimestep, MoreThanTheCapReportsTheDroppedSeconds)
+{
+  const auto plan = FixedTimestep::advance(0.0f, 5.125f, fixedDt, maxSteps);
+
+  EXPECT_EQ(plan.steps, maxSteps);
+  EXPECT_FLOAT_EQ(plan.droppedSeconds, 4.375f);
+}
+
+TEST(FixedTimestep, ExactlyTheCapDropsNothing)
+{
+  const auto plan = FixedTimestep::advance(0.125f, 0.75f, fixedDt, maxSteps);
+
+  EXPECT_EQ(plan.steps, maxSteps);
+  EXPECT_FLOAT_EQ(plan.droppedSeconds, 0.0f);
+}
+
+TEST(FixedTimestep, ZeroDtDropsNothing)
+{
+  const auto plan = FixedTimestep::advance(0.125f, 0.0f, fixedDt, maxSteps);
+
+  EXPECT_FLOAT_EQ(plan.droppedSeconds, 0.0f);
+}
+
+TEST(FixedTimestep, ZeroMaxStepsReportsTheWholeBacklogAsDropped)
+{
+  const auto plan = FixedTimestep::advance(0.0f, 1.0f, fixedDt, 0);
+
+  EXPECT_FLOAT_EQ(plan.droppedSeconds, 1.0f);
+}

@@ -43,3 +43,18 @@ TEST(ServerArguments, ParsePortArgumentRejectsEverythingElse)
     EXPECT_FALSE(net::parsePortArgument(text).has_value()) << "'" << text << "'";
   }
 }
+
+TEST(ServerArguments, ParseStatsIntervalArgumentAcceptsWholeSecondsInRange)
+{
+  EXPECT_EQ(net::parseStatsIntervalArgument("0"), 0);
+  EXPECT_EQ(net::parseStatsIntervalArgument("10"), 10);
+  EXPECT_EQ(net::parseStatsIntervalArgument("3600"), 3600);
+}
+
+TEST(ServerArguments, ParseStatsIntervalArgumentRejectsEverythingElse)
+{
+  for (const char* text : { "", "3601", "-1", "+10", "10s", " 10", "10 ", "abc", "99999999999999999999" })
+  {
+    EXPECT_FALSE(net::parseStatsIntervalArgument(text).has_value()) << "'" << text << "'";
+  }
+}

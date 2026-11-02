@@ -65,6 +65,31 @@ fewer. `Summary` holds `last`, `average`, `p95`, `max` and `samples`; an empty h
 - A **hitch** is a wall time more than twice the window's nearest-rank 50th percentile (the lower middle value for an
   even window); a zero there never counts. `countHitches` counts them over the window.
 
+## Server lane
+
+`ServerApp` owns a lane named `server` (512 samples), bound to the thread that runs `run()` and unbound when `run()`
+ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ticks`, `droppedSteps` and `objects`.
+
+- **Sample rule:** each `run()` iteration begins a sample (a no-op while one is open). `shouldCloseServerSample` in
+  `ServerPolicy.h` closes it when the iteration ran a step or the sample is a fixed step (20 ms) old, so idle spins
+  fold into one sample. The 1 ms sleep is outside every scope.
+- **Counters:** `ticks` adds the iteration's steps only while the current scene is running (a stopped or paused scene
+  plans steps that do nothing and opens no `Server tick` scope). `droppedSteps` adds the whole steps `FixedTimestep`
+  discarded past its cap (`Plan::droppedSeconds`). `objects` adds the current scene's object count once, as the sample
+  closes. `ServerApp` also keeps running totals of ticks and dropped steps, and the summary reports their change since
+  the previous summary, so a long interval is not capped by the history.
+- **Scopes:** `Network in`, `Server tick` (each step, including the input-state calls) holding `Scripts`
+  (`variableUpdate`, `fixedUpdate`), `Physics`, `Collisions` and `Script events`; `Replication` (`Structural`,
+  `State delta`) at the top level; `Snapshot`, `Log forwarding`, `Script reload check` and `Stats`.
+- **Summary line:** every `--stats-interval` seconds `logStatsIfDue` logs one line built by `StatsSummary.h`. The tick
+  figures (average, p50, p95, p99 and max, in milliseconds rounded from microseconds) come from the `Server tick`
+  durations pushed since the previous line. The per-sample averages of `Scripts`, `Physics`, `Collisions` and
+  `Replication` come from the samples closed since then. Ticks and dropped steps are the change in the running totals,
+  and the object count is the newest sample's.
+- **Covered seconds:** the wall time the summarized samples span. It can be less than the interval when the history is
+  shorter.
+- **Idle:** when no running-scene tick happened in the interval, it logs `stats: idle (no ticks)` once per idle streak.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.

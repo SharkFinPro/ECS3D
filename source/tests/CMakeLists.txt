@@ -220,6 +220,7 @@ add_executable(${PROJECT_NAME}
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
+  StatsSummaryTest.cpp
   StructuralChangesTest.cpp
   ShutdownSignalTest.cpp
   ChildProcessTest.cpp

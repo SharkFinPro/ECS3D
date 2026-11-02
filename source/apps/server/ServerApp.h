@@ -3,6 +3,8 @@
 
 #include <Protocol.h>
 #include <PlayerSlots.h>
+#include <Lane.h>
+#include "StatsSummary.h"
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
@@ -47,6 +49,8 @@ public:
     bool openEdit = false;
     // Keep ticking the scene with no one connected, instead of pausing until the next join.
     bool simulateWhenEmpty = false;
+    // Seconds between stats lines in the log; 0 turns them off.
+    int statsIntervalSeconds = 10;
   };
 
   explicit ServerApp(LaunchOptions options);
@@ -81,6 +85,13 @@ private:
   // LogBindings) can be forwarded to editor connections - the local console window some launches show is
   // separate from this and keeps working either way. Null on a non-edit server. See forwardLogToEditors.
   std::shared_ptr<RemoteLogSink> m_remoteLogSink;
+
+  profile::Lane m_lane;
+  StatsCounters m_counters;
+  StatsCursor m_statsCursor;
+  std::chrono::steady_clock::time_point m_sampleOpenedAt;
+  std::chrono::steady_clock::time_point m_lastStatsTime;
+  bool m_statsIdle = false;
 
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
@@ -128,6 +139,9 @@ private:
   // Handle every queued client message and release the slots of dropped connections.
   void drainNetwork();
 
+  // Logs the stats line (or the idle notice once per idle streak) when the interval has passed.
+  void logStatsIfDue(std::chrono::steady_clock::time_point now);
+
   void fixedUpdate(float dt) const;
 
   // Feed this tick's collision enter/stay/exit pairs (from CollisionSystem) into the scripts. Bridges
@@ -163,6 +177,9 @@ private:
   void handleLoadProject(const net::Message& message) const;
 
   void finishProjectLoad() const;
+
+  // Whether the current scene is running, the only state in which a fixed step does any work.
+  [[nodiscard]] bool sceneRunning() const;
 
   // Scripts are live from the scene's start until its stop, paused included.
   [[nodiscard]] bool scriptsLive() const;

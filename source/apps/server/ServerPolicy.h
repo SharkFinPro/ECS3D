@@ -6,6 +6,7 @@
 #include <RemoteLogSink.h>
 #include <ServerLog.h>
 #include <scenes/SceneManager.h>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -41,6 +42,20 @@
 [[nodiscard]] constexpr bool shouldSimulate(const int connectionCount, const bool simulateWhenEmpty) noexcept
 {
   return simulateWhenEmpty || connectionCount > 0;
+}
+
+// A loop iteration that ran a step closes its profiling sample; one that did not leaves it open so idle spins fold
+// into the next, until the sample is a whole fixed step old.
+[[nodiscard]] constexpr bool shouldCloseServerSample(const bool ticked, const double openSeconds,
+                                                     const double fixedDt) noexcept
+{
+  return ticked || openSeconds >= fixedDt;
+}
+
+// Whole fixed steps in the time FixedTimestep::advance discarded.
+[[nodiscard]] inline int droppedStepCount(const float droppedSeconds, const float fixedDt)
+{
+  return droppedSeconds >= fixedDt ? static_cast<int>(std::floor(droppedSeconds / fixedDt)) : 0;
 }
 
 // A dedicated server runs until a shutdown is requested. An exitWhenEmpty (editor/client-spawned) server also

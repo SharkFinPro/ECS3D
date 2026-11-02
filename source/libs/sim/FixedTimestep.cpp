@@ -11,10 +11,12 @@ FixedTimestep::Plan FixedTimestep::advance(const float accumulator, const float 
     ++steps;
   }
 
+  float dropped = 0.0f;
   if (remaining >= fixedDt)
   {
+    dropped = remaining;
     remaining = 0.0f;
   }
 
-  return { steps, remaining };
+  return { steps, remaining, dropped };
 }

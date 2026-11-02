@@ -16,6 +16,7 @@
 #include <objects/components/Component.h>
 #include <PhysicsSystem.h>
 #include <FixedTimestep.h>
+#include <ProfileScope.h>
 #include <CollisionSystem.h>
 #include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
@@ -45,8 +46,16 @@ ServerApp::ServerApp(LaunchOptions options)
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
     m_sceneManager(std::make_shared<SceneManager>()),
+    m_lane("server", 512),
     m_previousTime(std::chrono::steady_clock::now())
 {
+  m_lane.trackScope(profile::internName("Server tick"), 512);
+  m_counters.ticks = m_lane.counterId("ticks");
+  m_counters.droppedSteps = m_lane.counterId("droppedSteps");
+  m_counters.objects = m_lane.counterId("objects");
+  m_sampleOpenedAt = m_previousTime;
+  m_lastStatsTime = m_previousTime;
+
   // Boot the CLR from the net transport's runtimeconfig (ECS3DNet is linked by every app). The
   // ScriptBridge assembly is loaded on top of the same runtime by ScriptSystem.
   m_host->init("net/Transport");
@@ -181,6 +190,8 @@ bool ServerApp::isActive() const
 
 void ServerApp::drainNetwork()
 {
+  ECS3D_PROFILE_SCOPE("Network in");
+
   drainInboxThenDisconnects<net::Message>(
     [this] { return m_netServer->takeDisconnected(); },
     [this](net::Message& message, int32_t& senderId) { return m_netServer->poll(message, senderId); },
@@ -223,8 +234,24 @@ void ServerApp::run()
     installShutdownSignalHandlers();
   }
 
+  // Boot time before the loop must be neither replayed as ticks nor counted as dropped steps.
+  m_previousTime = std::chrono::steady_clock::now();
+  m_lastStatsTime = m_previousTime;
+
+  m_lane.bindToThisThread();
+  struct LaneUnbinder
+  {
+    ~LaneUnbinder() { profile::Lane::unbindThisThread(); }
+  } unbinder;
+
   while (isActive())
   {
+    if (!m_lane.sampleOpen())
+    {
+      m_sampleOpenedAt = std::chrono::steady_clock::now();
+    }
+    m_lane.beginSample();
+
     drainNetwork();
 
     const auto now = std::chrono::steady_clock::now();
@@ -251,8 +278,16 @@ void ServerApp::run()
                                              maxFixedStepsPerFrame);
     m_timeAccumulator = plan.remainingAccumulator;
 
-    const bool ticked = plan.steps > 0;
-    for (int step = 0; step < plan.steps; ++step)
+    // A step only counts as a tick when the scene runs; a stopped or paused one plans steps that do nothing.
+    const bool running = sceneRunning();
+    const int countedTicks = running ? plan.steps : 0;
+    const int droppedSteps = droppedStepCount(plan.droppedSeconds, m_fixedUpdateDt);
+    m_lane.addCounter(m_counters.ticks, countedTicks);
+    m_lane.addCounter(m_counters.droppedSteps, droppedSteps);
+    m_statsCursor.ticks += static_cast<uint64_t>(countedTicks);
+    m_statsCursor.droppedSteps += static_cast<uint64_t>(droppedSteps);
+
+    const auto runStep = [this]
     {
       fixedUpdate(m_fixedUpdateDt);
 
@@ -261,31 +296,99 @@ void ServerApp::run()
       // wasPressed/ReleasedThisTick reflect only genuinely new changes.
       InputState::clearMouseDeltas();
       InputState::commitInputEdges();
+    };
+
+    const bool ticked = plan.steps > 0;
+    for (int step = 0; step < plan.steps; ++step)
+    {
+      if (running)
+      {
+        ECS3D_PROFILE_SCOPE("Server tick");
+        runStep();
+      }
+      else
+      {
+        runStep();
+      }
     }
 
     // Only stream a delta when the sim actually advanced. The server is headless (no vsync), so without
     // this guard the unbounded loop would flood every client with deltas and stall their drain loops.
     if (ticked)
     {
+      ECS3D_PROFILE_SCOPE("Replication");
+
       // Replicate any runtime spawn/destroy the tick's scripts requested before the delta, so a client
       // has the object (or has dropped it) by the time the delta for this tick references it.
-      broadcastStructuralChanges();
+      {
+        ECS3D_PROFILE_SCOPE("Structural");
+        broadcastStructuralChanges();
+      }
 
-      broadcastStateDelta();
+      {
+        ECS3D_PROFILE_SCOPE("State delta");
+        broadcastStateDelta();
+      }
     }
 
     // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
     // while the scene is stopped or paused, and an editor watching the Console shouldn't have to wait for
     // the sim to advance to see it.
-    forwardLogToEditors();
+    {
+      ECS3D_PROFILE_SCOPE("Log forwarding");
+      forwardLogToEditors();
+    }
 
-    pollScriptChangesWhileStopped(dt);
+    {
+      ECS3D_PROFILE_SCOPE("Script reload check");
+      pollScriptChangesWhileStopped(dt);
+    }
+
+    logStatsIfDue(std::chrono::steady_clock::now());
+
+    const double openSeconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - m_sampleOpenedAt).count();
+    if (shouldCloseServerSample(ticked, openSeconds, m_fixedUpdateDt))
+    {
+      const auto currentScene = m_sceneManager->getCurrentScene();
+      m_lane.addCounter(m_counters.objects,
+                        currentScene ? static_cast<int64_t>(currentScene->getObjectManager()->getAllObjects().size()) : 0);
+      m_lane.endSample(true);
+    }
 
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   shutDown();
+}
+
+void ServerApp::logStatsIfDue(const std::chrono::steady_clock::time_point now)
+{
+  if (m_options.statsIntervalSeconds <= 0 ||
+      now - m_lastStatsTime < std::chrono::seconds(m_options.statsIntervalSeconds))
+  {
+    return;
+  }
+
+  m_lastStatsTime = now;
+
+  ECS3D_PROFILE_SCOPE("Stats");
+
+  const auto stats = gatherStats(m_lane, m_counters, m_statsCursor);
+  if (stats.ticks == 0)
+  {
+    if (!m_statsIdle)
+    {
+      Log::info(LogCategory::server, idleStatsLine());
+    }
+  }
+  else
+  {
+    Log::info(LogCategory::server, formatStatsLine(stats));
+  }
+
+  m_statsIdle = stats.ticks == 0;
 }
 
 void ServerApp::shutDown()
@@ -311,6 +414,11 @@ void ServerApp::logSimulationChange(const bool simulating)
   m_simulating = simulating;
   Log::info(LogCategory::server, simulating ? "A client connected - simulation resumed."
                                             : "No clients connected - simulation paused until one joins.");
+}
+
+bool ServerApp::sceneRunning() const
+{
+  return m_sceneManager->getCurrentScene() && m_sceneManager->getSceneStatus() == SceneStatus::running;
 }
 
 bool ServerApp::scriptsLive() const
@@ -403,11 +511,12 @@ void ServerApp::notifyObjectEvents(const std::vector<uuids::uuid>& spawned,
 
 void ServerApp::fixedUpdate(const float dt) const
 {
-  const auto scene = m_sceneManager->getCurrentScene();
-  if (!scene || m_sceneManager->getSceneStatus() != SceneStatus::running)
+  if (!sceneRunning())
   {
     return;
   }
+
+  const auto scene = m_sceneManager->getCurrentScene();
 
   // The number crunching, in order: scripts read input (variableUpdate) then queue forces, physics
   // integrates, collisions resolve. variableUpdate runs before fixedUpdate so input-driven force is
@@ -416,15 +525,37 @@ void ServerApp::fixedUpdate(const float dt) const
   {
     auto& objectManager = *scene->getObjectManager();
 
-    m_scriptSystem->variableUpdate(*scene);
-    m_scriptSystem->fixedUpdate(*scene, dt);
-    PhysicsSystem::fixedUpdate(objectManager, dt);
-    m_collisionSystem->fixedUpdate(objectManager, dt);
+    {
+      ECS3D_PROFILE_SCOPE("Scripts");
+
+      {
+        ECS3D_PROFILE_SCOPE("variableUpdate");
+        m_scriptSystem->variableUpdate(*scene);
+      }
+
+      {
+        ECS3D_PROFILE_SCOPE("fixedUpdate");
+        m_scriptSystem->fixedUpdate(*scene, dt);
+      }
+    }
+
+    {
+      ECS3D_PROFILE_SCOPE("Physics");
+      PhysicsSystem::fixedUpdate(objectManager, dt);
+    }
+
+    {
+      ECS3D_PROFILE_SCOPE("Collisions");
+      m_collisionSystem->fixedUpdate(objectManager, dt);
+    }
 
     // Contact events for this tick: hand CollisionSystem's diffed pair lists to the scripts. Done here
     // in the app (not as a library call) so sim stays independent of scripting - the collision system
     // produces plain uuid pairs and ScriptSystem consumes them.
-    dispatchCollisionEvents(objectManager);
+    {
+      ECS3D_PROFILE_SCOPE("Script events");
+      dispatchCollisionEvents(objectManager);
+    }
   }
   catch (const std::exception& e)
   {

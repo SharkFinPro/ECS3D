@@ -479,3 +479,28 @@ TEST(ServerPolicy, LogForwardingCapsBytesPerCall)
   ASSERT_EQ(forwarded.sends.size(), 2u);
   EXPECT_EQ(first + forwarded.sends[1].entries.size(), entryCount);
 }
+
+TEST(ServerPolicy, ATickedIterationClosesTheSampleAtOnce)
+{
+  EXPECT_TRUE(shouldCloseServerSample(true, 0.0, 0.02));
+}
+
+TEST(ServerPolicy, AnUntickedIterationBeforeOneFixedStepLeavesTheSampleOpen)
+{
+  EXPECT_FALSE(shouldCloseServerSample(false, 0.0, 0.02));
+  EXPECT_FALSE(shouldCloseServerSample(false, 0.0199, 0.02));
+}
+
+TEST(ServerPolicy, AnUntickedIterationAtOrPastOneFixedStepClosesTheSample)
+{
+  EXPECT_TRUE(shouldCloseServerSample(false, 0.02, 0.02));
+  EXPECT_TRUE(shouldCloseServerSample(false, 0.5, 0.02));
+}
+
+TEST(ServerPolicy, DroppedStepCountIsWholeFixedStepsOnly)
+{
+  EXPECT_EQ(droppedStepCount(0.0f, 0.25f), 0);
+  EXPECT_EQ(droppedStepCount(0.125f, 0.25f), 0);
+  EXPECT_EQ(droppedStepCount(0.25f, 0.25f), 1);
+  EXPECT_EQ(droppedStepCount(4.375f, 0.25f), 17);
+}

@@ -21,6 +21,7 @@ add_executable(${PROJECT_NAME}
   ServerPolicy.h
   ShutdownSignal.cpp
   ShutdownSignal.h
+  StatsSummary.h
 )
 
 # The server does all the number crunching. It is headless: it must NOT link ECS3DRender or
@@ -32,6 +33,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DNet
   ECS3DClrHost
   ECS3DLog
+  ECS3DProfile
 )
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport + ScriptBridge).
