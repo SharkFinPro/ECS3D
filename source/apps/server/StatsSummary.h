@@ -123,21 +123,9 @@ struct StatsCursor
   return std::nullopt;
 }
 
-// Summarizes the samples closed and the "Server tick" durations pushed since `cursor`, then advances it. Tick and
-// dropped-step counts are the change in the cursor's running totals.
-[[nodiscard]] inline StatsInput gatherStats(const profile::Lane& lane, const StatsCounters& counters,
-                                            StatsCursor& cursor)
-{
-  StatsInput in;
-  const auto& history = lane.history();
-
-  in.ticks = static_cast<int64_t>(cursor.ticks - cursor.reportedTicks);
-  in.droppedSteps = static_cast<int64_t>(cursor.droppedSteps - cursor.reportedDroppedSteps);
-  cursor.reportedTicks = cursor.ticks;
-  cursor.reportedDroppedSteps = cursor.droppedSteps;
-
-  const auto window = samplesSince(history, cursor.sequence);
-  if (window > 0)
+namespace statsDetail {
+  inline void fillWindowFigures(const profile::History& history, const std::size_t window,
+                                const StatsCounters& counters, StatsCursor& cursor, StatsInput& in)
   {
     const auto& first = history.at(history.size() - window);
     const auto& last = history.newest();
@@ -147,46 +135,78 @@ struct StatsCursor
     cursor.sequence = last.sequence;
   }
 
-  if (const auto* ring = lane.tracked())
+  inline void fillTickFigures(const profile::DurationRing& ring, StatsCursor& cursor, StatsInput& in)
   {
     const auto fresh =
-      static_cast<std::size_t>(std::min<uint64_t>(ring->totalPushed() - cursor.tickPushed, ring->size()));
-    cursor.tickPushed = ring->totalPushed();
+      static_cast<std::size_t>(std::min<uint64_t>(ring.totalPushed() - cursor.tickPushed, ring.size()));
+    cursor.tickPushed = ring.totalPushed();
 
-    auto values = ring->values();
+    auto values = ring.values();
     values.erase(values.begin(), values.end() - static_cast<std::ptrdiff_t>(fresh));
-    if (!values.empty())
+    if (values.empty())
     {
-      uint64_t sum = 0;
-      for (const auto micros : values)
-      {
-        sum += micros;
-      }
-
-      in.tickAvgMicros = static_cast<double>(sum) / static_cast<double>(values.size());
-      in.tickP50Micros = profile::percentile(values, 50.0);
-      in.tickP95Micros = profile::percentile(values, 95.0);
-      in.tickP99Micros = profile::percentile(values, 99.0);
-      in.tickMaxMicros = *std::max_element(values.begin(), values.end());
+      return;
     }
+
+    uint64_t sum = 0;
+    for (const auto micros : values)
+    {
+      sum += micros;
+    }
+
+    in.tickAvgMicros = static_cast<double>(sum) / static_cast<double>(values.size());
+    in.tickP50Micros = profile::percentile(values, 50.0);
+    in.tickP95Micros = profile::percentile(values, 95.0);
+    in.tickP99Micros = profile::percentile(values, 99.0);
+    in.tickMaxMicros = *std::max_element(values.begin(), values.end());
   }
 
-  const auto averageMicros = [&](const std::optional<profile::NodeId> node)
+  inline void fillNodeAverages(const profile::Lane& lane, const std::size_t window, StatsInput& in)
   {
-    return node ? profile::summarizeNode(history, *node, window).average : 0.0;
-  };
+    const auto& history = lane.history();
+    const auto averageMicros = [&](const std::optional<profile::NodeId> node)
+    {
+      return node ? profile::summarizeNode(history, *node, window).average : 0.0;
+    };
 
-  const auto& tree = lane.tree();
-  const auto serverTick = findStatsNode(tree, 0, "Server tick");
-  const auto under = [&](const std::string_view name)
+    const auto& tree = lane.tree();
+    const auto serverTick = findStatsNode(tree, 0, "Server tick");
+    const auto under = [&](const std::string_view name)
+    {
+      return serverTick ? findStatsNode(tree, *serverTick, name) : std::nullopt;
+    };
+
+    in.scriptsMicros = averageMicros(under("Scripts"));
+    in.physicsMicros = averageMicros(under("Physics"));
+    in.collisionsMicros = averageMicros(under("Collisions"));
+    in.replicationMicros = averageMicros(findStatsNode(tree, 0, "Replication"));
+  }
+}
+
+// Summarizes the samples closed and the "Server tick" durations pushed since `cursor`, then advances it. Tick and
+// dropped-step counts are the change in the cursor's running totals.
+[[nodiscard]] inline StatsInput gatherStats(const profile::Lane& lane, const StatsCounters& counters,
+                                            StatsCursor& cursor)
+{
+  StatsInput in;
+
+  in.ticks = static_cast<int64_t>(cursor.ticks - cursor.reportedTicks);
+  in.droppedSteps = static_cast<int64_t>(cursor.droppedSteps - cursor.reportedDroppedSteps);
+  cursor.reportedTicks = cursor.ticks;
+  cursor.reportedDroppedSteps = cursor.droppedSteps;
+
+  const auto window = samplesSince(lane.history(), cursor.sequence);
+  if (window > 0)
   {
-    return serverTick ? findStatsNode(tree, *serverTick, name) : std::nullopt;
-  };
+    statsDetail::fillWindowFigures(lane.history(), window, counters, cursor, in);
+  }
 
-  in.scriptsMicros = averageMicros(under("Scripts"));
-  in.physicsMicros = averageMicros(under("Physics"));
-  in.collisionsMicros = averageMicros(under("Collisions"));
-  in.replicationMicros = averageMicros(findStatsNode(tree, 0, "Replication"));
+  if (const auto* ring = lane.tracked())
+  {
+    statsDetail::fillTickFigures(*ring, cursor, in);
+  }
+
+  statsDetail::fillNodeAverages(lane, window, in);
   return in;
 }
 
