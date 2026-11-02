@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -364,4 +365,124 @@ TEST(ProfileLane, DestroyingALaneThatIsNotBoundLeavesTheBindingAlone)
   { const Scope scope(id("test.unbound")); }
 
   EXPECT_EQ(bound.lane.tree().size(), 2u);
+}
+
+TEST(ProfileLane, CountersInternSumWithinASampleAndResetInTheNext)
+{
+  LaneRig rig;
+  const auto bodies = rig.lane.counterId("bodies");
+  const auto contacts = rig.lane.counterId("contacts");
+
+  EXPECT_NE(bodies, contacts);
+  EXPECT_EQ(rig.lane.counterId("bodies"), bodies);
+
+  rig.lane.beginSample();
+  rig.lane.addCounter(bodies, 5);
+  rig.lane.addCounter(bodies, 7);
+  rig.lane.addCounter(contacts, -3);
+  rig.lane.endSample(true);
+
+  EXPECT_EQ(rig.newest().counters[bodies], 12);
+  EXPECT_EQ(rig.newest().counters[contacts], -3);
+
+  rig.lane.beginSample();
+  rig.lane.addCounter(bodies, 1);
+  rig.lane.endSample(true);
+
+  EXPECT_EQ(rig.newest().counters[bodies], 1);
+  EXPECT_EQ(rig.newest().counters[contacts], 0);
+}
+
+TEST(ProfileLane, ACounterAddedWithNoOpenSampleOrAnUnknownIdIsIgnored)
+{
+  LaneRig rig;
+  const auto counter = rig.lane.counterId("ignored");
+
+  rig.lane.addCounter(counter, 100);
+  rig.lane.beginSample();
+  rig.lane.addCounter(counter, 1);
+  rig.lane.addCounter(static_cast<uint8_t>(counter + 1), 50);
+  rig.lane.endSample(true);
+
+  EXPECT_EQ(rig.newest().counters[counter], 1);
+  EXPECT_EQ(rig.newest().counters[counter + 1], 0);
+}
+
+TEST(ProfileLane, MoreCountersThanTheCapThrow)
+{
+  LaneRig rig;
+
+  for (std::size_t i = 0; i < profile::maxCounters; ++i)
+  {
+    EXPECT_EQ(rig.lane.counterId("counter" + std::to_string(i)), i);
+  }
+
+  EXPECT_THROW(static_cast<void>(rig.lane.counterId("one.too.many")), std::length_error);
+  EXPECT_EQ(rig.lane.counterId("counter0"), 0u);
+  EXPECT_EQ(rig.lane.counterId("counter7"), 7u);
+}
+
+TEST(ProfileLane, ATrackedScopeRingCollectsEveryNestedInstanceAndWraps)
+{
+  LaneRig rig;
+  const auto tracked = id("test.tracked");
+  const auto outer = id("test.trackedOuter");
+
+  EXPECT_EQ(rig.lane.tracked(), nullptr);
+  rig.lane.trackScope(tracked, 3);
+  ASSERT_NE(rig.lane.tracked(), nullptr);
+  EXPECT_EQ(rig.lane.tracked()->capacity(), 3u);
+
+  rig.lane.beginSample();
+  {
+    const Scope a(outer);
+    const Scope b(outer);
+    const Scope c(tracked);
+    rig.advance(10us);
+  }
+  { const Scope top(tracked); rig.advance(20us); }
+  {
+    const Scope a(outer);
+    const Scope b(tracked);
+    rig.advance(30us);
+  }
+  { const Scope top(tracked); rig.advance(40us); }
+  rig.lane.endSample(true);
+
+  EXPECT_EQ(rig.lane.tracked()->values(), (std::vector<uint32_t>{20, 30, 40}));
+}
+
+TEST(ProfileLane, AFoldedScopeWithTheTrackedNamePushesNothing)
+{
+  LaneRig rig;
+  const auto tracked = id("test.trackedFolded");
+  const auto names = ids("test.trackedDepth", profile::maxDepth);
+
+  rig.lane.trackScope(tracked, 4);
+  rig.lane.beginSample();
+
+  { const Scope top(tracked); rig.advance(5us); }
+
+  EXPECT_EQ(rig.lane.tracked()->size(), 1u);
+
+  {
+    std::vector<std::unique_ptr<Scope>> open;
+
+    for (const auto name : names)
+    {
+      open.push_back(std::make_unique<Scope>(name));
+    }
+
+    { const Scope folded(tracked); rig.advance(9us); }
+
+    while (!open.empty())
+    {
+      open.pop_back();
+    }
+  }
+
+  rig.lane.endSample(true);
+
+  EXPECT_EQ(rig.lane.overflowCount(), 1u);
+  EXPECT_EQ(rig.lane.tracked()->values(), (std::vector<uint32_t>{5}));
 }

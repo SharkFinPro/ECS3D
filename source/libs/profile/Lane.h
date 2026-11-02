@@ -9,7 +9,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace profile {
   inline constexpr std::size_t maxDepth = 8;
@@ -35,6 +38,18 @@ namespace profile {
     // close == false keeps the sample open; close == true finalizes and pushes it.
     void endSample(bool close);
     [[nodiscard]] bool sampleOpen() const;
+
+    // Counters are interned per lane. Throws std::length_error past maxCounters.
+    [[nodiscard]] uint8_t counterId(std::string_view name);
+
+    // Summed into the open sample; ignored when none is open or the id is unknown.
+    void addCounter(uint8_t id, int64_t value);
+
+    // Every completed recorded scope with this name, at any depth, also pushes its micros into a ring of this capacity.
+    // The ring is allocated here so exit never allocates. Calling this again replaces the ring and its name, so a
+    // pointer from an earlier tracked() call is no longer valid.
+    void trackScope(NameId name, std::size_t capacity);
+    [[nodiscard]] const DurationRing* tracked() const;
 
     [[nodiscard]] const std::string& name() const;
     [[nodiscard]] const History& history() const;
@@ -73,10 +88,15 @@ namespace profile {
     Clock::time_point m_sampleStart;
     std::array<int64_t, maxNodes> m_nodeNanos{};
     std::array<uint32_t, maxNodes> m_nodeCalls{};
+    std::array<int64_t, maxCounters> m_counterValues{};
 
     std::array<Frame, maxDepth> m_stack{};
     std::size_t m_depth = 0;
     std::size_t m_foldedOpen = 0;
+
+    std::vector<std::string> m_counterNames;
+    std::unique_ptr<DurationRing> m_tracked;
+    NameId m_trackedName = 0;
 
     uint64_t m_overflow = 0;
     uint64_t m_abandoned = 0;

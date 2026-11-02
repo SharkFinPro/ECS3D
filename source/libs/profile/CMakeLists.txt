@@ -10,6 +10,8 @@ add_library(${PROJECT_NAME}
   Lane.h
   ProfileScope.cpp
   ProfileScope.h
+  ProfileStats.cpp
+  ProfileStats.h
   ScopeTree.cpp
   ScopeTree.h
 )

@@ -42,6 +42,29 @@ ticket from another sample or another depth. Closing a sample with scopes still 
 a ticket with depth zero, so they also stay tied to their own sample. The enter and exit path does not allocate unless
 it interns a new node, and it never throws: an allocation failure folds the scope.
 
+## Counters and tracked scopes
+
+- A **counter** is a per-sample integer. `Lane::counterId(name)` interns it per lane (at most `maxCounters` = 8, then
+  `std::length_error`), and `addCounter(id, value)` sums into the open sample; it is ignored with no open sample or an
+  unknown id. Counters reset in `beginSample` and are stored in `Sample::counters`.
+- `Lane::trackScope(name, capacity)` makes every completed recorded scope with that name, at any depth, also push its
+  micros into a `DurationRing`, a fixed ring read through `Lane::tracked()` (null until tracking starts).
+  `totalPushed()` counts every push since construction, even after the ring wraps.
+- The ring is allocated by `trackScope`, so `exit` stays allocation-free, and the check is a `NameId` compare. Folded
+  scopes record nothing, so they push nothing. Calling `trackScope` again replaces the ring and its name, so a pointer
+  from an earlier `tracked()` call is no longer valid.
+
+## Statistics
+
+`ProfileStats.h` summarizes a `History` over a **window**: the newest `window` samples, or all of them when there are
+fewer. `Summary` holds `last`, `average`, `p95`, `max` and `samples`; an empty history gives zeros, and
+`summarizeNode` gives zeros for a node id at or past `maxNodes`.
+
+- `percentile(values, p)` is nearest rank: the sorted value at 1-based rank `ceil(p / 100 * n)`, clamped to `[1, n]`,
+  and 0 for no values; a NaN `p` is treated as 0. The 95th percentile of 1..20 is 19.
+- A **hitch** is a wall time more than twice the window's nearest-rank 50th percentile (the lower middle value for an
+  even window); a zero there never counts. `countHitches` counts them over the window.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.
