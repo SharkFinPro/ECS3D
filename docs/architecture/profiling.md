@@ -85,7 +85,10 @@ ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ti
   figures (average, p50, p95, p99 and max, in milliseconds rounded from microseconds) come from the `Server tick`
   durations pushed since the previous line. The per-sample averages of `Scripts`, `Physics`, `Collisions` and
   `Replication` come from the samples closed since then. Ticks and dropped steps are the change in the running totals,
-  and the object count is the newest sample's.
+  and the object count is the newest sample's. The line ends with the traffic since the previous line: `sent` (bytes
+  handed to the transport, with the two largest message types), `recv`, `conns` (the connection count now) and
+  `snapshots` (how many were sent, with the largest one's size and reason). Sizes are `N B`, or `N.N KB` / `N.N MB` in
+  1024s.
 - **Covered seconds:** the wall time the summarized samples span. It can be less than the interval when the history is
   shorter.
 - **Idle:** when no running-scene tick happened in the interval, it logs `stats: idle (no ticks)` once per idle streak.

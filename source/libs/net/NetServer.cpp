@@ -1,6 +1,7 @@
 #include "NetServer.h"
 #include <Log.h>
 #include <LogEntry.h>
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <limits>
@@ -139,9 +140,12 @@ void NetServer::broadcast(const Message& message) const
   {
     Log::error(LogCategory::net, "Refusing to broadcast a " + std::to_string(message.size())
       + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    m_traffic.countRefused();
     return;
   }
 
+  // The transport's count includes a connection still in its handshake, so this can overstate the recipients.
+  m_traffic.countOut(message.getType(), message.size(), static_cast<std::size_t>(std::max(connectionCount(), 0)));
   m_transport->broadcast(static_cast<uint8_t>(message.getType()), message.bytes());
 }
 
@@ -172,6 +176,7 @@ void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& m
   {
     Log::error(LogCategory::net, "Refusing to send a " + std::to_string(message.size())
       + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    m_traffic.countRefused();
     return;
   }
 
@@ -179,6 +184,8 @@ void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& m
   {
     return;
   }
+
+  m_traffic.countOut(message.getType(), message.size(), connIds.size());
 
   m_transport->sendToMany(connIds, static_cast<uint8_t>(message.getType()), message.bytes());
 }
@@ -208,6 +215,7 @@ void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t*
 
   Message message(static_cast<MessageType>(type), payload);
 
+  m_traffic.countIn(message.getType(), message.size());
   m_inbox.push(std::move(message), connId);
 }
 

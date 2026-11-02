@@ -98,7 +98,7 @@ void ServerApp::handleEditComponent(const net::Message& message) const
 
       if (componentEditRefusalNeedsResync(result))
       {
-        broadcastSnapshot();
+        broadcastSnapshot(net::SnapshotReason::editRefusedResync);
       }
 
       return;
@@ -157,7 +157,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
   {
     if (describeRefusal(applied.result, json))
     {
-      broadcastSnapshot();
+      broadcastSnapshot(net::SnapshotReason::editRefusedResync);
     }
 
     return;
@@ -170,7 +170,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
     pushSceneScriptFields(*scene, json);
   }
 
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::sceneEdit);
 
   if (applied.tracked)
   {
@@ -210,7 +210,7 @@ void ServerApp::handleAddAsset(const net::Message& message) const
 
   Log::info(LogCategory::server, "Registered asset (" + asset.value("assetType", std::string{}) + ").");
 
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::assetChange);
 }
 
 void ServerApp::handleRenameAsset(const net::Message& message) const
@@ -237,7 +237,7 @@ void ServerApp::handleRenameAsset(const net::Message& message) const
     Log::warn(LogCategory::server, "Refused asset rename.");
   }
 
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::assetChange);
 }
 
 void ServerApp::handleRemoveAsset(const net::Message& message) const
@@ -263,5 +263,5 @@ void ServerApp::handleRemoveAsset(const net::Message& message) const
     Log::info(LogCategory::server, "Removed asset.");
   }
 
-  broadcastSnapshot();
+  broadcastSnapshot(net::SnapshotReason::assetChange);
 }

@@ -4,6 +4,7 @@
 #include <NetServer.h>
 #include <Protocol.h>
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -416,4 +417,63 @@ TEST_F(NetServerTest, ConnectionCountForwardsTheTransportsCountWhileStarted)
   transport->connectionCountResult = 0;
   EXPECT_EQ(server->connectionCount(), 0);
   EXPECT_EQ(transport->connectionCountCalls, 2);
+}
+
+TEST_F(NetServerTest, BroadcastCountsTheTransportsConnectionCountAsRecipients)
+{
+  transport->connectionCountResult = 3;
+  server->start(0, false, "");
+
+  server->broadcast(messageWith(net::MessageType::stateDelta, {1, 2, 3, 4}));
+
+  const auto out = server->traffic().totalOut();
+  EXPECT_EQ(out.messages[static_cast<std::size_t>(net::MessageType::stateDelta)], 3u);
+  EXPECT_EQ(out.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)], 15u);
+  EXPECT_EQ(out.refused, 0u);
+}
+
+TEST_F(NetServerTest, SendToCountsOneRecipientAndSendToEditorsCountsTheEditors)
+{
+  server->start(0, true, "");
+  transport->callbacks.authorized(1, editorRole);
+  transport->callbacks.authorized(3, editorRole);
+
+  server->sendTo(9, messageWith(net::MessageType::snapshot, {7, 7}));
+  server->sendToEditors(messageWith(net::MessageType::serverLog, {5}));
+
+  const auto out = server->traffic().totalOut();
+  EXPECT_EQ(out.messages[static_cast<std::size_t>(net::MessageType::snapshot)], 1u);
+  EXPECT_EQ(out.bytes[static_cast<std::size_t>(net::MessageType::snapshot)], 3u);
+  EXPECT_EQ(out.messages[static_cast<std::size_t>(net::MessageType::serverLog)], 2u);
+  EXPECT_EQ(out.bytes[static_cast<std::size_t>(net::MessageType::serverLog)], 4u);
+}
+
+TEST_F(NetServerTest, NothingIsCountedBeforeStartOrForNoRecipients)
+{
+  transport->connectionCountResult = 4;
+  server->broadcast(messageWith(net::MessageType::stateDelta, {1}));
+  server->sendTo(3, messageWith(net::MessageType::snapshot, {1}));
+
+  EXPECT_EQ(server->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::stateDelta)], 0u);
+  EXPECT_EQ(server->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::snapshot)], 0u);
+
+  server->start(0, true, "");
+  server->sendToEditors(messageWith(net::MessageType::serverLog, {1}));
+  EXPECT_EQ(server->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::serverLog)], 0u);
+
+  server->broadcast(messageWith(net::MessageType::stateDelta, {1}));
+  EXPECT_EQ(server->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::stateDelta)], 4u);
+}
+
+TEST_F(NetServerTest, InboundMessagesAreCountedWithTheirTypeByte)
+{
+  server->start(0, false, "");
+
+  receive(7, deltaType, {1, 2, 3});
+  receive(8, deltaType, {});
+
+  const auto in = server->traffic().totalIn();
+  EXPECT_EQ(in.messages[static_cast<std::size_t>(net::MessageType::stateDelta)], 2u);
+  EXPECT_EQ(in.bytes[static_cast<std::size_t>(net::MessageType::stateDelta)], 5u);
+  EXPECT_EQ(server->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::stateDelta)], 0u);
 }

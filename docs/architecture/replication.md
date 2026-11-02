@@ -17,6 +17,10 @@ Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `scene
 only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see
 [logging.md](logging.md).
 
+Every snapshot is sent for a `net::SnapshotReason` that `broadcastSnapshot` requires of its caller, and `ServerApp` records
+its size, build time and recipients in a 32-entry `net::SnapshotLog`; the stats line reports the largest since the previous
+line.
+
 The join reply (edit status, snapshot, scene status) and the `playerSlot` answer are likewise unicast to
 the joiner via `NetServer::sendTo`. A connection is answered on its first join only; a repeat join is ignored
 and logged once per connection (`planJoin` in `ServerPolicy.h`). An `editComponent` a replicated view could

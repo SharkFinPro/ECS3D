@@ -375,7 +375,9 @@ void ServerApp::logStatsIfDue(const std::chrono::steady_clock::time_point now)
 
   ECS3D_PROFILE_SCOPE("Stats");
 
-  const auto stats = gatherStats(m_lane, m_counters, m_statsCursor);
+  const NetStatsSample traffic{m_netServer->traffic().totalOut(), m_netServer->traffic().totalIn(),
+                               m_netServer->connectionCount(), &m_snapshotLog};
+  const auto stats = gatherStats(m_lane, m_counters, m_statsCursor, traffic);
   if (stats.ticks == 0)
   {
     if (!m_statsIdle)
@@ -438,7 +440,7 @@ void ServerApp::pollScriptChangesWhileStopped(const float dt) const
   {
     if (m_scriptSystem->pollScriptChanges(*scene, dt))
     {
-      broadcastSnapshot();
+      broadcastSnapshot(net::SnapshotReason::scriptReload);
     }
   }
   catch (const std::exception& e)

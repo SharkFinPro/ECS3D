@@ -4,6 +4,7 @@
 #include "ClientConnectionState.h"
 #include "ClientTransport.h"
 #include "MessageQueue.h"
+#include "TrafficCounters.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -38,10 +39,14 @@ public:
   // polls once a frame sees the event exactly once.
   [[nodiscard]] bool takeConnectionLost();
 
+  [[nodiscard]] const TrafficCounters& traffic() const { return m_traffic; }
+
 private:
   std::shared_ptr<ClientTransport> m_transport;
 
   MessageQueue m_inbox;
+
+  mutable TrafficCounters m_traffic;
 
   ClientConnectionState m_state;
 };
