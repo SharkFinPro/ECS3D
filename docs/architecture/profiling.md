@@ -87,11 +87,14 @@ ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ti
   `Replication` come from the samples closed since then. Ticks and dropped steps are the change in the running totals,
   and the object count is the newest sample's. The line ends with the traffic since the previous line: `sent` (bytes
   handed to the transport, with the two largest message types), `recv`, `conns` (the connection count now) and
-  `snapshots` (how many were sent, with the largest one's size and reason). Sizes are `N B`, or `N.N KB` / `N.N MB` in
+  `snapshots` (how many were sent, with the largest one's size and reason). ` refused N` follows `recv` when sends were
+  refused as too large. Sizes are `N B`, or `N.N KB` / `N.N MB` in
   1024s.
 - **Covered seconds:** the wall time the summarized samples span. It can be less than the interval when the history is
   shorter.
 - **Idle:** when no running-scene tick happened in the interval, it logs `stats: idle (no ticks)` once per idle streak.
+  An idle interval that still sent or received bytes or recorded a snapshot (a stopped edit server taking scene edits)
+  is logged every time, as `stats: idle (no ticks) | sent ... recv ... | conns N | snapshots ...`.
 
 ## Switches
 

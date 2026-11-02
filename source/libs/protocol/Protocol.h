@@ -69,8 +69,9 @@ enum class MessageType : uint8_t {
   // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
 };
 
-// One past the last enumerator. Appending a MessageType means updating this, messageTypeName and the counters'
-// tables that size themselves from it; the assert fails until this is bumped.
+// One past the last enumerator. The assert only pins this to the enumerator it names, so it cannot notice a newly
+// appended type: appending a MessageType means updating messageTypeCount, the assert's last enumerator and
+// messageTypeName together. A type left out is counted in bucket 0 and named "unknown".
 inline constexpr std::size_t messageTypeCount = 20;
 static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::possessSlot) + 1,
               "messageTypeCount must be one past the last MessageType");

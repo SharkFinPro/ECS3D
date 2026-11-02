@@ -45,6 +45,7 @@ struct StatsInput
   // Traffic since the previous summary; topSent holds the two largest outbound types, empty entries last.
   uint64_t sentBytes = 0;
   uint64_t recvBytes = 0;
+  uint64_t refused = 0;
   std::array<TypeBytes, 2> topSent{};
   int64_t connections = 0;
   int64_t snapshots = 0;
@@ -114,7 +115,8 @@ namespace statsDetail {
     {
       if (entry.bytes > 0)
       {
-        types += (types.empty() ? "" : ", ") + std::string(net::messageTypeName(entry.type)) + " " + byteSize(entry.bytes);
+        types += (types.empty() ? "" : ", ") + std::string(net::messageTypeName(entry.type)) + " " +
+                 byteSize(entry.bytes);
       }
     }
 
@@ -132,6 +134,14 @@ namespace statsDetail {
 
     return text;
   }
+
+  // Everything after the tick figures: traffic since the previous summary, connections and snapshots.
+  [[nodiscard]] inline std::string netText(const StatsInput& in)
+  {
+    return sentText(in) + " recv " + byteSize(in.recvBytes) +
+           (in.refused > 0 ? " refused " + std::to_string(in.refused) : std::string{}) + " | conns " +
+           std::to_string(in.connections) + " | " + snapshotText(in);
+  }
 }
 
 [[nodiscard]] inline std::string formatStatsLine(const StatsInput& in)
@@ -139,18 +149,28 @@ namespace statsDetail {
   using statsDetail::fixed;
   using statsDetail::ms;
 
-  return "stats " + fixed(in.coveredSeconds, 1) + "s: tick avg " + ms(in.tickAvgMicros) + " p50 " + ms(in.tickP50Micros) +
-         " p95 " + ms(in.tickP95Micros) + " p99 " + ms(in.tickP99Micros) + " max " + ms(in.tickMaxMicros) + " ms | ticks " +
-         std::to_string(in.ticks) + " | dropped steps " + std::to_string(in.droppedSteps) +
-         " | per tick period: scripts " + ms(in.scriptsMicros) + " physics " + ms(in.physicsMicros) + " collisions " +
-         ms(in.collisionsMicros) + " replication " + ms(in.replicationMicros) + " ms | objects " + std::to_string(in.objects) +
-         " | " + statsDetail::sentText(in) + " recv " + statsDetail::byteSize(in.recvBytes) + " | conns " +
-         std::to_string(in.connections) + " | " + statsDetail::snapshotText(in);
+  return "stats " + fixed(in.coveredSeconds, 1) + "s: tick avg " + ms(in.tickAvgMicros) + " p50 " +
+         ms(in.tickP50Micros) + " p95 " + ms(in.tickP95Micros) + " p99 " + ms(in.tickP99Micros) + " max " +
+         ms(in.tickMaxMicros) + " ms | ticks " + std::to_string(in.ticks) + " | dropped steps " +
+         std::to_string(in.droppedSteps) + " | per tick period: scripts " + ms(in.scriptsMicros) + " physics " +
+         ms(in.physicsMicros) + " collisions " + ms(in.collisionsMicros) + " replication " +
+         ms(in.replicationMicros) + " ms | objects " + std::to_string(in.objects) + " | " + statsDetail::netText(in);
 }
 
 [[nodiscard]] inline std::string idleStatsLine()
 {
   return "stats: idle (no ticks)";
+}
+
+// Whether an interval moved any bytes or recorded a snapshot, which an idle line then reports.
+[[nodiscard]] inline bool hasNetActivity(const StatsInput& in)
+{
+  return in.sentBytes > 0 || in.recvBytes > 0 || in.refused > 0 || in.snapshots > 0;
+}
+
+[[nodiscard]] inline std::string idleStatsLine(const StatsInput& in)
+{
+  return hasNetActivity(in) ? idleStatsLine() + " | " + statsDetail::netText(in) : idleStatsLine();
 }
 
 struct StatsCounters
@@ -256,11 +276,13 @@ namespace statsDetail {
   {
     in.sentBytes = totalBytes(net.out) - totalBytes(cursor.reportedOut);
     in.recvBytes = totalBytes(net.in) - totalBytes(cursor.reportedIn);
+    in.refused = net.out.refused - cursor.reportedOut.refused;
     in.connections = net.connections;
 
     for (std::size_t i = 0; i < net::messageTypeCount; ++i)
     {
-      const StatsInput::TypeBytes entry{static_cast<net::MessageType>(i), net.out.bytes[i] - cursor.reportedOut.bytes[i]};
+      const StatsInput::TypeBytes entry{static_cast<net::MessageType>(i),
+                                        net.out.bytes[i] - cursor.reportedOut.bytes[i]};
       if (entry.bytes > in.topSent[0].bytes)
       {
         in.topSent[1] = in.topSent[0];
@@ -279,7 +301,8 @@ namespace statsDetail {
   inline void fillSnapshotFigures(const net::SnapshotLog& log, StatsCursor& cursor, StatsInput& in)
   {
     in.snapshots = static_cast<int64_t>(log.totalRecorded() - cursor.reportedSnapshots);
-    const auto fresh = static_cast<std::size_t>(std::min<uint64_t>(log.totalRecorded() - cursor.reportedSnapshots, log.size()));
+    const auto fresh = static_cast<std::size_t>(
+      std::min<uint64_t>(log.totalRecorded() - cursor.reportedSnapshots, log.size()));
     cursor.reportedSnapshots = log.totalRecorded();
 
     for (std::size_t i = log.size() - fresh; i < log.size(); ++i)

@@ -380,9 +380,9 @@ void ServerApp::logStatsIfDue(const std::chrono::steady_clock::time_point now)
   const auto stats = gatherStats(m_lane, m_counters, m_statsCursor, traffic);
   if (stats.ticks == 0)
   {
-    if (!m_statsIdle)
+    if (!m_statsIdle || hasNetActivity(stats))
     {
-      Log::info(LogCategory::server, idleStatsLine());
+      Log::info(LogCategory::server, idleStatsLine(stats));
     }
   }
   else

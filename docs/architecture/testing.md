@@ -20,7 +20,8 @@ Tests (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, 
 `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
 window, GPU or server. The CLR-free sources of `ECS3DNet` are compiled straight into the target rather than linked:
 `net/MessageQueue.cpp`, `net/CommandLineSplit.cpp`, `net/ClientConnectionState.cpp` and `net/EditorConnections.cpp`.
-`net/TrafficCounters.cpp` (plain C++), the header-only `net/SnapshotLog.h`, `net/NetServer.cpp` and `net/NetClient.cpp` join them because they reach the transport only through an interface,
+`net/TrafficCounters.cpp` (plain C++), the header-only `net/SnapshotLog.h`, `net/NetServer.cpp` and `net/NetClient.cpp`
+join them because they reach the transport only through an interface,
 which the tests fake; the CLR-backed `Managed*Transport` classes stay out. See the comment in the test
 `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp`, `RestPose.cpp` and `ShutdownSignal.cpp` are compiled in the same
 way, as is

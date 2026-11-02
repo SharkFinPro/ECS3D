@@ -39,6 +39,7 @@ enum class SnapshotReason : uint8_t {
 
 struct SnapshotRecord {
   SnapshotReason reason = SnapshotReason::other;
+  // The payload size, without the type byte that the traffic counters add.
   uint32_t bytes = 0;
   uint32_t buildMicros = 0;
   uint16_t recipients = 0;

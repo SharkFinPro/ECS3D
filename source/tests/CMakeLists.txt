@@ -269,7 +269,8 @@ add_executable(${PROJECT_NAME}
   # CLR calls stay in ManagedServerTransport and ManagedClientTransport. TransportLog.cpp and ServerLog.cpp are
   # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol. CommandLineSplit.cpp,
   # ClientConnectionState.cpp and EditorConnections.cpp are the CLR-free pieces split out of ServerProcess,
-  # NetClient and NetServer. TrafficCounters.cpp is plain C++, and the header-only SnapshotLog.h needs no source. NetServer.cpp and NetClient.cpp compile in too: they reach the C# transport
+  # NetClient and NetServer. TrafficCounters.cpp is plain C++, and the header-only SnapshotLog.h needs no source.
+  # NetServer.cpp and NetClient.cpp compile in too: they reach the C# transport
   # only through ServerTransport/ClientTransport, and the CLR-backed ManagedServerTransport and
   # ManagedClientTransport stay out (the tests drive a fake from FakeTransports.h).
   ../libs/net/MessageQueue.cpp
