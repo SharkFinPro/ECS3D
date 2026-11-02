@@ -2,6 +2,7 @@
 #define EDITORAPP_H
 
 #include <VulkanEngine/components/window/Window.h>
+#include <Lane.h>
 #include <Protocol.h>
 #include <Replication.h>
 #include <edits/EditHistory.h>
@@ -118,6 +119,8 @@ private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<RenderSystem> m_renderSystem;
+
+  profile::Lane m_profileLane{"editor", 4096};
 
   // The editor-wide selection slot (object vs. asset vs. nothing), shared into the panels that read or
   // write it - the object tree, inspector, and asset browser. handlePicking writes it directly from

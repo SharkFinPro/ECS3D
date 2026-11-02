@@ -61,6 +61,10 @@ A post-build step on `ECS3DTests` runs `cmake/RegisterTestSuites.cmake`, which l
 would not run (a `DISABLED_` name, or only `DISABLED_` cases) and fails the build if no suite remains or if an
 unindented listing line is neither a suite header nor the `Running main()` banner.
 
+`ProfileOverhead.DISABLED_ScopeCost` measures the cost of a profile scope and runs only by hand, from the build's
+`tests` directory: `ECS3DTests --gtest_also_run_disabled_tests --gtest_filter=ProfileOverhead.*`. It prints
+nanoseconds per scope with profiling enabled and disabled, and asserts no timing.
+
 Two consequences of sharing a process. A test must not depend on state a sibling case leaves behind. A case that
 calls `GTEST_SKIP()` is not shown as skipped, because the suite's entry reports a pass; no skip regular
 expression is set, since one skipped case would mark the whole suite skipped and hide its passes.

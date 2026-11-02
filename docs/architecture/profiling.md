@@ -65,6 +65,20 @@ fewer. `Summary` holds `last`, `average`, `p95`, `max` and `samples`; an empty h
 - A **hitch** is a wall time more than twice the window's nearest-rank 50th percentile (the lower middle value for an
   even window); a zero there never counts. `countHitches` counts them over the window.
 
+## Client and editor lanes
+
+`ClientApp` and `EditorApp` each own a `Lane` (`"client"`, `"editor"`, 4096 samples) that `run()` binds to the main
+thread and unbinds on every exit path. One sample spans one `run()` iteration: the loop closes the previous sample and
+opens the next at its top, so the previous iteration's `render()` falls inside its own sample. Top-level scopes are
+`Network in` (with `Snapshot apply` nested under it), `Input`, `Scene prep` and `Renderer`; the editor adds `Editor UI`.
+Nothing reads these lanes yet. The app wiring has no headless test.
+
+## Collision phases
+
+`CollisionSystem` records `Broad phase` (building the edge list, bounding boxes, sort and dynamic flags), `Narrow
+phase` (the whole OpenMP loop, timed once from the calling thread) and `Response` (pair assembly through
+`recordCollisionEvents`). A scope never opens inside the parallel region, and with no lane bound they do nothing.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.

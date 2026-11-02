@@ -15,5 +15,7 @@ resting or the contact manifold: that behavior is tuned as a whole, and the suit
   cross to scripts as plain uuid pairs that `ServerApp` carries. This library does not link scripting.
 - `CollisionSystem` resolves responses top-down by bounding-box minY, so a stack settles the same whichever side the
   load sits.
+- The `CollisionSystem` profile scopes (`Broad phase`, `Narrow phase`, `Response`) open on the calling thread around
+  each phase; never put one inside the OpenMP region.
 - The narrow phase entry points are `collisions::findContact` and `collisions::intersects` (`collisions/NarrowPhase.h`).
 - Compare physics results in tests with a tolerance: results pass through matrix math and accumulation.

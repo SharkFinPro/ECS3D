@@ -117,6 +117,7 @@ add_executable(${PROJECT_NAME}
   UnresolvedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
+  CollisionProfileTest.cpp
   CompoundBodyCollisionTest.cpp
   CompoundFlushTest.cpp
   CompoundRollingArmTest.cpp
@@ -161,6 +162,7 @@ add_executable(${PROJECT_NAME}
   PrefabTest.cpp
   FixedTimestepTest.cpp
   ProfileHistoryTest.cpp
+  ProfileOverheadTest.cpp
   ProfileLaneTest.cpp
   ProfileStatsTest.cpp
   InertiaTensorBehaviorTest.cpp

@@ -92,7 +92,7 @@
   itself there. **Still include what you use** - the precompiled header is not a substitute.
 - **Dependency direction (must hold unless a deliberate change updates this section):** `log` -> nothing.
   `protocol` -> nothing. `profile` -> nothing. `settings` -> log (+ json). `data` -> protocol + log
-  (+ json/glm/uuid). `sim` -> data. `render` -> data + VulkanEngine. `editor` -> data + render + settings + nfd + log.
+  (+ json/glm/uuid). `sim` -> data + profile. `render` -> data + VulkanEngine. `editor` -> data + render + settings + nfd + log.
   `net`/`scripting` -> data + clrHost + log. `clrHost` -> log. Apps compose these. **Do not add a Vulkan or ImGui include
   to `data`**, and do not make the server link render or editor: those invariants keep the server headless.
 - Detail (managed publishing, precompiled headers, module scanning, project layout, tests):

@@ -11,6 +11,7 @@
 #include <RingBufferSink.h>
 #include <ServerLog.h>
 #include <Log.h>
+#include <ProfileScope.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
 #include <optional>
@@ -77,6 +78,8 @@ void EditorApp::applyStatusMessage(const net::Message& message)
 
 void EditorApp::handleSnapshot(const net::Message& message)
 {
+  ECS3D_PROFILE_SCOPE("Snapshot apply");
+
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
 

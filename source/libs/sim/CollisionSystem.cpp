@@ -1,6 +1,7 @@
 #include "CollisionSystem.h"
 #include "PhysicsSystem.h"
 #include "collisions/NarrowPhase.h"
+#include <ProfileScope.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -44,20 +45,24 @@ namespace {
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
-  m_collisionEdges.clear();
-
-  for (const auto& object : objectManager.getAllObjects())
   {
-    if (const auto collider = object->getComponent<Collider>(ComponentType::collider))
-    {
-      // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
-      // every other pair's collision work for the tick.
-      if (!object->getComponent<Transform>(ComponentType::transform))
-      {
-        continue;
-      }
+    ECS3D_PROFILE_SCOPE("Broad phase");
 
-      m_collisionEdges.push_back({ object, collider, 0.0f, object->getComponent<RigidBody>(ComponentType::rigidBody) });
+    m_collisionEdges.clear();
+
+    for (const auto& object : objectManager.getAllObjects())
+    {
+      if (const auto collider = object->getComponent<Collider>(ComponentType::collider))
+      {
+        // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
+        // every other pair's collision work for the tick.
+        if (!object->getComponent<Transform>(ComponentType::transform))
+        {
+          continue;
+        }
+
+        m_collisionEdges.push_back({ object, collider, 0.0f, object->getComponent<RigidBody>(ComponentType::rigidBody) });
+      }
     }
   }
 
@@ -66,20 +71,25 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
 
 void CollisionSystem::checkCollisions(const float dt)
 {
-  for (auto& edge : m_collisionEdges)
-  {
-    edge.position = edge.collider->getBoundingBox().minX;
-  }
-
-  std::ranges::sort(m_collisionEdges, [](const CollisionEdge& a, const CollisionEdge& b)
-  {
-    return a.position < b.position;
-  });
-
   std::vector<char> isDynamic(m_collisionEdges.size());
-  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+
   {
-    isDynamic[i] = m_collisionEdges[i].body != nullptr;
+    ECS3D_PROFILE_SCOPE("Broad phase");
+
+    for (auto& edge : m_collisionEdges)
+    {
+      edge.position = edge.collider->getBoundingBox().minX;
+    }
+
+    std::ranges::sort(m_collisionEdges, [](const CollisionEdge& a, const CollisionEdge& b)
+    {
+      return a.position < b.position;
+    });
+
+    for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+    {
+      isDynamic[i] = m_collisionEdges[i].body != nullptr;
+    }
   }
 
   // Each edge's forward-sweep hits (higher edge indices, ascending), indexed by edge so the parallel loop
@@ -93,46 +103,54 @@ void CollisionSystem::checkCollisions(const float dt)
   // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
   // it into two threads racing a write on m_boundingBox / m_transformedBoxVertices.
   // Dynamic scheduling because the work per edge depends on how many colliders overlap it in x.
+  {
+    ECS3D_PROFILE_SCOPE("Narrow phase");
+
 #pragma omp parallel for default(none) shared(forwardHits, isDynamic) schedule(dynamic, 8) num_threads(6)
-  for (int i = 0; i < m_collisionEdges.size(); ++i)
-  {
-    findCollisions(i, isDynamic, forwardHits[i]);
-  }
-
-  // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in
-  // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
-  std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
-  for (size_t i = 0; i < forwardHits.size(); ++i)
-  {
-    for (const auto& hit : forwardHits[i])
+    for (int i = 0; i < m_collisionEdges.size(); ++i)
     {
-      if (hit.lowerSees)
-      {
-        perEdgeCollisions[i].emplace_back(m_collisionEdges[hit.other].object);
-      }
-
-      if (hit.higherSees)
-      {
-        perEdgeCollisions[hit.other].emplace_back(m_collisionEdges[i].object);
-      }
+      findCollisions(i, isDynamic, forwardHits[i]);
     }
   }
 
-  // Applied serially, now that the parallel region is done: a response moves the transform of either
-  // object in a pair, which would invalidate a collider cache another thread might still be reading if
-  // this ran inside the loop above.
-  for (const auto i : responseOrder(perEdgeCollisions))
   {
-    const auto& rigidBody = m_collisionEdges[i].body;
-    if (!rigidBody)
+    ECS3D_PROFILE_SCOPE("Response");
+
+    // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in
+    // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
+    std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
+    for (size_t i = 0; i < forwardHits.size(); ++i)
     {
-      continue;
+      for (const auto& hit : forwardHits[i])
+      {
+        if (hit.lowerSees)
+        {
+          perEdgeCollisions[i].emplace_back(m_collisionEdges[hit.other].object);
+        }
+
+        if (hit.higherSees)
+        {
+          perEdgeCollisions[hit.other].emplace_back(m_collisionEdges[i].object);
+        }
+      }
     }
 
-    handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i], dt);
-  }
+    // Applied serially, now that the parallel region is done: a response moves the transform of either
+    // object in a pair, which would invalidate a collider cache another thread might still be reading if
+    // this ran inside the loop above.
+    for (const auto i : responseOrder(perEdgeCollisions))
+    {
+      const auto& rigidBody = m_collisionEdges[i].body;
+      if (!rigidBody)
+      {
+        continue;
+      }
 
-  recordCollisionEvents(perEdgeCollisions);
+      handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i], dt);
+    }
+
+    recordCollisionEvents(perEdgeCollisions);
+  }
 }
 
 std::vector<size_t> CollisionSystem::responseOrder(

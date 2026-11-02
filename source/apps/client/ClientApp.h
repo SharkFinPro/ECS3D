@@ -1,6 +1,7 @@
 #ifndef CLIENTAPP_H
 #define CLIENTAPP_H
 
+#include <Lane.h>
 #include <Protocol.h>
 #include <Replication.h>
 #include <cstdint>
@@ -62,6 +63,8 @@ private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<RenderSystem> m_renderSystem;
+
+  profile::Lane m_profileLane{"client", 4096};
 
   // Only resend input when it changes, so a second view (e.g. the editor) that isn't focused doesn't
   // clobber this one's keys on the shared server-side InputState every frame.
