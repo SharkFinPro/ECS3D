@@ -45,6 +45,8 @@ namespace {
       case net::MessageType::serverLog:
       case net::MessageType::objectComponentsChanged:
       case net::MessageType::possessSlot:
+      case net::MessageType::statsSubscribe:
+      case net::MessageType::serverStats:
         return false;
     }
 
@@ -168,6 +170,17 @@ TEST(ServerPolicyTest, NamedMutationTypes)
     EXPECT_FALSE(isMutationAuthorized(type, true, false)) << static_cast<int>(type);
     EXPECT_FALSE(isMutationAuthorized(type, false, true)) << static_cast<int>(type);
     EXPECT_FALSE(isMutationAuthorized(type, false, false)) << static_cast<int>(type);
+  }
+}
+
+TEST(ServerPolicyTest, StatsSubscribeIsNotAMutationSoItPassesOnAnyServer)
+{
+  for (const bool editMode : {false, true})
+  {
+    for (const bool isEditor : {false, true})
+    {
+      EXPECT_TRUE(isMutationAuthorized(net::MessageType::statsSubscribe, editMode, isEditor));
+    }
   }
 }
 

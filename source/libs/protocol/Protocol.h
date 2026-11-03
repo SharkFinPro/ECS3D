@@ -60,9 +60,14 @@ enum class MessageType : uint8_t {
                  // unknown - routine for a view that has not been sent the object yet or already dropped
                  // it. Appended last, like every enumerator here: this is the wire discriminator, so
                  // existing values must keep their number.
-  possessSlot    // editor -> server: (slot int32) - bind this connection's input to that player slot;
+  possessSlot,   // editor -> server: (slot int32) - bind this connection's input to that player slot;
                  // answered with playerSlot. Changes no project data, so it is not a mutation message, but the
                  // server honors it only on an edit-mode server, from the authorized editor connection.
+  statsSubscribe, // editor -> server: (subscribe bool) - start or stop receiving serverStats (net::packStatsSubscribe).
+                 // Not a mutation message: statistics carry no project content.
+  serverStats    // server -> editor: the server's profiling samples, per-tick durations, traffic and snapshot
+                 // records since its previous serverStats to that connection (net::packServerStats /
+                 // net::unpackServerStats).
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An
@@ -72,8 +77,8 @@ enum class MessageType : uint8_t {
 // One past the last enumerator. The assert only pins this to the enumerator it names, so it cannot notice a newly
 // appended type: appending a MessageType means updating messageTypeCount, the assert's last enumerator and
 // messageTypeName together. A type left out is counted in bucket 0 and named "unknown".
-inline constexpr std::size_t messageTypeCount = 20;
-static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::possessSlot) + 1,
+inline constexpr std::size_t messageTypeCount = 22;
+static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::serverStats) + 1,
               "messageTypeCount must be one past the last MessageType");
 
 [[nodiscard]] constexpr std::string_view messageTypeName(const MessageType type) noexcept
@@ -100,6 +105,8 @@ static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::possessS
     case MessageType::serverLog: return "serverLog";
     case MessageType::objectComponentsChanged: return "objectComponentsChanged";
     case MessageType::possessSlot: return "possessSlot";
+    case MessageType::statsSubscribe: return "statsSubscribe";
+    case MessageType::serverStats: return "serverStats";
   }
 
   return "unknown";
