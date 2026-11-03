@@ -40,6 +40,7 @@ enum class EditorAction {
   gizmoTranslate,
   gizmoRotate,
   gizmoScale,
+  toggleProfiler,
   count  // sentinel: the number of real actions above, not a real action itself
 };
 

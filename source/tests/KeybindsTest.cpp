@@ -163,6 +163,25 @@ TEST_F(Keybinds, DefaultTableMatchesTheSpecCatalogue)
   EXPECT_EQ(formatChord(*table.binding(EditorAction::gizmoScale)), "3");
 }
 
+TEST_F(Keybinds, ToggleProfilerDefaultsToF3AndNoOtherActionDoes)
+{
+  const KeybindTable table;
+
+  EXPECT_EQ(formatChord(*table.binding(EditorAction::toggleProfiler)), "F3");
+  EXPECT_EQ(table.actionFor(*parseChord("F3")), EditorAction::toggleProfiler);
+
+  int holders = 0;
+  for (const auto& info : editorActions())
+  {
+    if (info.defaultChord == parseChord("F3"))
+    {
+      ++holders;
+    }
+  }
+
+  EXPECT_EQ(holders, 1);
+}
+
 TEST_F(Keybinds, AssignRefusesAChordAlreadyHeldByAnotherAction)
 {
   SettingsStore settings(m_file);

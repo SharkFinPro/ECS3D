@@ -163,7 +163,9 @@ recorded, so a failure loses no subscription state.
 thread and unbinds on every exit path. One sample spans one `run()` iteration: the loop closes the previous sample and
 opens the next at its top, so the previous iteration's `render()` falls inside its own sample. Top-level scopes are
 `Network in` (with `Snapshot apply` nested under it), `Input`, `Scene prep` and `Renderer`; the editor adds `Editor UI`.
-Nothing reads these lanes yet. The app wiring has no headless test.
+The editor's lane is drawn by the Profiler panel through `ProfilerCharts` (`ECS3DRender`), which holds the ImGui
+drawing for the bars, legend and breakdown table; its pixel math is the headless `ProfilerChartLayout.h`. Nothing
+else reads the lanes yet. The app wiring has no headless test.
 
 ## Collision phases
 

@@ -60,7 +60,11 @@ the object Script handler), `ConsolePanel` (the "Console" window — reads the e
 `formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink; the
 rows and per-level counts come from the headless `ConsoleView.h`), and Auto-scroll; entries the connected server
 forwards land in this same sink, message-prefixed `"[server] "`, so
-they show and filter alongside the editor's own — see [logging.md](logging.md)), `AssetBrowserPanel` (its type
+they show and filter alongside the editor's own — see [logging.md](logging.md)), `ProfilerPanel` (the "Profiler" window, closed by default, F3 or Window, then Profiler: the editor's frame lane as
+stacked bars from `ECS3DRender`'s `ProfilerCharts`, a legend, and a per-scope breakdown. Pause copies the lane's
+history, and clicking a bar selects that frame and pauses. The window, scale and hidden groups persist in
+`editor.profiler.window`, `editor.profiler.scale` and `editor.profiler.hiddenGroups`; the choices, their validation
+and the pause/selection rules are the headless `ProfilerPanelState.h`), `AssetBrowserPanel` (its type
 filter is a union of toggled chips, with an "All" chip to clear: `AssetFilter.h`), `AssetDisplay` (shared asset
 label/name/icon/color rules, header-only), `PlayControls.h` (the headless play/pause/stop enable rules for the
 Scene Status toolbar's fixed row of icon buttons, which stay drawn and gray out when unavailable), `SaveUI`
