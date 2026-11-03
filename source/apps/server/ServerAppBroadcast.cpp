@@ -132,8 +132,17 @@ void ServerApp::sendServerStatsIfDue(const std::chrono::steady_clock::time_point
   StatsFeedInput input;
   input.net = {m_netServer->traffic().totalOut(), m_netServer->traffic().totalIn(), m_netServer->connectionCount(),
                &m_snapshotLog};
-  input.editors = m_netServer->editorCount();
   input.now = now;
+
+  if (m_statsSubscriptions.empty())
+  {
+    skipServerStats(m_lane, m_statsFeedCursor, input);
+    return;
+  }
+
+  ECS3D_PROFILE_SCOPE("Stats");
+
+  input.editors = m_netServer->editorCount();
 #ifndef NDEBUG
   input.flags |= net::serverStatsFlags::debugBuild;
 #endif
@@ -147,25 +156,35 @@ void ServerApp::sendServerStatsIfDue(const std::chrono::steady_clock::time_point
     input.flags |= net::serverStatsFlags::sceneRunning;
   }
 
-  if (m_statsSubscriptions.empty())
+  // Both copies are packed before takeRecipients records which table each subscriber was sent, so a throw
+  // leaves the subscriptions as they were.
+  try
   {
-    skipServerStats(m_lane, m_statsFeedCursor, input);
-    return;
+    const auto stats = collectServerStats(m_lane, m_counters, m_statsFeedCursor, input);
+    const auto withTable = net::packServerStats(stats, true);
+    const auto withoutTable = net::packServerStats(stats, false);
+    const auto recipients = m_statsSubscriptions.takeRecipients(stats.nodeTableEpoch);
+
+    if (!recipients.withNodeTable.empty())
+    {
+      m_netServer->sendToConnections(recipients.withNodeTable, withTable);
+    }
+
+    if (!recipients.withoutNodeTable.empty())
+    {
+      m_netServer->sendToConnections(recipients.withoutNodeTable, withoutTable);
+    }
+
+    m_statsFeedFailing = false;
   }
-
-  ECS3D_PROFILE_SCOPE("Stats");
-
-  const auto stats = collectServerStats(m_lane, m_counters, m_statsFeedCursor, input);
-  const auto recipients = m_statsSubscriptions.takeRecipients(stats.nodeTableEpoch);
-
-  if (!recipients.withNodeTable.empty())
+  catch (const std::exception& e)
   {
-    m_netServer->sendToConnections(recipients.withNodeTable, net::packServerStats(stats, true));
-  }
+    if (!m_statsFeedFailing)
+    {
+      Log::error(LogCategory::server, std::string("Server statistics were not sent: ") + e.what());
+    }
 
-  if (!recipients.withoutNodeTable.empty())
-  {
-    m_netServer->sendToConnections(recipients.withoutNodeTable, net::packServerStats(stats, false));
+    m_statsFeedFailing = true;
   }
 }
 

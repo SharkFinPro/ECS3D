@@ -98,6 +98,7 @@ private:
   bool m_statsIdle = false;
   net::StatsSubscriptions m_statsSubscriptions;
   StatsFeedCursor m_statsFeedCursor;
+  bool m_statsFeedFailing = false;
   std::chrono::steady_clock::time_point m_lastStatsFeedTime;
 
   std::chrono::steady_clock::time_point m_previousTime;

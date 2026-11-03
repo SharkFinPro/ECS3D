@@ -121,6 +121,11 @@ join. `net::StatsSubscriptions` keeps the subscribers and the node-table epoch e
 count, which only grows; the table goes only to a subscriber last sent a different epoch, and a new subscription
 starts with none, so its first message carries it. Messages go out through `NetServer::sendToConnections`.
 
+Tick durations are taken as their scopes exit, so a message can carry durations from a sample that is still open, and
+each duration is sent once, in a later message than its sample. A failure to build or send is logged once per run of
+consecutive failures and the server keeps running; both packed copies are built before the node-table epochs are
+recorded, so a failure loses no subscription state.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.

@@ -225,9 +225,6 @@ void ServerApp::handlePossessSlot(const net::Message& message, const int32_t sen
 
 void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t senderId)
 {
-  const auto subscribe = net::unpackStatsSubscribe(message);
-  const auto connection = "Connection " + std::to_string(senderId);
-
   if (!mayReceiveServerStats(m_netServer->isEditor(senderId)))
   {
     if (m_statsSubscriptions.warnRefusalOnce(senderId))
@@ -238,6 +235,9 @@ void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t 
 
     return;
   }
+
+  const auto subscribe = net::unpackStatsSubscribe(message);
+  const auto connection = "Connection " + std::to_string(senderId);
 
   if (subscribe)
   {

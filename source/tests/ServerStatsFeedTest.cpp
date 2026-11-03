@@ -99,6 +99,39 @@ namespace {
   {
     return {reason, bytes, 700, 2, time};
   }
+
+  void expectSameContent(const net::ServerStats& expected, const net::ServerStats& actual)
+  {
+    EXPECT_EQ(actual.nodeTableEpoch, expected.nodeTableEpoch);
+    EXPECT_EQ(actual.connections, expected.connections);
+    EXPECT_EQ(actual.editors, expected.editors);
+    EXPECT_EQ(actual.objects, expected.objects);
+    EXPECT_EQ(actual.tickMicros, expected.tickMicros);
+    ASSERT_EQ(actual.samples.size(), expected.samples.size());
+    for (std::size_t i = 0; i < expected.samples.size(); ++i)
+    {
+      EXPECT_EQ(actual.samples[i].wallMicros, expected.samples[i].wallMicros);
+      EXPECT_EQ(actual.samples[i].ticks, expected.samples[i].ticks);
+      EXPECT_EQ(actual.samples[i].droppedSteps, expected.samples[i].droppedSteps);
+      ASSERT_EQ(actual.samples[i].nodes.size(), expected.samples[i].nodes.size());
+      for (std::size_t n = 0; n < expected.samples[i].nodes.size(); ++n)
+      {
+        EXPECT_EQ(actual.samples[i].nodes[n].node, expected.samples[i].nodes[n].node);
+        EXPECT_EQ(actual.samples[i].nodes[n].micros, expected.samples[i].nodes[n].micros);
+        EXPECT_EQ(actual.samples[i].nodes[n].calls, expected.samples[i].nodes[n].calls);
+      }
+    }
+  }
+
+  void expectSameNodes(const net::ServerStats& expected, const net::ServerStats& actual)
+  {
+    ASSERT_EQ(actual.nodes.size(), expected.nodes.size());
+    for (std::size_t i = 0; i < expected.nodes.size(); ++i)
+    {
+      EXPECT_EQ(actual.nodes[i].parent, expected.nodes[i].parent);
+      EXPECT_EQ(actual.nodes[i].name, expected.nodes[i].name);
+    }
+  }
 }
 
 TEST(ServerStatsFeed, FirstCollectCarriesSamplesWithOnlyTheNodesThatRan)
@@ -369,4 +402,126 @@ TEST(ServerStatsFeed, ObjectsAreZeroUntilASampleHasClosed)
 
   rig.tickSample(1, 0, 12, 1ms, 0ms);
   EXPECT_EQ(rig.collect().objects, 12u);
+}
+
+TEST(ServerStatsFeed, ACollectRoundTripsThroughBothPackedCopies)
+{
+  FeedRig rig;
+  rig.tickSample(2, 1, 9, 1ms, 2ms);
+  rig.tickSample(3, 0, 11, 3ms, 0ms);
+  rig.netSample.connections = 3;
+  rig.editors = 1;
+  rig.flags = net::serverStatsFlags::editMode;
+  rig.netSample.out.messages[deltaIndex] = 4;
+  rig.netSample.out.bytes[deltaIndex] = 440;
+  rig.snapshotLog.record(snapshotAt(rig.wallNow - 250ms, net::SnapshotReason::join, 2048));
+
+  const auto stats = rig.collect();
+  const auto withTable = net::unpackServerStats(net::packServerStats(stats, true));
+  const auto withoutTable = net::unpackServerStats(net::packServerStats(stats, false));
+
+  EXPECT_TRUE(withTable.hasNodeTable);
+  EXPECT_FALSE(withoutTable.hasNodeTable);
+  EXPECT_TRUE(withoutTable.nodes.empty());
+  EXPECT_EQ(withTable.flags, stats.flags | net::serverStatsFlags::nodeTable);
+  EXPECT_EQ(withoutTable.flags, stats.flags);
+  expectSameContent(stats, withTable);
+  expectSameContent(stats, withoutTable);
+  expectSameNodes(stats, withTable);
+
+  ASSERT_EQ(withTable.out.size(), 1u);
+  EXPECT_EQ(withTable.out[0].bytes, 440u);
+  ASSERT_EQ(withTable.snapshots.size(), 1u);
+  EXPECT_EQ(withTable.snapshots[0].ageMillis, 250u);
+  EXPECT_EQ(withTable.snapshots[0].reason, net::SnapshotReason::join);
+}
+
+TEST(ServerStatsFeed, AFullScopeTreeCollectsAndRoundTripsEveryNode)
+{
+  FeedRig rig;
+  rig.lane.beginSample();
+  for (std::size_t i = 1; i < profile::maxNodes; ++i)
+  {
+    rig.timed(("Scope " + std::to_string(i)).c_str(), 1ms);
+  }
+
+  rig.lane.endSample(true);
+
+  const auto stats = rig.collect();
+
+  ASSERT_EQ(rig.lane.tree().size(), profile::maxNodes);
+  EXPECT_EQ(stats.nodeTableEpoch, profile::maxNodes);
+  ASSERT_EQ(stats.nodes.size(), profile::maxNodes - 1);
+  ASSERT_EQ(stats.samples.size(), 1u);
+  ASSERT_EQ(stats.samples[0].nodes.size(), profile::maxNodes - 1);
+  EXPECT_EQ(stats.samples[0].nodes.front().node, 1);
+  EXPECT_EQ(stats.samples[0].nodes.back().node, static_cast<uint16_t>(profile::maxNodes - 1));
+
+  net::ServerStats withTable;
+  net::ServerStats withoutTable;
+  ASSERT_NO_THROW(withTable = net::unpackServerStats(net::packServerStats(stats, true)));
+  ASSERT_NO_THROW(withoutTable = net::unpackServerStats(net::packServerStats(stats, false)));
+  expectSameContent(stats, withTable);
+  expectSameContent(stats, withoutTable);
+  expectSameNodes(stats, withTable);
+  EXPECT_EQ(withTable.nodes.back().name, "Scope 127");
+}
+
+TEST(ServerStatsFeed, ASecondCollectAfterTheHistoryWrapsReturnsTheNewestSamplesOldestFirst)
+{
+  FeedRig rig(4);
+  rig.tickSample(1, 0, 1, 1ms, 0ms);
+  rig.tickSample(1, 0, 1, 1ms, 0ms);
+  ASSERT_EQ(rig.collect().samples.size(), 2u);
+
+  for (int i = 1; i <= 7; ++i)
+  {
+    rig.lane.beginSample();
+    rig.advance(std::chrono::microseconds(i * 10));
+    rig.lane.endSample(true);
+  }
+
+  const auto stats = rig.collect();
+
+  ASSERT_EQ(stats.samples.size(), 4u);
+  EXPECT_EQ(stats.samples[0].wallMicros, 40u);
+  EXPECT_EQ(stats.samples[1].wallMicros, 50u);
+  EXPECT_EQ(stats.samples[2].wallMicros, 60u);
+  EXPECT_EQ(stats.samples[3].wallMicros, 70u);
+}
+
+TEST(ServerStatsFeed, ASecondCollectAfterTheTickRingWrapsReturnsTheNewestDurationsOldestFirst)
+{
+  FeedRig rig(16, 4);
+  rig.tickSample(1, 0, 1, 1ms, 0ms);
+  rig.tickSample(1, 0, 1, 1ms, 0ms);
+  ASSERT_EQ(rig.collect().tickMicros.size(), 2u);
+
+  for (int i = 1; i <= 7; ++i)
+  {
+    rig.tickSample(1, 0, 1, std::chrono::milliseconds(i), 0ms);
+  }
+
+  EXPECT_EQ(rig.collect().tickMicros, (std::vector<uint32_t>{5000, 6000, 7000, 8000}));
+}
+
+TEST(ServerStatsFeed, ASecondCollectAfterTheSnapshotLogWrapsReturnsTheNewestRecordsOldestFirst)
+{
+  FeedRig rig;
+  rig.snapshotLog.record(snapshotAt(rig.wallNow, net::SnapshotReason::join, 1));
+  rig.snapshotLog.record(snapshotAt(rig.wallNow, net::SnapshotReason::join, 2));
+  ASSERT_EQ(rig.collect().snapshots.size(), 2u);
+
+  constexpr uint32_t added = net::SnapshotLog::capacity + 5;
+  for (uint32_t i = 1; i <= added; ++i)
+  {
+    rig.snapshotLog.record(snapshotAt(rig.wallNow, net::SnapshotReason::sceneEdit, 100 + i));
+  }
+
+  const auto stats = rig.collect();
+
+  ASSERT_EQ(stats.snapshots.size(), net::SnapshotLog::capacity);
+  EXPECT_EQ(stats.snapshots.front().bytes, 100 + added - net::SnapshotLog::capacity + 1);
+  EXPECT_EQ(stats.snapshots.back().bytes, 100 + added);
+  EXPECT_EQ(stats.snapshots.front().reason, net::SnapshotReason::sceneEdit);
 }
