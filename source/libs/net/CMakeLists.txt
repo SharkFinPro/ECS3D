@@ -23,6 +23,8 @@ add_library(${PROJECT_NAME}
   ServerStats.cpp
   ServerStats.h
   SnapshotLog.h
+  StatsSubscriptions.cpp
+  StatsSubscriptions.h
   TrafficCounters.cpp
   TrafficCounters.h
   ServerLog.h

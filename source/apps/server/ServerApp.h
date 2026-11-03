@@ -5,7 +5,9 @@
 #include <PlayerSlots.h>
 #include <Lane.h>
 #include <SnapshotLog.h>
+#include "ServerStatsFeed.h"
 #include "StatsSummary.h"
+#include <StatsSubscriptions.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
@@ -94,6 +96,10 @@ private:
   std::chrono::steady_clock::time_point m_sampleOpenedAt;
   std::chrono::steady_clock::time_point m_lastStatsTime;
   bool m_statsIdle = false;
+  net::StatsSubscriptions m_statsSubscriptions;
+  StatsFeedCursor m_statsFeedCursor;
+  bool m_statsFeedFailing = false;
+  std::chrono::steady_clock::time_point m_lastStatsFeedTime;
 
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
@@ -143,6 +149,14 @@ private:
 
   // Logs the stats line (or the idle notice once per idle streak) when the interval has passed.
   void logStatsIfDue(std::chrono::steady_clock::time_point now);
+
+  // Sends serverStats to the subscribed editors when serverStatsPeriod has passed.
+  void sendServerStatsIfDue(std::chrono::steady_clock::time_point now);
+
+  // The serverStats flags this server reports: debug build, edit mode and scene running.
+  [[nodiscard]] uint8_t serverStatsFlags() const;
+
+  void handleStatsSubscribe(const net::Message& message, int32_t senderId);
 
   void fixedUpdate(float dt) const;
 

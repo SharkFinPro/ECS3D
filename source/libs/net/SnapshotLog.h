@@ -2,6 +2,7 @@
 #define SNAPSHOTLOG_H
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -43,6 +44,7 @@ struct SnapshotRecord {
   uint32_t bytes = 0;
   uint32_t buildMicros = 0;
   uint16_t recipients = 0;
+  std::chrono::steady_clock::time_point time{};
 };
 
 // The most recent snapshots, oldest first. Touched on the tick thread only.

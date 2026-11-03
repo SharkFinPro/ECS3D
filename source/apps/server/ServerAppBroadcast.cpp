@@ -96,7 +96,8 @@ void ServerApp::broadcastSnapshot(const net::SnapshotReason reason) const
   m_netServer->broadcast(message);
 
   m_snapshotLog.record({reason, saturatedTo<uint32_t>(message.size()), buildMicros,
-                        saturatedTo<uint16_t>(static_cast<uint64_t>(std::max(m_netServer->connectionCount(), 0)))});
+                        saturatedTo<uint16_t>(static_cast<uint64_t>(std::max(m_netServer->connectionCount(), 0))),
+                        std::chrono::steady_clock::now()});
 
   broadcastSceneStatus();
 }
@@ -113,9 +114,86 @@ void ServerApp::sendJoinReply(const int32_t connId) const
 
   m_netServer->sendTo(connId, message);
 
-  m_snapshotLog.record({net::SnapshotReason::join, saturatedTo<uint32_t>(message.size()), buildMicros, 1});
+  m_snapshotLog.record({net::SnapshotReason::join, saturatedTo<uint32_t>(message.size()), buildMicros, 1,
+                        std::chrono::steady_clock::now()});
 
   m_netServer->sendTo(connId, replication::buildSceneStatus(m_sceneManager->getSceneStatus()));
+}
+
+uint8_t ServerApp::serverStatsFlags() const
+{
+  uint8_t flags = 0;
+#ifndef NDEBUG
+  flags |= net::serverStatsFlags::debugBuild;
+#endif
+  if (m_options.editMode)
+  {
+    flags |= net::serverStatsFlags::editMode;
+  }
+
+  if (sceneRunning())
+  {
+    flags |= net::serverStatsFlags::sceneRunning;
+  }
+
+  return flags;
+}
+
+void ServerApp::sendServerStatsIfDue(const std::chrono::steady_clock::time_point now)
+{
+  if (now - m_lastStatsFeedTime < serverStatsPeriod)
+  {
+    return;
+  }
+
+  m_lastStatsFeedTime = now;
+
+  StatsFeedInput input;
+  input.net = {m_netServer->traffic().totalOut(), m_netServer->traffic().totalIn(), m_netServer->connectionCount(),
+               &m_snapshotLog};
+  input.now = now;
+
+  if (m_statsSubscriptions.empty())
+  {
+    skipServerStats(m_lane, m_statsFeedCursor, input);
+    return;
+  }
+
+  ECS3D_PROFILE_SCOPE("Stats");
+
+  input.editors = m_netServer->editorCount();
+  input.flags = serverStatsFlags();
+
+  // Both copies are packed before takeRecipients records which table each subscriber was sent, so a throw
+  // leaves the subscriptions as they were.
+  try
+  {
+    const auto stats = collectServerStats(m_lane, m_counters, m_statsFeedCursor, input);
+    const auto withTable = net::packServerStats(stats, true);
+    const auto withoutTable = net::packServerStats(stats, false);
+    const auto recipients = m_statsSubscriptions.takeRecipients(stats.nodeTableEpoch);
+
+    if (!recipients.withNodeTable.empty())
+    {
+      m_netServer->sendToConnections(recipients.withNodeTable, withTable);
+    }
+
+    if (!recipients.withoutNodeTable.empty())
+    {
+      m_netServer->sendToConnections(recipients.withoutNodeTable, withoutTable);
+    }
+
+    m_statsFeedFailing = false;
+  }
+  catch (const std::exception& e)
+  {
+    if (!m_statsFeedFailing)
+    {
+      Log::error(LogCategory::server, std::string("Server statistics were not sent: ") + e.what());
+    }
+
+    m_statsFeedFailing = true;
+  }
 }
 
 void ServerApp::broadcastSceneStatus() const

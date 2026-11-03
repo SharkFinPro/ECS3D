@@ -12,6 +12,7 @@
 #include <Log.h>
 #include <PlayerSlots.h>
 #include <Replication.h>
+#include <ServerStats.h>
 #include <nlohmann/json.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -44,6 +45,10 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
 
     case net::MessageType::possessSlot:
       handlePossessSlot(message, senderId);
+      break;
+
+    case net::MessageType::statsSubscribe:
+      handleStatsSubscribe(message, senderId);
       break;
 
     default:
@@ -218,8 +223,37 @@ void ServerApp::handlePossessSlot(const net::Message& message, const int32_t sen
   sendPlayerSlot(senderId);
 }
 
+void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t senderId)
+{
+  if (!mayReceiveServerStats(m_netServer->isEditor(senderId)))
+  {
+    if (m_statsSubscriptions.warnRefusalOnce(senderId))
+    {
+      Log::warn(LogCategory::server, "Refused a server statistics subscription from connection "
+        + std::to_string(senderId) + ": not an authorized editor.");
+    }
+
+    return;
+  }
+
+  const auto subscribe = net::unpackStatsSubscribe(message);
+  const auto connection = "Connection " + std::to_string(senderId);
+
+  if (subscribe)
+  {
+    m_statsSubscriptions.subscribe(senderId);
+    Log::info(LogCategory::server, connection + " subscribed to server statistics.");
+  }
+  else
+  {
+    m_statsSubscriptions.unsubscribe(senderId);
+    Log::info(LogCategory::server, connection + " unsubscribed from server statistics.");
+  }
+}
+
 void ServerApp::handleDisconnect(const int32_t connId)
 {
+  m_statsSubscriptions.forget(connId);
   m_joinNonces.erase(connId);
   m_slotlessConnections.erase(connId);
   m_joinedConnections.erase(connId);

@@ -32,9 +32,13 @@ public:
 
   // Sends to every connection currently authorized as Role::editor, and no one else - for data a play
   // client should never see, like the server's own log (MessageType::serverLog). A no-op if there are
-  // none. One call into the transport for the whole fan-out (sendToMany), which queues the message per
+  // none. One call into the transport for the whole fan-out (sendToConnections), which queues the message per
   // connection, so a stalled editor cannot block the authoritative tick thread.
   void sendToEditors(const Message& message) const;
+
+  // Sends to exactly these connections with one call into the transport, for data that only some connections
+  // asked for, like serverStats. A no-op for an empty list.
+  void sendToConnections(const std::vector<int32_t>& connIds, const Message& message) const;
 
   // Sends to one connection only - for a reply nobody else should see, like the snapshot a join asks for.
   // A no-op if that connection has disconnected.
@@ -75,11 +79,12 @@ public:
   // authorized as a player, one still mid-handshake, and one that has since disconnected.
   [[nodiscard]] bool isEditor(int32_t connectionId) const;
 
+  // How many connections are currently authorized as Role::editor.
+  [[nodiscard]] int editorCount() const;
+
   [[nodiscard]] const TrafficCounters& traffic() const { return m_traffic; }
 
 private:
-  void sendToMany(const std::vector<int32_t>& connIds, const Message& message) const;
-
   std::shared_ptr<ServerTransport> m_transport;
 
   MessageQueue m_inbox;

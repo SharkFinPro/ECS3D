@@ -6,6 +6,7 @@
 #include <RemoteLogSink.h>
 #include <ServerLog.h>
 #include <scenes/SceneManager.h>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +29,15 @@
 {
   return editMode;
 }
+
+// Statistics carry no project content, so any authorized editor may watch them, on a play server too; a player may not.
+[[nodiscard]] constexpr bool mayReceiveServerStats(const bool connectionIsEditor) noexcept
+{
+  return connectionIsEditor;
+}
+
+// The least time between two serverStats sends.
+inline constexpr auto serverStatsPeriod = std::chrono::milliseconds(250);
 
 // Hot reload is polled only where fixedUpdate never runs: an edit-mode server whose scene is stopped. A play
 // server auto-starts, and a paused scene keeps its started instances.
