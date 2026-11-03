@@ -376,11 +376,50 @@ TEST(ServerStats, TheSnapshotCountIsCappedAndTheReasonMustBeKnown)
 
 TEST(ServerStats, ACountPastWhatTheRemainingBytesCouldHoldIsRefusedBeforeReserving)
 {
-  Builder b;
-  b.header();
-  b.message.write(static_cast<uint16_t>(net::maxServerStatsSamples));
+  const std::string guardMessage = "past its cap or the payload";
 
-  EXPECT_THROW(static_cast<void>(net::unpackServerStats(b.message)), std::runtime_error);
+  Builder samples;
+  samples.header();
+  samples.message.write(static_cast<uint16_t>(net::maxServerStatsSamples));
+
+  try
+  {
+    static_cast<void>(net::unpackServerStats(samples.message));
+    FAIL() << "a sample count the payload cannot hold was accepted";
+  }
+  catch (const std::runtime_error& e)
+  {
+    EXPECT_NE(std::string(e.what()).find(guardMessage), std::string::npos) << e.what();
+  }
+
+  Builder ticks;
+  ticks.header();
+  ticks.message.write(static_cast<uint16_t>(0));
+  ticks.message.write(static_cast<uint16_t>(net::maxServerStatsTicks));
+
+  try
+  {
+    static_cast<void>(net::unpackServerStats(ticks.message));
+    FAIL() << "a tick count the payload cannot hold was accepted";
+  }
+  catch (const std::runtime_error& e)
+  {
+    EXPECT_NE(std::string(e.what()).find(guardMessage), std::string::npos) << e.what();
+  }
+}
+
+TEST(ServerStats, BytesAfterTheLastFieldAreIgnored)
+{
+  const auto stats = sampleStats();
+  const auto packed = net::packServerStats(stats, true);
+
+  std::vector<uint8_t> bytes(packed.bytes().begin(), packed.bytes().end());
+  bytes.push_back(0xAB);
+  const net::Message extended(net::MessageType::serverStats, bytes);
+
+  ASSERT_EQ(extended.size(), packed.size() + 1);
+  expectSame(net::unpackServerStats(extended), net::unpackServerStats(packed));
+  expectSame(net::unpackServerStats(extended), stats);
 }
 
 TEST(ServerStats, PackRefusesAVectorPastItsCap)
@@ -404,6 +443,47 @@ TEST(ServerStats, PackRefusesAVectorPastItsCap)
   tooManyNodes.nodes.resize(net::maxServerStatsNodes);
   EXPECT_THROW(static_cast<void>(net::packServerStats(tooManyNodes, true)), std::length_error);
   EXPECT_NO_THROW(static_cast<void>(net::packServerStats(tooManyNodes, false)));
+}
+
+TEST(ServerStats, PackRefusesASampleEntryNamingANodePastTheCap)
+{
+  auto stats = sampleStats();
+  stats.samples[0].nodes[0].node = net::maxServerStatsNodes - 1;
+
+  const auto restored = net::unpackServerStats(net::packServerStats(stats, true));
+  ASSERT_FALSE(restored.samples.empty());
+  EXPECT_EQ(restored.samples[0].nodes[0].node, net::maxServerStatsNodes - 1);
+
+  stats.samples[0].nodes[0].node = net::maxServerStatsNodes;
+  EXPECT_THROW(static_cast<void>(net::packServerStats(stats, true)), std::invalid_argument);
+  EXPECT_THROW(static_cast<void>(net::packServerStats(stats, false)), std::invalid_argument);
+}
+
+TEST(ServerStats, PackRefusesANodeParentThatIsNotAnEarlierNode)
+{
+  auto stats = sampleStats();
+  stats.nodes[2].parent = 2;
+
+  const auto restored = net::unpackServerStats(net::packServerStats(stats, true));
+  ASSERT_EQ(restored.nodes.size(), 3u);
+  EXPECT_EQ(restored.nodes[2].parent, 2);
+
+  stats.nodes[2].parent = 3;
+  EXPECT_THROW(static_cast<void>(net::packServerStats(stats, true)), std::invalid_argument);
+  EXPECT_NO_THROW(static_cast<void>(net::packServerStats(stats, false)));
+}
+
+TEST(ServerStats, PackRefusesASnapshotReasonPastTheLastOne)
+{
+  auto stats = sampleStats();
+  stats.snapshots[0].reason = net::SnapshotReason::other;
+
+  const auto restored = net::unpackServerStats(net::packServerStats(stats, true));
+  ASSERT_FALSE(restored.snapshots.empty());
+  EXPECT_EQ(restored.snapshots[0].reason, net::SnapshotReason::other);
+
+  stats.snapshots[0].reason = static_cast<net::SnapshotReason>(static_cast<uint8_t>(net::SnapshotReason::other) + 1);
+  EXPECT_THROW(static_cast<void>(net::packServerStats(stats, true)), std::invalid_argument);
 }
 
 TEST(ServerStats, SubscribeRoundTripsBothWays)

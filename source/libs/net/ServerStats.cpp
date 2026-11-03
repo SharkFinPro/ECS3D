@@ -25,6 +25,14 @@ namespace {
     }
   }
 
+  void requireValid(const bool valid, const char* message)
+  {
+    if (!valid)
+    {
+      throw std::invalid_argument(message);
+    }
+  }
+
   void packTraffic(Message& message, const std::vector<ServerStatsTraffic>& entries)
   {
     requireAtMost(entries.size(), std::numeric_limits<uint8_t>::max(), "traffic entries");
@@ -142,6 +150,15 @@ Message packServerStats(const ServerStats& stats, const bool withNodeTable)
   for (const auto& sample : stats.samples)
   {
     requireAtMost(sample.nodes.size(), maxServerStatsNodes, "sample entries");
+    for (const auto& time : sample.nodes)
+    {
+      requireValid(time.node < maxServerStatsNodes, "serverStats sample names a node past the node cap");
+    }
+  }
+
+  for (const auto& snapshot : stats.snapshots)
+  {
+    requireValid(snapshot.reason <= SnapshotReason::other, "serverStats snapshot reason is out of range");
   }
 
   Message message(MessageType::serverStats);
@@ -156,8 +173,11 @@ Message packServerStats(const ServerStats& stats, const bool withNodeTable)
   {
     requireAtMost(stats.nodes.size(), maxTableNodes, "nodes");
     message.write(static_cast<uint16_t>(stats.nodes.size()));
+    std::size_t index = 0;
     for (const auto& node : stats.nodes)
     {
+      requireValid(node.parent <= index, "serverStats node parent is not an earlier node");
+      ++index;
       message.write(node.parent);
       message.writeString(node.name);
     }
@@ -251,6 +271,7 @@ ServerStats unpackServerStats(const Message& message)
   stats.connections = reader.read<uint16_t>();
   stats.editors = reader.read<uint16_t>();
   stats.objects = reader.read<uint32_t>();
+  // Bytes after objects are ignored; changing the layout means a new version.
   return stats;
 }
 

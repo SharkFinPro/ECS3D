@@ -8,7 +8,8 @@
 #include <string>
 #include <vector>
 
-// Wire (de)serialization for MessageType::serverStats and statsSubscribe. Depends only on ECS3DNetProtocol and SnapshotLog.h, so it compiles into the headless test suite.
+// Wire (de)serialization for MessageType::serverStats and statsSubscribe. Depends only on ECS3DNetProtocol and
+// SnapshotLog.h, so it compiles into the headless test suite.
 namespace net {
 
 inline constexpr uint16_t serverStatsVersion = 1;
@@ -33,6 +34,8 @@ struct ServerStatsNode {
 };
 
 struct ServerStatsNodeTime {
+  // unpack bounds this only by maxServerStatsNodes, so a consumer checks it against the node table it holds, which
+  // may have come in an earlier message.
   uint16_t node = 0;
   uint32_t micros = 0;
   uint16_t calls = 0;
@@ -77,7 +80,8 @@ struct ServerStats {
 };
 
 // withNodeTable chooses whether this copy carries the node table; the rest is identical for every recipient.
-// Throws std::length_error when a vector is past its cap, which is a server bug and never data from the wire.
+// Throws std::length_error when a vector is past its cap, and std::invalid_argument when a sample entry, node parent
+// or snapshot reason is one unpack would refuse. Both are server bugs, never data from the wire.
 [[nodiscard]] Message packServerStats(const ServerStats& stats, bool withNodeTable);
 
 // Throws std::runtime_error on a truncated payload, a version other than serverStatsVersion, a count past its cap or
