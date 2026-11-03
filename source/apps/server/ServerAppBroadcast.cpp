@@ -120,6 +120,25 @@ void ServerApp::sendJoinReply(const int32_t connId) const
   m_netServer->sendTo(connId, replication::buildSceneStatus(m_sceneManager->getSceneStatus()));
 }
 
+uint8_t ServerApp::serverStatsFlags() const
+{
+  uint8_t flags = 0;
+#ifndef NDEBUG
+  flags |= net::serverStatsFlags::debugBuild;
+#endif
+  if (m_options.editMode)
+  {
+    flags |= net::serverStatsFlags::editMode;
+  }
+
+  if (sceneRunning())
+  {
+    flags |= net::serverStatsFlags::sceneRunning;
+  }
+
+  return flags;
+}
+
 void ServerApp::sendServerStatsIfDue(const std::chrono::steady_clock::time_point now)
 {
   if (now - m_lastStatsFeedTime < serverStatsPeriod)
@@ -143,18 +162,7 @@ void ServerApp::sendServerStatsIfDue(const std::chrono::steady_clock::time_point
   ECS3D_PROFILE_SCOPE("Stats");
 
   input.editors = m_netServer->editorCount();
-#ifndef NDEBUG
-  input.flags |= net::serverStatsFlags::debugBuild;
-#endif
-  if (m_options.editMode)
-  {
-    input.flags |= net::serverStatsFlags::editMode;
-  }
-
-  if (sceneRunning())
-  {
-    input.flags |= net::serverStatsFlags::sceneRunning;
-  }
+  input.flags = serverStatsFlags();
 
   // Both copies are packed before takeRecipients records which table each subscriber was sent, so a throw
   // leaves the subscriptions as they were.

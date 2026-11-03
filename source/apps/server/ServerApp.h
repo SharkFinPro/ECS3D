@@ -153,6 +153,9 @@ private:
   // Sends serverStats to the subscribed editors when serverStatsPeriod has passed.
   void sendServerStatsIfDue(std::chrono::steady_clock::time_point now);
 
+  // The serverStats flags this server reports: debug build, edit mode and scene running.
+  [[nodiscard]] uint8_t serverStatsFlags() const;
+
   void handleStatsSubscribe(const net::Message& message, int32_t senderId);
 
   void fixedUpdate(float dt) const;
