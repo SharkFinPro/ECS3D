@@ -107,6 +107,20 @@ connection, editor and object counts. Unpack refuses any other version, a trunca
 an earlier node, an unknown snapshot reason and every count past its cap or past what the remaining bytes could hold,
 before it reserves memory.
 
+## Server statistics to editors
+
+`ServerApp` honors `statsSubscribe` from any connection the transport authorized as `Role::editor`, on an edit or a
+play server (`mayReceiveServerStats` in `ServerPolicy.h`); a player's attempt is refused with one warning per
+connection. A subscription lasts until the connection unsubscribes or drops, so an editor subscribes again after every
+join. `net::StatsSubscriptions` keeps the subscribers and the node-table epoch each was last sent.
+
+`ServerApp::sendServerStatsIfDue` runs after `logStatsIfDue` and sends at most every `serverStatsPeriod` (250 ms).
+`collectServerStats` (`ServerStatsFeed.h`) gathers everything since the previous message: the closed samples, the
+`Server tick` durations, per-type traffic differences and the snapshot records with their age. With no subscriber
+`skipServerStats` only advances the cursor, so a first message carries no backlog. The epoch is the scope tree's node
+count, which only grows; the table goes only to a subscriber last sent a different epoch, and a new subscription
+starts with none, so its first message carries it. Messages go out through `NetServer::sendToConnections`.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.

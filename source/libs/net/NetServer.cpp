@@ -155,15 +155,15 @@ void NetServer::sendToEditors(const Message& message) const
   // the authoritative tick thread, and the transport call is outside the editor-id bookkeeping. Holding the
   // lock across it would make authorize()/isEditor()/takeDisconnected() wait on sending, which they have
   // nothing to do with.
-  sendToMany(m_connections.editorIds(), message);
+  sendToConnections(m_connections.editorIds(), message);
 }
 
 void NetServer::sendTo(const int32_t connId, const Message& message) const
 {
-  sendToMany({connId}, message);
+  sendToConnections({connId}, message);
 }
 
-void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& message) const
+void NetServer::sendToConnections(const std::vector<int32_t>& connIds, const Message& message) const
 {
   if (!m_started)
   {
@@ -188,6 +188,11 @@ void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& m
   m_traffic.countOut(message.getType(), message.size(), connIds.size());
 
   m_transport->sendToMany(connIds, static_cast<uint8_t>(message.getType()), message.bytes());
+}
+
+int NetServer::editorCount() const
+{
+  return static_cast<int>(m_connections.editorIds().size());
 }
 
 int NetServer::connectionCount() const

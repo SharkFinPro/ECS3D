@@ -173,6 +173,17 @@ TEST(ServerPolicyTest, NamedMutationTypes)
   }
 }
 
+TEST(ServerPolicyTest, OnlyAnEditorConnectionMayReceiveServerStats)
+{
+  EXPECT_TRUE(mayReceiveServerStats(true));
+  EXPECT_FALSE(mayReceiveServerStats(false));
+}
+
+TEST(ServerPolicyTest, ServerStatsGoOutAtMostFourTimesASecond)
+{
+  EXPECT_EQ(serverStatsPeriod, std::chrono::milliseconds(250));
+}
+
 TEST(ServerPolicyTest, StatsSubscribeIsNotAMutationSoItPassesOnAnyServer)
 {
   for (const bool editMode : {false, true})

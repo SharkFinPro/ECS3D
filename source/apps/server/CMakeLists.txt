@@ -19,6 +19,7 @@ add_executable(${PROJECT_NAME}
   RestPose.cpp
   RestPose.h
   ServerPolicy.h
+  ServerStatsFeed.h
   ShutdownSignal.cpp
   ShutdownSignal.h
   StatsSummary.h

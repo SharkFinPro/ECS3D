@@ -269,6 +269,51 @@ TEST_F(NetServerTest, ARevokedEditorIsDroppedFromTheFanOut)
   EXPECT_EQ(transport->sendToManyCalls[0].connIds, (std::vector<int32_t>{3}));
 }
 
+TEST_F(NetServerTest, SendToConnectionsMakesOneCallNamingExactlyTheGivenIdsAndCountsTheRecipients)
+{
+  server->start(0, true, "");
+  transport->callbacks.authorized(1, editorRole);
+
+  server->sendToConnections({7, 2}, messageWith(net::MessageType::serverStats, {4, 5, 6}));
+
+  ASSERT_EQ(transport->sendToManyCalls.size(), 1u);
+  EXPECT_EQ(transport->sendToManyCalls[0].connIds, (std::vector<int32_t>{7, 2}));
+  EXPECT_EQ(transport->sendToManyCalls[0].type, static_cast<uint8_t>(net::MessageType::serverStats));
+  EXPECT_EQ(transport->sendToManyCalls[0].payload, (std::vector<uint8_t>{4, 5, 6}));
+  EXPECT_TRUE(transport->broadcastCalls.empty());
+
+  const auto index = static_cast<std::size_t>(net::MessageType::serverStats);
+  const auto out = server->traffic().totalOut();
+  EXPECT_EQ(out.messages[index], 2u);
+  EXPECT_EQ(out.bytes[index], 8u);
+}
+
+TEST_F(NetServerTest, SendToConnectionsWithAnEmptyListSendsNothing)
+{
+  server->start(0, true, "");
+
+  server->sendToConnections({}, messageWith(net::MessageType::serverStats, {1}));
+  EXPECT_TRUE(transport->sendToManyCalls.empty());
+  EXPECT_EQ(server->traffic().totalOut().messages[static_cast<std::size_t>(net::MessageType::serverStats)], 0u);
+
+  server->sendToConnections({3}, messageWith(net::MessageType::serverStats, {1}));
+  EXPECT_EQ(transport->sendToManyCalls.size(), 1u);
+}
+
+TEST_F(NetServerTest, EditorCountFollowsAuthorizeAndRevoke)
+{
+  server->start(0, true, "");
+  EXPECT_EQ(server->editorCount(), 0);
+
+  transport->callbacks.authorized(1, editorRole);
+  transport->callbacks.authorized(2, playerRole);
+  transport->callbacks.authorized(3, editorRole);
+  EXPECT_EQ(server->editorCount(), 2);
+
+  server->revokeEditor(1);
+  EXPECT_EQ(server->editorCount(), 1);
+}
+
 TEST_F(NetServerTest, SendToNamesOnlyThatConnection)
 {
   server->start(0, false, "");

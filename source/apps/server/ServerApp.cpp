@@ -237,6 +237,7 @@ void ServerApp::run()
   // Boot time before the loop must be neither replayed as ticks nor counted as dropped steps.
   m_previousTime = std::chrono::steady_clock::now();
   m_lastStatsTime = m_previousTime;
+  m_lastStatsFeedTime = m_previousTime;
 
   m_lane.bindToThisThread();
   struct LaneUnbinder
@@ -345,6 +346,7 @@ void ServerApp::run()
     }
 
     logStatsIfDue(std::chrono::steady_clock::now());
+    sendServerStatsIfDue(std::chrono::steady_clock::now());
 
     const double openSeconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - m_sampleOpenedAt).count();

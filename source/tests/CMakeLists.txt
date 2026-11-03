@@ -222,7 +222,9 @@ add_executable(${PROJECT_NAME}
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
+  ServerStatsFeedTest.cpp
   ServerStatsTest.cpp
+  StatsSubscriptionsTest.cpp
   StatsSummaryTest.cpp
   TrafficCountersTest.cpp
   SnapshotLogTest.cpp
@@ -270,8 +272,8 @@ add_executable(${PROJECT_NAME}
   # CLR calls stay in ManagedServerTransport and ManagedClientTransport. TransportLog.cpp and ServerLog.cpp are
   # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol. CommandLineSplit.cpp,
   # ClientConnectionState.cpp and EditorConnections.cpp are the CLR-free pieces split out of ServerProcess,
-  # NetClient and NetServer. TrafficCounters.cpp and ServerStats.cpp are plain C++, and the header-only
-  # SnapshotLog.h needs no source.
+  # NetClient and NetServer. TrafficCounters.cpp, ServerStats.cpp and StatsSubscriptions.cpp are plain C++, and the
+  # header-only SnapshotLog.h needs no source.
   # NetServer.cpp and NetClient.cpp compile in too: they reach the C# transport
   # only through ServerTransport/ClientTransport, and the CLR-backed ManagedServerTransport and
   # ManagedClientTransport stay out (the tests drive a fake from FakeTransports.h).
@@ -284,6 +286,7 @@ add_executable(${PROJECT_NAME}
   ../libs/net/NetClient.cpp
   ../libs/net/TrafficCounters.cpp
   ../libs/net/ServerStats.cpp
+  ../libs/net/StatsSubscriptions.cpp
   # The Transform/RigidBody/Camera/InputUtils binding providers (and InputState, which InputUtilsBindings
   # reads) depend only on ECS3DData, so they are compiled in directly for the same reason as LogBindings.
   ../libs/scripting/bindings/TransformBindings.cpp
