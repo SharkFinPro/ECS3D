@@ -16,8 +16,8 @@ notes are in [docs/architecture/transport.md](../../../docs/architecture/transpo
   disconnect join every socket thread before clearing the `g_activeServer`/`g_activeClient` pointers the callbacks
   read.
 - `MessageQueue.cpp`, `CommandLineSplit.cpp`, `ClientConnectionState.cpp`, `EditorConnections.cpp`, `RemoteStats.cpp`,
-  `ServerStats.cpp`, `StatsSubscriptions.cpp`, `NetServer.cpp` and `NetClient.cpp` compile into the test suite, so they stay free of the
-  CLR: every managed call belongs in `ManagedServerTransport`/`ManagedClientTransport`, behind
+  `ServerStats.cpp`, `StatsSubscriptions.cpp`, `NetServer.cpp` and `NetClient.cpp` compile into the test suite, so
+  they stay free of the CLR: every managed call belongs in `ManagedServerTransport`/`ManagedClientTransport`, behind
   `ServerTransport`/`ClientTransport`. `EditToken.h` (`net::generateEditToken`, 128 bits from `std::random_device`) is
   header-only so the suite can include it too.
 - Appending a `MessageType` also updates `messageTypeCount`, the `static_assert`'s last enumerator and
