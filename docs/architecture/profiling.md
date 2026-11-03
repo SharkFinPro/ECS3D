@@ -133,6 +133,24 @@ each duration is sent once, in a later message than its sample. A failure to bui
 consecutive failures and the server keeps running; both packed copies are built before the node-table epochs are
 recorded, so a failure loses no subscription state.
 
+## Display model
+
+`ProfilerView.h` is the headless model the Profiler panel draws from; it is pure computation over a `History` and a
+`ViewNode` table (`viewNodes(ScopeTree)` for a local lane, or filled from a remote node table).
+
+- **Groups.** Each `LaneKind` has a fixed, ordered list of `DisplayGroup`s ending in "Other": frame lanes show Network
+  in, Input, Editor UI, Scene prep, Renderer, Profiler; the server lane shows Scripts, Physics, Collisions,
+  Replication, Network in. One rule table per kind in `ProfilerView.cpp` maps scope names (and, for the server's
+  phases, the parent `Server tick`) to groups; a node takes its nearest matching ancestor-or-self, else Other.
+- **Exclusive time.** `groupMicros` charges each node its micros minus its direct children's (clamped at 0), so
+  nested scopes are not counted twice. Hidden groups read 0.
+- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`.
+- **Auto scale.** `autoScaleMillis(p99)` picks 16.7, 33.3, 50 or 100 ms, then whole multiples of 100 ms.
+- **Columns.** `buildColumns` gives one column per sample; past `maxColumns`, adjacent samples merge by max, with
+  hitch OR'ed, so a spike survives downsampling. A column's `sequence` is its newest sample, which a click selects.
+- **Breakdown.** `breakdownRows` lists active nodes depth first with the selected (or newest) sample's value plus the
+  window's average, p95, max and share of the average wall time.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.

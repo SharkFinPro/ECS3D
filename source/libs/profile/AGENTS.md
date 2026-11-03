@@ -18,3 +18,4 @@ the suite pins their edge cases.
 - A change to the ticket encoding must keep a stale `exit` harmless: the sample sequence and the depth both have to
   match.
 - Tests drive a `Lane` with an injected clock and never assert on the real one. Unbind the lane at the end of each test.
+- Display groups map from scope names in `ProfilerView.cpp`'s rule tables; renaming a scope means updating them.
