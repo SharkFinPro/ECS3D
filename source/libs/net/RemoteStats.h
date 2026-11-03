@@ -39,12 +39,16 @@ public:
   // Clears everything and starts waiting: a new subscription gets a fresh node table from the server.
   void subscribed();
   void unsubscribed();
+  // Does nothing when idle.
   void disconnected();
 
-  // Reads the version first: another version logs one warning per subscription and moves to unsupported without
-  // throwing. Otherwise unpacks, letting a malformed message's exception propagate, and applies. Ignored when idle or
-  // disconnected.
+  // Ignores any type but serverStats. Reads the version first: another version logs one warning per subscription and
+  // moves to unsupported without throwing. Otherwise unpacks, letting a malformed message's exception propagate, and
+  // applies. Ignored when idle or disconnected.
   void apply(const Message& message);
+
+  // Keeps at most profile::maxNodes nodes (root included) and skips sample entries past the held table or that cap,
+  // so it is safe for a ServerStats that did not come from unpack.
   void apply(const ServerStats& stats);
 
   // Evaluated against the clock on each call.

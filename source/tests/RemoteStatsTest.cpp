@@ -2,6 +2,7 @@
 
 #include <Protocol.h>
 #include <RemoteStats.h>
+#include <ScopeTree.h>
 #include <ServerStats.h>
 
 #include <chrono>
@@ -114,16 +115,23 @@ TEST_F(RemoteStatsTest, SubscribingClearsEverything)
 {
   stats.subscribed();
   auto message = table();
-  message.samples = {{100, 1, 0, {{1, 5, 1}}}};
+  message.samples = {{100, 1, 0, {{1, 5, 1}, {50, 5, 1}}}};
   message.tickMicros = {8000};
   message.snapshots = {{10, 100, net::SnapshotReason::join, 5, 1}};
+  message.flags |= net::serverStatsFlags::editMode;
   message.connections = 2;
+  message.editors = 1;
+  message.objects = 9;
   stats.apply(message);
   ASSERT_EQ(stats.history().size(), 1u);
   ASSERT_EQ(stats.tickDurations().size(), 1u);
   ASSERT_EQ(stats.nodeCount(), 3u);
   ASSERT_EQ(stats.trafficBatches().size(), 1u);
   ASSERT_EQ(stats.snapshots().size(), 1u);
+  ASSERT_EQ(stats.unknownNodeEntries(), 1u);
+  ASSERT_NE(stats.flags(), 0u);
+  ASSERT_EQ(stats.editors(), 1u);
+  ASSERT_EQ(stats.objects(), 9u);
 
   stats.subscribed();
 
@@ -134,7 +142,17 @@ TEST_F(RemoteStatsTest, SubscribingClearsEverything)
   EXPECT_TRUE(stats.trafficBatches().empty());
   EXPECT_TRUE(stats.snapshots().empty());
   EXPECT_EQ(stats.connections(), 0u);
+  EXPECT_EQ(stats.editors(), 0u);
+  EXPECT_EQ(stats.objects(), 0u);
+  EXPECT_EQ(stats.flags(), 0u);
+  EXPECT_EQ(stats.unknownNodeEntries(), 0u);
   EXPECT_EQ(stats.state(), State::waiting);
+
+  stats.apply(withSample(100, 0));
+  ASSERT_EQ(stats.history().size(), 1u);
+  EXPECT_EQ(stats.history().newest().sequence, 1u);
+  EXPECT_EQ(stats.history().newest().startNanos, 0);
+  // The one-warning-per-subscription flag has no observable effect without a log hook, so it is not asserted.
 }
 
 TEST_F(RemoteStatsTest, TheTableIsKeptByLaterMessagesWithoutOne)
@@ -357,4 +375,105 @@ TEST_F(RemoteStatsTest, PackedMessagesApplyAndTruncatedOnesThrow)
   const net::Message tiny(net::MessageType::serverStats, bytes.first(1));
   EXPECT_THROW(stats.apply(tiny), std::runtime_error);
   EXPECT_EQ(stats.history().size(), 1u);
+}
+
+TEST_F(RemoteStatsTest, ApplyingDirectlyBoundsNodeIdsByTheProfileCap)
+{
+  stats.subscribed();
+  auto message = table();
+  message.nodes.assign(200, {0, "n"});
+  message.samples = {{100, 1, 0, {{150, 9, 1}, {5, 7, 2}}}};
+  stats.apply(message);
+
+  EXPECT_EQ(stats.nodeCount(), profile::maxNodes);
+  EXPECT_EQ(stats.unknownNodeEntries(), 1u);
+  ASSERT_EQ(stats.history().size(), 1u);
+  EXPECT_EQ(stats.history().newest().nodeMicros[5], 7u);
+  EXPECT_EQ(stats.history().newest().nodeCalls[5], 2u);
+  EXPECT_NO_THROW(static_cast<void>(stats.nodeName(profile::maxNodes - 1)));
+  EXPECT_THROW(static_cast<void>(stats.nodeName(profile::maxNodes)), std::out_of_range);
+}
+
+TEST_F(RemoteStatsTest, ANodeEntryPastTheProfileCapIsSkippedEvenWithoutATable)
+{
+  stats.subscribed();
+  stats.apply(withSample(100, static_cast<uint16_t>(profile::maxNodes)));
+  EXPECT_EQ(stats.unknownNodeEntries(), 1u);
+  ASSERT_EQ(stats.history().size(), 1u);
+
+  stats.apply(withSample(100, 0));
+  EXPECT_EQ(stats.unknownNodeEntries(), 1u);
+  EXPECT_EQ(stats.history().newest().nodeMicros[0], 700u);
+}
+
+TEST_F(RemoteStatsTest, OtherMessageTypesAreIgnored)
+{
+  stats.subscribed();
+  auto message = table();
+  message.samples = {{100, 1, 0, {{1, 5, 1}}}};
+  const auto packed = net::packServerStats(message, true);
+  const auto bytes = packed.bytes();
+
+  const net::Message wrongType(net::MessageType::stateDelta, bytes);
+  stats.apply(wrongType);
+  EXPECT_EQ(stats.history().size(), 0u);
+  EXPECT_EQ(stats.nodeCount(), 1u);
+  EXPECT_EQ(stats.state(), State::waiting);
+
+  stats.apply(packed);
+  EXPECT_EQ(stats.history().size(), 1u);
+  EXPECT_EQ(stats.nodeCount(), 3u);
+  EXPECT_EQ(stats.state(), State::live);
+}
+
+TEST_F(RemoteStatsTest, DisconnectingWhileIdleStaysIdle)
+{
+  stats.disconnected();
+  EXPECT_EQ(stats.state(), State::idle);
+
+  stats.subscribed();
+  ASSERT_EQ(stats.state(), State::waiting);
+  stats.disconnected();
+  EXPECT_EQ(stats.state(), State::disconnected);
+}
+
+TEST_F(RemoteStatsTest, AWaitingStoreWithAnotherVersionTurnsLiveOnAGoodMessage)
+{
+  stats.subscribed();
+  auto message = table();
+  message.samples = {{100, 1, 0, {{1, 5, 1}}}};
+  const auto packed = net::packServerStats(message, true);
+
+  stats.apply(withVersion(packed, 2));
+  EXPECT_EQ(stats.state(), State::unsupported);
+  EXPECT_EQ(stats.history().size(), 0u);
+
+  stats.apply(withVersion(packed, net::serverStatsVersion));
+  EXPECT_EQ(stats.state(), State::live);
+  EXPECT_EQ(stats.history().size(), 1u);
+}
+
+TEST_F(RemoteStatsTest, UnsupportedByTimeoutBecomesIdleWhenUnsubscribed)
+{
+  stats.subscribed();
+  now += 3s;
+  ASSERT_EQ(stats.state(), State::unsupported);
+
+  stats.unsubscribed();
+  EXPECT_EQ(stats.state(), State::idle);
+  now += 10s;
+  EXPECT_EQ(stats.state(), State::idle);
+}
+
+TEST_F(RemoteStatsTest, NodeAccessorsThrowPastTheTable)
+{
+  EXPECT_THROW(static_cast<void>(stats.nodeParent(1)), std::out_of_range);
+  EXPECT_THROW(static_cast<void>(stats.nodeName(1)), std::out_of_range);
+
+  stats.subscribed();
+  stats.apply(table());
+  EXPECT_EQ(stats.nodeParent(2), 1u);
+  EXPECT_EQ(stats.nodeName(2), "Physics");
+  EXPECT_THROW(static_cast<void>(stats.nodeParent(3)), std::out_of_range);
+  EXPECT_THROW(static_cast<void>(stats.nodeName(3)), std::out_of_range);
 }

@@ -1,15 +1,19 @@
 #include "RemoteStats.h"
 #include <Log.h>
+#include <algorithm>
 #include <utility>
 
 namespace net {
 
+static_assert(maxServerStatsNodes == profile::maxNodes);
+
 RemoteStats::RemoteStats(NowFunction now)
   : m_now(std::move(now)),
     m_history(historyCapacity),
-    m_ticks(maxServerStatsTicks)
+    m_ticks(maxServerStatsTicks),
+    m_parents(1, 0),
+    m_names(1)
 {
-  reset();
 }
 
 void RemoteStats::reset()
@@ -45,12 +49,20 @@ void RemoteStats::unsubscribed()
 
 void RemoteStats::disconnected()
 {
-  m_state = State::disconnected;
+  if (m_state != State::idle)
+  {
+    m_state = State::disconnected;
+  }
 }
 
 void RemoteStats::apply(const Message& message)
 {
   if (m_state == State::idle || m_state == State::disconnected)
+  {
+    return;
+  }
+
+  if (message.getType() != MessageType::serverStats)
   {
     return;
   }
@@ -85,10 +97,11 @@ void RemoteStats::apply(const ServerStats& stats)
   {
     m_parents.assign(1, 0);
     m_names.assign(1, std::string());
-    for (const auto& node : stats.nodes)
+    const auto kept = std::min(stats.nodes.size(), maxServerStatsNodes - 1);
+    for (std::size_t i = 0; i < kept; ++i)
     {
-      m_parents.push_back(node.parent);
-      m_names.push_back(node.name);
+      m_parents.push_back(stats.nodes[i].parent);
+      m_names.push_back(stats.nodes[i].name);
     }
     m_epoch = stats.nodeTableEpoch;
   }
@@ -109,7 +122,7 @@ void RemoteStats::apply(const ServerStats& stats)
 
     for (const auto& entry : source.nodes)
     {
-      if (entry.node >= m_parents.size())
+      if (entry.node >= profile::maxNodes || entry.node >= m_parents.size())
       {
         ++m_unknownNodeEntries;
         continue;
