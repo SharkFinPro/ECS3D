@@ -27,6 +27,8 @@ TEST(MessageTypeName, EveryTypeBelowTheCountHasADistinctRealName)
   EXPECT_EQ(names.size(), net::messageTypeCount);
   EXPECT_EQ(net::messageTypeName(net::MessageType::stateDelta), "stateDelta");
   EXPECT_EQ(net::messageTypeName(net::MessageType::possessSlot), "possessSlot");
+  EXPECT_EQ(net::messageTypeName(net::MessageType::statsSubscribe), "statsSubscribe");
+  EXPECT_EQ(net::messageTypeName(net::MessageType::serverStats), "serverStats");
 }
 
 TEST(MessageTypeName, ATypeBeyondTheCountIsUnknown)

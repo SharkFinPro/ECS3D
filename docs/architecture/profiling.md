@@ -96,6 +96,17 @@ ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ti
   An idle interval that still sent or received bytes or recorded a snapshot (a stopped edit server taking scene edits)
   is logged every time, as `stats: idle (no ticks) | sent ... recv ... | conns N | snapshots ...`.
 
+## Server statistics on the wire
+
+`MessageType::serverStats` carries a server lane's numbers to an editor, and `MessageType::statsSubscribe` (a bool)
+asks for them. `net/ServerStats.cpp` owns the layout and its caps (`packServerStats`, `unpackServerStats`), version 1:
+the flags (debug build, edit mode, scene running, node table present), the node-table epoch, then optionally the node
+table (each node's parent and name; node 0 is the root and has no entry), the samples with their non-zero nodes, the
+`Server tick` durations, per-type traffic in each direction, snapshot records with their age in milliseconds, and the
+connection, editor and object counts. Unpack refuses any other version, a truncated payload, a node parent that is not
+an earlier node, an unknown snapshot reason and every count past its cap or past what the remaining bytes could hold,
+before it reserves memory.
+
 ## Switches
 
 - `ECS3D_PROFILER_SCOPES` is a CMake option (default ON) that defines the macro of the same name for every consumer.
