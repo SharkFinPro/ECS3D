@@ -19,6 +19,8 @@ add_library(${PROJECT_NAME}
   NetClient.cpp
   NetClient.h
   EditToken.h
+  RemoteStats.cpp
+  RemoteStats.h
   ServerLog.cpp
   ServerStats.cpp
   ServerStats.h
@@ -47,6 +49,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DLog
   ECS3DClrHost
   ECS3DNetProtocol
+  ECS3DProfile
   ECS3DLog
 )
 

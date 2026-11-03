@@ -121,6 +121,13 @@ join. `net::StatsSubscriptions` keeps the subscribers and the node-table epoch e
 count, which only grows; the table goes only to a subscriber last sent a different epoch, and a new subscription
 starts with none, so its first message carries it. Messages go out through `NetServer::sendToConnections`.
 
+`net::RemoteStats` (`net/RemoteStats.h`) is the editor's copy of that data, touched on the main thread only. It rebuilds
+a `profile::History`, the tick ring, the node table (kept as strings and never interned, so a remote peer cannot grow
+the editor's name table), the traffic batches and the snapshot records from each `serverStats` message. It is `idle`
+until `subscribed()` clears it and starts `waiting`; a first message makes it `live`, and two seconds of silence, or a
+version other than 1, make it `unsupported` (a later good message turns it live again). `disconnected()` keeps the data
+for display. Sample entries naming a node the held table lacks are skipped and counted.
+
 Tick durations are taken as their scopes exit, so a message can carry durations from a sample that is still open, and
 each duration is sent once, in a later message than its sample. A failure to build or send is logged once per run of
 consecutive failures and the server keeps running; both packed copies are built before the node-table epochs are
