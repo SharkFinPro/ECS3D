@@ -12,6 +12,8 @@ add_library(${PROJECT_NAME}
   ProfileScope.h
   ProfileStats.cpp
   ProfileStats.h
+  ProfilerView.cpp
+  ProfilerView.h
   ScopeTree.cpp
   ScopeTree.h
 )
