@@ -154,6 +154,12 @@ namespace profilerPanelState {
       paused = false;
       selectedSequence = 0;
     }
+
+    // A closed panel reopens live.
+    void close()
+    {
+      resume();
+    }
   };
 }
 

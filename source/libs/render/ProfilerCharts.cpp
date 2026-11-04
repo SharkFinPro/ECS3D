@@ -142,15 +142,24 @@ namespace profilerCharts {
 
       ImGui::PushID(static_cast<int>(i));
 
+      const float textWidth = ImGui::CalcTextSize(labelBegin, labelEnd).x;
+      const float swatchWidth = box + 4.0f + textWidth;
+
       if (i > 0)
       {
-        ImGui::SameLine();
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float usedRight = ImGui::GetItemRectMax().x;
+        const float limit = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+
+        if (usedRight + spacing + swatchWidth <= limit)
+        {
+          ImGui::SameLine();
+        }
       }
 
       const ImVec2 position = ImGui::GetCursorScreenPos();
-      const float textWidth = ImGui::CalcTextSize(labelBegin, labelEnd).x;
 
-      if (ImGui::InvisibleButton("##legend", ImVec2(box + 4.0f + textWidth, box)))
+      if (ImGui::InvisibleButton("##legend", ImVec2(swatchWidth, box)))
       {
         hiddenMask ^= bit;
       }

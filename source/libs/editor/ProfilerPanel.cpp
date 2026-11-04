@@ -60,6 +60,12 @@ bool ProfilerPanel::isOpen() const
 void ProfilerPanel::setOpen(const bool open)
 {
   m_open = open;
+
+  if (!open)
+  {
+    m_interaction.close();
+    m_frozen.reset();
+  }
 }
 
 void ProfilerPanel::toggle()
@@ -142,6 +148,12 @@ void ProfilerPanel::displayLane(const profile::History& history)
                                                            m_interaction.selectedSequence,
                                                            ImGui::GetFontSize() * 9.0f);
   m_interaction.clickColumn(clicked);
+
+  // Freeze from the history just drawn, so the selected column keeps its merged boundaries.
+  if (m_interaction.paused && !m_frozen)
+  {
+    m_frozen.emplace(m_lane.history());
+  }
 
   const uint32_t previousMask = m_hiddenMask;
   profilerCharts::drawLegend(groups, m_hiddenMask);

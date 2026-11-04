@@ -246,7 +246,7 @@ void EditorApp::applyDockMinimumSizes() const
   const ImVec2 assetsMinimumSize{0.0f, 200.0f};
   const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
   const ImVec2 consoleMinimumSize{0.0f, 120.0f};
-  const ImVec2 profilerMinimumSize{0.0f, 220.0f};
+  const ImVec2 profilerMinimumSize{0.0f, 120.0f};
 
   gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
   gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);

@@ -82,6 +82,7 @@ TEST_F(ProfilerPanelState, ChoicesRoundTripThroughAReloadedStore)
   EXPECT_DOUBLE_EQ(profilerPanelState::readScaleMillis(reloaded), profile::fixedScalesMillis[2]);
   EXPECT_EQ(profilerPanelState::readHiddenMask(reloaded), maskOf("renderer") | maskOf("input"));
   EXPECT_NE(maskOf("renderer"), 0u);
+  EXPECT_NE(maskOf("input"), 0u);
 }
 
 TEST_F(ProfilerPanelState, HiddenGroupsAreStoredAsGroupIds)
@@ -191,6 +192,18 @@ TEST(ProfilerPanelInteraction, ResumeClearsThePauseAndTheSelection)
   interaction.clickColumn(42);
 
   interaction.togglePause();
+
+  EXPECT_FALSE(interaction.paused);
+  EXPECT_EQ(interaction.selectedSequence, 0u);
+}
+
+TEST(ProfilerPanelInteraction, ClosingDropsThePauseAndTheSelection)
+{
+  profilerPanelState::Interaction interaction;
+  interaction.clickColumn(42);
+  ASSERT_TRUE(interaction.paused);
+
+  interaction.close();
 
   EXPECT_FALSE(interaction.paused);
   EXPECT_EQ(interaction.selectedSequence, 0u);
