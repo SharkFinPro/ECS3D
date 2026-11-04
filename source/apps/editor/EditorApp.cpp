@@ -196,6 +196,8 @@ void EditorApp::setupSceneOverlay()
                               snap, sceneHovered);
 
       acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
+
+      drawStatsReadout(drawList, rect.x, rect.y, rect.width);
     });
 }
 
@@ -436,6 +438,8 @@ void EditorApp::run()
 
     {
       ECS3D_PROFILE_SCOPE("Editor UI");
+
+      updateServerStats();
 
       updateGui();
     }

@@ -11,4 +11,14 @@ namespace editorViewportSettings {
   {
     settings.set(showGridKey, show);
   }
+
+  bool readStatsReadout(const SettingsStore& settings)
+  {
+    return settings.get<bool>(statsReadoutKey, defaultStatsReadout);
+  }
+
+  void writeStatsReadout(SettingsStore& settings, const bool show)
+  {
+    settings.set(statsReadoutKey, show);
+  }
 }

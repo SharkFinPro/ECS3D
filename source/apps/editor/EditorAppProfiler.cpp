@@ -1,15 +1,22 @@
 #include "EditorApp.h"
+#include <EditorViewportSettings.h>
 #include <NetClient.h>
 #include <ProfilerPanel.h>
+#include <ProfilerPanelState.h>
+#include <ProfilerReadout.h>
+#include <ProfileScope.h>
 #include <Protocol.h>
 #include <RemoteStatsSummary.h>
 #include <ServerStats.h>
+#include <SettingsStore.h>
 #include <SnapshotLog.h>
 #include <TrafficCounters.h>
+#include <imgui.h>
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace {
   ServerLaneState laneState(const net::RemoteStats::State state)
@@ -56,7 +63,9 @@ namespace {
 
 void EditorApp::updateServerStats()
 {
-  const bool wanted = m_profilerPanel->wantsServerStats();
+  m_statsReadoutOn = editorViewportSettings::readStatsReadout(*m_settings);
+
+  const bool wanted = profilerPanelState::wantsServerStats(m_profilerPanel->isOpen(), m_statsReadoutOn);
   const bool connected = m_netClient->isConnected();
 
   if (wanted != m_statsSubscribed)
@@ -152,4 +161,46 @@ void EditorApp::fillServerLane()
   m_serverLane.editors = m_remoteStats.editors();
   m_serverLane.editorReceivedBytesPerSecond =
     m_receiveRate.update(totalBytes(m_netClient->traffic().totalIn()), now);
+}
+
+void EditorApp::drawStatsReadout(ImDrawList* drawList, const float sceneX, const float sceneY, const float sceneWidth)
+{
+  if (!m_statsReadoutOn)
+  {
+    return;
+  }
+
+  ECS3D_PROFILE_SCOPE("Profiler");
+
+  const auto lines = profilerReadout::lines(m_profileLane.history(), m_serverLane);
+
+  constexpr float margin = 8.0f;
+  constexpr float padding = 6.0f;
+  const float lineHeight = ImGui::GetTextLineHeight();
+
+  // A fixed template keeps the left edge from jittering as the digits change.
+  float textWidth = ImGui::CalcTextSize("000.0 ms  000 fps").x;
+  std::vector<float> widths;
+  widths.reserve(lines.size());
+
+  for (const auto& line : lines)
+  {
+    widths.push_back(ImGui::CalcTextSize(line.c_str()).x);
+    textWidth = std::max(textWidth, widths.back());
+  }
+
+  const float right = sceneX + sceneWidth - margin;
+  const float top = sceneY + margin;
+  const ImVec2 boxMin(right - textWidth - 2.0f * padding, top);
+  const ImVec2 boxMax(right, top + lineHeight * static_cast<float>(lines.size()) + 2.0f * padding);
+
+  drawList->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 140), 4.0f);
+
+  float y = top + padding;
+
+  for (std::size_t i = 0; i < lines.size(); ++i)
+  {
+    drawList->AddText(ImVec2(right - padding - widths[i], y), IM_COL32(235, 235, 235, 255), lines[i].c_str());
+    y += lineHeight;
+  }
 }

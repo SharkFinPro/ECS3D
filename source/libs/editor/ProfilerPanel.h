@@ -34,9 +34,6 @@ public:
   // The server's figures for this frame. The pointer is read during displayGui only, so it need only outlive that call.
   void setServerLane(const ServerLaneInput* input);
 
-  // Whether the editor should have the server streaming statistics: only while the panel is open.
-  [[nodiscard]] bool wantsServerStats() const;
-
   [[nodiscard]] int windowSeconds() const;
 
 private:

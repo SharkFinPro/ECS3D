@@ -44,6 +44,7 @@ add_library(${PROJECT_NAME}
   ProfilerPanel.cpp
   ProfilerPanel.h
   ProfilerPanelState.h
+  ProfilerReadout.h
   SceneScriptsPanel.cpp
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h

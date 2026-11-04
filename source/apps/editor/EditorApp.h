@@ -29,6 +29,7 @@ namespace vke {
 }
 
 class ManagedHost;
+struct ImDrawList;
 class Component;
 class ComponentRegistry;
 class AssetRegistry;
@@ -213,6 +214,7 @@ private:
   ServerLaneInput m_serverLane;
   profilerServerLane::RateMeter m_receiveRate;
   bool m_statsSubscribed = false;
+  bool m_statsReadoutOn = false;
   uint32_t m_serverNodesEpoch = 0;
 
   // The player slot the server bound this connection's input to (-1 until it says). Changes only when the
@@ -360,9 +362,12 @@ private:
 
   void updateGui();
 
-  // Subscribes to or unsubscribes from the server's statistics to match the Profiler panel, then hands the panel
-  // this frame's figures.
+  // Subscribes to or unsubscribes from the server's statistics while the Profiler panel is open or the corner
+  // readout is on, then hands the panel this frame's figures.
   void updateServerStats();
+
+  // Draws the stats readout at the top-right of the scene view's rectangle when its setting is on.
+  void drawStatsReadout(ImDrawList* drawList, float sceneX, float sceneY, float sceneWidth);
 
   void fillServerLane();
 

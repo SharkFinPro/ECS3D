@@ -318,6 +318,12 @@ void SettingsPanel::displayViewport()
     editorViewportSettings::writeShowGrid(*m_settings, showGrid);
   }
 
+  bool statsReadout = editorViewportSettings::readStatsReadout(*m_settings);
+  if (gc::accentCheckbox("Stats readout", &statsReadout))
+  {
+    editorViewportSettings::writeStatsReadout(*m_settings, statsReadout);
+  }
+
   ImGui::Spacing();
   ImGui::Separator();
   ImGui::Spacing();

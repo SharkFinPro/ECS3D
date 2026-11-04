@@ -133,7 +133,8 @@ in your scripts appear here too.
 Open Window, then Settings. It has three sections.
 
 - Appearance: the editor's colors.
-- Viewport: camera speed, Show Grid and the gizmo snap options. The grid shows only through the Editor Camera.
+- Viewport: camera speed, Show Grid, the Stats readout (frame, server tick and network figures in the viewport
+  corner) and the gizmo snap options. The grid shows only through the Editor Camera.
 - Keybinds: every action with its current key, plus Rebind, Unbind and Reset buttons, and Reset all to
   defaults. Rebinding to a key another action already uses is refused and names that action.
 

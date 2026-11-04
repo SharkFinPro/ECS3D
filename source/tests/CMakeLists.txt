@@ -168,6 +168,7 @@ add_executable(${PROJECT_NAME}
   ProfilerViewTest.cpp
   ProfilerChartLayoutTest.cpp
   ProfilerPanelStateTest.cpp
+  ProfilerReadoutTest.cpp
   ProfilerServerLaneTest.cpp
   StatsOverlayTest.cpp
   InertiaTensorBehaviorTest.cpp

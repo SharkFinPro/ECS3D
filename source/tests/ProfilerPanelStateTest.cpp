@@ -57,6 +57,14 @@ namespace {
   }
 }
 
+TEST(ProfilerPanelStateSubscription, TheServerIsWantedWhileThePanelIsOpenOrTheReadoutIsOn)
+{
+  EXPECT_FALSE(profilerPanelState::wantsServerStats(false, false));
+  EXPECT_TRUE(profilerPanelState::wantsServerStats(true, false));
+  EXPECT_TRUE(profilerPanelState::wantsServerStats(false, true));
+  EXPECT_TRUE(profilerPanelState::wantsServerStats(true, true));
+}
+
 TEST_F(ProfilerPanelState, DefaultsApplyWhenNothingIsStored)
 {
   const SettingsStore settings(m_file);

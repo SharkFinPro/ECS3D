@@ -128,7 +128,8 @@ namespace profilerServerLane {
   [[nodiscard]] inline std::string formatRate(const double bytesPerSecond)
   {
     constexpr const char* units[] = {"B/s", "KB/s", "MB/s", "GB/s"};
-    double value = bytesPerSecond > 0.0 ? bytesPerSecond : 0.0;
+    constexpr double maxRate = 1.0e18;
+    double value = bytesPerSecond > 0.0 ? (bytesPerSecond < maxRate ? bytesPerSecond : maxRate) : 0.0;
     std::size_t unit = 0;
 
     const auto printed = [](const double v, const std::size_t u) {

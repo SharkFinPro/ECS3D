@@ -44,6 +44,39 @@ TEST_F(EditorViewportSettings, ShowGridDefaultsToTrue)
   EXPECT_TRUE(editorViewportSettings::readShowGrid(settings));
 }
 
+TEST_F(EditorViewportSettings, StatsReadoutDefaultsToOff)
+{
+  const SettingsStore settings(m_file);
+
+  EXPECT_FALSE(editorViewportSettings::defaultStatsReadout);
+  EXPECT_FALSE(editorViewportSettings::readStatsReadout(settings));
+}
+
+TEST_F(EditorViewportSettings, StatsReadoutRoundTripsAndIsIndependentOfTheGrid)
+{
+  SettingsStore settings(m_file);
+
+  editorViewportSettings::writeStatsReadout(settings, true);
+  EXPECT_TRUE(editorViewportSettings::readStatsReadout(settings));
+  EXPECT_TRUE(editorViewportSettings::readShowGrid(settings));
+
+  editorViewportSettings::writeStatsReadout(settings, false);
+  EXPECT_FALSE(editorViewportSettings::readStatsReadout(settings));
+}
+
+TEST_F(EditorViewportSettings, StatsReadoutOfTheWrongTypeFallsBackToTheDefault)
+{
+  std::filesystem::create_directories(m_directory);
+  {
+    std::ofstream out(m_file);
+    out << R"({"editor.viewport.statsReadout": "yes"})";
+  }
+
+  const SettingsStore settings(m_file);
+
+  EXPECT_FALSE(editorViewportSettings::readStatsReadout(settings));
+}
+
 TEST_F(EditorViewportSettings, ShowGridRoundTripsBothValues)
 {
   SettingsStore settings(m_file);

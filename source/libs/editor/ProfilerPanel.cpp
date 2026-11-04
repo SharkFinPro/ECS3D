@@ -1,5 +1,6 @@
 #include "ProfilerPanel.h"
 #include "EditorTheme.h"
+#include <EditorViewportSettings.h>
 #include <Lane.h>
 #include <ProfilerCharts.h>
 #include <ProfilerView.h>
@@ -77,11 +78,6 @@ void ProfilerPanel::setServerLane(const ServerLaneInput* input)
   m_serverInput = input;
 }
 
-bool ProfilerPanel::wantsServerStats() const
-{
-  return m_open;
-}
-
 int ProfilerPanel::windowSeconds() const
 {
   return m_windowSeconds;
@@ -152,6 +148,14 @@ void ProfilerPanel::displayHeader()
     }
 
     ImGui::EndCombo();
+  }
+
+  ImGui::SameLine();
+
+  bool readout = editorViewportSettings::readStatsReadout(m_settings);
+  if (ImGui::Checkbox("Corner readout", &readout))
+  {
+    editorViewportSettings::writeStatsReadout(m_settings, readout);
   }
 
 #ifndef NDEBUG
