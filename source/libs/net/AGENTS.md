@@ -19,7 +19,7 @@ notes are in [docs/architecture/transport.md](../../../docs/architecture/transpo
   `ServerStats.cpp`, `StatsSubscriptions.cpp`, `NetServer.cpp` and `NetClient.cpp` compile into the test suite, so
   they stay free of the CLR: every managed call belongs in `ManagedServerTransport`/`ManagedClientTransport`, behind
   `ServerTransport`/`ClientTransport`. `EditToken.h` (`net::generateEditToken`, 128 bits from `std::random_device`) is
-  header-only so the suite can include it too, as is `TrafficRates.h`.
+  header-only so the suite can include it too, and so is `TrafficRates.h`.
 - Appending a `MessageType` also updates `messageTypeCount`, the `static_assert`'s last enumerator and
   `messageTypeName` in `Protocol.h`; nothing fails if one is missed.
 - `ServerProcess` launches a child server from one flag string. `CommandLineSplit` splits it on Linux and macOS,

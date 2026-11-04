@@ -249,14 +249,14 @@ void ClientApp::displayConnectionNotice()
 
 void ClientApp::displayStatsOverlay()
 {
+  m_inboundRates.update(m_netClient->traffic().totalIn(), std::chrono::steady_clock::now());
+
   if (m_statsMode == StatsOverlayMode::off)
   {
     return;
   }
 
   ECS3D_PROFILE_SCOPE("Profiler");
-
-  m_inboundRates.update(m_netClient->traffic().totalIn(), std::chrono::steady_clock::now());
 
   const auto& history = m_profileLane.history();
   const auto summary = profile::summarizeLane(history, profile::windowSize(history, 1.0));
@@ -413,7 +413,7 @@ void ClientApp::variableUpdate() const
   }
 }
 
-void ClientApp::applyMessage(const net::Message& message) const
+void ClientApp::applyMessage(const net::Message& message)
 {
   switch (message.getType())
   {
@@ -449,7 +449,7 @@ void ClientApp::applyMessage(const net::Message& message) const
   }
 }
 
-void ClientApp::handleSnapshot(const net::Message& message) const
+void ClientApp::handleSnapshot(const net::Message& message)
 {
   ECS3D_PROFILE_SCOPE("Snapshot apply");
 

@@ -20,6 +20,8 @@ struct TrafficRateRow {
 };
 
 // Bytes per second from a monotonic total, recomputed at most once per minInterval so the figures do not flicker.
+// A rate is the average since the previous recompute, so the caller updates every frame: a meter updated only now and
+// then reports the whole gap between its updates.
 class TrafficRateMeter {
 public:
   using Clock = std::chrono::steady_clock;

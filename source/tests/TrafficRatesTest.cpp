@@ -70,6 +70,74 @@ TEST(TrafficRateMeter, ARateIsTheDifferenceOverTheLastInterval)
   EXPECT_NEAR(meter.rows()[0].bytesPerSecond, 500.0, 1e-6);
 }
 
+TEST(TrafficRateMeter, AnUpdateInsideTheMinimumIntervalChangesNothing)
+{
+  net::TrafficRateMeter meter;
+  net::TrafficTotals totals;
+  const auto start = Clock::now();
+
+  meter.update(totals, start);
+  totals.bytes[delta] = 1000;
+  meter.update(totals, start + milliseconds(1000));
+  ASSERT_NEAR(meter.totalBytesPerSecond(), 1000.0, 1e-6);
+
+  totals.bytes[delta] = 5000;
+  meter.update(totals, start + milliseconds(1499));
+
+  EXPECT_NEAR(meter.totalBytesPerSecond(), 1000.0, 1e-6);
+
+  meter.update(totals, start + milliseconds(1500));
+
+  EXPECT_NEAR(meter.totalBytesPerSecond(), 8000.0, 1e-6);
+}
+
+TEST(TrafficRateMeter, AClockThatWentBackRestartsTheMeasurement)
+{
+  net::TrafficRateMeter meter;
+  net::TrafficTotals totals;
+  const auto start = Clock::now();
+
+  meter.update(totals, start);
+  totals.bytes[delta] = 1000;
+  meter.update(totals, start + milliseconds(1000));
+  ASSERT_GT(meter.totalBytesPerSecond(), 0.0);
+
+  totals.bytes[delta] = 2000;
+  meter.update(totals, start + milliseconds(500));
+
+  EXPECT_EQ(meter.totalBytesPerSecond(), 0.0);
+  EXPECT_TRUE(meter.rows().empty());
+
+  totals.bytes[delta] = 2600;
+  meter.update(totals, start + milliseconds(1000));
+
+  EXPECT_NEAR(meter.totalBytesPerSecond(), 1200.0, 1e-6);
+}
+
+TEST(TrafficRateMeter, ALongGapIsAveragedOverItselfAndTheNextIntervalIsPerInterval)
+{
+  net::TrafficRateMeter meter;
+  net::TrafficTotals totals;
+  const auto start = Clock::now();
+  const auto gap = std::chrono::minutes(10);
+
+  meter.update(totals, start);
+  totals.bytes[delta] = 600000;
+  meter.update(totals, start + gap);
+
+  EXPECT_NEAR(meter.totalBytesPerSecond(), 1000.0, 1e-6);
+
+  totals.bytes[delta] = 600500;
+  meter.update(totals, start + gap + milliseconds(500));
+
+  EXPECT_NEAR(meter.totalBytesPerSecond(), 1000.0, 1e-6);
+
+  totals.bytes[delta] = 602500;
+  meter.update(totals, start + gap + milliseconds(1000));
+
+  EXPECT_NEAR(meter.totalBytesPerSecond(), 4000.0, 1e-6);
+}
+
 TEST(TrafficRateMeter, ACounterThatWentBackRestartsTheMeasurement)
 {
   net::TrafficRateMeter meter;

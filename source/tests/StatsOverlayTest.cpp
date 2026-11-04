@@ -6,6 +6,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <limits>
+#include <vector>
 
 namespace {
   using Clock = statsOverlay::StateUpdateGap::Clock;
@@ -13,7 +16,7 @@ namespace {
 
   constexpr std::size_t counter = 2;
 
-  profile::History historyOf(const std::initializer_list<int64_t> values)
+  profile::History historyOf(const std::vector<int64_t>& values)
   {
     profile::History history(32);
     uint64_t sequence = 1;
@@ -82,15 +85,35 @@ TEST(StateUpdateGap, AGapThatRoundsToZeroStillCounts)
   EXPECT_EQ(gap.onStateDelta(start), 1u);
 }
 
+TEST(StateUpdateGap, AHugeGapClampsToTheLargestValue)
+{
+  statsOverlay::StateUpdateGap gap;
+  const auto start = Clock::now();
+
+  gap.onStateDelta(start);
+
+  EXPECT_EQ(gap.onStateDelta(start + std::chrono::hours(2)), std::numeric_limits<uint32_t>::max());
+  EXPECT_EQ(gap.takeFrameMax(), std::numeric_limits<uint32_t>::max());
+}
+
 TEST(StateIntervalStats, FramesWithoutAStateUpdateAreSkipped)
 {
-  const auto history = historyOf({10000, 0, 20000, 0, 0, 30000});
-  const auto stats = statsOverlay::summarizeIntervals(history, 10, counter);
+  std::vector<int64_t> values;
+  for (int64_t millis = 1; millis <= 20; ++millis)
+  {
+    values.push_back(millis * 1000);
+  }
+  values.insert(values.begin() + 5, 0);
+  values.push_back(0);
+  values.push_back(100000);
 
-  EXPECT_EQ(stats.count, 3u);
-  EXPECT_NEAR(stats.averageMillis, 20.0, 1e-9);
-  EXPECT_NEAR(stats.maxMillis, 30.0, 1e-9);
-  EXPECT_NEAR(stats.p95Millis, 30.0, 1e-9);
+  const auto history = historyOf(values);
+  const auto stats = statsOverlay::summarizeIntervals(history, 100, counter);
+
+  EXPECT_EQ(stats.count, 21u);
+  EXPECT_NEAR(stats.averageMillis, 310.0 / 21.0, 1e-9);
+  EXPECT_NEAR(stats.maxMillis, 100.0, 1e-9);
+  EXPECT_NEAR(stats.p95Millis, 20.0, 1e-9);
 }
 
 TEST(StateIntervalStats, OnlyTheNewestWindowCounts)

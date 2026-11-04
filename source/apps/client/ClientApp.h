@@ -73,8 +73,7 @@ private:
   statsOverlay::StateUpdateGap m_stateUpdateGap;
   uint8_t m_stateIntervalCounter = 0;
   net::TrafficRateMeter m_inboundRates;
-  // mutable: set from the const message-apply path.
-  mutable std::size_t m_lastSnapshotBytes = 0;
+  std::size_t m_lastSnapshotBytes = 0;
 
   // Only resend input when it changes, so a second view (e.g. the editor) that isn't focused doesn't
   // clobber this one's keys on the shared server-side InputState every frame.
@@ -109,9 +108,9 @@ private:
 
   void variableUpdate() const;
 
-  void applyMessage(const net::Message& message) const;
+  void applyMessage(const net::Message& message);
 
-  void handleSnapshot(const net::Message& message) const;
+  void handleSnapshot(const net::Message& message);
 
   void handleStateDelta(const net::Message& message) const;
 

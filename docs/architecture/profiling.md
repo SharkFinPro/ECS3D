@@ -178,7 +178,9 @@ interval, the top five inbound types and the last snapshot's size. The interval 
 client lane, in microseconds: `run()` times each drained `stateDelta` against the previous one
 (`StateUpdateGap`) and adds the frame's largest gap, so frames without a stateDelta hold 0 and are skipped by
 `summarizeIntervals`. Inbound rates come from `net::TrafficRateMeter` (`TrafficRates.h`) over `NetClient::traffic()`,
-recomputed every 500 ms.
+recomputed every 500 ms and updated every frame, whatever the overlay mode, so it never averages over the time the
+overlay was off. The interval is measured at drain, so a client frame stall or a server pause also shows as a long
+interval.
 
 ## Server lane in the Profiler panel
 
