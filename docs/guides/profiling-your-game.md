@@ -95,23 +95,24 @@ frame time, frames per second and the inbound network rate. Detailed adds a five
 the server's state updates, the largest incoming message types and the size of the last snapshot. Start the client with
 `--stats` to begin in compact.
 
-The server writes its own summary to its log every ten seconds. Change the interval with `--stats-interval <seconds>`
-on the server (a whole number from 0 to 3600), or use 0 to turn the line off. Each line gives the tick average, p50,
-p95,
+The server writes its own summary to its log every ten seconds. Change the interval with `--stats-interval <seconds>` on
+the server (a whole number from 0 to 3600), or use 0 to turn the line off. Each line gives the tick average, p50, p95,
 p99 and maximum, the tick and dropped step counts, the average time in scripts, physics, collisions and replication, the
 object count and the network figures. When the server saw no ticks it logs "stats: idle (no ticks)" instead.
 
 ## Saving a capture
 
 Click Save capture... in the Profiler header to write what the panel is showing to disk, for comparing runs or sharing
-with someone who can read a spreadsheet. If the panel is paused, it writes the frozen data. It saves the editor lane
+with someone who can read a spreadsheet. If the panel is paused, it writes the frozen data, including the
+snapshots table and connection count as they were when you paused. If there is nothing to save yet, the panel says
+"Nothing to save yet" and writes no files. It saves the editor lane
 and, when the server's statistics have arrived, the server lane, for the number of seconds in the Window setting.
 
 The files go in a `captures` folder inside the editor's per-user data directory (`%APPDATA%/ECS3D` on Windows,
-`~/Library/Application Support/ECS3D` on macOS, `~/.config/ECS3D` elsewhere), named by the time in UTC, for example
-`editor-20261103-143000.csv` and `editor-20261103-143000.json`. After a save the panel shows the path with an
-Open folder button, or the reason the save failed. Two saves in the same second share a name, and the second replaces
-the first.
+`~/Library/Application Support/ECS3D` on macOS, `$XDG_CONFIG_HOME/ECS3D` or, when that is unset, `~/.config/ECS3D` on
+Linux), named by the time in UTC, for example `editor-20261103-143000.csv` and `editor-20261103-143000.json`. After a
+save the panel shows the path with an Open folder button, or the reason the save failed. Two saves in the same second
+share a name, and the second replaces the first.
 
 The CSV has one row per sample: the editor lane's rows first, then the server lane's, oldest first within each. It
 uses LF line endings and plain integers, so it reads the same under any locale. The columns are:
@@ -123,16 +124,16 @@ uses LF line endings and plain integers, so it reads the same under any locale. 
   sample spent in that group: `frame.networkIn`, `frame.input`, `frame.editorUi`, `frame.scenePrep`, `frame.renderer`,
   `frame.profiler`, `frame.other`, then `server.scripts`, `server.physics`, `server.collisions`,
   `server.replication`, `server.networkIn`, `server.other`. Times are exclusive: a scope's time minus its child
-  scopes' time, summed
-  into its group. Hidden legend groups are still written. The other lane's columns are left empty.
+  scopes' time, summed into its group. Hidden legend groups are still written. The other lane's columns are left empty.
 - `ticks` and `droppedSteps`: the server lane's counts for that sample, empty on editor rows. One sample can cover
   more than one tick.
 
 The JSON sidecar has the same base name. It records the engine version, build type (Debug or Release), platform, app,
-scene name, object count, connection count and capture time, then for each lane its name, kind, sample count and scope
-table (`id`, `parent`, `name`), and the snapshots table from the Network section. The scene name and object count are
-the only project content in either file. There are no object, script or asset names, and no file paths from your
-project.
+scene name, object count, connection count and capture time, whether the panel was paused and the server lane's state
+(`live`, `waiting`, `unsupported`, `disconnected` or `off`, so numbers from a dropped connection are marked), then for
+each lane its name, kind, sample count and scope table (`id`, `parent`, `name`), and the snapshots table from the
+Network section. The scene name and object count are the only project content in either file. There are no object,
+script or asset names, and no file paths from your project.
 
 When comparing two captures, check that the sidecars agree on the build type, because a Debug run is much slower than
 a Release run and the numbers do not compare.

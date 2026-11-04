@@ -1,9 +1,12 @@
 #include "ProfilerCapture.h"
+#include <ProjectPaths.h>
 #include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstdint>
+#include <exception>
 #include <fstream>
+#include <initializer_list>
 #include <string_view>
 #include <system_error>
 
@@ -155,6 +158,27 @@ const char* captureBuildType()
 #endif
 }
 
+const char* captureServerStateName(const ServerLaneState state)
+{
+  switch (state)
+  {
+    case ServerLaneState::off: return "off";
+    case ServerLaneState::waiting: return "waiting";
+    case ServerLaneState::live: return "live";
+    case ServerLaneState::unsupported: return "unsupported";
+    case ServerLaneState::disconnected: return "disconnected";
+  }
+
+  return "off";
+}
+
+bool captureHasSamples(const CaptureInput& input)
+{
+  return std::ranges::any_of(input.lanes, [](const CaptureLane& lane) {
+    return lane.history != nullptr && lane.history->size() != 0 && lane.window != 0;
+  });
+}
+
 const char* capturePlatform()
 {
 #if defined(_WIN32)
@@ -238,16 +262,24 @@ nlohmann::json captureSidecar(const CaptureInput& input)
                          {"recipients", row.recipients}});
   }
 
-  return {{"engineVersion", input.engineVersion},
-          {"buildType", input.buildType},
-          {"platform", input.platform},
-          {"app", input.app},
-          {"sceneName", input.sceneName},
-          {"objectCount", input.objectCount},
-          {"connectionCount", input.connectionCount},
-          {"capturedAt", input.capturedAt},
-          {"lanes", lanes},
-          {"snapshots", snapshots}};
+  nlohmann::json sidecar{{"engineVersion", input.engineVersion},
+                         {"buildType", input.buildType},
+                         {"platform", input.platform},
+                         {"app", input.app},
+                         {"sceneName", input.sceneName},
+                         {"objectCount", input.objectCount},
+                         {"connectionCount", input.connectionCount},
+                         {"paused", input.paused},
+                         {"capturedAt", input.capturedAt},
+                         {"lanes", lanes},
+                         {"snapshots", snapshots}};
+
+  if (!input.serverState.empty())
+  {
+    sidecar["serverState"] = input.serverState;
+  }
+
+  return sidecar;
 }
 
 std::string captureBaseName(const std::string& app, const std::chrono::system_clock::time_point now)
@@ -270,30 +302,63 @@ CaptureResult writeCapture(CaptureInput input, const std::filesystem::path& fold
                            const std::chrono::system_clock::time_point now)
 {
   CaptureResult result;
-  input.capturedAt = captureTimestamp(now);
 
-  std::error_code error;
-  std::filesystem::create_directories(folder, error);
-
-  if (error)
+  if (!captureHasSamples(input))
   {
-    result.error = "could not create " + folder.string() + ": " + error.message();
+    result.error = "Nothing to save yet";
     return result;
   }
 
-  const std::string base = captureBaseName(input.app, now);
-  const auto csvPath = folder / (base + ".csv");
-  const auto jsonPath = folder / (base + ".json");
+  std::filesystem::path csvPath;
+  std::filesystem::path jsonPath;
 
-  if (!writeFile(csvPath, captureCsv(input)))
+  try
   {
-    result.error = "could not write " + csvPath.string();
-    return result;
+    input.capturedAt = captureTimestamp(now);
+
+    std::error_code error;
+    std::filesystem::create_directories(folder, error);
+
+    if (error)
+    {
+      result.error = "could not create " + pathToUtf8(folder) + ": " + error.message();
+      return result;
+    }
+
+    const std::string base = captureBaseName(input.app, now);
+    csvPath = folder / (base + ".csv");
+    jsonPath = folder / (base + ".json");
+
+    if (!writeFile(csvPath, captureCsv(input)))
+    {
+      result.error = "could not write " + pathToUtf8(csvPath);
+      return result;
+    }
+
+    // Node names and snapshot reasons can come from a remote server, so invalid UTF-8 is replaced, not thrown on.
+    const std::string sidecar =
+      captureSidecar(input).dump(2, ' ', false, nlohmann::json::error_handler_t::replace) + "\n";
+
+    if (!writeFile(jsonPath, sidecar))
+    {
+      result.error = "could not write " + pathToUtf8(jsonPath);
+    }
+  }
+  catch (const std::exception& exception)
+  {
+    result.error = std::string("could not save the capture: ") + exception.what();
   }
 
-  if (!writeFile(jsonPath, captureSidecar(input).dump(2) + "\n"))
+  if (!result.error.empty())
   {
-    result.error = "could not write " + jsonPath.string();
+    std::error_code ignored;
+    std::filesystem::remove(csvPath, ignored);
+
+    if (std::filesystem::is_regular_file(jsonPath, ignored))
+    {
+      std::filesystem::remove(jsonPath, ignored);
+    }
+
     return result;
   }
 

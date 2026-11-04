@@ -6,6 +6,7 @@
 #include <ProfilerCharts.h>
 #include <ProfilerView.h>
 #include <SettingsStore.h>
+#include <ProjectPaths.h>
 #include <UserDataDirectory.h>
 #include <imgui.h>
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <chrono>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 namespace {
   constexpr const char* windowName = "Profiler";
@@ -73,6 +75,8 @@ void ProfilerPanel::setOpen(const bool open)
     m_frozenServer.reset();
     m_frozenServerNodes.clear();
     m_frozenServerTicks.clear();
+    m_frozenSnapshots.clear();
+    m_frozenConnections = 0;
   }
 }
 
@@ -115,9 +119,12 @@ void ProfilerPanel::saveCapture(const profile::History& history, const std::vect
                              m_serverInput->droppedStepsCounter});
     }
 
-    input.snapshots = m_serverInput->snapshots;
-    input.connectionCount = m_serverInput->connections;
+    input.snapshots = m_frozenServer ? m_frozenSnapshots : m_serverInput->snapshots;
+    input.connectionCount = m_frozenServer ? m_frozenConnections : m_serverInput->connections;
+    input.serverState = captureServerStateName(m_serverInput->state);
   }
+
+  input.paused = m_interaction.paused;
 
   const auto result = writeCapture(std::move(input), userDataDirectory() / "captures",
                                    std::chrono::system_clock::now());
@@ -139,7 +146,7 @@ void ProfilerPanel::displayCaptureStatus()
 {
   if (m_savedCsv)
   {
-    ImGui::TextWrapped("Saved %s", m_savedCsv->string().c_str());
+    ImGui::TextWrapped("Saved %s", pathToUtf8(*m_savedCsv).c_str());
     ImGui::SameLine();
 
     if (ImGui::Button("Open folder") && !openFolderInFileBrowser(m_savedCsv->parent_path()))
@@ -166,6 +173,8 @@ void ProfilerPanel::freezeServer()
   m_frozenServer.emplace(*m_serverInput->history);
   m_frozenServerNodes = m_serverInput->nodes;
   m_frozenServerTicks = m_serverInput->tickMicros;
+  m_frozenSnapshots = m_serverInput->snapshots;
+  m_frozenConnections = m_serverInput->connections;
 }
 
 void ProfilerPanel::toggle()
@@ -464,6 +473,8 @@ void ProfilerPanel::displayGui()
       m_frozenServer.reset();
       m_frozenServerNodes.clear();
       m_frozenServerTicks.clear();
+      m_frozenSnapshots.clear();
+      m_frozenConnections = 0;
     }
     else
     {

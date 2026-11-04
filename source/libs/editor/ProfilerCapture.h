@@ -34,6 +34,10 @@ struct CaptureInput {
   std::string sceneName;
   std::size_t objectCount = 0;
   std::size_t connectionCount = 0;
+  // The panel was paused, so the rows and counts are those of the moment it paused.
+  bool paused = false;
+  // Empty when there is no server lane input; otherwise the lane state's name, which marks stale data.
+  std::string serverState;
   // ISO 8601 UTC; writeCapture fills it from its clock argument.
   std::string capturedAt;
   std::vector<CaptureLane> lanes;
@@ -53,6 +57,11 @@ struct CaptureResult {
 
 [[nodiscard]] const char* captureBuildType();
 
+[[nodiscard]] const char* captureServerStateName(ServerLaneState state);
+
+// Whether any lane holds a sample to write.
+[[nodiscard]] bool captureHasSamples(const CaptureInput& input);
+
 [[nodiscard]] const char* capturePlatform();
 
 // RFC 4180: a field holding a comma, quote, CR or LF is quoted, with its quotes doubled.
@@ -69,7 +78,8 @@ struct CaptureResult {
 // "yyyy-MM-ddTHH:mm:ssZ" in UTC.
 [[nodiscard]] std::string captureTimestamp(std::chrono::system_clock::time_point now);
 
-// Writes <folder>/<base>.csv and <base>.json, creating the folder.
+// Writes <folder>/<base>.csv and <base>.json, creating the folder. Fails with "Nothing to save yet" when no lane has
+// samples, and leaves neither file behind when either write fails.
 [[nodiscard]] CaptureResult writeCapture(CaptureInput input, const std::filesystem::path& folder,
                                          std::chrono::system_clock::time_point now);
 

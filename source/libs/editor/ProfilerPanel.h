@@ -68,6 +68,8 @@ private:
   std::optional<profile::History> m_frozenServer;
   std::vector<profile::ViewNode> m_frozenServerNodes;
   std::vector<uint32_t> m_frozenServerTicks;
+  std::vector<ServerSnapshotRow> m_frozenSnapshots;
+  uint16_t m_frozenConnections = 0;
 
   void displayHeader();
 

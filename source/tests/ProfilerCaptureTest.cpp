@@ -367,6 +367,45 @@ TEST(ProfilerCapture, BaseNameAndTimestampUseUtcFromTheGivenTime)
   EXPECT_EQ(captureBaseName("editor", at(0)), "editor-19700101-000000");
 }
 
+TEST(ProfilerCapture, DatesBeforeTheEpochAndFarInTheFutureFormatCorrectly)
+{
+  EXPECT_EQ(captureTimestamp(at(-1)), "1969-12-31T23:59:59Z");
+  EXPECT_EQ(captureBaseName("editor", at(-1)), "editor-19691231-235959");
+  EXPECT_EQ(captureTimestamp(at(-58017600)), "1968-02-29T12:00:00Z");
+  EXPECT_EQ(captureTimestamp(at(4107542399)), "2100-02-28T23:59:59Z");
+  EXPECT_EQ(captureTimestamp(at(4107542400)), "2100-03-01T00:00:00Z");
+  EXPECT_EQ(captureTimestamp(at(13574563200)), "2400-02-29T00:00:00Z");
+  EXPECT_EQ(captureTimestamp(at(13601088000)), "2401-01-01T00:00:00Z");
+  EXPECT_EQ(captureBaseName("editor", at(16756761599)), "editor-25001231-235959");
+}
+
+TEST(ProfilerCapture, SidecarRecordsPausedAndServerState)
+{
+  Histories histories;
+  auto input = inputFor(histories);
+
+  EXPECT_FALSE(captureSidecar(input).at("paused").get<bool>());
+  EXPECT_FALSE(captureSidecar(input).contains("serverState"));
+
+  input.paused = true;
+  input.serverState = captureServerStateName(ServerLaneState::disconnected);
+  const auto sidecar = captureSidecar(input);
+
+  EXPECT_TRUE(sidecar.at("paused").get<bool>());
+  EXPECT_EQ(sidecar.at("serverState"), "disconnected");
+  EXPECT_STREQ(captureServerStateName(ServerLaneState::live), "live");
+}
+
+TEST(ProfilerCapture, HasSamplesNeedsAtLeastOneNonEmptyLane)
+{
+  Histories histories;
+  EXPECT_FALSE(captureHasSamples(inputFor(histories)));
+  EXPECT_FALSE(captureHasSamples(CaptureInput{}));
+
+  histories.server.push(serverSample(1));
+  EXPECT_TRUE(captureHasSamples(inputFor(histories)));
+}
+
 TEST_F(ProfilerCaptureFiles, WriteCaptureCreatesTheFolderAndBothFiles)
 {
   Histories histories;
@@ -399,8 +438,60 @@ TEST_F(ProfilerCaptureFiles, WriteCaptureReportsAnUncreatableFolder)
   std::ofstream(blocker) << "x";
 
   Histories histories;
+  histories.editor.push(editorSample(1));
   const auto result = writeCapture(inputFor(histories), blocker / "captures", at(0));
 
   EXPECT_FALSE(result.ok());
   EXPECT_TRUE(result.csvPath.empty());
+}
+
+TEST_F(ProfilerCaptureFiles, WriteCaptureWithNothingToSaveWritesNoFiles)
+{
+  Histories histories;
+  const auto folder = m_directory / "captures";
+
+  const auto result = writeCapture(inputFor(histories), folder, at(1767499506));
+
+  EXPECT_FALSE(result.ok());
+  EXPECT_EQ(result.error, "Nothing to save yet");
+  EXPECT_FALSE(std::filesystem::exists(folder));
+
+  histories.editor.push(editorSample(1));
+  EXPECT_TRUE(writeCapture(inputFor(histories), folder, at(1767499506)).ok());
+}
+
+TEST_F(ProfilerCaptureFiles, InvalidUtf8InANodeNameStillWritesAParsableSidecar)
+{
+  Histories histories;
+  histories.editor.push(editorSample(1));
+
+  auto input = inputFor(histories);
+  input.lanes[0].nodes[2].name = "In\xff" "put";
+  input.snapshots.push_back({1.0, 10, "jo\xc3" "in", 1.0, 1});
+
+  const auto folder = m_directory / "captures";
+  const auto result = writeCapture(input, folder, at(1767499506));
+
+  ASSERT_TRUE(result.ok()) << result.error;
+
+  std::ifstream sidecarFile(folder / "editor-20260104-040506.json");
+  const auto sidecar = nlohmann::json::parse(sidecarFile);
+  EXPECT_NE(sidecar.at("lanes")[0].at("nodes")[2].at("name").get<std::string>().find("put"), std::string::npos);
+}
+
+TEST_F(ProfilerCaptureFiles, ASidecarWriteFailureRemovesTheCsv)
+{
+  Histories histories;
+  histories.editor.push(editorSample(1));
+
+  const auto folder = m_directory / "captures";
+  std::filesystem::create_directories(folder / "editor-20260104-040506.json");
+  std::ofstream(folder / "editor-20260104-040506.json" / "keep") << "x";
+
+  const auto result = writeCapture(inputFor(histories), folder, at(1767499506));
+
+  EXPECT_FALSE(result.ok());
+  EXPECT_TRUE(result.csvPath.empty());
+  EXPECT_FALSE(std::filesystem::exists(folder / "editor-20260104-040506.csv"));
+  EXPECT_TRUE(std::filesystem::exists(folder / "editor-20260104-040506.json" / "keep"));
 }
