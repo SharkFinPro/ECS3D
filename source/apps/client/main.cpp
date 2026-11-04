@@ -45,6 +45,10 @@ namespace
       {
         options.project = absoluteProjectArgument(argv[++i]);
       }
+      else if (arg == "--stats")
+      {
+        options.showStats = true;
+      }
       else if (arg == "--server-console")
       {
         options.showServerConsole = true;

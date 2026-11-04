@@ -169,6 +169,7 @@ add_executable(${PROJECT_NAME}
   ProfilerChartLayoutTest.cpp
   ProfilerPanelStateTest.cpp
   ProfilerServerLaneTest.cpp
+  StatsOverlayTest.cpp
   InertiaTensorBehaviorTest.cpp
   InertiaTensorTests.cpp
   PhysicsIntegrationTest.cpp
@@ -233,6 +234,7 @@ add_executable(${PROJECT_NAME}
   StatsSubscriptionsTest.cpp
   StatsSummaryTest.cpp
   TrafficCountersTest.cpp
+  TrafficRatesTest.cpp
   SnapshotLogTest.cpp
   StructuralChangesTest.cpp
   ShutdownSignalTest.cpp

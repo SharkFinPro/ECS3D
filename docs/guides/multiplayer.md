@@ -104,6 +104,8 @@ firewall allows incoming TCP on the port you chose.
   macOS, and `$XDG_CONFIG_HOME` (or `~/.config` when it is unset) on Linux. A server that a client or editor
   starts for you logs to `client-server.log` or `editor-server.log` instead. Add `--console` to a client or
   editor to see its log in a console window as well.
+- **Frame and network figures.** Press F3 in a client to cycle a statistics overlay through off, compact and
+  detailed; start a client with `--stats` to open it in compact mode.
 
 ## Test two players on one machine
 
