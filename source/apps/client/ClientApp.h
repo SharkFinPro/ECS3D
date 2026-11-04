@@ -106,6 +106,9 @@ private:
 
   void displayStatsOverlay();
 
+  // The Detailed mode's chart, state-update interval, inbound types and last snapshot size.
+  void displayDetailedStats();
+
   void variableUpdate() const;
 
   void applyMessage(const net::Message& message);

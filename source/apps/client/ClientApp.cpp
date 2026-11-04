@@ -277,47 +277,54 @@ void ClientApp::displayStatsOverlay()
 
     if (m_statsMode == StatsOverlayMode::detailed)
     {
-      constexpr float chartWidth = 360.0f;
-      constexpr double chartSeconds = 5.0;
-
-      const auto nodes = profile::viewNodes(m_profileLane.tree());
-      const auto groups = profile::displayGroups(profile::LaneKind::frame);
-      const auto groupOfNode = profile::groupOfNodes(profile::LaneKind::frame, nodes);
-      const std::size_t window = profile::windowSize(history, chartSeconds);
-      const double scaleMillis = profile::autoScaleMillis(statsOverlay::p99WallMicros(history, window));
-      const auto columns = profile::buildColumns(history, window, nodes, groupOfNode, 0,
-                                                 static_cast<std::size_t>(chartWidth));
-      const float chartHeight = ImGui::GetFontSize() * 4.0f;
-
-      if (ImGui::BeginChild("##statsChart", ImVec2(chartWidth, chartHeight), 0,
-                            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar))
-      {
-        profilerCharts::drawStackedBars(columns, groups, scaleMillis, std::nullopt, 0, chartHeight);
-      }
-      ImGui::EndChild();
-
-      const auto intervals = statsOverlay::summarizeIntervals(history, window, m_stateIntervalCounter);
-      if (intervals.count == 0)
-      {
-        ImGui::TextUnformatted("state updates: none");
-      }
-      else
-      {
-        ImGui::Text("state updates  avg %.1f ms  p95 %.1f ms  max %.1f ms", intervals.averageMillis,
-                    intervals.p95Millis, intervals.maxMillis);
-      }
-
-      const auto& rows = m_inboundRates.rows();
-      for (std::size_t i = 0; i < rows.size() && i < 5; ++i)
-      {
-        ImGui::Text("%.*s  %.1f KB/s", static_cast<int>(rows[i].name.size()), rows[i].name.data(),
-                    rows[i].bytesPerSecond / 1024.0);
-      }
-
-      ImGui::Text("last snapshot  %.1f KB", static_cast<double>(m_lastSnapshotBytes) / 1024.0);
+      displayDetailedStats();
     }
   }
   ImGui::End();
+}
+
+void ClientApp::displayDetailedStats()
+{
+  const auto& history = m_profileLane.history();
+
+  constexpr float chartWidth = 360.0f;
+  constexpr double chartSeconds = 5.0;
+
+  const auto nodes = profile::viewNodes(m_profileLane.tree());
+  const auto groups = profile::displayGroups(profile::LaneKind::frame);
+  const auto groupOfNode = profile::groupOfNodes(profile::LaneKind::frame, nodes);
+  const std::size_t window = profile::windowSize(history, chartSeconds);
+  const double scaleMillis = profile::autoScaleMillis(statsOverlay::p99WallMicros(history, window));
+  const auto columns = profile::buildColumns(history, window, nodes, groupOfNode, 0,
+                                             static_cast<std::size_t>(chartWidth));
+  const float chartHeight = ImGui::GetFontSize() * 4.0f;
+
+  if (ImGui::BeginChild("##statsChart", ImVec2(chartWidth, chartHeight), 0,
+                        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar))
+  {
+    profilerCharts::drawStackedBars(columns, groups, scaleMillis, std::nullopt, 0, chartHeight);
+  }
+  ImGui::EndChild();
+
+  const auto intervals = statsOverlay::summarizeIntervals(history, window, m_stateIntervalCounter);
+  if (intervals.count == 0)
+  {
+    ImGui::TextUnformatted("state updates: none");
+  }
+  else
+  {
+    ImGui::Text("state updates  avg %.1f ms  p95 %.1f ms  max %.1f ms", intervals.averageMillis,
+                intervals.p95Millis, intervals.maxMillis);
+  }
+
+  const auto& rows = m_inboundRates.rows();
+  for (std::size_t i = 0; i < rows.size() && i < 5; ++i)
+  {
+    ImGui::Text("%.*s  %.1f KB/s", static_cast<int>(rows[i].name.size()), rows[i].name.data(),
+                rows[i].bytesPerSecond / 1024.0);
+  }
+
+  ImGui::Text("last snapshot  %.1f KB", static_cast<double>(m_lastSnapshotBytes) / 1024.0);
 }
 
 void ClientApp::connectToServer()
