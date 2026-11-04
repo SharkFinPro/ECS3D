@@ -416,6 +416,7 @@ void EditorApp::run()
       {
         logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
         m_serverEditable = false;
+        m_remoteStats.disconnected();
       }
     }
 

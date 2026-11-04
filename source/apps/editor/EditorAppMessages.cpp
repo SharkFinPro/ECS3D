@@ -72,6 +72,10 @@ void EditorApp::applyStatusMessage(const net::Message& message)
       handlePlayerSlot(message);
       break;
 
+    case net::MessageType::serverStats:
+      m_remoteStats.apply(message);
+      break;
+
     default: break;
   }
 }

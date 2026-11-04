@@ -24,6 +24,12 @@ namespace profilerPanelState {
   inline constexpr const char* windowKey = "editor.profiler.window";
   inline constexpr const char* scaleKey = "editor.profiler.scale";
   inline constexpr const char* hiddenGroupsKey = "editor.profiler.hiddenGroups";
+  inline constexpr const char* serverHiddenGroupsKey = "editor.profiler.serverHiddenGroups";
+
+  [[nodiscard]] inline const char* hiddenGroupsKeyFor(const profile::LaneKind kind)
+  {
+    return kind == profile::LaneKind::server ? serverHiddenGroupsKey : hiddenGroupsKey;
+  }
 
   [[nodiscard]] inline int readWindowSeconds(const SettingsStore& settings)
   {
@@ -67,11 +73,12 @@ namespace profilerPanelState {
     settings.set(scaleKey, millis);
   }
 
-  // Bit i of the mask is group i of the frame lane's display groups. Unknown ids are ignored.
-  [[nodiscard]] inline uint32_t readHiddenMask(const SettingsStore& settings)
+  // Bit i of the mask is group i of the lane kind's display groups. Unknown ids are ignored.
+  [[nodiscard]] inline uint32_t readHiddenMask(const SettingsStore& settings,
+                                               const profile::LaneKind kind = profile::LaneKind::frame)
   {
-    const auto ids = settings.get<std::vector<std::string>>(hiddenGroupsKey, {});
-    const auto groups = profile::displayGroups(profile::LaneKind::frame);
+    const auto ids = settings.get<std::vector<std::string>>(hiddenGroupsKeyFor(kind), {});
+    const auto groups = profile::displayGroups(kind);
     uint32_t mask = 0;
 
     for (std::size_t i = 0; i < groups.size(); ++i)
@@ -85,9 +92,10 @@ namespace profilerPanelState {
     return mask;
   }
 
-  inline void writeHiddenMask(SettingsStore& settings, const uint32_t mask)
+  inline void writeHiddenMask(SettingsStore& settings, const uint32_t mask,
+                              const profile::LaneKind kind = profile::LaneKind::frame)
   {
-    const auto groups = profile::displayGroups(profile::LaneKind::frame);
+    const auto groups = profile::displayGroups(kind);
     std::vector<std::string> ids;
 
     for (std::size_t i = 0; i < groups.size(); ++i)
@@ -98,7 +106,7 @@ namespace profilerPanelState {
       }
     }
 
-    settings.set(hiddenGroupsKey, ids);
+    settings.set(hiddenGroupsKeyFor(kind), ids);
   }
 
   // The 99th percentile of wall time over the newest `window` samples, which the automatic scale is chosen from.
@@ -116,26 +124,25 @@ namespace profilerPanelState {
     return profile::percentile(std::move(walls), 99.0);
   }
 
-  // Clicking a bar selects that sample and pauses; clicking the selected bar again, or Resume, goes back to live.
+  // Which lane the Breakdown table shows: the one whose bar was clicked last.
+  enum class BreakdownLane : uint8_t { editor, server };
+
+  // Clicking a bar selects that sample in its lane and pauses both lanes; clicking the selected bar again, or Resume,
+  // goes back to live. The two lanes keep separate selections.
   struct Interaction {
     bool paused = false;
     uint64_t selectedSequence = 0;
+    uint64_t serverSelectedSequence = 0;
+    BreakdownLane breakdownLane = BreakdownLane::editor;
 
     void clickColumn(const uint64_t sequence)
     {
-      if (sequence == 0)
-      {
-        return;
-      }
+      click(selectedSequence, BreakdownLane::editor, sequence);
+    }
 
-      if (paused && selectedSequence == sequence)
-      {
-        resume();
-        return;
-      }
-
-      paused = true;
-      selectedSequence = sequence;
+    void clickServerColumn(const uint64_t sequence)
+    {
+      click(serverSelectedSequence, BreakdownLane::server, sequence);
     }
 
     void togglePause()
@@ -153,12 +160,33 @@ namespace profilerPanelState {
     {
       paused = false;
       selectedSequence = 0;
+      serverSelectedSequence = 0;
+      breakdownLane = BreakdownLane::editor;
     }
 
     // A closed panel reopens live.
     void close()
     {
       resume();
+    }
+
+  private:
+    void click(uint64_t& selected, const BreakdownLane lane, const uint64_t sequence)
+    {
+      if (sequence == 0)
+      {
+        return;
+      }
+
+      if (paused && selected == sequence)
+      {
+        resume();
+        return;
+      }
+
+      paused = true;
+      selected = sequence;
+      breakdownLane = lane;
     }
   };
 }

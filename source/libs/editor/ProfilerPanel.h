@@ -2,8 +2,10 @@
 #define PROFILERPANEL_H
 
 #include "ProfilerPanelState.h"
+#include "ProfilerServerLane.h"
 #include <History.h>
 #include <optional>
+#include <vector>
 
 class SettingsStore;
 
@@ -11,7 +13,8 @@ namespace profile {
   class Lane;
 }
 
-// The editor's "Profiler" window: the editor's own frame lane as stacked bars, a legend and a per-scope breakdown.
+// The editor's "Profiler" window: the editor's own frame lane and the server's tick lane as stacked bars with legends,
+// a per-scope breakdown and the Network section.
 // The lane must be read on the thread that records it, so displayGui is called from that thread.
 class ProfilerPanel {
 public:
@@ -28,6 +31,14 @@ public:
 
   void toggle();
 
+  // The server's figures for this frame. The pointer is read during displayGui only, so it need only outlive that call.
+  void setServerLane(const ServerLaneInput* input);
+
+  // Whether the editor should have the server streaming statistics: only while the panel is open.
+  [[nodiscard]] bool wantsServerStats() const;
+
+  [[nodiscard]] int windowSeconds() const;
+
 private:
   const profile::Lane& m_lane;
   SettingsStore& m_settings;
@@ -38,15 +49,29 @@ private:
   int m_windowSeconds;
   double m_scaleMillis;
   uint32_t m_hiddenMask;
+  uint32_t m_serverHiddenMask;
+
+  const ServerLaneInput* m_serverInput = nullptr;
 
   profilerPanelState::Interaction m_interaction;
 
   // A copy taken when pausing, so the frozen view neither moves nor loses its selection as the ring wraps.
   std::optional<profile::History> m_frozen;
+  std::optional<profile::History> m_frozenServer;
+  std::vector<profile::ViewNode> m_frozenServerNodes;
 
   void displayHeader();
 
-  void displayLane(const profile::History& history);
+  void displayLane(const profile::History& history, const std::vector<profile::ViewNode>& nodes);
+
+  void displayServerLane(const std::vector<profile::ViewNode>& nodes);
+
+  void displayBreakdown(const profile::History& history, const std::vector<profile::ViewNode>& nodes,
+                        const std::vector<profile::ViewNode>& serverNodes);
+
+  void displayNetwork() const;
+
+  void freezeServer();
 };
 
 #endif

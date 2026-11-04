@@ -3,6 +3,8 @@
 
 #include <VulkanEngine/components/window/Window.h>
 #include <Lane.h>
+#include <ProfilerServerLane.h>
+#include <RemoteStats.h>
 #include <Protocol.h>
 #include <Replication.h>
 #include <edits/EditHistory.h>
@@ -206,6 +208,13 @@ private:
   // can pick out its own slot from the broadcast.
   uint64_t m_joinNonce = 0;
 
+  // The server's statistics for the Profiler panel, subscribed to only while the panel is open.
+  net::RemoteStats m_remoteStats;
+  ServerLaneInput m_serverLane;
+  profilerServerLane::RateMeter m_receiveRate;
+  bool m_statsSubscribed = false;
+  uint32_t m_serverNodesEpoch = 0;
+
   // The player slot the server bound this connection's input to (-1 until it says). Changes only when the
   // server confirms - a possessSlot request does not move it by itself.
   int32_t m_playerSlot = -1;
@@ -350,6 +359,12 @@ private:
   void clearEditHistory();
 
   void updateGui();
+
+  // Subscribes to or unsubscribes from the server's statistics to match the Profiler panel, then hands the panel
+  // this frame's figures.
+  void updateServerStats();
+
+  void fillServerLane();
 
   // Not const: unlike the rest of the menu bar, Edit's items call requestUndo()/requestRedo(), which
   // mutate the in-flight gate above.

@@ -42,7 +42,8 @@ ProfilerPanel::ProfilerPanel(const profile::Lane& lane, SettingsStore& settings)
     m_settings(settings),
     m_windowSeconds(profilerPanelState::readWindowSeconds(settings)),
     m_scaleMillis(profilerPanelState::readScaleMillis(settings)),
-    m_hiddenMask(profilerPanelState::readHiddenMask(settings))
+    m_hiddenMask(profilerPanelState::readHiddenMask(settings)),
+    m_serverHiddenMask(profilerPanelState::readHiddenMask(settings, profile::LaneKind::server))
 {
 }
 
@@ -65,7 +66,35 @@ void ProfilerPanel::setOpen(const bool open)
   {
     m_interaction.close();
     m_frozen.reset();
+    m_frozenServer.reset();
+    m_frozenServerNodes.clear();
   }
+}
+
+void ProfilerPanel::setServerLane(const ServerLaneInput* input)
+{
+  m_serverInput = input;
+}
+
+bool ProfilerPanel::wantsServerStats() const
+{
+  return m_open;
+}
+
+int ProfilerPanel::windowSeconds() const
+{
+  return m_windowSeconds;
+}
+
+void ProfilerPanel::freezeServer()
+{
+  if (m_frozenServer || m_serverInput == nullptr || m_serverInput->history == nullptr)
+  {
+    return;
+  }
+
+  m_frozenServer.emplace(*m_serverInput->history);
+  m_frozenServerNodes = m_serverInput->nodes;
 }
 
 void ProfilerPanel::toggle()
@@ -127,10 +156,9 @@ void ProfilerPanel::displayHeader()
 #endif
 }
 
-void ProfilerPanel::displayLane(const profile::History& history)
+void ProfilerPanel::displayLane(const profile::History& history, const std::vector<profile::ViewNode>& nodes)
 {
   const auto groups = profile::displayGroups(profile::LaneKind::frame);
-  const auto nodes = profile::viewNodes(m_lane.tree());
   const auto groupOfNode = profile::groupOfNodes(profile::LaneKind::frame, nodes);
   const std::size_t window = profile::windowSize(history, m_windowSeconds);
   const auto summary = profile::summarizeLane(history, window);
@@ -143,6 +171,8 @@ void ProfilerPanel::displayLane(const profile::History& history)
                                : m_scaleMillis;
   const auto maxColumns = static_cast<std::size_t>(std::max(ImGui::GetContentRegionAvail().x, 1.0f));
   const auto columns = profile::buildColumns(history, window, nodes, groupOfNode, m_hiddenMask, maxColumns);
+
+  ImGui::PushID("editorLane");
 
   const uint64_t clicked = profilerCharts::drawStackedBars(columns, groups, scaleMillis, std::nullopt,
                                                            m_interaction.selectedSequence,
@@ -163,16 +193,146 @@ void ProfilerPanel::displayLane(const profile::History& history)
     profilerPanelState::writeHiddenMask(m_settings, m_hiddenMask);
   }
 
-  const std::string selected = m_interaction.selectedSequence != 0
-                                 ? "selected: frame " + std::to_string(m_interaction.selectedSequence)
+  ImGui::PopID();
+}
+
+void ProfilerPanel::displayServerLane(const std::vector<profile::ViewNode>& nodes)
+{
+  const ServerLaneInput& input = *m_serverInput;
+  const profile::History* history = m_frozenServer ? &*m_frozenServer : input.history;
+  const std::string notice = serverLaneNotice(input);
+
+  ImGui::Separator();
+
+  if (history == nullptr || history->size() == 0)
+  {
+    ImGui::TextUnformatted("SERVER TICK");
+
+    if (!notice.empty())
+    {
+      ImGui::SameLine();
+      ImGui::TextDisabled("%s", notice.c_str());
+    }
+
+    return;
+  }
+
+  constexpr double budgetMillis = 20.0;
+  const auto groups = profile::displayGroups(profile::LaneKind::server);
+  const auto groupOfNode = profile::groupOfNodes(profile::LaneKind::server, nodes);
+  const std::size_t window = profile::windowSize(*history, m_windowSeconds);
+  const auto summary = profile::summarizeLane(*history, window);
+
+  ImGui::Text("SERVER TICK  (%s server, 50 Hz)  avg %.1f ms  p95 %.1f ms  max %.1f ms  budget %.0f ms",
+              input.localServer ? "local" : "remote", summary.averageMillis, summary.p95Millis, summary.maxMillis,
+              budgetMillis);
+
+  const double scaleMillis =
+    m_scaleMillis == profilerPanelState::autoScale
+      ? std::max(profile::autoScaleMillis(profilerPanelState::p99WallMicros(*history, window)),
+                 profile::fixedScalesMillis[1])
+      : m_scaleMillis;
+  const auto maxColumns = static_cast<std::size_t>(std::max(ImGui::GetContentRegionAvail().x, 1.0f));
+  const auto columns = profile::buildColumns(*history, window, nodes, groupOfNode, m_serverHiddenMask, maxColumns);
+
+  ImGui::PushID("serverLane");
+
+  const uint64_t clicked = profilerCharts::drawStackedBars(columns, groups, scaleMillis, budgetMillis,
+                                                           m_interaction.serverSelectedSequence,
+                                                           ImGui::GetFontSize() * 9.0f);
+  m_interaction.clickServerColumn(clicked);
+  freezeServer();
+
+  const uint32_t previousMask = m_serverHiddenMask;
+  profilerCharts::drawLegend(groups, m_serverHiddenMask);
+
+  if (m_serverHiddenMask != previousMask)
+  {
+    profilerPanelState::writeHiddenMask(m_settings, m_serverHiddenMask, profile::LaneKind::server);
+  }
+
+  ImGui::PopID();
+
+  ImGui::Text("dropped steps (last %d s): %lld", m_windowSeconds,
+              static_cast<long long>(profile::sumCounter(*history, window, input.droppedStepsCounter)));
+
+  if (!notice.empty())
+  {
+    ImGui::TextDisabled("%s", notice.c_str());
+  }
+}
+
+void ProfilerPanel::displayBreakdown(const profile::History& history, const std::vector<profile::ViewNode>& nodes,
+                                     const std::vector<profile::ViewNode>& serverNodes)
+{
+  const profile::History* serverHistory =
+    m_frozenServer ? &*m_frozenServer : (m_serverInput != nullptr ? m_serverInput->history : nullptr);
+  const bool showServer = m_interaction.breakdownLane == profilerPanelState::BreakdownLane::server &&
+                          serverHistory != nullptr && serverHistory->size() > 0;
+
+  const profile::History& shown = showServer ? *serverHistory : history;
+  const auto& shownNodes = showServer ? serverNodes : nodes;
+  const uint64_t sequence = showServer ? m_interaction.serverSelectedSequence : m_interaction.selectedSequence;
+
+  const std::string selected = sequence != 0
+                                 ? std::string("selected: ") + (showServer ? "tick " : "frame ") +
+                                     std::to_string(sequence)
                                  : "latest";
-  const std::string heading = "Breakdown (" + selected + ")###breakdown";
+  const std::string heading = std::string(showServer ? "Server breakdown (" : "Breakdown (") + selected +
+                              ")###breakdown";
 
   if (ImGui::CollapsingHeader(heading.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
   {
     profilerCharts::drawBreakdownTable(
-      profile::breakdownRows(history, nodes, window, m_interaction.selectedSequence));
+      profile::breakdownRows(shown, shownNodes, profile::windowSize(shown, m_windowSeconds), sequence));
   }
+}
+
+void ProfilerPanel::displayNetwork() const
+{
+  if (!ImGui::CollapsingHeader("Network"))
+  {
+    return;
+  }
+
+  const ServerLaneInput& input = *m_serverInput;
+
+  ImGui::Text("Sent  %s", profilerServerLane::describeTraffic(input.sent).c_str());
+  ImGui::Text("Received  %s", profilerServerLane::describeTraffic(input.received).c_str());
+  ImGui::Text("Editor received  %s", profilerServerLane::formatRate(input.editorReceivedBytesPerSecond).c_str());
+  ImGui::Text("Snapshots  %s", profilerServerLane::describeSnapshots(input).c_str());
+
+  if (!input.snapshots.empty() &&
+      ImGui::BeginTable("snapshots", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+  {
+    ImGui::TableSetupColumn("Ago");
+    ImGui::TableSetupColumn("Size");
+    ImGui::TableSetupColumn("Reason");
+    ImGui::TableSetupColumn("Build");
+    ImGui::TableSetupColumn("Recipients");
+    ImGui::TableHeadersRow();
+
+    for (const auto& row : input.snapshots)
+    {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::Text("%.0f s", row.secondsAgo);
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(profilerServerLane::formatSize(row.bytes).c_str());
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(row.reason.c_str());
+      ImGui::TableNextColumn();
+      ImGui::Text("%.2f ms", row.buildMillis);
+      ImGui::TableNextColumn();
+      ImGui::Text("%u", static_cast<unsigned>(row.recipients));
+    }
+
+    ImGui::EndTable();
+  }
+
+  ImGui::Text("Connections: %u (editors: %u)", static_cast<unsigned>(input.connections),
+              static_cast<unsigned>(input.editors));
+  ImGui::TextDisabled("Byte counts exclude the transport's framing: +4 bytes per message on TCP.");
 }
 
 void ProfilerPanel::displayGui()
@@ -209,7 +369,18 @@ void ProfilerPanel::displayGui()
       m_frozen.reset();
     }
 
+    if (!m_interaction.paused)
+    {
+      m_frozenServer.reset();
+      m_frozenServerNodes.clear();
+    }
+    else
+    {
+      freezeServer();
+    }
+
     const profile::History& history = m_frozen ? *m_frozen : m_lane.history();
+    const auto nodes = profile::viewNodes(m_lane.tree());
 
     if (history.size() == 0)
     {
@@ -217,7 +388,26 @@ void ProfilerPanel::displayGui()
     }
     else
     {
-      displayLane(history);
+      displayLane(history, nodes);
+    }
+
+    static const std::vector<profile::ViewNode> noNodes;
+    const std::vector<profile::ViewNode>* serverNodes = &noNodes;
+
+    if (m_serverInput != nullptr)
+    {
+      serverNodes = m_frozenServer ? &m_frozenServerNodes : &m_serverInput->nodes;
+      displayServerLane(*serverNodes);
+    }
+
+    if (history.size() != 0 || m_serverInput != nullptr)
+    {
+      displayBreakdown(history, nodes, *serverNodes);
+    }
+
+    if (m_serverInput != nullptr)
+    {
+      displayNetwork();
     }
   }
 

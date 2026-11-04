@@ -21,6 +21,7 @@ add_library(${PROJECT_NAME}
   EditToken.h
   RemoteStats.cpp
   RemoteStats.h
+  RemoteStatsSummary.h
   ServerLog.cpp
   ServerStats.cpp
   ServerStats.h
