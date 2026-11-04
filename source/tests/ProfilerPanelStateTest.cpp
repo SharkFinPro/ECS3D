@@ -239,3 +239,130 @@ TEST(ProfilerPanelWindow, P99WallIsTakenOverTheNewestWindowOnly)
   EXPECT_EQ(profilerPanelState::p99WallMicros(history, 100), 90000u);
   EXPECT_EQ(profilerPanelState::p99WallMicros(profile::History(4), 10), 0u);
 }
+
+TEST_F(ProfilerPanelState, ServerHiddenGroupsRoundTripUnderTheirOwnKey)
+{
+  const auto groups = profile::displayGroups(profile::LaneKind::server);
+  const uint32_t physics = 1u << 1;
+  ASSERT_EQ(groups[1].id, "physics");
+
+  {
+    SettingsStore settings(m_file);
+    profilerPanelState::writeHiddenMask(settings, physics | (1u << 3), profile::LaneKind::server);
+    settings.flush();
+  }
+
+  const SettingsStore reloaded(m_file);
+  const auto ids = reloaded.get<std::vector<std::string>>(profilerPanelState::serverHiddenGroupsKey, {});
+
+  ASSERT_EQ(ids.size(), 2u);
+  EXPECT_EQ(ids[0], "physics");
+  EXPECT_EQ(ids[1], "replication");
+  EXPECT_EQ(profilerPanelState::readHiddenMask(reloaded, profile::LaneKind::server), physics | (1u << 3));
+  EXPECT_EQ(profilerPanelState::readHiddenMask(reloaded), 0u);
+}
+
+TEST_F(ProfilerPanelState, InvalidServerHiddenGroupsFallBackAndUnknownIdsAreIgnored)
+{
+  writeFile(R"({"editor.profiler.serverHiddenGroups": ["physics", "renderer", "nonsense"],
+                "editor.profiler.hiddenGroups": "renderer"})");
+  const SettingsStore settings(m_file);
+
+  EXPECT_EQ(profilerPanelState::readHiddenMask(settings, profile::LaneKind::server), 1u << 1);
+  EXPECT_EQ(profilerPanelState::readHiddenMask(settings), 0u);
+}
+
+TEST_F(ProfilerPanelState, WrongTypedServerHiddenGroupsFallBackToNothingHidden)
+{
+  writeFile(R"({"editor.profiler.serverHiddenGroups": [1, 2]})");
+  const SettingsStore settings(m_file);
+
+  EXPECT_EQ(profilerPanelState::readHiddenMask(settings, profile::LaneKind::server), 0u);
+}
+
+TEST(ProfilerPanelInteraction, ClickingAServerBarSelectsTheServerLaneAndPausesBoth)
+{
+  profilerPanelState::Interaction interaction;
+  interaction.clickColumn(7);
+  interaction.clickServerColumn(40);
+
+  EXPECT_TRUE(interaction.paused);
+  EXPECT_EQ(interaction.serverSelectedSequence, 40u);
+  EXPECT_EQ(interaction.selectedSequence, 7u);
+  EXPECT_EQ(interaction.breakdownLane, profilerPanelState::BreakdownLane::server);
+
+  interaction.clickColumn(9);
+
+  EXPECT_EQ(interaction.breakdownLane, profilerPanelState::BreakdownLane::editor);
+  EXPECT_EQ(interaction.serverSelectedSequence, 40u);
+}
+
+TEST(ProfilerPanelInteraction, ClickingTheSelectedServerBarResumesBothLanes)
+{
+  profilerPanelState::Interaction interaction;
+  interaction.clickColumn(7);
+  interaction.clickServerColumn(40);
+
+  interaction.clickServerColumn(40);
+
+  EXPECT_FALSE(interaction.paused);
+  EXPECT_EQ(interaction.selectedSequence, 0u);
+  EXPECT_EQ(interaction.serverSelectedSequence, 0u);
+  EXPECT_EQ(interaction.breakdownLane, profilerPanelState::BreakdownLane::editor);
+}
+
+TEST(ProfilerPanelInteraction, ClickingNothingOnTheServerLaneChangesNothing)
+{
+  profilerPanelState::Interaction interaction;
+
+  interaction.clickServerColumn(0);
+
+  EXPECT_FALSE(interaction.paused);
+  EXPECT_EQ(interaction.serverSelectedSequence, 0u);
+}
+
+TEST(ProfilerPanelInteraction, ClosingDropsTheServerSelectionToo)
+{
+  profilerPanelState::Interaction interaction;
+  interaction.clickServerColumn(40);
+  ASSERT_TRUE(interaction.paused);
+
+  interaction.close();
+
+  EXPECT_FALSE(interaction.paused);
+  EXPECT_EQ(interaction.serverSelectedSequence, 0u);
+  EXPECT_EQ(interaction.breakdownLane, profilerPanelState::BreakdownLane::editor);
+}
+
+TEST(ProfilerPanelFreeze, OnlyAPausedLaneWithASourceThatIsNotYetFrozenCopies)
+{
+  EXPECT_TRUE(profilerPanelState::shouldFreeze(true, false, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(false, false, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(true, true, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(true, false, false));
+}
+
+TEST(ProfilerPanelFreeze, AClickFreezesInTheSameFrameAndLiveFramesNeverDo)
+{
+  profilerPanelState::Interaction interaction;
+
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(interaction.paused, false, true));
+
+  interaction.clickServerColumn(40);
+
+  EXPECT_TRUE(profilerPanelState::shouldFreeze(interaction.paused, false, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(interaction.paused, true, true));
+
+  interaction.resume();
+
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(interaction.paused, false, true));
+}
+
+TEST(ProfilerPanelScale, ServerScaleNeverDropsBelowTheBudget)
+{
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(16.7, 20.0), 33.3);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(33.3, 20.0), 33.3);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(100.0, 20.0), 100.0);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(150.0, 20.0), 150.0);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(5.0, 200.0), 200.0);
+}

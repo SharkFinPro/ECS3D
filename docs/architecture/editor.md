@@ -66,7 +66,12 @@ window, closed by default, F3 or Window, then Profiler: the editor's frame lane 
 frame and pauses in the same frame, and closing the panel resumes and drops the copy. The window, scale and hidden
 groups persist in
 `editor.profiler.window`, `editor.profiler.scale` and `editor.profiler.hiddenGroups`; the choices, their validation
-and the pause/selection rules are the headless `ProfilerPanelState.h`), `AssetBrowserPanel` (its type
+and the pause/selection rules are the headless `ProfilerPanelState.h`. Below the editor lane sits the server's tick
+lane (own legend, own `editor.profiler.serverHiddenGroups`, a 20 ms budget line) and a collapsing Network section.
+`EditorApp` (`EditorAppProfiler.cpp`) subscribes the connection to the server's statistics only while the panel is
+open and fills a `ServerLaneInput` (`ProfilerServerLane.h`, plain data, so the library needs no `ECS3DNet`) from
+`net::RemoteStats` each frame; the panel reads it through `setServerLane`. Pause freezes both lanes, each bar click
+selects in its own lane, and the Breakdown table shows the lane clicked last), `AssetBrowserPanel` (its type
 filter is a union of toggled chips, with an "All" chip to clear: `AssetFilter.h`), `AssetDisplay` (shared asset
 label/name/icon/color rules, header-only), `PlayControls.h` (the headless play/pause/stop enable rules for the
 Scene Status toolbar's fixed row of icon buttons, which stay drawn and gray out when unavailable), `SaveUI`

@@ -65,6 +65,8 @@ void EditorApp::updateGui()
 
   m_consolePanel->displayGui();
 
+  updateServerStats();
+
   m_profilerPanel->displayGui();
 
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate

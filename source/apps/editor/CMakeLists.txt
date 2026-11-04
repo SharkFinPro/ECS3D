@@ -9,6 +9,7 @@ add_executable(${PROJECT_NAME}
   EditorAppInput.cpp
   EditorAppMessages.cpp
   EditorAppPanels.cpp
+  EditorAppProfiler.cpp
   EditorAppUndoMenu.cpp
   EditorApp.h
   DarkTitleBar.cpp

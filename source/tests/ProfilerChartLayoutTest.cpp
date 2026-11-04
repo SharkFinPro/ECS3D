@@ -70,3 +70,13 @@ TEST(ProfilerChartLayout, OnlyATotalAboveTheScaleIsMarkedClipped)
   EXPECT_FALSE(profilerChart::exceedsScale(16700.0, 16.7));
   EXPECT_FALSE(profilerChart::exceedsScale(1.0e6, 0.0));
 }
+
+TEST(ProfilerChartLayout, BreakdownIndentStartsAtZeroAndStrictlyIncreasesWithDepth)
+{
+  EXPECT_FLOAT_EQ(profilerChart::rowIndent(0), 0.0f);
+
+  for (std::size_t depth = 1; depth < 6; ++depth)
+  {
+    EXPECT_GT(profilerChart::rowIndent(depth), profilerChart::rowIndent(depth - 1));
+  }
+}

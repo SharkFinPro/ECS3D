@@ -146,8 +146,8 @@ recorded, so a failure loses no subscription state.
   record it under `Network in`, reloads under `Script reload check`), and a cyclic or out-of-range parent gives Other.
 - **Exclusive time.** `groupMicros` charges each node its micros minus its direct children's (clamped at 0), so
   nested scopes are not counted twice. Hidden groups read 0.
-- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`. Negative or NaN
-  seconds count as 0.
+- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`.
+  Negative or NaN seconds count as 0.
 - **Auto scale.** `autoScaleMillis(p99)` picks 16.7, 33.3, 50 or 100 ms, then whole multiples of 100 ms.
 - **Columns.** `buildColumns` gives one column per sample; past `maxColumns`, adjacent samples merge by max, with
   hitch OR'ed, so a spike survives downsampling. A column's `sequence` is its newest sample, which a click selects.
@@ -170,6 +170,25 @@ opens the next at its top, so the previous iteration's `render()` falls inside i
 The editor's lane is drawn by the Profiler panel through `ProfilerCharts` (`ECS3DRender`), which holds the ImGui
 drawing for the bars, legend and breakdown table; its pixel math is the headless `ProfilerChartLayout.h`. Nothing
 else reads the lanes yet. The app wiring has no headless test.
+
+## Server lane in the Profiler panel
+
+The panel draws the server's tick lane below the editor lane, from `net::RemoteStats`. `EditorApp::updateServerStats`
+(`EditorAppProfiler.cpp`) sends `statsSubscribe(true)` when the panel opens and `false` when it closes, so the server
+streams nothing while the panel is shut; it also calls `subscribed()`/`unsubscribed()` on the `RemoteStats` and
+`disconnected()` when the connection is lost. Each frame the panel is open, it fills a `ServerLaneInput`
+(`ProfilerServerLane.h`): the state (`off`, `waiting`, `live`, `unsupported`, `disconnected`), the history pointer, the
+node table as `ViewNode`s (rebuilt only when the epoch or node count changes), the server flags and the figures below.
+`serverLaneNotice` gives the line shown under or instead of the chart: waiting, unsupported, "Disconnected", or "Scene
+stopped" while live with no scene running. The editor lane draws in every state.
+
+The Network section shows, over the panel's window, bytes per second sent and received with the largest message types
+(`net::summarizeTraffic` in `RemoteStatsSummary.h`, which divides by the server time the batches cover), the
+editor's own inbound rate (`RateMeter`, from `NetClient::traffic()`), the last ten snapshots with their reason, size,
+build time and recipients, the largest held snapshot, snapshots in the last minute (`net::snapshotsWithin`), and the
+connection and editor counts. Counted bytes exclude the transport's framing, which adds 4 bytes per message on TCP.
+Byte rates divide by the server time the samples cover, which excludes the roughly 1 ms sleep between samples, so they
+read slightly high.
 
 ## Collision phases
 

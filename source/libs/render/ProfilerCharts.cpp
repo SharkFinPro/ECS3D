@@ -20,10 +20,12 @@ namespace {
     return (color & 0x00FFFFFFu) | (90u << 24);
   }
 
-  void drawColumnTooltip(const profile::Column& column, const std::span<const profile::DisplayGroup> groups)
+  void drawColumnTooltip(const profile::Column& column, const std::span<const profile::DisplayGroup> groups,
+                         const std::string_view label)
   {
     ImGui::BeginTooltip();
-    ImGui::Text("Frame %llu: %.2f ms", static_cast<unsigned long long>(column.sequence), millis(column.wallMicros));
+    ImGui::Text("%.*s %llu: %.2f ms", static_cast<int>(label.size()), label.data(),
+                static_cast<unsigned long long>(column.sequence), millis(column.wallMicros));
 
     if (column.hitch)
     {
@@ -49,7 +51,7 @@ namespace profilerCharts {
   uint64_t drawStackedBars(const std::vector<profile::Column>& columns,
                            const std::span<const profile::DisplayGroup> groups, const double scaleMillis,
                            const std::optional<double> budgetMillis, const uint64_t selectedSequence,
-                           const float height)
+                           const float height, const std::string_view label)
   {
     const float width = std::max(ImGui::GetContentRegionAvail().x, 1.0f);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -122,7 +124,7 @@ namespace profilerCharts {
       return 0;
     }
 
-    drawColumnTooltip(columns[*hoveredColumn], groups);
+    drawColumnTooltip(columns[*hoveredColumn], groups, label);
 
     return ImGui::IsMouseClicked(ImGuiMouseButton_Left) ? columns[*hoveredColumn].sequence : 0;
   }
@@ -195,14 +197,11 @@ namespace profilerCharts {
 
     for (const auto& row : rows)
     {
-      const float indent = static_cast<float>(row.depth) * 14.0f;
-
       ImGui::TableNextRow();
 
       ImGui::TableNextColumn();
-      ImGui::Indent(indent);
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + profilerChart::rowIndent(row.depth));
       ImGui::TextUnformatted(row.name.data(), row.name.data() + row.name.size());
-      ImGui::Unindent(indent);
 
       ImGui::TableNextColumn();
       ImGui::Text("%.2f", millis(row.lastMicros));
