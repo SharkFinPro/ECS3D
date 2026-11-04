@@ -161,3 +161,27 @@ TEST(ServerLaneTicks, WindowTickCountSumsTheTicksCounterAndCapsAtTheAvailableTic
   EXPECT_EQ(profilerServerLane::windowTickCount(history, 4, 0, 100), 12u);
   EXPECT_EQ(profilerServerLane::windowTickCount(history, 4, 0, 5), 5u);
 }
+
+TEST(ServerLaneFormat, ValuesRoundBeforeTheUnitIsChosen)
+{
+  EXPECT_EQ(profilerServerLane::formatRate(1023.96 * 1024.0), "1.0 MB/s");
+  EXPECT_EQ(profilerServerLane::formatRate(1023.94 * 1024.0), "1023.9 KB/s");
+  EXPECT_EQ(profilerServerLane::formatRate(1048575.0), "1.0 MB/s");
+  EXPECT_EQ(profilerServerLane::formatRate(1023.6), "1.0 KB/s");
+  EXPECT_EQ(profilerServerLane::formatRate(1023.4), "1023 B/s");
+  EXPECT_EQ(profilerServerLane::formatSize(1048575), "1.0 MB");
+}
+
+TEST(ServerLaneRateMeter, ResetForgetsTheEarlierMeasurement)
+{
+  Meter meter;
+  const Meter::Clock::time_point start{100s};
+
+  static_cast<void>(meter.update(0, start));
+  ASSERT_DOUBLE_EQ(meter.update(1000, start + 1s), 1000.0);
+
+  meter.reset();
+
+  EXPECT_DOUBLE_EQ(meter.update(900000, start + 100s), 0.0);
+  EXPECT_DOUBLE_EQ(meter.update(901000, start + 101s), 1000.0);
+}

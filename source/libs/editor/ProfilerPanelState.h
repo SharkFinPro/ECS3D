@@ -124,6 +124,32 @@ namespace profilerPanelState {
     return profile::percentile(std::move(walls), 99.0);
   }
 
+  // Whether a lane copies its history this frame: only while paused, once, and when it has something to copy.
+  [[nodiscard]] inline bool shouldFreeze(const bool paused, const bool alreadyFrozen, const bool hasSource)
+  {
+    return paused && !alreadyFrozen && hasSource;
+  }
+
+  // The server lane's scale never drops below its budget, so the budget line is never pinned to the top edge:
+  // below it, the smallest fixed scale that reaches it (or the budget itself when none does).
+  [[nodiscard]] inline double serverScaleMillis(const double scaleMillis, const double budgetMillis)
+  {
+    if (scaleMillis >= budgetMillis)
+    {
+      return scaleMillis;
+    }
+
+    for (const double fixed : profile::fixedScalesMillis)
+    {
+      if (fixed >= budgetMillis)
+      {
+        return fixed;
+      }
+    }
+
+    return budgetMillis;
+  }
+
   // Which lane the Breakdown table shows: the one whose bar was clicked last.
   enum class BreakdownLane : uint8_t { editor, server };
 

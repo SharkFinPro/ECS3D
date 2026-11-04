@@ -62,6 +62,7 @@ void EditorApp::updateServerStats()
   if (wanted != m_statsSubscribed)
   {
     m_statsSubscribed = wanted;
+    m_receiveRate.reset();
 
     if (connected)
     {
@@ -108,8 +109,8 @@ void EditorApp::fillServerLane()
   const auto flags = m_remoteStats.flags();
   m_serverLane.sceneRunning = (flags & net::serverStatsFlags::sceneRunning) != 0;
   m_serverLane.debugBuild = (flags & net::serverStatsFlags::debugBuild) != 0;
-  m_serverLane.editMode = (flags & net::serverStatsFlags::editMode) != 0;
 
+  // subscribed() resets the held table to the root alone, so a changed count catches a fresh subscription.
   const std::size_t nodeCount = m_remoteStats.nodeCount();
 
   if (m_serverLane.nodes.size() != nodeCount || m_serverNodesEpoch != m_remoteStats.nodeTableEpoch())

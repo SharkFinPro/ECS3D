@@ -5,8 +5,8 @@
 #include <ProfileStats.h>
 #include <ProfilerView.h>
 #include <algorithm>
-#include <cstddef>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -44,7 +44,6 @@ struct ServerLaneInput {
   std::vector<profile::ViewNode> nodes;
   bool sceneRunning = false;
   bool debugBuild = false;
-  bool editMode = false;
   bool localServer = true;
   std::size_t droppedStepsCounter = 0;
   std::size_t ticksCounter = 0;
@@ -124,14 +123,19 @@ namespace profilerServerLane {
     return {};
   }
 
-  // 1024-based with one decimal and no locale, for example "61.2 KB/s". Negative and NaN rates read as 0.
+  // 1024-based with one decimal and no locale, for example "61.2 KB/s". The value is rounded as it will print before
+  // the unit is chosen, so 1023.96 KB reads "1.0 MB/s". Negative and NaN rates read as 0.
   [[nodiscard]] inline std::string formatRate(const double bytesPerSecond)
   {
     constexpr const char* units[] = {"B/s", "KB/s", "MB/s", "GB/s"};
     double value = bytesPerSecond > 0.0 ? bytesPerSecond : 0.0;
     std::size_t unit = 0;
 
-    while (value >= 1024.0 && unit + 1 < std::size(units))
+    const auto printed = [](const double v, const std::size_t u) {
+      return u == 0 ? std::floor(v + 0.5) : std::floor(v * 10.0 + 0.5) / 10.0;
+    };
+
+    while (unit + 1 < std::size(units) && printed(value, unit) >= 1024.0)
     {
       value /= 1024.0;
       ++unit;
@@ -139,7 +143,7 @@ namespace profilerServerLane {
 
     if (unit == 0)
     {
-      return std::to_string(static_cast<uint64_t>(value)) + " " + units[unit];
+      return std::to_string(static_cast<uint64_t>(value + 0.5)) + " " + units[unit];
     }
 
     const auto tenths = static_cast<uint64_t>(value * 10.0 + 0.5);
@@ -202,6 +206,12 @@ namespace profilerServerLane {
     using Clock = std::chrono::steady_clock;
 
     static constexpr auto minInterval = std::chrono::milliseconds(500);
+
+    // Forgets the history, so a later reading does not average over time nobody was measuring.
+    void reset()
+    {
+      *this = RateMeter();
+    }
 
     // 0 until the first interval has passed, and when the total went back.
     double update(const uint64_t total, const Clock::time_point now)

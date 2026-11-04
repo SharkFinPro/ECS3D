@@ -146,8 +146,8 @@ recorded, so a failure loses no subscription state.
   record it under `Network in`, reloads under `Script reload check`), and a cyclic or out-of-range parent gives Other.
 - **Exclusive time.** `groupMicros` charges each node its micros minus its direct children's (clamped at 0), so
   nested scopes are not counted twice. Hidden groups read 0.
-- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`. Negative or NaN
-  seconds count as 0.
+- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`.
+  Negative or NaN seconds count as 0.
 - **Auto scale.** `autoScaleMillis(p99)` picks 16.7, 33.3, 50 or 100 ms, then whole multiples of 100 ms.
 - **Columns.** `buildColumns` gives one column per sample; past `maxColumns`, adjacent samples merge by max, with
   hitch OR'ed, so a spike survives downsampling. A column's `sequence` is its newest sample, which a click selects.
@@ -184,9 +184,11 @@ stopped" while live with no scene running. The editor lane draws in every state.
 
 The Network section shows, over the panel's window, bytes per second sent and received with the largest message types
 (`net::summarizeTraffic` in `RemoteStatsSummary.h`, which divides by the server time the batches cover), the
-editor's own inbound rate (`RateMeter`, from `NetClient::traffic()`), the last ten snapshots with their reason, size, build time and
-recipients, the largest held snapshot, snapshots in the last minute (`net::snapshotsWithin`), and the connection and
-editor counts. Counted bytes exclude the transport's framing, which adds 4 bytes per message on TCP.
+editor's own inbound rate (`RateMeter`, from `NetClient::traffic()`), the last ten snapshots with their reason, size,
+build time and recipients, the largest held snapshot, snapshots in the last minute (`net::snapshotsWithin`), and the
+connection and editor counts. Counted bytes exclude the transport's framing, which adds 4 bytes per message on TCP.
+Byte rates divide by the server time the samples cover, which excludes the roughly 1 ms sleep between samples, so they
+read slightly high.
 
 ## Collision phases
 

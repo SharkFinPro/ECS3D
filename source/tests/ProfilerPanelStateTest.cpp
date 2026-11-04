@@ -333,3 +333,36 @@ TEST(ProfilerPanelInteraction, ClosingDropsTheServerSelectionToo)
   EXPECT_EQ(interaction.serverSelectedSequence, 0u);
   EXPECT_EQ(interaction.breakdownLane, profilerPanelState::BreakdownLane::editor);
 }
+
+TEST(ProfilerPanelFreeze, OnlyAPausedLaneWithASourceThatIsNotYetFrozenCopies)
+{
+  EXPECT_TRUE(profilerPanelState::shouldFreeze(true, false, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(false, false, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(true, true, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(true, false, false));
+}
+
+TEST(ProfilerPanelFreeze, AClickFreezesInTheSameFrameAndLiveFramesNeverDo)
+{
+  profilerPanelState::Interaction interaction;
+
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(interaction.paused, false, true));
+
+  interaction.clickServerColumn(40);
+
+  EXPECT_TRUE(profilerPanelState::shouldFreeze(interaction.paused, false, true));
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(interaction.paused, true, true));
+
+  interaction.resume();
+
+  EXPECT_FALSE(profilerPanelState::shouldFreeze(interaction.paused, false, true));
+}
+
+TEST(ProfilerPanelScale, ServerScaleNeverDropsBelowTheBudget)
+{
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(16.7, 20.0), 33.3);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(33.3, 20.0), 33.3);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(100.0, 20.0), 100.0);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(150.0, 20.0), 150.0);
+  EXPECT_DOUBLE_EQ(profilerPanelState::serverScaleMillis(5.0, 200.0), 200.0);
+}

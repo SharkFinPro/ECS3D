@@ -89,7 +89,9 @@ int ProfilerPanel::windowSeconds() const
 
 void ProfilerPanel::freezeServer()
 {
-  if (m_frozenServer || m_serverInput == nullptr || m_serverInput->history == nullptr)
+  const bool hasSource = m_serverInput != nullptr && m_serverInput->history != nullptr;
+
+  if (!profilerPanelState::shouldFreeze(m_interaction.paused, m_frozenServer.has_value(), hasSource))
   {
     return;
   }
@@ -182,7 +184,7 @@ void ProfilerPanel::displayLane(const profile::History& history, const std::vect
   m_interaction.clickColumn(clicked);
 
   // Freeze from the history just drawn, so the selected column keeps its merged boundaries.
-  if (m_interaction.paused && !m_frozen)
+  if (profilerPanelState::shouldFreeze(m_interaction.paused, m_frozen.has_value(), true))
   {
     m_frozen.emplace(m_lane.history());
   }
@@ -227,15 +229,15 @@ void ProfilerPanel::displayServerLane(const std::vector<profile::ViewNode>& node
   const auto summary = profilerServerLane::summarizeTicks(
     tickMicros, profilerServerLane::windowTickCount(*history, window, input.ticksCounter, tickMicros.size()));
 
-  ImGui::Text("SERVER TICK  (%s server, 50 Hz)  avg %.1f ms  p95 %.1f ms  max %.1f ms  budget %.0f ms",
+  ImGui::Text("SERVER TICK  (%s server, 50 Hz)  avg %.1f ms  p95 %.1f ms  max %.1f ms  budget %.0f ms%s",
               input.localServer ? "local" : "remote", summary.averageMillis, summary.p95Millis, summary.maxMillis,
-              budgetMillis);
+              budgetMillis, input.debugBuild ? "  (debug build)" : "");
 
-  const double scaleMillis =
+  const double scaleMillis = profilerPanelState::serverScaleMillis(
     m_scaleMillis == profilerPanelState::autoScale
-      ? std::max(profile::autoScaleMillis(profilerPanelState::p99WallMicros(*history, window)),
-                 profile::fixedScalesMillis[1])
-      : m_scaleMillis;
+      ? profile::autoScaleMillis(profilerPanelState::p99WallMicros(*history, window))
+      : m_scaleMillis,
+    budgetMillis);
   const auto maxColumns = static_cast<std::size_t>(std::max(ImGui::GetContentRegionAvail().x, 1.0f));
   const auto columns = profile::buildColumns(*history, window, nodes, groupOfNode, m_serverHiddenMask, maxColumns);
 
@@ -364,7 +366,7 @@ void ProfilerPanel::displayGui()
   {
     displayHeader();
 
-    if (m_interaction.paused && !m_frozen)
+    if (profilerPanelState::shouldFreeze(m_interaction.paused, m_frozen.has_value(), true))
     {
       m_frozen.emplace(m_lane.history());
     }

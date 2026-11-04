@@ -68,7 +68,8 @@ namespace summaryDetail {
 }
 
 // Sums the traffic batches that arrived within `window` of the newest one.
-[[nodiscard]] inline TrafficSummary summarizeTraffic(const RemoteStats& stats, const RemoteStats::Clock::duration window)
+[[nodiscard]] inline TrafficSummary summarizeTraffic(const RemoteStats& stats,
+                                                     const RemoteStats::Clock::duration window)
 {
   TrafficSummary summary;
   const auto& batches = stats.trafficBatches();
