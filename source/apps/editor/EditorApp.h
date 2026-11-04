@@ -46,6 +46,7 @@ class EditorSelection;
 class SettingsStore;
 class SettingsPanel;
 class ConsolePanel;
+class ProfilerPanel;
 class SceneScriptsPanel;
 class RingBufferSink;
 class KeybindTable;
@@ -148,6 +149,7 @@ private:
   // that would otherwise only reach stdout. Only the editor has a panel for it, so only the editor adds it.
   std::shared_ptr<RingBufferSink> m_consoleSink;
   std::unique_ptr<ConsolePanel> m_consolePanel;
+  std::unique_ptr<ProfilerPanel> m_profilerPanel;
   std::unique_ptr<SceneScriptsPanel> m_sceneScriptsPanel;
 
   // Named editor actions mapped to key chords, dispatched independently of who handles them (SaveUI,

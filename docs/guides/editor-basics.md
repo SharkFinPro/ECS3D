@@ -154,6 +154,7 @@ The default keybinds are:
 | Gizmo: Translate | 1 |
 | Gizmo: Rotate | 2 |
 | Gizmo: Scale | 3 |
+| Toggle Profiler | F3 |
 
 Focus Selection can be bound, but it has no behavior yet. Keybinds are ignored while a text field wants
 keyboard input.

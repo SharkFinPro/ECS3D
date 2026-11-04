@@ -19,6 +19,9 @@ add_library(${PROJECT_NAME}
   InputView.h
   MissingAssetFallback.h
   OutlineColors.h
+  ProfilerChartLayout.h
+  ProfilerCharts.cpp
+  ProfilerCharts.h
   SharedAssetLoads.h
   ThumbnailImage.cpp
   ThumbnailImage.h
@@ -34,6 +37,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
+  ECS3DProfile
   VulkanEngine
 )
 

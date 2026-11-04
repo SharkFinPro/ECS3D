@@ -27,6 +27,7 @@
 #include <AssetReferences.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
+#include <ProfilerPanel.h>
 #include <SceneScriptsPanel.h>
 #include <RingBufferSink.h>
 #include <SettingsStore.h>
@@ -108,6 +109,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_consoleSink = std::make_shared<RingBufferSink>(2000);
   Log::addSink(m_consoleSink);
   m_consolePanel = std::make_unique<ConsolePanel>(m_consoleSink);
+  m_profilerPanel = std::make_unique<ProfilerPanel>(m_profileLane, *m_settings);
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
   if (m_options.project.empty())
@@ -497,6 +499,7 @@ void EditorApp::setupKeybinds()
   m_keybindDispatcher = std::make_shared<KeybindDispatcher>(m_renderer, m_keybindTable);
 
   m_keybindDispatcher->on(EditorAction::toggleGui, [this] { m_shouldDisplayGui = !m_shouldDisplayGui; });
+  m_keybindDispatcher->on(EditorAction::toggleProfiler, [this] { m_profilerPanel->toggle(); });
 
   // requestUndo()/requestRedo() (EditorAppUndoMenu.cpp) add the in-flight gate on top of undo()/redo() -
   // the Edit menu calls the same two methods.

@@ -166,6 +166,8 @@ add_executable(${PROJECT_NAME}
   ProfileOverheadTest.cpp
   ProfileStatsTest.cpp
   ProfilerViewTest.cpp
+  ProfilerChartLayoutTest.cpp
+  ProfilerPanelStateTest.cpp
   InertiaTensorBehaviorTest.cpp
   InertiaTensorTests.cpp
   PhysicsIntegrationTest.cpp

@@ -193,6 +193,7 @@ const std::array<EditorActionInfo, editorActionCount>& editorActions()
     set(EditorAction::gizmoTranslate, "gizmoTranslate", "Gizmo: Translate", parseChord("1"));
     set(EditorAction::gizmoRotate, "gizmoRotate", "Gizmo: Rotate", parseChord("2"));
     set(EditorAction::gizmoScale, "gizmoScale", "Gizmo: Scale", parseChord("3"));
+    set(EditorAction::toggleProfiler, "toggleProfiler", "Toggle Profiler", parseChord("F3"));
 
     return result;
   }();

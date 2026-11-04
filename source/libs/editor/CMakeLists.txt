@@ -41,6 +41,9 @@ add_library(${PROJECT_NAME}
   ConsolePanel.h
   ConsolePanelLayout.h
   ConsoleView.h
+  ProfilerPanel.cpp
+  ProfilerPanel.h
+  ProfilerPanelState.h
   SceneScriptsPanel.cpp
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h

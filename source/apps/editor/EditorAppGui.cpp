@@ -10,6 +10,7 @@
 #include <SaveUI.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
+#include <ProfilerPanel.h>
 #include <SceneScriptsPanel.h>
 #include <SettingsStore.h>
 #include <VulkanEngine/VulkanEngine.h>
@@ -63,6 +64,8 @@ void EditorApp::updateGui()
   m_sceneScriptsPanel->displayGui();
 
   m_consolePanel->displayGui();
+
+  m_profilerPanel->displayGui();
 
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
   // scene-selector widget.
@@ -166,6 +169,11 @@ void EditorApp::displayWindowMenu() const
       }
     }
 
+    if (ImGui::MenuItem("Profiler", nullptr, m_profilerPanel->isOpen()))
+    {
+      m_profilerPanel->toggle();
+    }
+
     ImGui::EndMenu();
   }
 }
@@ -219,6 +227,7 @@ void EditorApp::applyDockLocations() const
   gui->dockBottom("Assets");
   gui->dockBottom("Project Errors");
   gui->dockBottom("Console");
+  gui->dockBottom("Profiler");
 
   applyDockMinimumSizes();
 }
@@ -237,6 +246,7 @@ void EditorApp::applyDockMinimumSizes() const
   const ImVec2 assetsMinimumSize{0.0f, 200.0f};
   const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
   const ImVec2 consoleMinimumSize{0.0f, 120.0f};
+  const ImVec2 profilerMinimumSize{0.0f, 120.0f};
 
   gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
   gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
@@ -245,6 +255,7 @@ void EditorApp::applyDockMinimumSizes() const
   gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
   gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
   gui->setDockedWindowMinimumSize("Console", consoleMinimumSize);
+  gui->setDockedWindowMinimumSize("Profiler", profilerMinimumSize);
 }
 
 bool EditorApp::applyDockPercents() const
