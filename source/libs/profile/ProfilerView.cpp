@@ -4,13 +4,27 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <utility>
 
 namespace profile {
   namespace {
     constexpr uint32_t rgb(const uint32_t r, const uint32_t g, const uint32_t b)
     {
-      return r | g << 8 | b << 16 | 0xFFu << 24;
+      return r | (g << 8) | (b << 16) | (0xFFu << 24);
     }
+
+    constexpr std::array<uint32_t, fixedScalesMillis.size()> fixedScalesMicros = []
+    {
+      std::array<uint32_t, fixedScalesMillis.size()> micros{};
+
+      for (std::size_t i = 0; i < micros.size(); ++i)
+      {
+        micros[i] = static_cast<uint32_t>(fixedScalesMillis[i] * 1000.0 + 0.5);
+      }
+
+      return micros;
+    }();
 
     constexpr std::array<DisplayGroup, 7> frameGroups{{
       {"networkIn", "Network in", rgb(0x4E, 0x79, 0xA7)},
@@ -31,7 +45,8 @@ namespace profile {
       {"other", "Other", rgb(0x9C, 0x9C, 0x9C)}
     }};
 
-    // The one place scope names map to groups. An empty parent means a top-level scope.
+    // The one place scope names map to groups. An empty parent means a top-level scope (parent is the root); "*" means
+    // any parent.
     struct Rule {
       std::string_view name;
       std::string_view parent;
@@ -53,7 +68,7 @@ namespace profile {
       {"Physics", "Server tick", "physics"},
       {"Collisions", "Server tick", "collisions"},
       {"Replication", "", "replication"},
-      {"Snapshot", "", "replication"},
+      {"Snapshot", "*", "replication"},
       {"Network in", "", "networkIn"}
     }};
 
@@ -103,22 +118,53 @@ namespace profile {
       return walls;
     }
 
-    void appendRows(const std::vector<std::vector<NodeId>>& children, const NodeId node, const std::size_t depth,
+    bool ruleMatches(const Rule& rule, const std::span<const ViewNode> nodes, const std::size_t node)
+    {
+      if (rule.name != nodes[node].name)
+      {
+        return false;
+      }
+
+      const auto parent = static_cast<std::size_t>(nodes[node].parent);
+
+      if (rule.parent == "*")
+      {
+        return true;
+      }
+
+      if (rule.parent.empty())
+      {
+        return parent == 0;
+      }
+
+      return parent < nodes.size() && nodes[parent].name == rule.parent;
+    }
+
+    // Appends the subtree's rows depth first; an inactive node stays only to keep an active descendant readable.
+    bool appendRows(const std::vector<std::vector<NodeId>>& children, const NodeId node, const std::size_t depth,
                     const std::span<const ViewNode> nodes, const std::vector<BreakdownRow>& byNode,
                     const std::vector<bool>& active, std::vector<BreakdownRow>& rows)
     {
+      bool any = false;
+
       for (const auto child : children[node])
       {
-        if (active[child])
+        auto row = byNode[child];
+        row.depth = depth;
+        row.name = nodes[child].name;
+        rows.push_back(std::move(row));
+
+        const auto descendants = appendRows(children, child, depth + 1, nodes, byNode, active, rows);
+
+        if (!active[child] && !descendants)
         {
-          auto row = byNode[child];
-          row.depth = depth;
-          row.name = nodes[child].name;
-          rows.push_back(row);
+          rows.pop_back();
         }
 
-        appendRows(children, child, depth + 1, nodes, byNode, active, rows);
+        any = any || active[child] || descendants;
       }
+
+      return any;
     }
   }
 
@@ -158,11 +204,9 @@ namespace profile {
 
       for (std::size_t step = 0; step < nodes.size() && current > 0 && current < nodes.size(); ++step)
       {
-        const auto parent = static_cast<std::size_t>(nodes[current].parent);
-        const std::string_view parentName = parent < nodes.size() ? std::string_view(nodes[parent].name) : "";
         const auto match = std::ranges::find_if(rules, [&](const Rule& rule)
         {
-          return rule.name == nodes[current].name && rule.parent == parentName;
+          return ruleMatches(rule, nodes, current);
         });
 
         if (match != rules.end())
@@ -171,7 +215,7 @@ namespace profile {
           break;
         }
 
-        current = parent;
+        current = static_cast<std::size_t>(nodes[current].parent);
       }
     }
 
@@ -192,17 +236,24 @@ namespace profile {
       }
     }
 
-    std::array<uint32_t, maxDisplayGroups> result{};
+    std::array<uint64_t, maxDisplayGroups> totals{};
 
     for (std::size_t i = 1; i < count && i < groups.size(); ++i)
     {
-      if (groups[i] >= maxDisplayGroups || (hiddenMask >> groups[i] & 1u) != 0)
+      if (groups[i] >= maxDisplayGroups || ((hiddenMask >> groups[i]) & 1u) != 0)
       {
         continue;
       }
 
       const uint64_t micros = sample.nodeMicros[i];
-      result[groups[i]] += static_cast<uint32_t>(micros > childSum[i] ? micros - childSum[i] : 0);
+      totals[groups[i]] += micros > childSum[i] ? micros - childSum[i] : 0;
+    }
+
+    std::array<uint32_t, maxDisplayGroups> result{};
+
+    for (std::size_t g = 0; g < result.size(); ++g)
+    {
+      result[g] = static_cast<uint32_t>(std::min<uint64_t>(totals[g], UINT32_MAX));
     }
 
     return result;
@@ -215,12 +266,14 @@ namespace profile {
       return 0;
     }
 
-    const auto cutoff = static_cast<double>(sampleEndNanos(history.newest())) - seconds * 1e9;
+    const auto nanos = seconds >= 9.2e9 ? INT64_MAX : (seconds > 0.0 ? static_cast<int64_t>(seconds * 1e9) : 0);
+    const auto newestEnd = sampleEndNanos(history.newest());
+    const auto cutoff = newestEnd < INT64_MIN + nanos ? INT64_MIN : newestEnd - nanos;
     std::size_t count = 0;
 
     for (std::size_t i = history.size(); i > 0; --i)
     {
-      if (static_cast<double>(sampleEndNanos(history.at(i - 1))) <= cutoff)
+      if (sampleEndNanos(history.at(i - 1)) <= cutoff)
       {
         break;
       }
@@ -233,11 +286,11 @@ namespace profile {
 
   double autoScaleMillis(const uint32_t p99Micros)
   {
-    for (const auto scale : fixedScalesMillis)
+    for (std::size_t i = 0; i < fixedScalesMicros.size(); ++i)
     {
-      if (p99Micros <= static_cast<uint64_t>(std::llround(scale * 1000.0)))
+      if (p99Micros <= fixedScalesMicros[i])
       {
-        return scale;
+        return fixedScalesMillis[i];
       }
     }
 

@@ -3,9 +3,12 @@
 #include "ProfilerView.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -444,4 +447,190 @@ TEST(ProfilerView, BreakdownRowsOfNothingAreEmpty)
   const auto nodes = makeNodes({{0, "Server tick"}});
 
   EXPECT_TRUE(profile::breakdownRows(profile::History(4), nodes, 10, 0).empty());
+}
+
+TEST(ProfilerView, SnapshotIsReplicationAtAnyDepth)
+{
+  // 1 Script reload check, 2 Snapshot, 3 Network in, 4 Snapshot, 5 Child (under Snapshot)
+  const auto nodes = makeNodes({{0, "Script reload check"}, {1, "Snapshot"}, {0, "Network in"}, {3, "Snapshot"},
+                                {4, "Child"}});
+
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 1), "other");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 2), "replication");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 3), "networkIn");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 4), "replication");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 5), "replication");
+}
+
+TEST(ProfilerView, TopLevelRulesNeedTheRootAsParent)
+{
+  // 1 Network in past the table, 2 Physics under it, 3 Snapshot under it, 4 Scripts under a valid Server tick
+  const auto nodes = makeNodes({{9, "Network in"}, {1, "Physics"}, {1, "Snapshot"}, {5, "Scripts"}, {0, "Server tick"}});
+
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 1), "other");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 2), "other");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 3), "replication");
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 4), "scripts");
+}
+
+TEST(ProfilerView, MalformedNodeTablesTerminate)
+{
+  // 1<->2 cycle, 3 its own parent, 4 parent past the table, 5 a valid positive control
+  const auto nodes = makeNodes({{2, "Network in"}, {1, "Network in"}, {3, "Network in"}, {99, "Network in"},
+                                {0, "Network in"}});
+  const auto groups = profile::groupOfNodes(LaneKind::server, nodes);
+
+  ASSERT_EQ(groups.size(), nodes.size());
+
+  for (std::size_t node = 0; node < 5; ++node)
+  {
+    EXPECT_EQ(groupIdOf(LaneKind::server, nodes, node), "other") << node;
+  }
+
+  EXPECT_EQ(groupIdOf(LaneKind::server, nodes, 5), "networkIn");
+
+  profile::History history(4);
+  auto sample = sampleAt(1, 0, 1000);
+
+  for (std::size_t node = 1; node < nodes.size(); ++node)
+  {
+    sample.nodeMicros[node] = 100;
+    sample.nodeCalls[node] = 1;
+  }
+
+  history.push(sample);
+
+  const auto rows = profile::breakdownRows(history, nodes, 4, 0);
+
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].node, 5u);
+}
+
+TEST(ProfilerView, GroupMicrosIgnoresExtraNodesPastMaxNodes)
+{
+  std::vector<Spec> specs(199, Spec{0, "Network in"});
+  const auto nodes = makeNodes(specs);
+  const auto groups = profile::groupOfNodes(LaneKind::server, nodes);
+  profile::Sample sample;
+
+  for (std::size_t node = 1; node < profile::maxNodes; ++node)
+  {
+    sample.nodeMicros[node] = 1;
+  }
+
+  // Aliases nodeMicros[maxNodes] if the bound were missing.
+  sample.nodeCalls[0] = 0xFFFF;
+  sample.nodeCalls[1] = 0xFFFF;
+
+  ASSERT_EQ(nodes.size(), 200u);
+  ASSERT_EQ(groups.size(), 200u);
+  EXPECT_EQ(profile::groupMicros(sample, nodes, groups, 0)[4], profile::maxNodes - 1);
+}
+
+TEST(ProfilerView, GroupMicrosSaturatesAGroupSum)
+{
+  const auto nodes = makeNodes({{0, "Network in"}, {0, "Network in"}});
+  const auto groups = profile::groupOfNodes(LaneKind::server, nodes);
+  profile::Sample sample;
+  sample.nodeMicros[1] = 4000000000u;
+
+  EXPECT_EQ(profile::groupMicros(sample, nodes, groups, 0)[4], 4000000000u);
+
+  sample.nodeMicros[2] = 4000000000u;
+
+  EXPECT_EQ(profile::groupMicros(sample, nodes, groups, 0)[4], std::numeric_limits<uint32_t>::max());
+}
+
+TEST(ProfilerView, GroupMicrosHidesSeveralGroupsIncludingTheFirst)
+{
+  const auto nodes = makeNodes({{0, "Server tick"}, {1, "Scripts"}, {1, "Physics"}, {1, "Collisions"}});
+  const auto groups = profile::groupOfNodes(LaneKind::server, nodes);
+  profile::Sample sample;
+  sample.nodeMicros[2] = 100;
+  sample.nodeMicros[3] = 200;
+  sample.nodeMicros[4] = 300;
+
+  const auto all = profile::groupMicros(sample, nodes, groups, 0);
+  const auto hidden = profile::groupMicros(sample, nodes, groups, 0b11u);
+
+  EXPECT_EQ(all[0], 100u);
+  EXPECT_EQ(all[1], 200u);
+  EXPECT_EQ(hidden[0], 0u);
+  EXPECT_EQ(hidden[1], 0u);
+  EXPECT_EQ(hidden[2], 300u);
+}
+
+TEST(ProfilerView, WindowSizeTreatsNegativeAndNanSecondsAsZero)
+{
+  profile::History history(8);
+
+  for (uint64_t i = 1; i <= 4; ++i)
+  {
+    history.push(sampleAt(i, static_cast<int64_t>(i) * 1000000000 - 1000000, 1000));
+  }
+
+  EXPECT_EQ(profile::windowSize(history, -5.0), 1u);
+  EXPECT_EQ(profile::windowSize(history, std::nan("")), 1u);
+  EXPECT_EQ(profile::windowSize(history, 1e300), 4u);
+  EXPECT_EQ(profile::windowSize(history, 3.5), 4u);
+}
+
+TEST(ProfilerView, BreakdownRowsOmitANodeActiveOnlyBeforeTheWindow)
+{
+  const auto nodes = makeNodes({{0, "Server tick"}, {0, "Physics"}});
+  profile::History history(8);
+
+  for (uint64_t i = 1; i <= 3; ++i)
+  {
+    auto sample = sampleAt(i, 0, 1000);
+    sample.nodeMicros[1] = 500;
+    sample.nodeCalls[1] = 1;
+    sample.nodeMicros[2] = i == 1 ? 400 : 0;
+    sample.nodeCalls[2] = i == 1 ? 1 : 0;
+    history.push(sample);
+  }
+
+  const auto narrow = profile::breakdownRows(history, nodes, 2, 0);
+  const auto wide = profile::breakdownRows(history, nodes, 3, 0);
+
+  ASSERT_EQ(narrow.size(), 1u);
+  EXPECT_EQ(narrow[0].name, "Server tick");
+  ASSERT_EQ(wide.size(), 2u);
+  EXPECT_EQ(wide[1].name, "Physics");
+}
+
+TEST(ProfilerView, BreakdownShareIsZeroWithoutWallTime)
+{
+  const auto nodes = makeNodes({{0, "Server tick"}});
+  profile::History history(4);
+  auto sample = sampleAt(1, 0, 0);
+  sample.nodeMicros[1] = 500;
+  history.push(sample);
+
+  const auto rows = profile::breakdownRows(history, nodes, 4, 0);
+
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_DOUBLE_EQ(rows[0].averageMicros, 500.0);
+  EXPECT_DOUBLE_EQ(rows[0].share, 0.0);
+}
+
+TEST(ProfilerView, BreakdownKeepsAnInactiveParentOfAnActiveChild)
+{
+  const auto nodes = makeNodes({{0, "Server tick"}, {1, "Scripts"}, {0, "Idle"}});
+  profile::History history(4);
+  auto sample = sampleAt(1, 0, 1000);
+  sample.nodeMicros[2] = 300;
+  sample.nodeCalls[2] = 1;
+  history.push(sample);
+
+  const auto rows = profile::breakdownRows(history, nodes, 4, 0);
+
+  ASSERT_EQ(rows.size(), 2u);
+  EXPECT_EQ(rows[0].name, "Server tick");
+  EXPECT_EQ(rows[0].depth, 0u);
+  EXPECT_DOUBLE_EQ(rows[0].averageMicros, 0.0);
+  EXPECT_EQ(rows[0].maxMicros, 0u);
+  EXPECT_EQ(rows[1].name, "Scripts");
+  EXPECT_EQ(rows[1].depth, 1u);
+  EXPECT_DOUBLE_EQ(rows[1].averageMicros, 300.0);
 }
