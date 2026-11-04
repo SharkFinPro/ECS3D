@@ -37,18 +37,19 @@ namespace profile {
   [[nodiscard]] std::span<const DisplayGroup> displayGroups(LaneKind kind);
 
   // The group of every node, indexed like nodes; the root gets Other. A node takes the group of its nearest
-  // ancestor-or-self whose name maps to one.
+  // ancestor-or-self whose name maps to one. A malformed table (cycle, parent past the end) gives Other.
   [[nodiscard]] std::vector<uint8_t> groupOfNodes(LaneKind kind, std::span<const ViewNode> nodes);
 
   // Exclusive time: a node's micros minus its direct children's (clamped at 0), summed into its group. Hidden groups
-  // (bit i of hiddenMask is group i) read 0. Nodes at or past nodes.size() or maxNodes are ignored.
+  // (bit i of hiddenMask is group i) read 0. Nodes at or past nodes.size() or maxNodes are ignored; a group's sum
+  // saturates at the largest uint32_t.
   [[nodiscard]] std::array<uint32_t, maxDisplayGroups> groupMicros(const Sample& sample,
                                                                    std::span<const ViewNode> nodes,
                                                                    std::span<const uint8_t> groups,
                                                                    uint32_t hiddenMask);
 
   // How many of the newest samples end within the last `seconds` of the newest sample's end. At least 1 when the
-  // history is not empty, 0 when it is.
+  // history is not empty, 0 when it is. Negative or NaN seconds count as 0.
   [[nodiscard]] std::size_t windowSize(const History& history, double seconds);
 
   inline constexpr std::array<double, 4> fixedScalesMillis{16.7, 33.3, 50.0, 100.0};
@@ -88,7 +89,7 @@ namespace profile {
   struct BreakdownRow {
     NodeId node = 0;
     std::size_t depth = 0;       // top-level nodes are 0
-    std::string_view name;       // points into the nodes span the caller passed
+    std::string name;
     uint32_t lastMicros = 0;     // the selected sample's value, or the newest sample's
     double averageMicros = 0.0;
     uint32_t p95Micros = 0;
@@ -96,7 +97,8 @@ namespace profile {
     double share = 0.0;          // averageMicros / the window's average wall, 0 when that is 0
   };
 
-  // Depth-first, children in node-id order, root excluded; only nodes with time or calls in the window.
+  // Depth-first, children in node-id order, root excluded; only nodes with time or calls in the window, plus the
+  // ancestors of such a node so the tree stays readable. Nodes that do not reach the root are left out.
   // selectedSequence 0 means none; a sequence no longer in the history falls back to the newest.
   [[nodiscard]] std::vector<BreakdownRow> breakdownRows(const History& history, std::span<const ViewNode> nodes,
                                                         std::size_t window, uint64_t selectedSequence);

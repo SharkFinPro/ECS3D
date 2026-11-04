@@ -141,15 +141,19 @@ recorded, so a failure loses no subscription state.
 - **Groups.** Each `LaneKind` has a fixed, ordered list of `DisplayGroup`s ending in "Other": frame lanes show Network
   in, Input, Editor UI, Scene prep, Renderer, Profiler; the server lane shows Scripts, Physics, Collisions,
   Replication, Network in. One rule table per kind in `ProfilerView.cpp` maps scope names (and, for the server's
-  phases, the parent `Server tick`) to groups; a node takes its nearest matching ancestor-or-self, else Other.
+  phases, the parent `Server tick`) to groups; a node takes its nearest matching ancestor-or-self, else Other. A
+  top-level rule matches only a node whose parent is the root, `Snapshot` maps to Replication at any depth (joins
+  record it under `Network in`, reloads under `Script reload check`), and a cyclic or out-of-range parent gives Other.
 - **Exclusive time.** `groupMicros` charges each node its micros minus its direct children's (clamped at 0), so
   nested scopes are not counted twice. Hidden groups read 0.
-- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`.
+- **Window.** `windowSize(history, seconds)` counts the newest samples whose end falls within the last `seconds`. Negative or NaN
+  seconds count as 0.
 - **Auto scale.** `autoScaleMillis(p99)` picks 16.7, 33.3, 50 or 100 ms, then whole multiples of 100 ms.
 - **Columns.** `buildColumns` gives one column per sample; past `maxColumns`, adjacent samples merge by max, with
   hitch OR'ed, so a spike survives downsampling. A column's `sequence` is its newest sample, which a click selects.
 - **Breakdown.** `breakdownRows` lists active nodes depth first with the selected (or newest) sample's value plus the
-  window's average, p95, max and share of the average wall time.
+  window's average, p95, max and share of the average wall time. An inactive node stays, with zero statistics, when a
+  descendant is active. Nodes whose parent chain does not reach the root are left out.
 
 ## Switches
 
