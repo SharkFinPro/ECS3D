@@ -178,6 +178,11 @@ void ProfilerPanel::displayGui()
     m_focusRequested = false;
   }
 
+  // A saved layout from before this panel existed opens it floating; FirstUseEver keeps a saved size winning.
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.5f, viewport->Size.y * 0.5f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+
   bool stayOpen = true;
   if (ImGui::Begin(windowName, &stayOpen))
   {
