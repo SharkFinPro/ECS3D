@@ -68,6 +68,7 @@ void ProfilerPanel::setOpen(const bool open)
     m_frozen.reset();
     m_frozenServer.reset();
     m_frozenServerNodes.clear();
+    m_frozenServerTicks.clear();
   }
 }
 
@@ -95,6 +96,7 @@ void ProfilerPanel::freezeServer()
 
   m_frozenServer.emplace(*m_serverInput->history);
   m_frozenServerNodes = m_serverInput->nodes;
+  m_frozenServerTicks = m_serverInput->tickMicros;
 }
 
 void ProfilerPanel::toggle()
@@ -221,7 +223,9 @@ void ProfilerPanel::displayServerLane(const std::vector<profile::ViewNode>& node
   const auto groups = profile::displayGroups(profile::LaneKind::server);
   const auto groupOfNode = profile::groupOfNodes(profile::LaneKind::server, nodes);
   const std::size_t window = profile::windowSize(*history, m_windowSeconds);
-  const auto summary = profile::summarizeLane(*history, window);
+  const auto& tickMicros = m_frozenServer ? m_frozenServerTicks : input.tickMicros;
+  const auto summary = profilerServerLane::summarizeTicks(
+    tickMicros, profilerServerLane::windowTickCount(*history, window, input.ticksCounter, tickMicros.size()));
 
   ImGui::Text("SERVER TICK  (%s server, 50 Hz)  avg %.1f ms  p95 %.1f ms  max %.1f ms  budget %.0f ms",
               input.localServer ? "local" : "remote", summary.averageMillis, summary.p95Millis, summary.maxMillis,
@@ -239,7 +243,7 @@ void ProfilerPanel::displayServerLane(const std::vector<profile::ViewNode>& node
 
   const uint64_t clicked = profilerCharts::drawStackedBars(columns, groups, scaleMillis, budgetMillis,
                                                            m_interaction.serverSelectedSequence,
-                                                           ImGui::GetFontSize() * 9.0f);
+                                                           ImGui::GetFontSize() * 9.0f, "Tick");
   m_interaction.clickServerColumn(clicked);
   freezeServer();
 
@@ -290,7 +294,7 @@ void ProfilerPanel::displayBreakdown(const profile::History& history, const std:
 
 void ProfilerPanel::displayNetwork() const
 {
-  if (!ImGui::CollapsingHeader("Network"))
+  if (!ImGui::CollapsingHeader("Network", ImGuiTreeNodeFlags_DefaultOpen))
   {
     return;
   }
@@ -373,6 +377,7 @@ void ProfilerPanel::displayGui()
     {
       m_frozenServer.reset();
       m_frozenServerNodes.clear();
+      m_frozenServerTicks.clear();
     }
     else
     {

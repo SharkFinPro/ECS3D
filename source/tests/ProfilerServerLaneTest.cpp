@@ -3,7 +3,9 @@
 #include <ProfilerServerLane.h>
 
 #include <chrono>
+#include <cstdint>
 #include <limits>
+#include <vector>
 
 namespace {
   using namespace std::chrono_literals;
@@ -117,4 +119,45 @@ TEST(ServerLaneRateMeter, ATotalThatWentBackRestartsTheMeasurement)
 
   EXPECT_DOUBLE_EQ(meter.update(10, start + 2s), 0.0);
   EXPECT_DOUBLE_EQ(meter.update(1010, start + 3s), 1000.0);
+}
+
+TEST(ServerLaneTicks, SummarizesOnlyTheNewestRequestedTicksPerTick)
+{
+  const std::vector<uint32_t> ticks{900000, 1000, 2000, 3000, 4000, 20000};
+
+  const auto summary = profilerServerLane::summarizeTicks(ticks, 5);
+
+  EXPECT_EQ(summary.ticks, 5u);
+  EXPECT_DOUBLE_EQ(summary.averageMillis, 6.0);
+  EXPECT_DOUBLE_EQ(summary.maxMillis, 20.0);
+  EXPECT_DOUBLE_EQ(summary.p95Millis, 20.0);
+}
+
+TEST(ServerLaneTicks, ACountPastWhatWasKeptUsesEverythingAndNoneGivesZeros)
+{
+  const std::vector<uint32_t> ticks{1000, 3000};
+
+  EXPECT_EQ(profilerServerLane::summarizeTicks(ticks, 50).ticks, 2u);
+  EXPECT_DOUBLE_EQ(profilerServerLane::summarizeTicks(ticks, 50).averageMillis, 2.0);
+  EXPECT_EQ(profilerServerLane::summarizeTicks(ticks, 0).ticks, 0u);
+  EXPECT_DOUBLE_EQ(profilerServerLane::summarizeTicks({}, 3).maxMillis, 0.0);
+}
+
+TEST(ServerLaneTicks, WindowTickCountSumsTheTicksCounterAndCapsAtTheAvailableTicks)
+{
+  profile::History history(8);
+
+  for (uint64_t i = 1; i <= 4; ++i)
+  {
+    profile::Sample sample;
+    sample.sequence = i;
+    sample.startNanos = static_cast<int64_t>(i) * 60000000;
+    sample.wallMicros = 60000;
+    sample.counters[0] = 3;
+    history.push(sample);
+  }
+
+  EXPECT_EQ(profilerServerLane::windowTickCount(history, 2, 0, 100), 6u);
+  EXPECT_EQ(profilerServerLane::windowTickCount(history, 4, 0, 100), 12u);
+  EXPECT_EQ(profilerServerLane::windowTickCount(history, 4, 0, 5), 5u);
 }

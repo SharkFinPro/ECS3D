@@ -102,6 +102,8 @@ void EditorApp::fillServerLane()
   m_serverLane.history = m_remoteStats.history().size() > 0 ? &m_remoteStats.history() : nullptr;
   m_serverLane.localServer = m_options.launchLocalServer;
   m_serverLane.droppedStepsCounter = net::RemoteStats::droppedStepsCounter;
+  m_serverLane.ticksCounter = net::RemoteStats::ticksCounter;
+  m_serverLane.tickMicros = m_remoteStats.tickDurations().values();
 
   const auto flags = m_remoteStats.flags();
   m_serverLane.sceneRunning = (flags & net::serverStatsFlags::sceneRunning) != 0;

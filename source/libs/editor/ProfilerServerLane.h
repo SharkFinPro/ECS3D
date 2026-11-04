@@ -2,12 +2,16 @@
 #define PROFILERSERVERLANE_H
 
 #include <History.h>
+#include <ProfileStats.h>
 #include <ProfilerView.h>
+#include <algorithm>
+#include <cstddef>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 // What the Profiler panel draws for the server's tick lane and the Network section. Plain data the editor app fills
@@ -43,6 +47,9 @@ struct ServerLaneInput {
   bool editMode = false;
   bool localServer = true;
   std::size_t droppedStepsCounter = 0;
+  std::size_t ticksCounter = 0;
+  // The server's per-tick durations, oldest first; one sample can hold several ticks.
+  std::vector<uint32_t> tickMicros;
   ServerTrafficDirection sent;
   ServerTrafficDirection received;
   // Newest first, at most maxSnapshotRows.
@@ -56,6 +63,50 @@ struct ServerLaneInput {
 };
 
 namespace profilerServerLane {
+  struct TickSummary {
+    double averageMillis = 0.0;
+    double p95Millis = 0.0;
+    double maxMillis = 0.0;
+    std::size_t ticks = 0;
+  };
+
+  // The newest ticks the window's samples hold, according to their ticks counters, capped at what was kept.
+  [[nodiscard]] inline std::size_t windowTickCount(const profile::History& history, const std::size_t window,
+                                                   const std::size_t ticksCounter, const std::size_t available)
+  {
+    const int64_t counted = profile::sumCounter(history, window, ticksCounter);
+
+    return counted <= 0 ? 0 : std::min(static_cast<std::size_t>(counted), available);
+  }
+
+  [[nodiscard]] inline TickSummary summarizeTicks(const std::vector<uint32_t>& tickMicros, const std::size_t count)
+  {
+    TickSummary summary;
+    const std::size_t used = std::min(count, tickMicros.size());
+
+    if (used == 0)
+    {
+      return summary;
+    }
+
+    std::vector<uint32_t> newest(tickMicros.end() - static_cast<std::ptrdiff_t>(used), tickMicros.end());
+    uint64_t total = 0;
+    uint32_t largest = 0;
+
+    for (const uint32_t micros : newest)
+    {
+      total += micros;
+      largest = std::max(largest, micros);
+    }
+
+    summary.ticks = used;
+    summary.averageMillis = static_cast<double>(total) / static_cast<double>(used) / 1000.0;
+    summary.maxMillis = largest / 1000.0;
+    summary.p95Millis = profile::percentile(std::move(newest), 95.0) / 1000.0;
+
+    return summary;
+  }
+
   inline constexpr std::size_t maxSnapshotRows = 10;
 
   // The line shown instead of, or above, the lane's chart; empty when there is none.

@@ -40,6 +40,12 @@ namespace profilerChart {
     return static_cast<float>(std::min(fraction, 1.0)) * chartHeight;
   }
 
+  // Extra left offset of a breakdown row; strictly increasing with depth, zero at depth 0.
+  [[nodiscard]] inline float rowIndent(const std::size_t depth)
+  {
+    return static_cast<float>(depth) * 14.0f;
+  }
+
   [[nodiscard]] inline bool exceedsScale(const double micros, const double scaleMillis)
   {
     return scaleMillis > 0.0 && micros > scaleMillis * 1000.0;

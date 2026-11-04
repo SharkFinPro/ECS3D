@@ -59,6 +59,7 @@ private:
   std::optional<profile::History> m_frozen;
   std::optional<profile::History> m_frozenServer;
   std::vector<profile::ViewNode> m_frozenServerNodes;
+  std::vector<uint32_t> m_frozenServerTicks;
 
   void displayHeader();
 
