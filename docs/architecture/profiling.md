@@ -185,9 +185,10 @@ interval.
 ## Server lane in the Profiler panel
 
 The panel draws the server's tick lane below the editor lane, from `net::RemoteStats`. `EditorApp::updateServerStats`
-(`EditorAppProfiler.cpp`) sends `statsSubscribe(true)` when the panel opens and `false` when it closes, so the server
-streams nothing while the panel is shut; it also calls `subscribed()`/`unsubscribed()` on the `RemoteStats` and
-`disconnected()` when the connection is lost. Each frame the panel is open, it fills a `ServerLaneInput`
+(`EditorAppProfiler.cpp`) sends `statsSubscribe(true)` when the panel opens or the viewport corner readout
+(`editor.viewport.statsReadout`, `ProfilerReadout.h`) turns on and `false` when neither holds, so the server streams
+nothing otherwise; it also calls `subscribed()`/`unsubscribed()` on the `RemoteStats` and
+`disconnected()` when the connection is lost. Each frame the stats are wanted, it fills a `ServerLaneInput`
 (`ProfilerServerLane.h`): the state (`off`, `waiting`, `live`, `unsupported`, `disconnected`), the history pointer, the
 node table as `ViewNode`s (rebuilt only when the epoch or node count changes), the server flags and the figures below.
 `serverLaneNotice` gives the line shown under or instead of the chart: waiting, unsupported, "Disconnected", or "Scene

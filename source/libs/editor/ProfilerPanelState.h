@@ -26,6 +26,12 @@ namespace profilerPanelState {
   inline constexpr const char* hiddenGroupsKey = "editor.profiler.hiddenGroups";
   inline constexpr const char* serverHiddenGroupsKey = "editor.profiler.serverHiddenGroups";
 
+  // The editor has the server stream statistics while the panel is open or the corner readout is on.
+  [[nodiscard]] inline bool wantsServerStats(const bool panelOpen, const bool readoutOn)
+  {
+    return panelOpen || readoutOn;
+  }
+
   [[nodiscard]] inline const char* hiddenGroupsKeyFor(const profile::LaneKind kind)
   {
     return kind == profile::LaneKind::server ? serverHiddenGroupsKey : hiddenGroupsKey;

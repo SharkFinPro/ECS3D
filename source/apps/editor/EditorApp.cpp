@@ -196,6 +196,8 @@ void EditorApp::setupSceneOverlay()
                               snap, sceneHovered);
 
       acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
+
+      drawStatsReadout(drawList, rect.x, rect.y, rect.width);
     });
 }
 

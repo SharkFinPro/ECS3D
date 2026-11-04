@@ -69,9 +69,14 @@ groups persist in
 and the pause/selection rules are the headless `ProfilerPanelState.h`. Below the editor lane sits the server's tick
 lane (own legend, own `editor.profiler.serverHiddenGroups`, a 20 ms budget line) and a collapsing Network section.
 `EditorApp` (`EditorAppProfiler.cpp`) subscribes the connection to the server's statistics only while the panel is
-open and fills a `ServerLaneInput` (`ProfilerServerLane.h`, plain data, so the library needs no `ECS3DNet`) from
+open or the corner readout is on (`profilerPanelState::wantsServerStats`) and fills a `ServerLaneInput`
+(`ProfilerServerLane.h`, plain data, so the library needs no `ECS3DNet`) from
 `net::RemoteStats` each frame; the panel reads it through `setServerLane`. Pause freezes both lanes, each bar click
-selects in its own lane, and the Breakdown table shows the lane clicked last), `AssetBrowserPanel` (its type
+selects in its own lane, and the Breakdown table shows the lane clicked last. The stats readout,
+`editor.viewport.statsReadout` (off by default;
+a checkbox in Settings > Viewport and "Corner readout" in the panel header), is drawn by
+`EditorApp::drawStatsReadout` in the scene overlay callback onto the scene view's draw list, so it survives F10
+hiding the GUI; its three lines are the headless `ProfilerReadout.h`), `AssetBrowserPanel` (its type
 filter is a union of toggled chips, with an "All" chip to clear: `AssetFilter.h`), `AssetDisplay` (shared asset
 label/name/icon/color rules, header-only), `PlayControls.h` (the headless play/pause/stop enable rules for the
 Scene Status toolbar's fixed row of icon buttons, which stay drawn and gray out when unavailable), `SaveUI`

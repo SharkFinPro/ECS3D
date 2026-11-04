@@ -1,11 +1,16 @@
 #include "EditorApp.h"
+#include <EditorViewportSettings.h>
 #include <NetClient.h>
 #include <ProfilerPanel.h>
+#include <ProfilerReadout.h>
+#include <ProfileScope.h>
 #include <Protocol.h>
 #include <RemoteStatsSummary.h>
 #include <ServerStats.h>
+#include <SettingsStore.h>
 #include <SnapshotLog.h>
 #include <TrafficCounters.h>
+#include <imgui.h>
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -56,7 +61,8 @@ namespace {
 
 void EditorApp::updateServerStats()
 {
-  const bool wanted = m_profilerPanel->wantsServerStats();
+  const bool wanted = profilerPanelState::wantsServerStats(
+    m_profilerPanel->isOpen(), editorViewportSettings::readStatsReadout(*m_settings));
   const bool connected = m_netClient->isConnected();
 
   if (wanted != m_statsSubscribed)
@@ -152,4 +158,43 @@ void EditorApp::fillServerLane()
   m_serverLane.editors = m_remoteStats.editors();
   m_serverLane.editorReceivedBytesPerSecond =
     m_receiveRate.update(totalBytes(m_netClient->traffic().totalIn()), now);
+}
+
+void EditorApp::drawStatsReadout(ImDrawList* drawList, const float sceneX, const float sceneY, const float sceneWidth)
+{
+  if (!editorViewportSettings::readStatsReadout(*m_settings))
+  {
+    return;
+  }
+
+  ECS3D_PROFILE_SCOPE("Profiler");
+
+  const auto lines = profilerReadout::lines(m_profileLane.history(), m_serverLane);
+
+  constexpr float margin = 8.0f;
+  constexpr float padding = 6.0f;
+  const float lineHeight = ImGui::GetTextLineHeight();
+
+  float textWidth = 0.0f;
+
+  for (const auto& line : lines)
+  {
+    textWidth = std::max(textWidth, ImGui::CalcTextSize(line.c_str()).x);
+  }
+
+  const float right = sceneX + sceneWidth - margin;
+  const float top = sceneY + margin;
+  const ImVec2 boxMin(right - textWidth - 2.0f * padding, top);
+  const ImVec2 boxMax(right, top + lineHeight * static_cast<float>(lines.size()) + 2.0f * padding);
+
+  drawList->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 140), 4.0f);
+
+  float y = top + padding;
+
+  for (const auto& line : lines)
+  {
+    const float width = ImGui::CalcTextSize(line.c_str()).x;
+    drawList->AddText(ImVec2(right - padding - width, y), IM_COL32(235, 235, 235, 255), line.c_str());
+    y += lineHeight;
+  }
 }
