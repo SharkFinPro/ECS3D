@@ -192,7 +192,9 @@ nothing otherwise; it also calls `subscribed()`/`unsubscribed()` on the `RemoteS
 (`ProfilerServerLane.h`): the state (`off`, `waiting`, `live`, `unsupported`, `disconnected`), the history pointer, the
 node table as `ViewNode`s (rebuilt only when the epoch or node count changes), the server flags and the figures below.
 `serverLaneNotice` gives the line shown under or instead of the chart: waiting, unsupported, "Disconnected", or "Scene
-stopped" while live with no scene running. The editor lane draws in every state.
+stopped" while live with no scene running. The editor lane draws in every state. `updateServerStats` runs every frame
+from the run loop, so the subscription and figures stay current while F10 hides the GUI. The readout is drawn inside the
+`Renderer` scope, so its own `Profiler` scope groups under Renderer, not Profiler.
 
 The Network section shows, over the panel's window, bytes per second sent and received with the largest message types
 (`net::summarizeTraffic` in `RemoteStatsSummary.h`, which divides by the server time the batches cover), the

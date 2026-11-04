@@ -125,3 +125,28 @@ TEST(ProfilerReadout, TenthsRoundAndNegativeOrNotANumberReadAsZero)
   EXPECT_EQ(profilerReadout::formatTenths(-3.0), "0.0");
   EXPECT_EQ(profilerReadout::formatTenths(std::numeric_limits<double>::quiet_NaN()), "0.0");
 }
+
+TEST(ProfilerReadout, ARoundingBoundaryRoundsHalfUp)
+{
+  EXPECT_EQ(profilerReadout::formatTenths(2.05), "2.1");
+  EXPECT_EQ(profilerReadout::formatTenths(2.049), "2.0");
+}
+
+TEST(ProfilerReadout, InfiniteAndHugeValuesClampInsteadOfOverflowing)
+{
+  const auto infinite = profilerReadout::formatTenths(std::numeric_limits<double>::infinity());
+  const auto huge = profilerReadout::formatTenths(1.0e30);
+
+  EXPECT_EQ(infinite, huge);
+  EXPECT_EQ(infinite, "100000000000000.0");
+  EXPECT_EQ(profilerServerLane::formatRate(std::numeric_limits<double>::infinity()),
+            profilerServerLane::formatRate(1.0e30));
+}
+
+TEST(ProfilerReadout, AnOffServerReadsWaiting)
+{
+  const auto lines = profilerReadout::lines(editorHistory(), stateOnly(ServerLaneState::off));
+
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[1], "srv waiting");
+}

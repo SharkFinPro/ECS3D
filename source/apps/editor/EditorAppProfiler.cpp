@@ -2,6 +2,7 @@
 #include <EditorViewportSettings.h>
 #include <NetClient.h>
 #include <ProfilerPanel.h>
+#include <ProfilerPanelState.h>
 #include <ProfilerReadout.h>
 #include <ProfileScope.h>
 #include <Protocol.h>
@@ -15,6 +16,7 @@
 #include <chrono>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace {
   ServerLaneState laneState(const net::RemoteStats::State state)
@@ -61,8 +63,9 @@ namespace {
 
 void EditorApp::updateServerStats()
 {
-  const bool wanted = profilerPanelState::wantsServerStats(
-    m_profilerPanel->isOpen(), editorViewportSettings::readStatsReadout(*m_settings));
+  m_statsReadoutOn = editorViewportSettings::readStatsReadout(*m_settings);
+
+  const bool wanted = profilerPanelState::wantsServerStats(m_profilerPanel->isOpen(), m_statsReadoutOn);
   const bool connected = m_netClient->isConnected();
 
   if (wanted != m_statsSubscribed)
@@ -162,7 +165,7 @@ void EditorApp::fillServerLane()
 
 void EditorApp::drawStatsReadout(ImDrawList* drawList, const float sceneX, const float sceneY, const float sceneWidth)
 {
-  if (!editorViewportSettings::readStatsReadout(*m_settings))
+  if (!m_statsReadoutOn)
   {
     return;
   }
@@ -175,11 +178,15 @@ void EditorApp::drawStatsReadout(ImDrawList* drawList, const float sceneX, const
   constexpr float padding = 6.0f;
   const float lineHeight = ImGui::GetTextLineHeight();
 
-  float textWidth = 0.0f;
+  // A fixed template keeps the left edge from jittering as the digits change.
+  float textWidth = ImGui::CalcTextSize("000.0 ms  000 fps").x;
+  std::vector<float> widths;
+  widths.reserve(lines.size());
 
   for (const auto& line : lines)
   {
-    textWidth = std::max(textWidth, ImGui::CalcTextSize(line.c_str()).x);
+    widths.push_back(ImGui::CalcTextSize(line.c_str()).x);
+    textWidth = std::max(textWidth, widths.back());
   }
 
   const float right = sceneX + sceneWidth - margin;
@@ -191,10 +198,9 @@ void EditorApp::drawStatsReadout(ImDrawList* drawList, const float sceneX, const
 
   float y = top + padding;
 
-  for (const auto& line : lines)
+  for (std::size_t i = 0; i < lines.size(); ++i)
   {
-    const float width = ImGui::CalcTextSize(line.c_str()).x;
-    drawList->AddText(ImVec2(right - padding - width, y), IM_COL32(235, 235, 235, 255), line.c_str());
+    drawList->AddText(ImVec2(right - padding - widths[i], y), IM_COL32(235, 235, 235, 255), lines[i].c_str());
     y += lineHeight;
   }
 }

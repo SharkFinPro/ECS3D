@@ -4,7 +4,6 @@
 #include "ProfilerServerLane.h"
 #include <History.h>
 #include <ProfilerView.h>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -14,10 +13,12 @@
 namespace profilerReadout {
   inline constexpr double windowSeconds = 1.0;
 
-  // One decimal place, no locale; negative and NaN values read as 0.
+  // One decimal place, no locale; negative and NaN values read as 0, and huge or infinite ones clamp.
   [[nodiscard]] inline std::string formatTenths(const double value)
   {
-    const auto tenths = static_cast<uint64_t>((value > 0.0 ? value : 0.0) * 10.0 + 0.5);
+    constexpr double maxValue = 1.0e14;
+    const double clamped = value > 0.0 ? (value < maxValue ? value : maxValue) : 0.0;
+    const auto tenths = static_cast<uint64_t>(clamped * 10.0 + 0.5);
 
     return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10);
   }

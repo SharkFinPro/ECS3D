@@ -439,6 +439,8 @@ void EditorApp::run()
     {
       ECS3D_PROFILE_SCOPE("Editor UI");
 
+      updateServerStats();
+
       updateGui();
     }
 

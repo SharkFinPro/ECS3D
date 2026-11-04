@@ -214,6 +214,7 @@ private:
   ServerLaneInput m_serverLane;
   profilerServerLane::RateMeter m_receiveRate;
   bool m_statsSubscribed = false;
+  bool m_statsReadoutOn = false;
   uint32_t m_serverNodesEpoch = 0;
 
   // The player slot the server bound this connection's input to (-1 until it says). Changes only when the
