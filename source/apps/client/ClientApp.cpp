@@ -27,7 +27,9 @@
 #include <VulkanEngine/components/window/Window.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <ProfilerCharts.h>
 #include <imgui.h>
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <random>
@@ -42,6 +44,9 @@ ClientApp::ClientApp(ConnectOptions options)
 {
   // Boot the CLR from the net transport's runtimeconfig (the client only needs the socket assembly).
   m_host->init("net/Transport");
+
+  m_statsMode = initialStatsOverlayMode(m_options.showStats);
+  m_stateIntervalCounter = m_profileLane.counterId("stateInterval");
 
   registerDataComponents(*m_componentRegistry);
 
@@ -116,6 +121,11 @@ void ClientApp::run()
       net::Message message;
       while (m_netClient->poll(message))
       {
+        if (message.getType() == net::MessageType::stateDelta)
+        {
+          m_stateUpdateGap.onStateDelta(std::chrono::steady_clock::now());
+        }
+
         // A malformed message costs the message, not the session. Without this the exception escapes run()
         // and main exits, so one bad packet closes the window.
         try
@@ -127,6 +137,11 @@ void ClientApp::run()
           Log::error(LogCategory::client, std::string("Failed to apply a message from the server: ") + e.what());
           m_connectionNotice = "Received a malformed message; see the log for details.";
         }
+      }
+
+      if (const uint32_t gap = m_stateUpdateGap.takeFrameMax(); gap > 0)
+      {
+        m_profileLane.addCounter(m_stateIntervalCounter, gap);
       }
 
       if (m_netClient->takeConnectionLost())
@@ -143,6 +158,13 @@ void ClientApp::run()
     }
 
     displayConnectionNotice();
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F3, false) && !ImGui::GetIO().WantTextInput)
+    {
+      m_statsMode = nextStatsOverlayMode(m_statsMode);
+    }
+
+    displayStatsOverlay();
 
     variableUpdate();
   }
@@ -223,6 +245,86 @@ void ClientApp::displayConnectionNotice()
     glfwSetWindowShouldClose(m_renderer->getWindow()->getWindow(), true);
   }
   ImGui::End();
+}
+
+void ClientApp::displayStatsOverlay()
+{
+  m_inboundRates.update(m_netClient->traffic().totalIn(), std::chrono::steady_clock::now());
+
+  if (m_statsMode == StatsOverlayMode::off)
+  {
+    return;
+  }
+
+  ECS3D_PROFILE_SCOPE("Profiler");
+
+  const auto& history = m_profileLane.history();
+  const auto summary = profile::summarizeLane(history, profile::windowSize(history, 1.0));
+
+  const auto viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 8.0f, viewport->WorkPos.y + 8.0f),
+                          ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+  ImGui::SetNextWindowBgAlpha(0.55f);
+
+  constexpr auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs
+    | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+    | ImGuiWindowFlags_NoNav;
+
+  if (ImGui::Begin("Stats Overlay", nullptr, flags))
+  {
+    ImGui::Text("%.1f ms  %.0f fps", summary.averageMillis, summary.samplesPerSecond);
+    ImGui::Text("net %.1f KB/s", m_inboundRates.totalBytesPerSecond() / 1024.0);
+
+    if (m_statsMode == StatsOverlayMode::detailed)
+    {
+      displayDetailedStats();
+    }
+  }
+  ImGui::End();
+}
+
+void ClientApp::displayDetailedStats()
+{
+  const auto& history = m_profileLane.history();
+
+  constexpr float chartWidth = 360.0f;
+  constexpr double chartSeconds = 5.0;
+
+  const auto nodes = profile::viewNodes(m_profileLane.tree());
+  const auto groups = profile::displayGroups(profile::LaneKind::frame);
+  const auto groupOfNode = profile::groupOfNodes(profile::LaneKind::frame, nodes);
+  const std::size_t window = profile::windowSize(history, chartSeconds);
+  const double scaleMillis = profile::autoScaleMillis(statsOverlay::p99WallMicros(history, window));
+  const auto columns = profile::buildColumns(history, window, nodes, groupOfNode, 0,
+                                             static_cast<std::size_t>(chartWidth));
+  const float chartHeight = ImGui::GetFontSize() * 4.0f;
+
+  if (ImGui::BeginChild("##statsChart", ImVec2(chartWidth, chartHeight), 0,
+                        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar))
+  {
+    profilerCharts::drawStackedBars(columns, groups, scaleMillis, std::nullopt, 0, chartHeight);
+  }
+  ImGui::EndChild();
+
+  const auto intervals = statsOverlay::summarizeIntervals(history, window, m_stateIntervalCounter);
+  if (intervals.count == 0)
+  {
+    ImGui::TextUnformatted("state updates: none");
+  }
+  else
+  {
+    ImGui::Text("state updates  avg %.1f ms  p95 %.1f ms  max %.1f ms", intervals.averageMillis,
+                intervals.p95Millis, intervals.maxMillis);
+  }
+
+  const auto& rows = m_inboundRates.rows();
+  for (std::size_t i = 0; i < rows.size() && i < 5; ++i)
+  {
+    ImGui::Text("%.*s  %.1f KB/s", static_cast<int>(rows[i].name.size()), rows[i].name.data(),
+                rows[i].bytesPerSecond / 1024.0);
+  }
+
+  ImGui::Text("last snapshot  %.1f KB", static_cast<double>(m_lastSnapshotBytes) / 1024.0);
 }
 
 void ClientApp::connectToServer()
@@ -318,7 +420,7 @@ void ClientApp::variableUpdate() const
   }
 }
 
-void ClientApp::applyMessage(const net::Message& message) const
+void ClientApp::applyMessage(const net::Message& message)
 {
   switch (message.getType())
   {
@@ -354,12 +456,13 @@ void ClientApp::applyMessage(const net::Message& message) const
   }
 }
 
-void ClientApp::handleSnapshot(const net::Message& message) const
+void ClientApp::handleSnapshot(const net::Message& message)
 {
   ECS3D_PROFILE_SCOPE("Snapshot apply");
 
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+  m_lastSnapshotBytes = message.size();
 
   const auto scene = m_sceneManager->getCurrentScene();
   Log::info(LogCategory::client, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "

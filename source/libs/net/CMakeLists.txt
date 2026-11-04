@@ -30,6 +30,7 @@ add_library(${PROJECT_NAME}
   StatsSubscriptions.h
   TrafficCounters.cpp
   TrafficCounters.h
+  TrafficRates.h
   ServerLog.h
   ServerTransport.h
   ServerArguments.h

@@ -23,6 +23,7 @@ add_library(${PROJECT_NAME}
   ProfilerCharts.cpp
   ProfilerCharts.h
   SharedAssetLoads.h
+  StatsOverlay.h
   ThumbnailImage.cpp
   ThumbnailImage.h
 )
