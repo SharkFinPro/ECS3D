@@ -8,3 +8,4 @@ Short, practical guides for people who have the engine built and want to make so
 - [Scene scripts and events](scene-scripts-and-events.md): scene-wide scripts, and events between scripts.
 - [Starter scripts](starter-scripts.md): the 18 ready-made scripts, their fields, events and where the samples use them.
 - [Multiplayer](multiplayer.md): host Coin Rush from the command line, share your address and join from other machines.
+- [Profiling your game](profiling-your-game.md): the Profiler panel, the client overlay and server stats line, and saving a capture.

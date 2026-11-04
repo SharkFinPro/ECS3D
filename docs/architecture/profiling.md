@@ -204,6 +204,19 @@ connection and editor counts. Counted bytes exclude the transport's framing, whi
 Byte rates divide by the server time the samples cover, which excludes the roughly 1 ms sleep between samples, so they
 read slightly high.
 
+## Captures
+
+"Save capture..." in the panel header writes the window the panel shows (the frozen histories while paused) through
+`writeCapture` (`ProfilerCapture.h`, compiled into the test suite; `ECS3DProfile` stays free of json and file I/O) into
+`userDataDirectory() / "captures"` as `<app>-<yyyyMMdd-HHmmss>.csv` plus a `.json` sidecar. The CSV has one row per
+sample, the editor lane before the server lane, with `frame.*` and `server.*` group columns holding `groupMicros`
+(nothing hidden; the other kind's columns empty) and the server's `ticks` and `droppedSteps` counters; it is integers
+only with LF endings, so no locale can change it. The sidecar holds the version, build type, platform, scene name,
+object and connection counts, capture time, each lane's scope table and the snapshot rows; the scene name and object
+count are the only project content. `EditorApp` supplies the environment each frame through
+`ProfilerPanel::setCaptureEnvironment`; the version is the `ECS3D_ENGINE_VERSION` define on the editor target. The
+guide is [profiling-your-game.md](../guides/profiling-your-game.md).
+
 ## Collision phases
 
 `CollisionSystem` records `Broad phase` (building the edge list, bounding boxes, sort and dynamic flags), `Narrow

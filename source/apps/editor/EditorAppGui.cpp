@@ -10,6 +10,7 @@
 #include <SaveUI.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
+#include <ProfilerCapture.h>
 #include <ProfilerPanel.h>
 #include <SceneScriptsPanel.h>
 #include <SettingsStore.h>
@@ -65,6 +66,14 @@ void EditorApp::updateGui()
 
   m_consolePanel->displayGui();
 
+  CaptureInput captureEnvironment;
+  captureEnvironment.app = "editor";
+  captureEnvironment.engineVersion = ECS3D_ENGINE_VERSION;
+  captureEnvironment.buildType = captureBuildType();
+  captureEnvironment.platform = capturePlatform();
+  captureEnvironment.sceneName = scene ? scene->getName() : std::string();
+  captureEnvironment.objectCount = objectManager ? objectManager->getAllObjects().size() : 0;
+  m_profilerPanel->setCaptureEnvironment(captureEnvironment);
   m_profilerPanel->displayGui();
 
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate

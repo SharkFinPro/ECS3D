@@ -170,6 +170,7 @@ add_executable(${PROJECT_NAME}
   ProfilerPanelStateTest.cpp
   ProfilerReadoutTest.cpp
   ProfilerServerLaneTest.cpp
+  ProfilerCaptureTest.cpp
   StatsOverlayTest.cpp
   InertiaTensorBehaviorTest.cpp
   InertiaTensorTests.cpp
@@ -344,6 +345,9 @@ add_executable(${PROJECT_NAME}
 
   # The gizmo's edit sending depends only on ECS3DData, Gizmo.h and json.
   ../libs/editor/GizmoEditSending.cpp
+
+  # The capture writer depends only on ECS3DProfile, json and the standard library.
+  ../libs/editor/ProfilerCapture.cpp
 
   # TransientObject depends only on ECS3DData and json.
   ../libs/editor/TransientObject.cpp
