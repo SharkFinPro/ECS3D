@@ -36,6 +36,11 @@ Managed assemblies deployed at build time: `ScriptBridge` → `bin/scripts/Scrip
 `ECS3DNetTransport` → `bin/net/Transport`, user scripts → `bin/scripts/UserScripts`. All apps boot the
 CLR (Common Language Runtime) from the same runtime; the server loads `ScriptBridge` on top.
 
+Every C# project's `Directory.Build.props` adds its own local `obj/` and `bin/` to `DefaultItemExcludes`.
+Visual Studio's CMake "Open Folder" mode also loads each `.csproj` into its C# project system and runs a
+design-time build without `BuildRoot`, which writes generated `*AssemblyInfo.cs` into the source tree. The
+relocated CMake publish would otherwise compile those a second time and fail with CS0579.
+
 ## Precompiled headers
 
 Precompiled headers (PCH) are set up in one block at the end of `source/CMakeLists.txt`: each
