@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
-#include <limits>
+#include <cstdint>
 #include <stdexcept>
 #include <Protocol.h>
 
@@ -145,32 +145,56 @@ glm::vec3 BoxCollider::getRotation()
   return quatToEulerDegrees(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
 }
 
+namespace
+{
+  // Maps a sign mask (bit 0 = +x, bit 1 = +y, bit 2 = +z) to the boxVertices index with those signs.
+  constexpr std::array<uint8_t, 8> buildVertexBySignMask()
+  {
+    std::array<uint8_t, 8> table{};
+    for (uint8_t i = 0; i < boxVertices.size(); ++i)
+    {
+      const auto& v = boxVertices[i];
+      const int mask = (v.x > 0 ? 1 : 0) | (v.y > 0 ? 2 : 0) | (v.z > 0 ? 4 : 0);
+      table[mask] = i;
+    }
+    return table;
+  }
+
+  constexpr std::array<uint8_t, 8> vertexBySignMask = buildVertexBySignMask();
+}
+
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
+{
+  if (const Transform& transform = meshTransform();
+      m_meshDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
+  {
+    generateTransformedMesh(transform);
+    m_meshDirty = false;
+  }
+
+  // dot(direction, vertex) is affine in the per-axis signs, so the furthest vertex takes the sign of each
+  // axis' dot: 3 dots instead of scanning all 8 vertices.
+  const int mask = (dot(direction, m_transformedBoxAxes[0]) >= 0.0f ? 1 : 0)
+    | (dot(direction, m_transformedBoxAxes[1]) >= 0.0f ? 2 : 0)
+    | (dot(direction, m_transformedBoxAxes[2]) >= 0.0f ? 4 : 0);
+
+  return m_transformedBoxVertices[vertexBySignMask[mask]];
+}
+
+Transform& BoxCollider::meshTransform()
 {
   updateTransformPointer();
 
-  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
+  // owner_before compares control blocks without touching the reference counts lock() would bump.
+  if (m_meshTransform == nullptr
+      || m_meshTransformSource.owner_before(m_transform_ptr)
+      || m_transform_ptr.owner_before(m_meshTransformSource))
   {
-    if (m_meshDirty || m_currentTransformUpdateID != transform->getWorldUpdateID())
-    {
-      generateTransformedMesh(transform);
-      m_meshDirty = false;
-    }
+    m_meshTransform = m_transform_ptr.lock().get();
+    m_meshTransformSource = m_transform_ptr;
   }
 
-  float largestDot = std::numeric_limits<float>::lowest();
-  glm::vec3 furthestVertex{ 0, 0, 0 };
-
-  for (auto& vertex : m_transformedBoxVertices)
-  {
-    if (const float currentDot = dot(vertex, direction); currentDot > largestDot)
-    {
-      largestDot = currentDot;
-      furthestVertex = vertex;
-    }
-  }
-
-  return furthestVertex;
+  return *m_meshTransform;
 }
 
 void BoxCollider::pack(net::Message& message) const
@@ -200,23 +224,23 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
   invalidateBoundingBox();
 }
 
-void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)
+void BoxCollider::generateTransformedMesh(const Transform& transform)
 {
-  const auto scale = transform->getScale() * m_scale.get();
-  const auto position = transform->getPosition() + m_position.get();
+  const auto scale = transform.getScale() * m_scale.get();
+  const auto position = transform.getPosition() + m_position.get();
 
   glm::mat4 rotationMatrix;
-  if (!transform->hasParentTransform())
+  if (!transform.hasParentTransform())
   {
     // Built exactly as getRotation's additive sum describes it, which the narrow phase and queries rebuild.
-    const auto rotation = transform->getRotation() + m_rotation.get();
+    const auto rotation = transform.getRotation() + m_rotation.get();
     rotationMatrix = rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
       * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0})
       * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0});
   }
   else
   {
-    rotationMatrix = glm::mat4_cast(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
+    rotationMatrix = glm::mat4_cast(transform.getOrientation() * eulerDegreesToQuat(m_rotation.get()));
   }
 
   const auto transformationMatrix = translate(glm::mat4(1.0f), position)
@@ -230,7 +254,12 @@ void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& tran
     m_transformedBoxVertices[i] = glm::vec3(transformedVertex);
   }
 
-  m_currentTransformUpdateID = transform->getWorldUpdateID();
+  // Each pair below differs only in the one axis's sign, so the difference is that axis' world-space edge.
+  m_transformedBoxAxes[0] = m_transformedBoxVertices[0] - m_transformedBoxVertices[1];
+  m_transformedBoxAxes[1] = m_transformedBoxVertices[0] - m_transformedBoxVertices[4];
+  m_transformedBoxAxes[2] = m_transformedBoxVertices[0] - m_transformedBoxVertices[3];
+
+  m_currentTransformUpdateID = transform.getWorldUpdateID();
 }
 
 void BoxCollider::updateTransformPointer()

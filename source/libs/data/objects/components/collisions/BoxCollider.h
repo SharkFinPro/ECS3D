@@ -49,6 +49,15 @@ public:
 private:
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 
+  // World-space box edges along the local x, y and z axes; the signs of their dots with a direction pick
+  // the support vertex directly.
+  std::array<glm::vec3, 3> m_transformedBoxAxes{};
+
+  // Cached raw view of m_transform_ptr so the support query skips lock()'s atomic ref-count traffic.
+  // m_meshTransformSource pins the control block it came from, so a replaced transform is detected.
+  Transform* m_meshTransform = nullptr;
+  std::weak_ptr<Transform> m_meshTransformSource;
+
   uint64_t m_currentTransformUpdateID = 255;
 
   // Editing the collider's own offset doesn't bump the transform's update id, so force a mesh rebuild.
@@ -58,7 +67,9 @@ private:
   ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(1));
   ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
 
-  void generateTransformedMesh(const std::shared_ptr<Transform>& transform);
+  void generateTransformedMesh(const Transform& transform);
+
+  [[nodiscard]] Transform& meshTransform();
 
   void updateTransformPointer();
 };
