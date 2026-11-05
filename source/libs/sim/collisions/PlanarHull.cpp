@@ -2,6 +2,7 @@
 #include <glm/geometric.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace {
   // A turn below this share of the product of the two edge lengths is straight.
@@ -10,7 +11,7 @@ namespace {
   struct Point {
     float x;
     float y;
-    size_t index;
+    uint32_t index;
   };
 
   bool keepsTurn(const Point& o, const Point& a, const Point& b)
@@ -55,15 +56,21 @@ namespace collisions {
     const auto u = glm::normalize(glm::cross(helper, normal));
     const auto v = glm::cross(normal, u);
 
-    std::vector<Point> sorted;
-    sorted.reserve(points.size());
+    // Per-thread scratch keeps capacity across calls, so the hot path does not allocate.
+    thread_local std::vector<Point> sorted;
+    thread_local std::vector<Point> hull;
+
+    sorted.clear();
     for (size_t i = 0; i < points.size(); ++i)
     {
-      sorted.push_back({ glm::dot(points[i], u), glm::dot(points[i], v), i });
+      sorted.push_back({ glm::dot(points[i], u), glm::dot(points[i], v), static_cast<uint32_t>(i) });
     }
     std::ranges::sort(sorted, [](const Point& a, const Point& b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
 
-    std::vector<Point> hull(points.size() + 1);
+    if (hull.size() < points.size() + 1)
+    {
+      hull.resize(points.size() + 1);
+    }
     size_t count = 0;
     for (const auto& point : sorted)
     {
@@ -88,8 +95,11 @@ namespace collisions {
 
   std::vector<glm::vec3> convexOutline(const std::span<const glm::vec3> points, const glm::vec3& normal)
   {
+    const auto indices = convexOutlineIndices(points, normal);
+
     std::vector<glm::vec3> outline;
-    for (const auto index : convexOutlineIndices(points, normal))
+    outline.reserve(indices.size());
+    for (const auto index : indices)
     {
       outline.push_back(points[index]);
     }
