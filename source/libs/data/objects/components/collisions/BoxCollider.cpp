@@ -165,7 +165,7 @@ namespace
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  if (const Transform& transform = meshTransform();
+  if (const Transform& transform = cachedTransform();
       m_meshDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
   {
     generateTransformedMesh(transform);
@@ -179,22 +179,6 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
     | (dot(direction, m_transformedBoxAxes[2]) >= 0.0f ? 4 : 0);
 
   return m_transformedBoxVertices[vertexBySignMask[mask]];
-}
-
-Transform& BoxCollider::meshTransform()
-{
-  updateTransformPointer();
-
-  // owner_before compares control blocks without touching the reference counts lock() would bump.
-  if (m_meshTransform == nullptr
-      || m_meshTransformSource.owner_before(m_transform_ptr)
-      || m_transform_ptr.owner_before(m_meshTransformSource))
-  {
-    m_meshTransform = m_transform_ptr.lock().get();
-    m_meshTransformSource = m_transform_ptr;
-  }
-
-  return *m_meshTransform;
 }
 
 void BoxCollider::pack(net::Message& message) const

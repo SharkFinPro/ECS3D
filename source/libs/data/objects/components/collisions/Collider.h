@@ -93,6 +93,16 @@ protected:
   bool m_renderCollider = false;
 
   void invalidateBoundingBox();
+
+  // m_transform_ptr's target without lock()'s atomic ref-count traffic, for per-query hot paths like
+  // findFurthestPoint. Throws if the owner has no transform.
+  [[nodiscard]] Transform& cachedTransform();
+
+private:
+  // m_cachedTransformSource pins the control block m_cachedTransform came from, so a replaced transform
+  // is detected and its address cannot be reused while the cache still points at it.
+  Transform* m_cachedTransform = nullptr;
+  std::weak_ptr<Transform> m_cachedTransformSource;
 };
 
 

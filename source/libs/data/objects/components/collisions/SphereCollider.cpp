@@ -41,6 +41,7 @@ void SphereCollider::setRadius(const float radius)
   }
 
   m_radius.set(radius);
+  m_shapeDirty = true;
   invalidateBoundingBox();
 }
 
@@ -57,6 +58,7 @@ void SphereCollider::setPosition(const glm::vec3& position)
   }
 
   m_position.set(position);
+  m_shapeDirty = true;
   invalidateBoundingBox();
 }
 
@@ -92,6 +94,7 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
   setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
 
+  m_shapeDirty = true;
   invalidateBoundingBox();
 }
 
@@ -106,14 +109,16 @@ glm::vec3 SphereCollider::getPosition()
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  updateTransformPointer();
-
-  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
+  if (const Transform& transform = cachedTransform();
+      m_shapeDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
   {
-    return direction * getScaledRadius(transform) + transform->getPosition() + m_position.get();
+    m_worldCenter = transform.getPosition() + m_position.get();
+    m_worldRadius = compMax(glm::abs(transform.getScale())) * m_radius.get();
+    m_currentTransformUpdateID = transform.getWorldUpdateID();
+    m_shapeDirty = false;
   }
 
-  return { 0, 0, 0 };
+  return direction * m_worldRadius + m_worldCenter;
 }
 
 void SphereCollider::pack(net::Message& message) const
@@ -137,6 +142,7 @@ void SphereCollider::unpack(net::MessageReader& messageReader)
   setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
 
+  m_shapeDirty = true;
   invalidateBoundingBox();
 }
 

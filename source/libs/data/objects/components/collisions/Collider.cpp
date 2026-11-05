@@ -43,6 +43,30 @@ const BoundingBox& Collider::getBoundingBox()
   return m_boundingBox;
 }
 
+Transform& Collider::cachedTransform()
+{
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("Collider::cachedTransform::Missing Transform");
+    }
+  }
+
+  // owner_before compares control blocks without touching the reference counts lock() would bump.
+  if (m_cachedTransform == nullptr
+      || m_cachedTransformSource.owner_before(m_transform_ptr)
+      || m_transform_ptr.owner_before(m_cachedTransformSource))
+  {
+    m_cachedTransform = m_transform_ptr.lock().get();
+    m_cachedTransformSource = m_transform_ptr;
+  }
+
+  return *m_cachedTransform;
+}
+
 const BoundingBox& Collider::cachedBoundingBox() const
 {
   // Fails loudly in a debug build if a caller reaches this before getBoundingBox() has ever warmed the

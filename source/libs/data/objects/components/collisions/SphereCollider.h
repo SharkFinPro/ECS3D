@@ -3,6 +3,7 @@
 
 #include "Collider.h"
 #include <glm/vec3.hpp>
+#include <cstdint>
 
 class SphereCollider final : public Collider {
 public:
@@ -34,6 +35,14 @@ private:
   ComponentVariable<float> m_radius = ComponentVariable(1.0f);
 
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
+
+  // World center and radius for the support query; the transform's world getters walk the parent chain.
+  glm::vec3 m_worldCenter{ 0 };
+  float m_worldRadius = 0;
+  uint64_t m_currentTransformUpdateID = 0;
+
+  // Editing the collider's own offset or radius doesn't bump the transform's update id.
+  bool m_shapeDirty = true;
 
   void updateTransformPointer();
 
