@@ -33,7 +33,7 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
   // Collect first so the entry count can lead (Message is append-only - there's no way to back-patch a
   // header once entries are written). Each entry is uuid + the three local transform vectors.
   struct Entry {
-    std::string uuid;
+    std::string_view uuid;
     glm::vec3 position;
     glm::vec3 rotation;
     glm::vec3 scale;
@@ -44,6 +44,8 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
   // it, so logging unconditionally would repeat the same entry forever. Remembered across calls and
   // rebuilt each time from only what is still foreign-owned, so an object that stops being foreign (fixed,
   // or removed and its uuid never reused) drops out and would be logged again if it ever recurred.
+  // Owning strings, not views: the set outlives the call, and the objects whose cached uuid a view would
+  // point into can be destroyed in between.
   static std::unordered_set<std::string> reportedForeignOwners;
   std::unordered_set<std::string> stillForeignOwned;
 
@@ -62,7 +64,7 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
     // silently vanish from every delta.
     if (transform->getOwner() != object.get())
     {
-      auto uuid = uuids::to_string(object->getUUID());
+      auto uuid = std::string(object->getUUIDString());
 
       if (reportedForeignOwners.insert(uuid).second)
       {
@@ -90,7 +92,7 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
       continue;
     }
 
-    entries.push_back({ uuids::to_string(object->getUUID()), position, rotation, scale });
+    entries.push_back({ object->getUUIDString(), position, rotation, scale });
   }
 
   reportedForeignOwners = std::move(stillForeignOwned);

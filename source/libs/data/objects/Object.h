@@ -10,6 +10,7 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <uuid.h>
 
 namespace net {
@@ -82,6 +83,9 @@ public:
 
   [[nodiscard]] uuids::uuid getUUID() const;
 
+  // Valid until this object is destroyed or its uuid is reassigned by unpack/loadFromJSON; do not store it.
+  [[nodiscard]] std::string_view getUUIDString() const;
+
   // True when object sits somewhere below this one in the hierarchy. An object is not its own
   // ancestor, so a caller guarding against cycles has to check for self separately.
   [[nodiscard]] bool isAncestorOf(const std::shared_ptr<Object>& object) const;
@@ -114,6 +118,8 @@ private:
   std::vector<std::shared_ptr<Object>> m_children;
 
   uuids::uuid m_uuid;
+
+  mutable std::string m_uuidString;
 
   std::string m_name;
 
