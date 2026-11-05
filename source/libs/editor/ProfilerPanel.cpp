@@ -396,9 +396,11 @@ void ProfilerPanel::displayNetwork() const
 
   const ServerLaneInput& input = *m_serverInput;
 
-  ImGui::Text("Sent  %s", profilerServerLane::describeTraffic(input.sent).c_str());
-  ImGui::Text("Received  %s", profilerServerLane::describeTraffic(input.received).c_str());
-  ImGui::Text("Editor received  %s", profilerServerLane::formatRate(input.editorReceivedBytesPerSecond).c_str());
+  for (const auto& line : profilerServerLane::describeAllTraffic(input))
+  {
+    ImGui::TextUnformatted(line.c_str());
+  }
+
   ImGui::Text("Snapshots  %s", profilerServerLane::describeSnapshots(input).c_str());
 
   if (!input.snapshots.empty() &&

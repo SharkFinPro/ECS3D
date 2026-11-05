@@ -196,9 +196,11 @@ stopped" while live with no scene running. The editor lane draws in every state.
 from the run loop, so the subscription and figures stay current while F10 hides the GUI. The readout is drawn inside the
 `Renderer` scope, so its own `Profiler` scope groups under Renderer, not Profiler.
 
-The Network section shows, over the panel's window, bytes per second sent and received with the largest message types
-(`net::summarizeTraffic` in `RemoteStatsSummary.h`, which divides by the server time the batches cover), the
-editor's own inbound rate (`RateMeter`, from `NetClient::traffic()`), the last ten snapshots with their reason, size,
+The Network section shows four traffic lines (`describeAllTraffic`), each with bytes per second, messages per second
+and the largest message types: the server's sent and received (`net::summarizeTraffic` in `RemoteStatsSummary.h`,
+over the panel's window, dividing by the server time the batches cover) and the editor's own, from two
+`net::TrafficRateMeter`s over `NetClient::traffic()` (the lines use the meters' 500 ms intervals, not the window,
+and the meters restart when the subscription flips). It also shows the last ten snapshots with their reason, size,
 build time and recipients, the largest held snapshot, snapshots in the last minute (`net::snapshotsWithin`), and the
 connection and editor counts. Counted bytes exclude the transport's framing, which adds 4 bytes per message on TCP.
 Byte rates divide by the server time the samples cover, which excludes the roughly 1 ms sleep between samples, so they

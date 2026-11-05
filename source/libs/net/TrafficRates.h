@@ -17,6 +17,7 @@ struct TrafficRateRow {
   MessageType type = MessageType::undefined;
   std::string_view name;
   double bytesPerSecond = 0.0;
+  double messagesPerSecond = 0.0;
 };
 
 // Bytes per second from a monotonic total, recomputed at most once per minInterval so the figures do not flicker.
@@ -35,6 +36,7 @@ public:
     {
       m_primed = true;
       m_total = 0.0;
+      m_totalMessages = 0.0;
       m_rows.clear();
       m_last = totals;
       m_time = now;
@@ -50,6 +52,7 @@ public:
     const double seconds = std::chrono::duration<double>(now - m_time).count();
     m_rows.clear();
     uint64_t total = 0;
+    uint64_t totalMessages = 0;
 
     for (std::size_t i = 0; i < messageTypeCount; ++i)
     {
@@ -58,8 +61,11 @@ public:
       if (bytes > 0)
       {
         const auto type = static_cast<MessageType>(i);
-        m_rows.push_back({ type, messageTypeName(type), static_cast<double>(bytes) / seconds });
+        const uint64_t messages = totals.messages[i] - m_last.messages[i];
+        m_rows.push_back({ type, messageTypeName(type), static_cast<double>(bytes) / seconds,
+                           static_cast<double>(messages) / seconds });
         total += bytes;
+        totalMessages += messages;
       }
     }
 
@@ -68,11 +74,14 @@ public:
     });
 
     m_total = static_cast<double>(total) / seconds;
+    m_totalMessages = static_cast<double>(totalMessages) / seconds;
     m_last = totals;
     m_time = now;
   }
 
   [[nodiscard]] double totalBytesPerSecond() const { return m_total; }
+
+  [[nodiscard]] double totalMessagesPerSecond() const { return m_totalMessages; }
 
   // Types that moved bytes in the last interval, largest first.
   [[nodiscard]] const std::vector<TrafficRateRow>& rows() const { return m_rows; }
@@ -82,7 +91,7 @@ private:
   {
     for (std::size_t i = 0; i < messageTypeCount; ++i)
     {
-      if (totals.bytes[i] < m_last.bytes[i])
+      if (totals.bytes[i] < m_last.bytes[i] || totals.messages[i] < m_last.messages[i])
       {
         return true;
       }
@@ -94,6 +103,7 @@ private:
   bool m_primed = false;
   TrafficTotals m_last;
   double m_total = 0.0;
+  double m_totalMessages = 0.0;
   std::vector<TrafficRateRow> m_rows;
   Clock::time_point m_time{};
 };

@@ -10,6 +10,7 @@
 #include <ServerStats.h>
 #include <SettingsStore.h>
 #include <SnapshotLog.h>
+#include <TrafficRates.h>
 #include <TrafficCounters.h>
 #include <imgui.h>
 #include <algorithm>
@@ -37,6 +38,8 @@ namespace {
   {
     ServerTrafficDirection direction;
     direction.bytesPerSecond = summary.bytesPerSecond;
+    direction.messagesPerSecond =
+      summary.coveredSeconds > 0.0 ? static_cast<double>(summary.messages) / summary.coveredSeconds : 0.0;
 
     for (const auto& entry : summary.types)
     {
@@ -48,16 +51,19 @@ namespace {
     return direction;
   }
 
-  uint64_t totalBytes(const net::TrafficTotals& totals)
+  ServerTrafficDirection trafficDirection(const net::TrafficRateMeter& meter)
   {
-    uint64_t sum = 0;
+    ServerTrafficDirection direction;
+    direction.bytesPerSecond = meter.totalBytesPerSecond();
+    direction.messagesPerSecond = meter.totalMessagesPerSecond();
 
-    for (const auto bytes : totals.bytes)
+    for (const auto& row : meter.rows())
     {
-      sum += bytes;
+      const double share = direction.bytesPerSecond > 0.0 ? row.bytesPerSecond / direction.bytesPerSecond : 0.0;
+      direction.types.push_back({std::string(row.name), 0, share});
     }
 
-    return sum;
+    return direction;
   }
 }
 
@@ -71,7 +77,8 @@ void EditorApp::updateServerStats()
   if (wanted != m_statsSubscribed)
   {
     m_statsSubscribed = wanted;
-    m_receiveRate.reset();
+    m_sentRates = net::TrafficRateMeter();
+    m_receivedRates = net::TrafficRateMeter();
 
     if (connected)
     {
@@ -159,8 +166,12 @@ void EditorApp::fillServerLane()
   m_serverLane.snapshotsLastMinute = net::snapshotsWithin(m_remoteStats, now, std::chrono::minutes(1));
   m_serverLane.connections = m_remoteStats.connections();
   m_serverLane.editors = m_remoteStats.editors();
-  m_serverLane.editorReceivedBytesPerSecond =
-    m_receiveRate.update(totalBytes(m_netClient->traffic().totalIn()), now);
+
+  const auto meterNow = net::TrafficRateMeter::Clock::now();
+  m_sentRates.update(m_netClient->traffic().totalOut(), meterNow);
+  m_receivedRates.update(m_netClient->traffic().totalIn(), meterNow);
+  m_serverLane.editorSent = trafficDirection(m_sentRates);
+  m_serverLane.editorReceived = trafficDirection(m_receivedRates);
 }
 
 void EditorApp::drawStatsReadout(ImDrawList* drawList, const float sceneX, const float sceneY, const float sceneWidth)
