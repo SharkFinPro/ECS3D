@@ -129,9 +129,20 @@ void Collider::invalidateBoundingBox()
   ++m_geometryRevision;
 }
 
-uint64_t Collider::getWorldUpdateID()
+uint64_t Collider::getWorldUpdateID() const
 {
-  return cachedTransform().getWorldUpdateID();
+  auto transform = m_transform_ptr.lock();
+  if (!transform)
+  {
+    transform = m_owner->getComponent<Transform>(ComponentType::transform);
+  }
+
+  if (!transform)
+  {
+    throw std::runtime_error("Collider::getWorldUpdateID::Missing Transform");
+  }
+
+  return transform->getWorldUpdateID();
 }
 
 uint64_t Collider::getGeometryRevision() const

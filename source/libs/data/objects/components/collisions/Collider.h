@@ -73,8 +73,9 @@ public:
   [[nodiscard]] virtual glm::vec3 getScale() { return glm::vec3(1); }
   [[nodiscard]] virtual glm::vec3 getRotation() { return glm::vec3(0); }
 
-  // The owner transform's Transform::getWorldUpdateID. Throws if the owner has no transform.
-  [[nodiscard]] uint64_t getWorldUpdateID();
+  // The owner transform's Transform::getWorldUpdateID. Throws if the owner has no transform. Writes nothing, so the
+  // parallel narrow phase can ask it of a collider another thread is reading.
+  [[nodiscard]] uint64_t getWorldUpdateID() const;
 
   // Moves whenever the collider's own geometry (offset, size, radius, hull) changes. Together with
   // getWorldUpdateID it tells a cache built from this collider's world geometry that it is stale.

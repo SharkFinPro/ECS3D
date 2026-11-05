@@ -5,6 +5,7 @@
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/geometric.hpp>
@@ -440,4 +441,34 @@ TEST(NarrowPhase, ABoxManifoldFollowsTheBoxsOwnResize)
   ASSERT_TRUE(after.has_value());
   EXPECT_NEAR(after->depth(), 0.3f, tolerance);
   EXPECT_NEAR(after->point.y, 0.7f, tolerance);
+}
+
+// A hull's face normals are cached per world-vertex rebuild. After the hull turns, its contact has to match a
+// hull that never cached anything at that pose.
+TEST(NarrowPhase, AHullContactAfterATurnMatchesAFreshHull)
+{
+  const auto [groundObject, ground] = makeCollider<BoxCollider>({ 0, 0, 0 }, { 5, 1, 5 });
+  const auto [hullObject, hull] = makeCollider<ConvexMeshCollider>({ 0, 1.8f, 0 });
+
+  ASSERT_TRUE(collisions::findContact(*hull, *ground).has_value());
+
+  const auto transform = hullObject->getComponent<Transform>(ComponentType::transform);
+  transform->setPosition({ 0, 2.0f, 0 });
+  transform->setRotation({ 0, 0, 30 });
+
+  const auto [freshObject, fresh] = makeCollider<ConvexMeshCollider>({ 0, 2.0f, 0 });
+  freshObject->getComponent<Transform>(ComponentType::transform)->setRotation({ 0, 0, 30 });
+
+  const auto turned = collisions::findContact(*hull, *ground);
+  const auto expected = collisions::findContact(*fresh, *ground);
+  ASSERT_TRUE(turned.has_value());
+  ASSERT_TRUE(expected.has_value());
+
+  EXPECT_EQ(turned->minimumTranslationVector, expected->minimumTranslationVector);
+  EXPECT_EQ(turned->point, expected->point);
+  ASSERT_EQ(turned->pointCount, expected->pointCount);
+  for (std::uint8_t i = 0; i < expected->pointCount; ++i)
+  {
+    EXPECT_EQ(turned->points[i], expected->points[i]);
+  }
 }
