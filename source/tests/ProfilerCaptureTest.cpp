@@ -374,9 +374,12 @@ TEST(ProfilerCapture, DatesBeforeTheEpochAndFarInTheFutureFormatCorrectly)
   EXPECT_EQ(captureTimestamp(at(-58017600)), "1968-02-29T12:00:00Z");
   EXPECT_EQ(captureTimestamp(at(4107542399)), "2100-02-28T23:59:59Z");
   EXPECT_EQ(captureTimestamp(at(4107542400)), "2100-03-01T00:00:00Z");
-  EXPECT_EQ(captureTimestamp(at(13574563200)), "2400-02-29T00:00:00Z");
-  EXPECT_EQ(captureTimestamp(at(13601088000)), "2401-01-01T00:00:00Z");
-  EXPECT_EQ(captureBaseName("editor", at(16756761599)), "editor-25001231-235959");
+  // libstdc++ counts system_clock in int64 nanoseconds, so its range ends in 2262; stay inside it.
+  EXPECT_EQ(captureTimestamp(at(7263215999)), "2200-02-28T23:59:59Z");
+  EXPECT_EQ(captureTimestamp(at(7263216000)), "2200-03-01T00:00:00Z");
+  EXPECT_EQ(captureTimestamp(at(7389360000)), "2204-02-29T00:00:00Z");
+  EXPECT_EQ(captureTimestamp(at(7415884800)), "2205-01-01T00:00:00Z");
+  EXPECT_EQ(captureBaseName("editor", at(9214646399)), "editor-22611231-235959");
 }
 
 TEST(ProfilerCapture, SidecarRecordsPausedAndServerState)
