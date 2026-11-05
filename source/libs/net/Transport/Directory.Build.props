@@ -1,5 +1,10 @@
 <Project>
     <PropertyGroup>
         <BaseIntermediateOutputPath>$(BuildRoot)obj/</BaseIntermediateOutputPath>
+
+        <!-- An IDE that loads this project on its own (Visual Studio's design-time build) has no BuildRoot and
+             writes generated *.cs into a local obj/. Once obj/ is relocated the SDK no longer excludes the
+             local one, so exclude it here or the CMake publish compiles it twice (CS0579). -->
+        <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildThisFileDirectory)obj\**;$(MSBuildThisFileDirectory)bin\**</DefaultItemExcludes>
     </PropertyGroup>
 </Project>

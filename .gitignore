@@ -8,3 +8,6 @@ cmake-build-ecs3d-sanitize
 cmake-build-ecs3d-profile
 .idea
 __pycache__/
+source/**/obj/
+source/**/bin/
+.vs/
