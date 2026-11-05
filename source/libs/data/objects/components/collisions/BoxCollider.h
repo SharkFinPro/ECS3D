@@ -6,6 +6,7 @@
 #include <glm/vec3.hpp>
 #include <array>
 #include <cstdint>
+#include <limits>
 
 constexpr std::array<glm::vec3, 8> boxVertices = {{
   {1.0f, 1.0f, 1.0f},
@@ -18,32 +19,27 @@ constexpr std::array<glm::vec3, 8> boxVertices = {{
   {1.0f, -1.0f, -1.0f}
 }};
 
-// Maps a sign mask (bit 0 = +x, bit 1 = +y, bit 2 = +z) to the boxVertices index with those signs.
-inline constexpr std::array<uint8_t, 8> boxVertexBySignMask = [] {
-  std::array<uint8_t, 8> table{};
-  for (uint8_t i = 0; i < boxVertices.size(); ++i)
-  {
-    const auto& v = boxVertices[i];
-    const int mask = (v.x > 0 ? 1 : 0) | (v.y > 0 ? 2 : 0) | (v.z > 0 ? 4 : 0);
-    table[mask] = i;
-  }
-  return table;
-}();
-
-// A box's world-space corners and the world-space edges along its local x, y and z axes.
+// A box's world-space corners.
 struct BoxSupport {
   std::array<glm::vec3, boxVertices.size()> vertices{};
-  std::array<glm::vec3, 3> axes{};
 
-  // dot(direction, vertex) is affine in the per-axis signs, so the furthest vertex takes the sign of each
-  // axis' dot: 3 dots instead of scanning all 8 vertices.
+  // A full scan rather than picking the corner from the signs of the axis dots: the two break ties (a
+  // direction square to a face) toward different corners, and the response is tuned on the scan's choice.
   [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
   {
-    const int mask = (glm::dot(direction, axes[0]) >= 0.0f ? 1 : 0)
-      | (glm::dot(direction, axes[1]) >= 0.0f ? 2 : 0)
-      | (glm::dot(direction, axes[2]) >= 0.0f ? 4 : 0);
+    float largestDot = std::numeric_limits<float>::lowest();
+    glm::vec3 furthestVertex{ 0, 0, 0 };
 
-    return vertices[boxVertexBySignMask[mask]];
+    for (const auto& vertex : vertices)
+    {
+      if (const float currentDot = glm::dot(vertex, direction); currentDot > largestDot)
+      {
+        largestDot = currentDot;
+        furthestVertex = vertex;
+      }
+    }
+
+    return furthestVertex;
   }
 };
 

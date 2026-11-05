@@ -16,19 +16,11 @@ namespace {
 
   bool keepsTurn(const Point& o, const Point& a, const Point& b)
   {
-    const float ax = a.x - o.x;
-    const float ay = a.y - o.y;
-    const float bx = b.x - o.x;
-    const float by = b.y - o.y;
-    const float turn = ax * by - ay * bx;
+    // hypot rather than a squared comparison, which rounds differently at the collinear threshold.
+    const float turn = (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const float lengths = std::hypot(a.x - o.x, a.y - o.y) * std::hypot(b.x - o.x, b.y - o.y);
 
-    if (turn <= 0.0f)
-    {
-      return false;
-    }
-
-    // Squared form of turn > collinearShare * |a| * |b|, avoiding hypot/sqrt.
-    return turn * turn > collinearShare * collinearShare * (ax * ax + ay * ay) * (bx * bx + by * by);
+    return turn > collinearShare * lengths;
   }
 
   void extend(Point* hull, size_t& count, const Point& point, const size_t floor)

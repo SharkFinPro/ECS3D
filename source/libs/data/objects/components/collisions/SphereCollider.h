@@ -5,14 +5,16 @@
 #include <glm/vec3.hpp>
 #include <cstdint>
 
-// A sphere's world center and radius.
+// A sphere's world placement: the transform's world position, the collider's own offset and the world radius.
+// The two positions stay apart so the support point sums them in the order it always has.
 struct SphereSupport {
-  glm::vec3 center{ 0 };
+  glm::vec3 transformPosition{ 0 };
+  glm::vec3 offset{ 0 };
   float radius = 0;
 
   [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
   {
-    return direction * radius + center;
+    return direction * radius + transformPosition + offset;
   }
 };
 

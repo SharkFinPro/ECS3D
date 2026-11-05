@@ -117,7 +117,8 @@ const SphereSupport& SphereCollider::getWorldSupport()
   if (const Transform& transform = cachedTransform();
       m_shapeDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
   {
-    m_worldSupport.center = transform.getPosition() + m_position.get();
+    m_worldSupport.transformPosition = transform.getPosition();
+    m_worldSupport.offset = m_position.get();
     m_worldSupport.radius = compMax(glm::abs(transform.getScale())) * m_radius.get();
     m_currentTransformUpdateID = transform.getWorldUpdateID();
     m_shapeDirty = false;

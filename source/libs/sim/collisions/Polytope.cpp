@@ -288,16 +288,10 @@ constexpr float visibilityTolerance = 1e-5f;
 
 static bool isInFrontOf(const glm::vec3& normal, const glm::vec3& planePoint, const glm::vec3& point)
 {
-  const float distance = glm::dot(normal, point - planePoint);
-  if (distance <= 0.0f)
-  {
-    return false;
-  }
-
-  // distance > tolerance * |normal| * max(1, |point|), squared to skip both square roots; both sides are
-  // non-negative past the check above, so squaring keeps the comparison.
-  constexpr float toleranceSquared = visibilityTolerance * visibilityTolerance;
-  return distance * distance > toleranceSquared * glm::dot(normal, normal) * std::max(1.0f, glm::dot(point, point));
+  // Not squared to skip the roots: the squared comparison rounds differently near the threshold, which moves which
+  // faces EPA removes.
+  const float beyond = visibilityTolerance * glm::length(normal) * std::max(1.0f, glm::length(point));
+  return glm::dot(normal, point - planePoint) > beyond;
 }
 
 constexpr uint8_t maxEpaIterations = 25;
