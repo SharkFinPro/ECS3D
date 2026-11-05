@@ -245,20 +245,26 @@ namespace {
   // The convex outline of a group's vertices in its plane, counter-clockwise about its normal, as vertex ids.
   std::vector<uint32_t> outlineOf(const Group& group, const Vertices& vertices)
   {
-    auto ids = group.vertexIds;
+    // Scratch buffers are reused across calls to avoid a heap allocation per group; thread_local keeps
+    // parallel callers independent.
+    thread_local std::vector<uint32_t> ids;
+    thread_local Vertices points;
+
+    ids.assign(group.vertexIds.begin(), group.vertexIds.end());
     std::ranges::sort(ids);
     ids.erase(std::ranges::unique(ids).begin(), ids.end());
 
-    Vertices points;
-    points.reserve(vertices.size());
+    points.clear();
     for (const auto id : ids)
     {
       points.push_back(vertices[id]);
     }
 
+    const auto indices = collisions::convexOutlineIndices(points, group.normal);
+
     std::vector<uint32_t> outline;
-    outline.reserve(points.size());
-    for (const auto index : collisions::convexOutlineIndices(points, group.normal))
+    outline.reserve(indices.size());
+    for (const auto index : indices)
     {
       outline.push_back(ids[index]);
     }
