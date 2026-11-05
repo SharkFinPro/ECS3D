@@ -5,7 +5,6 @@
 #include <ProfileStats.h>
 #include <ProfilerView.h>
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +25,7 @@ struct ServerTrafficRow {
 
 struct ServerTrafficDirection {
   double bytesPerSecond = 0.0;
+  double messagesPerSecond = 0.0;
   std::vector<ServerTrafficRow> types;
 };
 
@@ -57,8 +57,9 @@ struct ServerLaneInput {
   std::size_t snapshotsLastMinute = 0;
   uint16_t connections = 0;
   uint16_t editors = 0;
-  // The editor's own inbound rate, from its client's counters.
-  double editorReceivedBytesPerSecond = 0.0;
+  // The editor's own traffic, from its client's counters.
+  ServerTrafficDirection editorSent;
+  ServerTrafficDirection editorReceived;
 };
 
 namespace profilerServerLane {
@@ -183,6 +184,43 @@ namespace profilerServerLane {
     return text + ")";
   }
 
+  // "Server sent     61.2 KB/s  52 msg/s  (stateDelta 98%, serverLog 2%)"; the label is padded to a common width.
+  [[nodiscard]] inline std::string describeTrafficLine(const std::string& label,
+                                                       const ServerTrafficDirection& direction)
+  {
+    constexpr std::size_t labelWidth = 16;
+    std::string text = label;
+    text.resize(std::max(labelWidth, label.size() + 1), ' ');
+    text += formatRate(direction.bytesPerSecond) + "  ";
+    text += std::to_string(static_cast<uint64_t>(std::max(direction.messagesPerSecond, 0.0) + 0.5)) + " msg/s";
+
+    const std::string types = describeTraffic(direction);
+    const std::size_t split = types.find("  (");
+
+    return split == std::string::npos ? text : text + types.substr(split);
+  }
+
+  // Whether the server has sent any statistics, so its figures mean something rather than reading as zeros.
+  [[nodiscard]] inline bool hasServerFigures(const ServerLaneInput& input)
+  {
+    return input.history != nullptr;
+  }
+
+  // The server lines only once the server has reported; the editor's own lines always.
+  [[nodiscard]] inline std::vector<std::string> describeAllTraffic(const ServerLaneInput& input)
+  {
+    std::vector<std::string> lines;
+    if (hasServerFigures(input))
+    {
+      lines.push_back(describeTrafficLine("Server sent", input.sent));
+      lines.push_back(describeTrafficLine("Server received", input.received));
+    }
+
+    lines.push_back(describeTrafficLine("Editor sent", input.editorSent));
+    lines.push_back(describeTrafficLine("Editor received", input.editorReceived));
+    return lines;
+  }
+
   // "last 12.3 KB (join, 4s ago)  largest 90.0 KB  in last minute: 3"
   [[nodiscard]] inline std::string describeSnapshots(const ServerLaneInput& input)
   {
@@ -199,47 +237,6 @@ namespace profilerServerLane {
            std::to_string(static_cast<uint64_t>(last.secondsAgo)) + "s ago)  largest " +
            formatSize(input.largestSnapshotBytes) + "  " + lastMinute;
   }
-
-  // The editor's inbound byte rate, from a monotonic total read once per frame. The rate is recomputed once per
-  // minInterval so a frame-to-frame jitter in arrivals does not make the figure flicker.
-  class RateMeter {
-  public:
-    using Clock = std::chrono::steady_clock;
-
-    static constexpr auto minInterval = std::chrono::milliseconds(500);
-
-    // Forgets the history, so a later reading does not average over time nobody was measuring.
-    void reset()
-    {
-      *this = RateMeter();
-    }
-
-    // 0 until the first interval has passed, and when the total went back.
-    double update(const uint64_t total, const Clock::time_point now)
-    {
-      if (!m_primed || total < m_total || now < m_time)
-      {
-        m_primed = true;
-        m_rate = 0.0;
-        m_total = total;
-        m_time = now;
-      }
-      else if (now - m_time >= minInterval)
-      {
-        m_rate = static_cast<double>(total - m_total) / std::chrono::duration<double>(now - m_time).count();
-        m_total = total;
-        m_time = now;
-      }
-
-      return m_rate;
-    }
-
-  private:
-    bool m_primed = false;
-    uint64_t m_total = 0;
-    double m_rate = 0.0;
-    Clock::time_point m_time{};
-  };
 }
 
 [[nodiscard]] inline std::string serverLaneNotice(const ServerLaneInput& input)

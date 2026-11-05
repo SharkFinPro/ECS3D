@@ -67,7 +67,8 @@ frame and pauses in the same frame, and closing the panel resumes and drops the 
 groups persist in
 `editor.profiler.window`, `editor.profiler.scale` and `editor.profiler.hiddenGroups`; the choices, their validation
 and the pause/selection rules are the headless `ProfilerPanelState.h`. Below the editor lane sits the server's tick
-lane (own legend, own `editor.profiler.serverHiddenGroups`, a 20 ms budget line) and a collapsing Network section.
+lane (own legend, own `editor.profiler.serverHiddenGroups`, a 20 ms budget line) and a collapsing Network section
+(the server's and the editor's own traffic, in bytes and messages per second).
 `EditorApp` (`EditorAppProfiler.cpp`) subscribes the connection to the server's statistics only while the panel is
 open or the corner readout is on (`profilerPanelState::wantsServerStats`) and fills a `ServerLaneInput`
 (`ProfilerServerLane.h`, plain data, so the library needs no `ECS3DNet`) from

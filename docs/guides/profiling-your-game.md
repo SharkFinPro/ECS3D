@@ -69,10 +69,13 @@ Use it to go from "Scripts is the tall group" to the specific scope inside it.
 
 ## The Network section
 
-The Network section appears whenever the server lane does. Over the chosen window it shows:
+The Network section appears whenever the server lane does. The server's lines (its traffic, snapshots and
+connections) wait for its first report, so against a server that does not report statistics only the editor's own
+lines show. Over the chosen window it shows:
 
-- Sent and Received: bytes per second at the server, with the message types that make up the most.
-- Editor received: what the editor itself receives per second.
+- Server sent and Server received: bytes and messages per second at the server, with the message types that make up
+  the most.
+- Editor sent and Editor received: the same figures for the editor's own connection, over the last half second or so.
 - Snapshots: the last snapshot's size, why it was sent and how long ago, the largest one held and how many were sent in
   the last minute. A table below lists the last ten with their size, reason, build time and recipients. A snapshot is
   the whole project sent at once, so a large or frequent one is worth explaining.

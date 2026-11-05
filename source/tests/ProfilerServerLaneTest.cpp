@@ -1,15 +1,13 @@
 #include <gtest/gtest.h>
 
+#include <History.h>
 #include <ProfilerServerLane.h>
 
-#include <chrono>
 #include <cstdint>
 #include <limits>
 #include <vector>
 
 namespace {
-  using namespace std::chrono_literals;
-  using Meter = profilerServerLane::RateMeter;
 
   ServerLaneInput input(const ServerLaneState state, const bool sceneRunning = true)
   {
@@ -88,39 +86,6 @@ TEST(ServerLaneFormat, SnapshotSummaryNamesTheNewestSnapshot)
             "last 2.0 KB (sceneEdit, 4s ago)  largest 90.0 KB  in last minute: 3");
 }
 
-TEST(ServerLaneRateMeter, ReadsZeroUntilAnIntervalHasPassed)
-{
-  Meter meter;
-  const Meter::Clock::time_point start{100s};
-
-  EXPECT_DOUBLE_EQ(meter.update(1000, start), 0.0);
-  EXPECT_DOUBLE_EQ(meter.update(2000, start + 100ms), 0.0);
-}
-
-TEST(ServerLaneRateMeter, DifferencesTheTotalOverTheElapsedTimeAndHoldsBetweenIntervals)
-{
-  Meter meter;
-  const Meter::Clock::time_point start{100s};
-
-  static_cast<void>(meter.update(1000, start));
-
-  EXPECT_DOUBLE_EQ(meter.update(2000, start + 500ms), 2000.0);
-  EXPECT_DOUBLE_EQ(meter.update(2100, start + 600ms), 2000.0);
-  EXPECT_DOUBLE_EQ(meter.update(2600, start + 1000ms), 1200.0);
-}
-
-TEST(ServerLaneRateMeter, ATotalThatWentBackRestartsTheMeasurement)
-{
-  Meter meter;
-  const Meter::Clock::time_point start{100s};
-
-  static_cast<void>(meter.update(5000, start));
-  ASSERT_GT(meter.update(9000, start + 1s), 0.0);
-
-  EXPECT_DOUBLE_EQ(meter.update(10, start + 2s), 0.0);
-  EXPECT_DOUBLE_EQ(meter.update(1010, start + 3s), 1000.0);
-}
-
 TEST(ServerLaneTicks, SummarizesOnlyTheNewestRequestedTicksPerTick)
 {
   const std::vector<uint32_t> ticks{900000, 1000, 2000, 3000, 4000, 20000};
@@ -172,16 +137,56 @@ TEST(ServerLaneFormat, ValuesRoundBeforeTheUnitIsChosen)
   EXPECT_EQ(profilerServerLane::formatSize(1048575), "1.0 MB");
 }
 
-TEST(ServerLaneRateMeter, ResetForgetsTheEarlierMeasurement)
+TEST(ServerLaneFormat, ATrafficLineShowsBytesMessagesAndTypes)
 {
-  Meter meter;
-  const Meter::Clock::time_point start{100s};
+  ServerTrafficDirection direction;
+  direction.bytesPerSecond = 61.2 * 1024.0;
+  direction.messagesPerSecond = 51.6;
+  direction.types = {{"stateDelta", 0, 0.98}, {"serverLog", 0, 0.02}};
 
-  static_cast<void>(meter.update(0, start));
-  ASSERT_DOUBLE_EQ(meter.update(1000, start + 1s), 1000.0);
+  EXPECT_EQ(profilerServerLane::describeTrafficLine("Server sent", direction),
+            "Server sent     61.2 KB/s  52 msg/s  (stateDelta 98%, serverLog 2%)");
+}
 
-  meter.reset();
+TEST(ServerLaneFormat, AnEmptyDirectionHasNoTypeList)
+{
+  EXPECT_EQ(profilerServerLane::describeTrafficLine("Editor sent", {}), "Editor sent     0 B/s  0 msg/s");
+}
 
-  EXPECT_DOUBLE_EQ(meter.update(900000, start + 100s), 0.0);
-  EXPECT_DOUBLE_EQ(meter.update(901000, start + 101s), 1000.0);
+TEST(ServerLaneFormat, TheNetworkBlockHasServerAndEditorLinesInBothDirections)
+{
+  profile::History history(4);
+  ServerLaneInput lane;
+  lane.history = &history;
+  lane.sent.bytesPerSecond = 2048.0;
+  lane.sent.messagesPerSecond = 10.0;
+  lane.editorReceived.bytesPerSecond = 1024.0;
+  lane.editorReceived.messagesPerSecond = 4.0;
+  lane.editorReceived.types = {{"stateDelta", 0, 1.0}};
+
+  const auto lines = profilerServerLane::describeAllTraffic(lane);
+
+  ASSERT_EQ(lines.size(), 4u);
+  EXPECT_EQ(lines[0], "Server sent     2.0 KB/s  10 msg/s");
+  EXPECT_EQ(lines[1], "Server received 0 B/s  0 msg/s");
+  EXPECT_EQ(lines[2], "Editor sent     0 B/s  0 msg/s");
+  EXPECT_EQ(lines[3], "Editor received 1.0 KB/s  4 msg/s  (stateDelta 100%)");
+}
+
+TEST(ServerLaneFormat, AServerThatHasNotReportedShowsOnlyTheEditorsLines)
+{
+  ServerLaneInput lane;
+  lane.state = ServerLaneState::unsupported;
+  lane.editorSent.bytesPerSecond = 1024.0;
+
+  const auto lines = profilerServerLane::describeAllTraffic(lane);
+
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0], "Editor sent     1.0 KB/s  0 msg/s");
+  EXPECT_FALSE(profilerServerLane::hasServerFigures(lane));
+
+  profile::History history(4);
+  lane.history = &history;
+  EXPECT_TRUE(profilerServerLane::hasServerFigures(lane));
+  EXPECT_EQ(profilerServerLane::describeAllTraffic(lane).size(), 4u);
 }

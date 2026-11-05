@@ -396,41 +396,46 @@ void ProfilerPanel::displayNetwork() const
 
   const ServerLaneInput& input = *m_serverInput;
 
-  ImGui::Text("Sent  %s", profilerServerLane::describeTraffic(input.sent).c_str());
-  ImGui::Text("Received  %s", profilerServerLane::describeTraffic(input.received).c_str());
-  ImGui::Text("Editor received  %s", profilerServerLane::formatRate(input.editorReceivedBytesPerSecond).c_str());
-  ImGui::Text("Snapshots  %s", profilerServerLane::describeSnapshots(input).c_str());
-
-  if (!input.snapshots.empty() &&
-      ImGui::BeginTable("snapshots", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+  for (const auto& line : profilerServerLane::describeAllTraffic(input))
   {
-    ImGui::TableSetupColumn("Ago");
-    ImGui::TableSetupColumn("Size");
-    ImGui::TableSetupColumn("Reason");
-    ImGui::TableSetupColumn("Build");
-    ImGui::TableSetupColumn("Recipients");
-    ImGui::TableHeadersRow();
-
-    for (const auto& row : input.snapshots)
-    {
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("%.0f s", row.secondsAgo);
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(profilerServerLane::formatSize(row.bytes).c_str());
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(row.reason.c_str());
-      ImGui::TableNextColumn();
-      ImGui::Text("%.2f ms", row.buildMillis);
-      ImGui::TableNextColumn();
-      ImGui::Text("%u", static_cast<unsigned>(row.recipients));
-    }
-
-    ImGui::EndTable();
+    ImGui::TextUnformatted(line.c_str());
   }
 
-  ImGui::Text("Connections: %u (editors: %u)", static_cast<unsigned>(input.connections),
-              static_cast<unsigned>(input.editors));
+  if (profilerServerLane::hasServerFigures(input))
+  {
+    ImGui::Text("Snapshots  %s", profilerServerLane::describeSnapshots(input).c_str());
+
+    if (!input.snapshots.empty() &&
+        ImGui::BeginTable("snapshots", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+    {
+      ImGui::TableSetupColumn("Ago");
+      ImGui::TableSetupColumn("Size");
+      ImGui::TableSetupColumn("Reason");
+      ImGui::TableSetupColumn("Build");
+      ImGui::TableSetupColumn("Recipients");
+      ImGui::TableHeadersRow();
+
+      for (const auto& row : input.snapshots)
+      {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("%.0f s", row.secondsAgo);
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(profilerServerLane::formatSize(row.bytes).c_str());
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(row.reason.c_str());
+        ImGui::TableNextColumn();
+        ImGui::Text("%.2f ms", row.buildMillis);
+        ImGui::TableNextColumn();
+        ImGui::Text("%u", static_cast<unsigned>(row.recipients));
+      }
+
+      ImGui::EndTable();
+    }
+
+    ImGui::Text("Connections: %u (editors: %u)", static_cast<unsigned>(input.connections),
+                static_cast<unsigned>(input.editors));
+  }
   ImGui::TextDisabled("Byte counts exclude the transport's framing: +4 bytes per message on TCP.");
 }
 

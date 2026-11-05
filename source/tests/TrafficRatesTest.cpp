@@ -160,3 +160,48 @@ TEST(TrafficRateMeter, ACounterThatWentBackRestartsTheMeasurement)
 
   EXPECT_NEAR(meter.totalBytesPerSecond(), 200.0, 1e-6);
 }
+
+TEST(TrafficRateMeter, MessageRatesAreCountedPerTypeAndInTotal)
+{
+  net::TrafficRateMeter meter;
+  net::TrafficTotals totals;
+  const auto start = Clock::now();
+
+  meter.update(totals, start);
+  totals.bytes[delta] = 5000;
+  totals.messages[delta] = 60;
+  totals.bytes[input] = 100;
+  totals.messages[input] = 20;
+  meter.update(totals, start + milliseconds(2000));
+
+  EXPECT_NEAR(meter.totalMessagesPerSecond(), 40.0, 1e-6);
+  ASSERT_EQ(meter.rows().size(), 2u);
+  EXPECT_NEAR(meter.rows()[0].messagesPerSecond, 30.0, 1e-6);
+  EXPECT_NEAR(meter.rows()[1].messagesPerSecond, 10.0, 1e-6);
+
+  totals.messages[delta] = 70;
+  totals.bytes[delta] = 5500;
+  meter.update(totals, start + milliseconds(3000));
+
+  EXPECT_NEAR(meter.totalMessagesPerSecond(), 10.0, 1e-6);
+}
+
+TEST(TrafficRateMeter, AMessageCounterThatWentBackRestartsTheMessageRates)
+{
+  net::TrafficRateMeter meter;
+  net::TrafficTotals totals;
+  const auto start = Clock::now();
+
+  meter.update(totals, start);
+  totals.bytes[delta] = 1000;
+  totals.messages[delta] = 10;
+  meter.update(totals, start + milliseconds(1000));
+  ASSERT_GT(meter.totalMessagesPerSecond(), 0.0);
+
+  // Bytes grow while messages go back, so only the message check can restart the meter.
+  totals.bytes[delta] = 1500;
+  totals.messages[delta] = 2;
+  meter.update(totals, start + milliseconds(2000));
+
+  EXPECT_EQ(meter.totalMessagesPerSecond(), 0.0);
+}

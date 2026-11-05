@@ -6,6 +6,7 @@
 #include <ProfilerServerLane.h>
 #include <RemoteStats.h>
 #include <Protocol.h>
+#include <TrafficRates.h>
 #include <Replication.h>
 #include <edits/EditHistory.h>
 #include <edits/HistoryScope.h>
@@ -212,7 +213,8 @@ private:
   // The server's statistics for the Profiler panel, subscribed to only while the panel is open.
   net::RemoteStats m_remoteStats;
   ServerLaneInput m_serverLane;
-  profilerServerLane::RateMeter m_receiveRate;
+  net::TrafficRateMeter m_sentRates;
+  net::TrafficRateMeter m_receivedRates;
   bool m_statsSubscribed = false;
   bool m_statsReadoutOn = false;
   uint32_t m_serverNodesEpoch = 0;
