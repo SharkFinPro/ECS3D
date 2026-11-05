@@ -57,15 +57,15 @@ public:
     for (std::size_t i = 0; i < messageTypeCount; ++i)
     {
       const uint64_t bytes = totals.bytes[i] - m_last.bytes[i];
+      const uint64_t messages = totals.messages[i] - m_last.messages[i];
+      totalMessages += messages;
 
       if (bytes > 0)
       {
         const auto type = static_cast<MessageType>(i);
-        const uint64_t messages = totals.messages[i] - m_last.messages[i];
         m_rows.push_back({ type, messageTypeName(type), static_cast<double>(bytes) / seconds,
                            static_cast<double>(messages) / seconds });
         total += bytes;
-        totalMessages += messages;
       }
     }
 

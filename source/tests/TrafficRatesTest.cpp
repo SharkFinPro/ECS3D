@@ -198,6 +198,8 @@ TEST(TrafficRateMeter, AMessageCounterThatWentBackRestartsTheMessageRates)
   meter.update(totals, start + milliseconds(1000));
   ASSERT_GT(meter.totalMessagesPerSecond(), 0.0);
 
+  // Bytes grow while messages go back, so only the message check can restart the meter.
+  totals.bytes[delta] = 1500;
   totals.messages[delta] = 2;
   meter.update(totals, start + milliseconds(2000));
 

@@ -69,7 +69,9 @@ Use it to go from "Scripts is the tall group" to the specific scope inside it.
 
 ## The Network section
 
-The Network section appears whenever the server lane does. Over the chosen window it shows:
+The Network section appears whenever the server lane does. The server's lines (its traffic, snapshots and
+connections) wait for its first report, so against a server that does not report statistics only the editor's own
+lines show. Over the chosen window it shows:
 
 - Server sent and Server received: bytes and messages per second at the server, with the message types that make up
   the most.

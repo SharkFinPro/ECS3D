@@ -202,7 +202,9 @@ over the panel's window, dividing by the server time the batches cover) and the 
 `net::TrafficRateMeter`s over `NetClient::traffic()` (the lines use the meters' 500 ms intervals, not the window,
 and the meters restart when the subscription flips). It also shows the last ten snapshots with their reason, size,
 build time and recipients, the largest held snapshot, snapshots in the last minute (`net::snapshotsWithin`), and the
-connection and editor counts. Counted bytes exclude the transport's framing, which adds 4 bytes per message on TCP.
+connection and editor counts; those server lines appear only once the server has reported (`hasServerFigures`), so
+an older server shows just the editor's two lines. Counted bytes exclude the transport's framing, which adds 4 bytes
+per message on TCP.
 Byte rates divide by the server time the samples cover, which excludes the roughly 1 ms sleep between samples, so they
 read slightly high.
 

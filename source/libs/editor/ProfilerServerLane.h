@@ -184,13 +184,13 @@ namespace profilerServerLane {
     return text + ")";
   }
 
-  // "Server sent      61.2 KB/s  52 msg/s  (stateDelta 98%, serverLog 2%)"; the label is padded to a common width.
+  // "Server sent     61.2 KB/s  52 msg/s  (stateDelta 98%, serverLog 2%)"; the label is padded to a common width.
   [[nodiscard]] inline std::string describeTrafficLine(const std::string& label,
                                                        const ServerTrafficDirection& direction)
   {
     constexpr std::size_t labelWidth = 16;
     std::string text = label;
-    text.resize(std::max(labelWidth, label.size()), ' ');
+    text.resize(std::max(labelWidth, label.size() + 1), ' ');
     text += formatRate(direction.bytesPerSecond) + "  ";
     text += std::to_string(static_cast<uint64_t>(std::max(direction.messagesPerSecond, 0.0) + 0.5)) + " msg/s";
 
@@ -200,7 +200,6 @@ namespace profilerServerLane {
     return split == std::string::npos ? text : text + types.substr(split);
   }
 
-  // The four lines of the Network section's traffic block.
   // Whether the server has sent any statistics, so its figures mean something rather than reading as zeros.
   [[nodiscard]] inline bool hasServerFigures(const ServerLaneInput& input)
   {
