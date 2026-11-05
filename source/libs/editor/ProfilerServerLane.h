@@ -201,11 +201,25 @@ namespace profilerServerLane {
   }
 
   // The four lines of the Network section's traffic block.
+  // Whether the server has sent any statistics, so its figures mean something rather than reading as zeros.
+  [[nodiscard]] inline bool hasServerFigures(const ServerLaneInput& input)
+  {
+    return input.history != nullptr;
+  }
+
+  // The server lines only once the server has reported; the editor's own lines always.
   [[nodiscard]] inline std::vector<std::string> describeAllTraffic(const ServerLaneInput& input)
   {
-    return {describeTrafficLine("Server sent", input.sent), describeTrafficLine("Server received", input.received),
-            describeTrafficLine("Editor sent", input.editorSent),
-            describeTrafficLine("Editor received", input.editorReceived)};
+    std::vector<std::string> lines;
+    if (hasServerFigures(input))
+    {
+      lines.push_back(describeTrafficLine("Server sent", input.sent));
+      lines.push_back(describeTrafficLine("Server received", input.received));
+    }
+
+    lines.push_back(describeTrafficLine("Editor sent", input.editorSent));
+    lines.push_back(describeTrafficLine("Editor received", input.editorReceived));
+    return lines;
   }
 
   // "last 12.3 KB (join, 4s ago)  largest 90.0 KB  in last minute: 3"

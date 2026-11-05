@@ -401,38 +401,41 @@ void ProfilerPanel::displayNetwork() const
     ImGui::TextUnformatted(line.c_str());
   }
 
-  ImGui::Text("Snapshots  %s", profilerServerLane::describeSnapshots(input).c_str());
-
-  if (!input.snapshots.empty() &&
-      ImGui::BeginTable("snapshots", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+  if (profilerServerLane::hasServerFigures(input))
   {
-    ImGui::TableSetupColumn("Ago");
-    ImGui::TableSetupColumn("Size");
-    ImGui::TableSetupColumn("Reason");
-    ImGui::TableSetupColumn("Build");
-    ImGui::TableSetupColumn("Recipients");
-    ImGui::TableHeadersRow();
+    ImGui::Text("Snapshots  %s", profilerServerLane::describeSnapshots(input).c_str());
 
-    for (const auto& row : input.snapshots)
+    if (!input.snapshots.empty() &&
+        ImGui::BeginTable("snapshots", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
     {
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("%.0f s", row.secondsAgo);
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(profilerServerLane::formatSize(row.bytes).c_str());
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(row.reason.c_str());
-      ImGui::TableNextColumn();
-      ImGui::Text("%.2f ms", row.buildMillis);
-      ImGui::TableNextColumn();
-      ImGui::Text("%u", static_cast<unsigned>(row.recipients));
+      ImGui::TableSetupColumn("Ago");
+      ImGui::TableSetupColumn("Size");
+      ImGui::TableSetupColumn("Reason");
+      ImGui::TableSetupColumn("Build");
+      ImGui::TableSetupColumn("Recipients");
+      ImGui::TableHeadersRow();
+
+      for (const auto& row : input.snapshots)
+      {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("%.0f s", row.secondsAgo);
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(profilerServerLane::formatSize(row.bytes).c_str());
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(row.reason.c_str());
+        ImGui::TableNextColumn();
+        ImGui::Text("%.2f ms", row.buildMillis);
+        ImGui::TableNextColumn();
+        ImGui::Text("%u", static_cast<unsigned>(row.recipients));
+      }
+
+      ImGui::EndTable();
     }
 
-    ImGui::EndTable();
+    ImGui::Text("Connections: %u (editors: %u)", static_cast<unsigned>(input.connections),
+                static_cast<unsigned>(input.editors));
   }
-
-  ImGui::Text("Connections: %u (editors: %u)", static_cast<unsigned>(input.connections),
-              static_cast<unsigned>(input.editors));
   ImGui::TextDisabled("Byte counts exclude the transport's framing: +4 bytes per message on TCP.");
 }
 

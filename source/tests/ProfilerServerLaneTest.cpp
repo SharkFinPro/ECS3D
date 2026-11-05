@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <History.h>
 #include <ProfilerServerLane.h>
 
 #include <cstdint>
@@ -154,7 +155,9 @@ TEST(ServerLaneFormat, AnEmptyDirectionHasNoTypeList)
 
 TEST(ServerLaneFormat, TheNetworkBlockHasServerAndEditorLinesInBothDirections)
 {
+  profile::History history(4);
   ServerLaneInput lane;
+  lane.history = &history;
   lane.sent.bytesPerSecond = 2048.0;
   lane.sent.messagesPerSecond = 10.0;
   lane.editorReceived.bytesPerSecond = 1024.0;
@@ -168,4 +171,22 @@ TEST(ServerLaneFormat, TheNetworkBlockHasServerAndEditorLinesInBothDirections)
   EXPECT_EQ(lines[1], "Server received 0 B/s  0 msg/s");
   EXPECT_EQ(lines[2], "Editor sent     0 B/s  0 msg/s");
   EXPECT_EQ(lines[3], "Editor received 1.0 KB/s  4 msg/s  (stateDelta 100%)");
+}
+
+TEST(ServerLaneFormat, AServerThatHasNotReportedShowsOnlyTheEditorsLines)
+{
+  ServerLaneInput lane;
+  lane.state = ServerLaneState::unsupported;
+  lane.editorSent.bytesPerSecond = 1024.0;
+
+  const auto lines = profilerServerLane::describeAllTraffic(lane);
+
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0], "Editor sent     1.0 KB/s  0 msg/s");
+  EXPECT_FALSE(profilerServerLane::hasServerFigures(lane));
+
+  profile::History history(4);
+  lane.history = &history;
+  EXPECT_TRUE(profilerServerLane::hasServerFigures(lane));
+  EXPECT_EQ(profilerServerLane::describeAllTraffic(lane).size(), 4u);
 }
