@@ -17,7 +17,6 @@
 #include <array>
 #include <cmath>
 #include <limits>
-#include <map>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -673,19 +672,28 @@ bool Polytope::closeEnough(const float minDistance, const std::optional<float>& 
 
 std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist)
 {
-  std::vector<Edge> edges;
+  // Reused across calls so the horizon search allocates nothing but its result; thread_local because the
+  // narrow phase runs in parallel.
+  thread_local std::vector<Edge> edges;
+  thread_local std::vector<uint16_t> undirectedKeys;
+  edges.clear();
+  undirectedKeys.clear();
+
+  const auto addEdge = [](const uint8_t a, const uint8_t b)
+  {
+    edges.emplace_back(a, b);
+    undirectedKeys.push_back(static_cast<uint16_t>(std::min(a, b) << 8 | std::max(a, b)));
+  };
 
   for (int i = 0; i < m_faces.size();)
   {
-    auto [faceVertices, normal, c] = m_faces[i];
+    const auto& faceVertices = m_faces[i].vertices;
 
-    auto facePoint = m_vertices[faceVertices[0]].vertex;
-
-    if (isInFrontOf(normal, facePoint, supportPoint))
+    if (isInFrontOf(m_faces[i].normal, m_vertices[faceVertices[0]].vertex, supportPoint))
     {
-      edges.emplace_back( faceVertices[0], faceVertices[1] );
-      edges.emplace_back( faceVertices[1], faceVertices[2] );
-      edges.emplace_back( faceVertices[2], faceVertices[0] );
+      addEdge(faceVertices[0], faceVertices[1]);
+      addEdge(faceVertices[1], faceVertices[2]);
+      addEdge(faceVertices[2], faceVertices[0]);
 
       std::swap(m_faces[i], m_faces.back());
       m_faces.pop_back();
@@ -703,20 +711,15 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
     ++i;
   }
 
-  std::map<Edge, int> edgeCount;
-  for (const auto& edge : edges)
-  {
-    auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first);
-
-    ++edgeCount[sortedEdge];
-  }
-
+  // The horizon is every edge that only one removed face owns. The list is a few dozen edges at most, so a
+  // linear count over packed keys beats a tree.
   std::vector<Edge> uniqueEdges;
-  for (const auto& edge : edges)
+  uniqueEdges.reserve(edges.size());
+  for (size_t i = 0; i < edges.size(); ++i)
   {
-    if (auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first); edgeCount[sortedEdge] == 1)
+    if (std::ranges::count(undirectedKeys, undirectedKeys[i]) == 1)
     {
-      uniqueEdges.push_back(edge);
+      uniqueEdges.push_back(edges[i]);
     }
   }
 
