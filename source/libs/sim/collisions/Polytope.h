@@ -88,7 +88,8 @@ private:
   static bool closeEnough(float minDistance, const std::optional<float>& previousMinDistance,
                           glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
 
-  std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
+  // The horizon lives in a per-thread buffer, valid until this thread's next call.
+  const std::vector<Edge>& deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
 
   [[nodiscard]] bool isFacingInward(const FaceData& faceData) const;
 

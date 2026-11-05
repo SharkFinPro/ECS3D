@@ -270,8 +270,16 @@ constexpr float visibilityTolerance = 1e-5f;
 
 static bool isInFrontOf(const glm::vec3& normal, const glm::vec3& planePoint, const glm::vec3& point)
 {
-  const float beyond = visibilityTolerance * glm::length(normal) * std::max(1.0f, glm::length(point));
-  return glm::dot(normal, point - planePoint) > beyond;
+  const float distance = glm::dot(normal, point - planePoint);
+  if (distance <= 0.0f)
+  {
+    return false;
+  }
+
+  // distance > tolerance * |normal| * max(1, |point|), squared to skip both square roots; both sides are
+  // non-negative past the check above, so squaring keeps the comparison.
+  constexpr float toleranceSquared = visibilityTolerance * visibilityTolerance;
+  return distance * distance > toleranceSquared * glm::dot(normal, normal) * std::max(1.0f, glm::dot(point, point));
 }
 
 // Contact::points holds this many.
@@ -670,10 +678,10 @@ bool Polytope::closeEnough(const float minDistance, const std::optional<float>& 
   return deltaX + deltaY + deltaZ < minDist;
 }
 
-std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist)
+const std::vector<Edge>& Polytope::deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist)
 {
-  // Reused across calls so the horizon search allocates nothing but its result; thread_local because the
-  // narrow phase runs in parallel.
+  // Reused across calls so the horizon search allocates nothing once warm; thread_local because the narrow
+  // phase runs in parallel.
   thread_local std::vector<Edge> edges;
   thread_local std::vector<uint16_t> undirectedKeys;
   edges.clear();
@@ -712,18 +720,18 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
   }
 
   // The horizon is every edge that only one removed face owns. The list is a few dozen edges at most, so a
-  // linear count over packed keys beats a tree.
-  std::vector<Edge> uniqueEdges;
-  uniqueEdges.reserve(edges.size());
+  // linear count over packed keys beats a tree. The counts read only the keys, so edges compacts in place.
+  size_t kept = 0;
   for (size_t i = 0; i < edges.size(); ++i)
   {
     if (std::ranges::count(undirectedKeys, undirectedKeys[i]) == 1)
     {
-      uniqueEdges.push_back(edges[i]);
+      edges[kept++] = edges[i];
     }
   }
+  edges.resize(kept);
 
-  return uniqueEdges;
+  return edges;
 }
 
 bool Polytope::isFacingInward(const FaceData& faceData) const
