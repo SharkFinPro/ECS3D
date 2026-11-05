@@ -250,12 +250,14 @@ namespace {
     ids.erase(std::ranges::unique(ids).begin(), ids.end());
 
     Vertices points;
+    points.reserve(vertices.size());
     for (const auto id : ids)
     {
       points.push_back(vertices[id]);
     }
 
     std::vector<uint32_t> outline;
+    outline.reserve(points.size());
     for (const auto index : collisions::convexOutlineIndices(points, group.normal))
     {
       outline.push_back(ids[index]);
