@@ -145,25 +145,12 @@ glm::vec3 BoxCollider::getRotation()
   return quatToEulerDegrees(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
 }
 
-namespace
+glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  // Maps a sign mask (bit 0 = +x, bit 1 = +y, bit 2 = +z) to the boxVertices index with those signs.
-  constexpr std::array<uint8_t, 8> buildVertexBySignMask()
-  {
-    std::array<uint8_t, 8> table{};
-    for (uint8_t i = 0; i < boxVertices.size(); ++i)
-    {
-      const auto& v = boxVertices[i];
-      const int mask = (v.x > 0 ? 1 : 0) | (v.y > 0 ? 2 : 0) | (v.z > 0 ? 4 : 0);
-      table[mask] = i;
-    }
-    return table;
-  }
-
-  constexpr std::array<uint8_t, 8> vertexBySignMask = buildVertexBySignMask();
+  return getWorldSupport().furthestPoint(direction);
 }
 
-glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
+const BoxSupport& BoxCollider::getWorldSupport()
 {
   if (const Transform& transform = cachedTransform();
       m_meshDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
@@ -172,13 +159,39 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
     m_meshDirty = false;
   }
 
-  // dot(direction, vertex) is affine in the per-axis signs, so the furthest vertex takes the sign of each
-  // axis' dot: 3 dots instead of scanning all 8 vertices.
-  const int mask = (dot(direction, m_transformedBoxAxes[0]) >= 0.0f ? 1 : 0)
-    | (dot(direction, m_transformedBoxAxes[1]) >= 0.0f ? 2 : 0)
-    | (dot(direction, m_transformedBoxAxes[2]) >= 0.0f ? 4 : 0);
+  return m_worldSupport;
+}
 
-  return m_transformedBoxVertices[vertexBySignMask[mask]];
+const BoxWorldFrame& BoxCollider::getWorldFrame()
+{
+  const uint64_t updateID = getWorldUpdateID();
+  if (m_worldFrameValid && m_worldFrameUpdateID == updateID && m_worldFrameRevision == getGeometryRevision())
+  {
+    return m_worldFrame;
+  }
+
+  const auto rotation = glm::radians(getRotation());
+  const auto scale = glm::abs(getScale());
+
+  const auto rotationMatrix = glm::mat3(
+    glm::rotate(glm::mat4(1.0f), rotation.z, { 0, 0, 1 }) *
+    glm::rotate(glm::mat4(1.0f), rotation.y, { 0, 1, 0 }) *
+    glm::rotate(glm::mat4(1.0f), rotation.x, { 1, 0, 0 }));
+
+  m_worldFrame = {
+    .center = getPosition(),
+    .axes = {
+      rotationMatrix * glm::vec3{ 1, 0, 0 },
+      rotationMatrix * glm::vec3{ 0, 1, 0 },
+      rotationMatrix * glm::vec3{ 0, 0, 1 }
+    },
+    .halfExtents = { scale.x, scale.y, scale.z }
+  };
+  m_worldFrameUpdateID = updateID;
+  m_worldFrameRevision = getGeometryRevision();
+  m_worldFrameValid = true;
+
+  return m_worldFrame;
 }
 
 void BoxCollider::pack(net::Message& message) const
@@ -235,13 +248,13 @@ void BoxCollider::generateTransformedMesh(const Transform& transform)
   {
     const auto transformedVertex = transformationMatrix * glm::vec4(boxVertices[i], 1.0f);
 
-    m_transformedBoxVertices[i] = glm::vec3(transformedVertex);
+    m_worldSupport.vertices[i] = glm::vec3(transformedVertex);
   }
 
   // Each pair below differs only in the one axis's sign, so the difference is that axis' world-space edge.
-  m_transformedBoxAxes[0] = m_transformedBoxVertices[0] - m_transformedBoxVertices[1];
-  m_transformedBoxAxes[1] = m_transformedBoxVertices[0] - m_transformedBoxVertices[4];
-  m_transformedBoxAxes[2] = m_transformedBoxVertices[0] - m_transformedBoxVertices[3];
+  m_worldSupport.axes[0] = m_worldSupport.vertices[0] - m_worldSupport.vertices[1];
+  m_worldSupport.axes[1] = m_worldSupport.vertices[0] - m_worldSupport.vertices[4];
+  m_worldSupport.axes[2] = m_worldSupport.vertices[0] - m_worldSupport.vertices[3];
 
   m_currentTransformUpdateID = transform.getWorldUpdateID();
 }

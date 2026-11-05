@@ -2,12 +2,33 @@
 #define CAPSULECOLLIDER_H
 
 #include "Collider.h"
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <cstdint>
 
 struct CapsuleSegment {
   glm::vec3 start{};
   glm::vec3 end{};
+};
+
+// A capsule's core segment ends and radius in world space.
+struct CapsuleSupport {
+  CapsuleSegment segment;
+  float radius = 0.0f;
+
+  [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
+  {
+    const auto& [start, end] = segment;
+
+    if (const float length = glm::length(direction); length > 0.0f)
+    {
+      const glm::vec3& endpoint = glm::dot(end, direction) > glm::dot(start, direction) ? end : start;
+
+      return endpoint + direction / length * radius;
+    }
+
+    return (start + end) * 0.5f;
+  }
 };
 
 // A capsule whose axis is local +Y. The height is the total height including both caps; the core segment
@@ -42,6 +63,9 @@ public:
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
+  // The geometry findFurthestPoint reads, refreshed first.
+  [[nodiscard]] const CapsuleSupport& getWorldSupport();
+
   void pack(net::Message& message) const override;
 
   void unpack(net::MessageReader& messageReader) override;
@@ -54,10 +78,7 @@ public:
 private:
   // Segment ends and radius in world space, rebuilt when the transform's update id moves or a setter, load,
   // unpack, start or stop changes the capsule's own fields.
-  struct WorldShape {
-    CapsuleSegment segment;
-    float radius = 0.0f;
-  };
+  using WorldShape = CapsuleSupport;
 
   WorldShape m_worldShape;
   uint64_t m_worldShapeUpdateID = 0;

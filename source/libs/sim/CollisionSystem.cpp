@@ -21,7 +21,7 @@ namespace {
   // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
   struct ScoredContact {
     float distance;
-    std::shared_ptr<Object> object;
+    size_t touch;
     std::optional<collisions::Contact> contact;
   };
 
@@ -71,7 +71,29 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
 
 void CollisionSystem::checkCollisions(const float dt)
 {
-  std::vector<char> isDynamic(m_collisionEdges.size());
+  const size_t edgeCount = m_collisionEdges.size();
+
+  // Named locals so the OpenMP clause below can list them. Each edge's forward-sweep hits (higher edge
+  // indices, ascending) are indexed by edge so the parallel loop can record them lock-free: every thread
+  // writes only its own slot.
+  auto& isDynamic = m_isDynamic;
+  auto& forwardHits = m_forwardHits;
+
+  isDynamic.resize(edgeCount);
+  if (forwardHits.size() < edgeCount)
+  {
+    forwardHits.resize(edgeCount);
+  }
+  if (m_touches.size() < edgeCount)
+  {
+    m_touches.resize(edgeCount);
+  }
+
+  for (size_t i = 0; i < edgeCount; ++i)
+  {
+    forwardHits[i].clear();
+    m_touches[i].clear();
+  }
 
   {
     ECS3D_PROFILE_SCOPE("Broad phase");
@@ -92,16 +114,12 @@ void CollisionSystem::checkCollisions(const float dt)
     }
   }
 
-  // Each edge's forward-sweep hits (higher edge indices, ascending), indexed by edge so the parallel loop
-  // can record them lock-free: every thread writes only its own slot.
-  std::vector<std::vector<SweepHit>> forwardHits(m_collisionEdges.size());
-
   // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
   // transformed meshes that live on the same Collider another thread's iteration can also read. That is
   // only safe because every collider in m_collisionEdges was just warmed serially above, and nothing in
   // this loop moves a transform - collision responses, which do, are deferred to the serial pass below.
   // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
-  // it into two threads racing a write on m_boundingBox / m_transformedBoxVertices.
+  // it into two threads racing a write on m_boundingBox / the collider's support mesh.
   // Dynamic scheduling because the work per edge depends on how many colliders overlap it in x.
   {
     ECS3D_PROFILE_SCOPE("Narrow phase");
@@ -118,19 +136,18 @@ void CollisionSystem::checkCollisions(const float dt)
 
     // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in
     // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
-    std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
-    for (size_t i = 0; i < forwardHits.size(); ++i)
+    for (size_t i = 0; i < edgeCount; ++i)
     {
-      for (const auto& hit : forwardHits[i])
+      for (auto& hit : forwardHits[i])
       {
         if (hit.lowerSees)
         {
-          perEdgeCollisions[i].emplace_back(m_collisionEdges[hit.other].object);
+          m_touches[i].push_back({ hit.other, std::move(hit.lowerWitness) });
         }
 
         if (hit.higherSees)
         {
-          perEdgeCollisions[hit.other].emplace_back(m_collisionEdges[i].object);
+          m_touches[hit.other].push_back({ i, std::move(hit.higherWitness) });
         }
       }
     }
@@ -138,28 +155,26 @@ void CollisionSystem::checkCollisions(const float dt)
     // Applied serially, now that the parallel region is done: a response moves the transform of either
     // object in a pair, which would invalidate a collider cache another thread might still be reading if
     // this ran inside the loop above.
-    for (const auto i : responseOrder(perEdgeCollisions))
+    for (const auto i : responseOrder())
     {
-      const auto& rigidBody = m_collisionEdges[i].body;
-      if (!rigidBody)
+      if (!m_collisionEdges[i].body)
       {
         continue;
       }
 
-      handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i], dt);
+      handleCollisions(i, dt);
     }
 
-    recordCollisionEvents(perEdgeCollisions);
+    recordCollisionEvents();
   }
 }
 
-std::vector<size_t> CollisionSystem::responseOrder(
-  const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const
+std::vector<size_t> CollisionSystem::responseOrder() const
 {
   std::vector<std::pair<size_t, float>> bottoms;
-  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
   {
-    if (perEdgeCollisions[i].empty())
+    if (m_touches[i].empty())
     {
       continue;
     }
@@ -185,18 +200,18 @@ std::vector<size_t> CollisionSystem::responseOrder(
   return order;
 }
 
-void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
+void CollisionSystem::recordCollisionEvents()
 {
   // Flatten the per-edge results into this tick's canonical pair set. A dynamic-vs-dynamic contact is
   // tested once from each side and the two answers can differ, so canonicalize (a < b) and dedupe.
   std::vector<CollisionPair> current;
-  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
   {
     const auto& selfUUID = m_collisionEdges[i].object->getUUID();
 
-    for (const auto& other : perEdgeCollisions[i])
+    for (const auto& touch : m_touches[i])
     {
-      current.push_back(CollisionPair::make(selfUUID, other->getUUID()));
+      current.push_back(CollisionPair::make(selfUUID, m_collisionEdges[touch.other].object->getUUID()));
     }
   }
 
@@ -273,31 +288,42 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
 
     // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
     // keeps its own answer.
-    SweepHit hit{ j, false, false };
-    hit.lowerSees = isDynamic[index] && collisions::intersects(*edge.collider, *other.collider);
-    hit.higherSees = isDynamic[j] && collisions::intersects(*other.collider, *edge.collider);
+    SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
+    hit.lowerSees = isDynamic[index] && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
+    hit.higherSees = isDynamic[j] && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
 
     if (hit.lowerSees || hit.higherSees)
     {
-      hits.push_back(hit);
+      hits.push_back(std::move(hit));
     }
   }
 }
 
-void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                                       const std::vector<std::shared_ptr<Object>>& collidedObjects, const float dt)
+void CollisionSystem::handleCollisions(const size_t index, const float dt) const
 {
-  if (collidedObjects.size() == 1)
+  const auto& edge = m_collisionEdges[index];
+  const auto& rigidBody = edge.body;
+  const auto& collider = edge.collider;
+  const auto& touches = m_touches[index];
+
+  // The edge already holds the other side's collider, so the response asks the narrow phase directly.
+  const auto contactWith = [&](const Touch& touch) {
+    return collisions::findContact(*collider, *m_collisionEdges[touch.other].collider, touch.witness);
+  };
+
+  if (touches.size() == 1)
   {
+    const auto& other = m_collisionEdges[touches[0].other];
+
     // Triggers still recorded the pair (events fire), but get no MTV correction / impulse.
-    if (isTriggerPair(collider, collidedObjects[0]))
+    if (isTriggerPair(*collider, *other.collider))
     {
       return;
     }
 
-    if (const auto contact = contactWith(collider, collidedObjects[0]))
+    if (const auto contact = contactWith(touches[0]))
     {
-      PhysicsSystem::handleCollision(*rigidBody, collider, collidedObjects[0], contact->minimumTranslationVector,
+      PhysicsSystem::handleCollision(*rigidBody, collider, other.object, contact->minimumTranslationVector,
                                      contact->contactPoints(), dt);
     }
 
@@ -307,15 +333,15 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
   // Each candidate's contact alongside its squared penetration depth, so the deepest overlap is resolved
   // first. A pair with no contact scores zero, which the loop below stops at.
   std::vector<ScoredContact> scoredContacts;
-  scoredContacts.reserve(collidedObjects.size());
+  scoredContacts.reserve(touches.size());
 
-  for (const auto& collidedObject : collidedObjects)
+  for (size_t i = 0; i < touches.size(); ++i)
   {
-    auto contact = contactWith(collider, collidedObject);
+    auto contact = contactWith(touches[i]);
     const float distance = contact ? dot(contact->minimumTranslationVector, contact->minimumTranslationVector)
                                    : 0.0f;
 
-    scoredContacts.push_back({ distance, collidedObject, std::move(contact) });
+    scoredContacts.push_back({ distance, i, std::move(contact) });
   }
 
   std::ranges::stable_sort(scoredContacts, [](const ScoredContact& a, const ScoredContact& b)
@@ -331,46 +357,31 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
       break;
     }
 
-    if (isTriggerPair(collider, scoredContact.object))
+    const auto& touch = touches[scoredContact.touch];
+    const auto& other = m_collisionEdges[touch.other];
+
+    if (isTriggerPair(*collider, *other.collider))
     {
       continue;
     }
 
     // Once a response has moved the body, the contacts scored before it no longer describe the overlap -
     // the earlier push may have cleared this one, or changed its depth - so it is measured again.
-    const auto contact = bodyMoved ? contactWith(collider, scoredContact.object) : scoredContact.contact;
+    const auto contact = bodyMoved ? contactWith(touch) : scoredContact.contact;
     if (!contact)
     {
       continue;
     }
 
-    PhysicsSystem::handleCollision(*rigidBody, collider, scoredContact.object, contact->minimumTranslationVector,
+    PhysicsSystem::handleCollision(*rigidBody, collider, other.object, contact->minimumTranslationVector,
                                    contact->contactPoints(), dt);
     bodyMoved = true;
   }
 }
 
-std::optional<collisions::Contact> CollisionSystem::contactWith(const std::shared_ptr<Collider>& collider,
-                                                                const std::shared_ptr<Object>& other)
+bool CollisionSystem::isTriggerPair(const Collider& collider, const Collider& other)
 {
-  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
-  if (!otherCollider)
-  {
-    return std::nullopt;
-  }
-
-  return collisions::findContact(*collider, *otherCollider);
-}
-
-bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other)
-{
-  if (collider->isTrigger())
-  {
-    return true;
-  }
-
-  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
-  return otherCollider && otherCollider->isTrigger();
+  return collider.isTrigger() || other.isTrigger();
 }
 
 bool CollisionSystem::layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b)

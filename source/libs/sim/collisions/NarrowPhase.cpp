@@ -250,7 +250,7 @@ namespace collisions {
 
     // Leaves the terminating simplex in simplex. False means the pair does not overlap, or that GJK ran
     // out of iterations before deciding.
-    bool runGjk(Collider& collider, Collider& other, Simplex& simplex)
+    bool runGjk(const SupportShape& collider, const SupportShape& other, Simplex& simplex)
     {
       glm::vec3 direction{ 1, 0, 0 };
 
@@ -407,18 +407,32 @@ namespace collisions {
 
   std::optional<Contact> findContact(Collider& collider, Collider& other)
   {
+    return findContact(collider, other, std::nullopt);
+  }
+
+  std::optional<Contact> findContact(Collider& collider, Collider& other, const std::optional<OverlapWitness>& witness)
+  {
     if (isRound(collider) && isRound(other))
     {
       return findRoundContact(collider, other);
     }
 
+    const SupportShape shape(collider);
+    const SupportShape otherShape(other);
+
     Simplex simplex;
-    if (!runGjk(collider, other, simplex))
+    if (witness && witness->colliderUpdateID == collider.getWorldUpdateID() &&
+        witness->colliderRevision == collider.getGeometryRevision() &&
+        witness->otherUpdateID == other.getWorldUpdateID() && witness->otherRevision == other.getGeometryRevision())
+    {
+      simplex = witness->simplex;
+    }
+    else if (!runGjk(shape, otherShape, simplex))
     {
       return std::nullopt;
     }
 
-    const Polytope polytope(collider, other, simplex);
+    const Polytope polytope(collider, other, shape, otherShape, simplex);
 
     const auto minimumTranslationVector = polytope.getMinimumTranslationVector();
 
@@ -430,9 +444,9 @@ namespace collisions {
     }
 
     // Negated so it moves the first collider, matching the sphere path and what the response expects.
-    Contact contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
+    const auto [point, manifold] = polytope.findContactPoints();
+    Contact contact{ -minimumTranslationVector, point };
 
-    const auto manifold = polytope.findContactManifold();
     if (manifold.size() > 1)
     {
       contact.pointCount = static_cast<std::uint8_t>(std::min(manifold.size(), contact.points.size()));
@@ -444,13 +458,29 @@ namespace collisions {
 
   bool intersects(Collider& collider, Collider& other)
   {
+    std::optional<OverlapWitness> witness;
+
+    return intersects(collider, other, witness);
+  }
+
+  bool intersects(Collider& collider, Collider& other, std::optional<OverlapWitness>& witness)
+  {
+    witness.reset();
+
     if (isRound(collider) && isRound(other))
     {
       return roundShapesOverlap(collider, other);
     }
 
     Simplex simplex;
+    if (!runGjk(SupportShape(collider), SupportShape(other), simplex))
+    {
+      return false;
+    }
 
-    return runGjk(collider, other, simplex);
+    witness = OverlapWitness{ simplex, collider.getWorldUpdateID(), collider.getGeometryRevision(),
+                              other.getWorldUpdateID(), other.getGeometryRevision() };
+
+    return true;
   }
 }

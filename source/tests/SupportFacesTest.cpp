@@ -584,3 +584,36 @@ TEST(SupportFaces, AnExactTieGoesToTheFirstFaceLikeNearestAxis)
   const auto reference = referenceOf(rig.box);
   expectNear("reference", faceNormalToward(reference.axes, { 1.0f, -1.0f, 0.0f }), tied->normal);
 }
+
+TEST(SupportFaces, AReplacedHullDropsTheOldHullsFaces)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  ASSERT_EQ(collisions::supportFacesOf(*hull).size(), 6u);
+
+  ASSERT_TRUE(hull->setHull(convexFixtures::tetrahedron()));
+
+  EXPECT_EQ(collisions::supportFacesOf(*hull).size(), 4u);
+}
+
+TEST(SupportFaces, KeptHullFacesFollowTheTransform)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  const auto before = collisions::supportFacesOf(*hull);
+
+  transformOf(object)->setPosition({ 0.0f, 5.0f, 0.0f });
+
+  const auto after = collisions::supportFacesOf(*hull);
+  ASSERT_EQ(after.size(), before.size());
+  for (size_t i = 0; i < before.size(); ++i)
+  {
+    expectNear(after[i].center, before[i].center + glm::vec3(0.0f, 5.0f, 0.0f));
+  }
+}

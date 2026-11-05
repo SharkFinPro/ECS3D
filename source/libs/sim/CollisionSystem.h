@@ -55,7 +55,30 @@ public:
   void reset();
 
 private:
+  // A pair the forward sweep found: the higher edge's index, which dynamic side(s) saw the other, and the GJK
+  // result each side found it with.
+  struct SweepHit {
+    size_t other;
+    bool lowerSees;
+    bool higherSees;
+    std::optional<collisions::OverlapWitness> lowerWitness;
+    std::optional<collisions::OverlapWitness> higherWitness;
+  };
+
+  // One edge's contact with another edge, and the GJK result that found it from this edge's side, which the
+  // response hands back to the narrow phase.
+  struct Touch {
+    size_t other;
+    std::optional<collisions::OverlapWitness> witness;
+  };
+
   std::vector<CollisionEdge> m_collisionEdges;
+
+  // Per-edge scratch, kept across ticks so its capacity carries over. Only the first m_collisionEdges.size()
+  // entries belong to the current tick.
+  std::vector<char> m_isDynamic;
+  std::vector<std::vector<SweepHit>> m_forwardHits;
+  std::vector<std::vector<Touch>> m_touches;
 
   // Sorted set of colliding pairs from the previous tick, diffed against the current tick to produce
   // the enter/stay/exit lists.
@@ -66,40 +89,26 @@ private:
 
   void checkCollisions(float dt);
 
-  // Build this tick's sorted pair set from the per-edge collision results and diff it against the
-  // previous tick to refresh m_enters/m_stays/m_exits.
-  void recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions);
+  // Build this tick's sorted pair set from the per-edge touches and diff it against the previous tick to
+  // refresh m_enters/m_stays/m_exits.
+  void recordCollisionEvents();
 
   // Indices of the edges with something to resolve, in the order their responses should run. Reads the
   // bounding boxes the sweep just warmed, so it has to run before any response moves a transform.
-  [[nodiscard]] std::vector<size_t> responseOrder(
-    const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
-
-  // A pair the forward sweep found: the higher edge's index and which dynamic side(s) saw the other.
-  struct SweepHit {
-    size_t other;
-    bool lowerSees;
-    bool higherSees;
-  };
+  [[nodiscard]] std::vector<size_t> responseOrder() const;
 
   // Forward sweep from one edge: appends a hit for every higher-indexed edge it meets, ascending. A pair is
   // visited once, from its lower-indexed edge, and only if at least one side is dynamic.
   void findCollisions(size_t index, const std::vector<char>& isDynamic, std::vector<SweepHit>& hits) const;
 
-  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                               const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
+  // Resolves every touch the edge's body has, deepest first.
+  void handleCollisions(size_t index, float dt) const;
 
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
-  static bool isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);
+  static bool isTriggerPair(const Collider& collider, const Collider& other);
 
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
   static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
-
-  // The narrow phase itself lives in collisions/NarrowPhase.h and works on a pair of colliders. This
-  // resolves the other object's collider first, which is all the response path has to hand - the sweep
-  // already holds both colliders and calls the narrow phase directly.
-  [[nodiscard]] static std::optional<collisions::Contact> contactWith(const std::shared_ptr<Collider>& collider,
-                                                                      const std::shared_ptr<Object>& other);
 };
 
 

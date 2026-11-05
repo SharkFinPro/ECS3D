@@ -126,4 +126,15 @@ void Collider::setRenderCollider(const bool renderCollider)
 void Collider::invalidateBoundingBox()
 {
   m_boundingBoxDirty = true;
+  ++m_geometryRevision;
+}
+
+uint64_t Collider::getWorldUpdateID()
+{
+  return cachedTransform().getWorldUpdateID();
+}
+
+uint64_t Collider::getGeometryRevision() const
+{
+  return m_geometryRevision;
 }

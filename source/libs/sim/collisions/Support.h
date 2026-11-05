@@ -1,7 +1,12 @@
 #ifndef SUPPORT_H
 #define SUPPORT_H
 
+#include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/CapsuleCollider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
+#include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
+#include <span>
 
 class Collider;
 
@@ -12,6 +17,43 @@ class Collider;
 // no business in their lifetime. The references also cannot be null, which the callers already relied on.
 // Not const only because findFurthestPoint is a non-const virtual.
 glm::vec3 getSupport(Collider& collider, Collider& other, const glm::vec3& direction);
+
+// A collider's support geometry, refreshed once so GJK and EPA query it without revalidating the collider's
+// caches on every call. It answers exactly as findFurthestPoint does, and stays valid while no transform or
+// collider geometry changes - for the length of one narrow-phase call.
+class SupportShape {
+public:
+  explicit SupportShape(Collider& collider);
+
+  [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
+  {
+    switch (m_type)
+    {
+      case ColliderType::boxCollider:
+        return m_box->furthestPoint(direction);
+      case ColliderType::sphereCollider:
+        return m_sphere.furthestPoint(direction);
+      case ColliderType::capsuleCollider:
+        return m_capsule.furthestPoint(direction);
+      case ColliderType::convexMeshCollider:
+        return ConvexMeshCollider::furthestOf(m_hullVertices, direction);
+    }
+
+    return glm::vec3(0);
+  }
+
+private:
+  ColliderType m_type;
+  const BoxSupport* m_box = nullptr;
+  SphereSupport m_sphere;
+  CapsuleSupport m_capsule;
+  std::span<const glm::vec3> m_hullVertices;
+};
+
+inline glm::vec3 getSupport(const SupportShape& shape, const SupportShape& other, const glm::vec3& direction)
+{
+  return shape.furthestPoint(direction) - other.furthestPoint(-direction);
+}
 
 
 

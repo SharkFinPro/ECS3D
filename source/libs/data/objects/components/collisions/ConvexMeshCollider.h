@@ -9,6 +9,7 @@
 #include <uuid.h>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 // A convex hull collider. The hull lives inline in the component (local-space vertices and triangle
@@ -23,6 +24,15 @@ public:
     float volume = 0.0f;
     glm::vec3 centroid{ 0.0f };
     glm::mat3 covariance{ 0.0f };
+  };
+
+  // The face outlines of the hull as hull vertex ids, filled by the sim. Derived state, cleared with the hull.
+  using FaceOutlines = std::vector<std::vector<uint32_t>>;
+
+  // The hull's world-space unit face normals, filled by the sim. Derived state, current while generation matches.
+  struct FaceNormalCache {
+    uint64_t generation = 0;
+    std::vector<glm::vec3> normals;
   };
 
   ConvexMeshCollider();
@@ -55,6 +65,17 @@ public:
 
   void setMassCache(const MassCache& cache);
 
+  [[nodiscard]] const std::optional<FaceOutlines>& getFaceOutlines() const;
+
+  void setFaceOutlines(FaceOutlines outlines);
+
+  [[nodiscard]] const std::optional<FaceNormalCache>& getFaceNormalCache() const;
+
+  void setFaceNormalCache(FaceNormalCache cache);
+
+  // The vertex furthest along direction, the first of equals winning; the origin when there are none.
+  [[nodiscard]] static glm::vec3 furthestOf(std::span<const glm::vec3> vertices, const glm::vec3& direction);
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -85,6 +106,10 @@ private:
   uint64_t m_worldVerticesGeneration = 0;
 
   std::optional<MassCache> m_massCache;
+
+  std::optional<FaceOutlines> m_faceOutlines;
+
+  std::optional<FaceNormalCache> m_faceNormalCache;
 
   // Editing the collider's own offset or hull doesn't bump the transform's update id, so force a rebuild.
   bool m_meshDirty = true;

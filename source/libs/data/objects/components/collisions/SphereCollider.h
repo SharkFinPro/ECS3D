@@ -5,6 +5,17 @@
 #include <glm/vec3.hpp>
 #include <cstdint>
 
+// A sphere's world center and radius.
+struct SphereSupport {
+  glm::vec3 center{ 0 };
+  float radius = 0;
+
+  [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
+  {
+    return direction * radius + center;
+  }
+};
+
 class SphereCollider final : public Collider {
 public:
   SphereCollider();
@@ -27,6 +38,9 @@ public:
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
+  // The geometry findFurthestPoint reads, refreshed first.
+  [[nodiscard]] const SphereSupport& getWorldSupport();
+
   void pack(net::Message& message) const override;
 
   void unpack(net::MessageReader& messageReader) override;
@@ -37,8 +51,7 @@ private:
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
 
   // World center and radius for the support query; the transform's world getters walk the parent chain.
-  glm::vec3 m_worldCenter{ 0 };
-  float m_worldRadius = 0;
+  SphereSupport m_worldSupport;
   uint64_t m_currentTransformUpdateID = 0;
 
   // Editing the collider's own offset or radius doesn't bump the transform's update id.

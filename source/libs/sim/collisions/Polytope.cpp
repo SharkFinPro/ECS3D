@@ -6,6 +6,7 @@
 #include "ManifoldInternal.h"
 #include "NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
@@ -17,6 +18,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -30,17 +32,16 @@ glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
   return normal * p;
 }
 
-// World-space box geometry, rebuilt from the position/scale/rotation Collider already exposes rather
-// than a new accessor onto BoxCollider's own cached mesh.
-struct BoxGeometry
-{
-  glm::vec3 center;
-  std::array<glm::vec3, 3> axes;        // world-space unit local X/Y/Z
-  std::array<float, 3> halfExtents;     // magnitude along the matching axis above
-};
+// World-space box geometry from the position/scale/rotation Collider exposes, not BoxCollider's support mesh.
+using BoxGeometry = BoxWorldFrame;
 
 BoxGeometry boxGeometryOf(Collider& collider)
 {
+  if (collider.getColliderType() == ColliderType::boxCollider)
+  {
+    return static_cast<BoxCollider&>(collider).getWorldFrame();
+  }
+
   const auto rotation = glm::radians(collider.getRotation());
   const auto scale = glm::abs(collider.getScale());
 
@@ -185,19 +186,6 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
   return points;
 }
 
-// The vertices of a hull or box, in world space.
-std::vector<glm::vec3> worldVerticesOf(Collider& collider)
-{
-  if (collider.getColliderType() == ColliderType::convexMeshCollider)
-  {
-    return dynamic_cast<ConvexMeshCollider&>(collider).getWorldVertices();
-  }
-
-  const auto vertices = boxVerticesOf(boxGeometryOf(collider));
-
-  return std::vector<glm::vec3>(vertices.begin(), vertices.end());
-}
-
 // The part of a shape that touches along towardOther: a capsule's cap points, otherwise the extreme vertices.
 std::vector<glm::vec3> touchingFeatureOf(Collider& collider, Collider& other, const glm::vec3& towardOther)
 {
@@ -206,21 +194,49 @@ std::vector<glm::vec3> touchingFeatureOf(Collider& collider, Collider& other, co
     return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(collider), other, towardOther);
   }
 
-  return collisions::touchingFeature(worldVerticesOf(collider), towardOther);
+  if (collider.getColliderType() == ColliderType::convexMeshCollider)
+  {
+    return collisions::touchingFeature(dynamic_cast<ConvexMeshCollider&>(collider).getWorldVertices(), towardOther);
+  }
+
+  return collisions::touchingFeature(boxVerticesOf(boxGeometryOf(collider)), towardOther);
 }
 
-// The geometry of a box or hull for collisions::referenceFaceManifold, which views it.
+// The geometry of a box or hull for collisions::referenceFaceManifold, which views it. A hull's vertices and
+// normals stay in the collider's caches; a box's are held here.
 struct OwnedFaces
 {
-  std::vector<glm::vec3> vertices;
-  std::vector<glm::vec3> normals;
-  float epsilon;
+  std::span<const glm::vec3> hullVertices;
+  std::span<const glm::vec3> hullNormals;
+  std::array<glm::vec3, 8> boxVertices{};
+  std::array<glm::vec3, 6> boxNormals{};
+  bool isHull = false;
+  float epsilon = 0.0f;
 
   [[nodiscard]] collisions::FaceShape view() const
   {
-    return { vertices, normals, epsilon };
+    if (isHull)
+    {
+      return { hullVertices, hullNormals, epsilon };
+    }
+
+    return { boxVertices, boxNormals, epsilon };
   }
 };
+
+// The hull's world face normals, rebuilt only when its world vertices are.
+const std::vector<glm::vec3>& hullFaceNormalsOf(ConvexMeshCollider& hullCollider)
+{
+  const auto& vertices = hullCollider.getWorldVertices();
+  const auto generation = hullCollider.getWorldVerticesGeneration();
+
+  if (const auto& cache = hullCollider.getFaceNormalCache(); !cache || cache->generation != generation)
+  {
+    hullCollider.setFaceNormalCache({ generation, collisions::hullFaceNormals(vertices, hullCollider.getHull().indices) });
+  }
+
+  return hullCollider.getFaceNormalCache()->normals;
+}
 
 // The touching tolerance scales with the shape's own size along its local axes, so a box-shaped hull selects
 // the same vertices a box does at any orientation.
@@ -244,22 +260,24 @@ OwnedFaces facesOf(Collider& collider)
       high = glm::max(high, vertex);
     }
 
-    OwnedFaces faces{ hullCollider.getWorldVertices(), {},
-                      touchingEpsilon((high - low) * 0.5f * glm::abs(collider.getScale())) };
-    faces.normals = collisions::hullFaceNormals(faces.vertices, hull.indices);
+    OwnedFaces faces;
+    faces.isHull = true;
+    faces.epsilon = touchingEpsilon((high - low) * 0.5f * glm::abs(collider.getScale()));
+    faces.hullVertices = hullCollider.getWorldVertices();
+    faces.hullNormals = hullFaceNormalsOf(hullCollider);
 
     return faces;
   }
 
   const auto box = boxGeometryOf(collider);
-  const auto vertices = boxVerticesOf(box);
 
-  OwnedFaces faces{ std::vector<glm::vec3>(vertices.begin(), vertices.end()), {},
-                    touchingEpsilon({ box.halfExtents[0], box.halfExtents[1], box.halfExtents[2] }) };
-  for (const auto& axis : box.axes)
+  OwnedFaces faces;
+  faces.boxVertices = boxVerticesOf(box);
+  faces.epsilon = touchingEpsilon({ box.halfExtents[0], box.halfExtents[1], box.halfExtents[2] });
+  for (size_t i = 0; i < box.axes.size(); ++i)
   {
-    faces.normals.push_back(axis);
-    faces.normals.push_back(-axis);
+    faces.boxNormals[2 * i] = box.axes[i];
+    faces.boxNormals[2 * i + 1] = -box.axes[i];
   }
 
   return faces;
@@ -282,11 +300,14 @@ static bool isInFrontOf(const glm::vec3& normal, const glm::vec3& planePoint, co
   return distance * distance > toleranceSquared * glm::dot(normal, normal) * std::max(1.0f, glm::dot(point, point));
 }
 
+constexpr uint8_t maxEpaIterations = 25;
+
 // Contact::points holds this many.
 constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
 
-Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
-  : m_collider(&collider), m_otherCollider(&otherCollider)
+Polytope::Polytope(Collider& collider, Collider& otherCollider, const SupportShape& shape,
+                   const SupportShape& otherShape, Simplex &simplex)
+  : m_collider(&collider), m_otherCollider(&otherCollider), m_shape(&shape), m_otherShape(&otherShape)
 {
   generatePolytope(simplex);
 
@@ -298,14 +319,42 @@ glm::vec3 Polytope::getMinimumTranslationVector() const
   return m_closestFaceData.closestPoint;
 }
 
-glm::vec3 Polytope::findCollisionPoint() const
+bool Polytope::hasSphere() const
 {
-  const auto transform = m_collider->getOwner()->getComponent<Transform>(ComponentType::transform);
-  const auto otherTransform = m_otherCollider->getOwner()->getComponent<Transform>(ComponentType::transform);
-  if (!transform || !otherTransform)
+  return m_collider->getColliderType() == ColliderType::sphereCollider ||
+         m_otherCollider->getColliderType() == ColliderType::sphereCollider;
+}
+
+Polytope::ContactPoints Polytope::findContactPoints() const
+{
+  if (hasSphere())
   {
-    throw std::runtime_error("Collider::EPA::Missing Transform");
+    return { sphereContactPoint(), {} };
   }
+
+  auto points = shapeContactPoints();
+
+  glm::vec3 centroid{ 0 };
+  for (const auto& point : points)
+  {
+    centroid += point;
+  }
+
+  // Never empty (each feature always yields at least one point), so no fallback case is needed.
+  return { centroid / static_cast<float>(points.size()), std::move(points) };
+}
+
+glm::vec3 Polytope::sphereContactPoint() const
+{
+  const auto transformOf = [](const Collider& collider) {
+    auto transform = collider.getOwner()->getComponent<Transform>(ComponentType::transform);
+    if (!transform)
+    {
+      throw std::runtime_error("Collider::EPA::Missing Transform");
+    }
+
+    return transform;
+  };
 
   auto closestPoint = m_closestFaceData.closestPoint;
 
@@ -313,6 +362,7 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   if (m_collider->getColliderType() == ColliderType::sphereCollider)
   {
+    const auto transform = transformOf(*m_collider);
     auto direction = glm::normalize(closestPoint);
 
     pointOfCollision = transform->getPosition() + direction * dynamic_cast<SphereCollider*>(m_collider)->getRadius();
@@ -320,8 +370,9 @@ glm::vec3 Polytope::findCollisionPoint() const
     return pointOfCollision;
   }
 
-  if (m_otherCollider->getColliderType() == ColliderType::sphereCollider)
   {
+    const auto otherTransform = transformOf(*m_otherCollider);
+
     // closestPoint is a Minkowski-difference point, so its direction runs from m_collider toward
     // m_otherCollider - the opposite of the case above, where the sphere was m_collider itself. Adding
     // it here would land on the far pole of the sphere, away from the other shape; subtracting it lands
@@ -332,27 +383,6 @@ glm::vec3 Polytope::findCollisionPoint() const
 
     return pointOfCollision;
   }
-
-  glm::vec3 centroid{ 0 };
-  const auto points = shapeContactPoints();
-  for (const auto& point : points)
-  {
-    centroid += point;
-  }
-
-  // Never empty (each feature always yields at least one point), so no fallback case is needed.
-  return centroid / static_cast<float>(points.size());
-}
-
-std::vector<glm::vec3> Polytope::findContactManifold() const
-{
-  if (m_collider->getColliderType() == ColliderType::sphereCollider ||
-      m_otherCollider->getColliderType() == ColliderType::sphereCollider)
-  {
-    return { findCollisionPoint() };
-  }
-
-  return shapeContactPoints();
 }
 
 std::vector<glm::vec3> Polytope::shapeContactPoints() const
@@ -402,7 +432,7 @@ bool Polytope::isCapsulePair() const
 
 std::vector<glm::vec3> Polytope::capsuleFeaturePoints() const
 {
-  // closestPoint runs from m_collider toward m_otherCollider (see findCollisionPoint), so the direction
+  // closestPoint runs from m_collider toward m_otherCollider (see sphereContactPoint), so the direction
   // toward the other shape is its normal when the capsule is m_collider and the reverse when it is not.
   const auto normal = glm::normalize(m_closestFaceData.closestPoint);
 
@@ -498,14 +528,17 @@ std::vector<glm::vec3> Polytope::boxContactPoints() const
 
 void Polytope::EPA()
 {
+  // A rollback copy reused across iterations and calls, so an iteration allocates nothing once warm.
+  // thread_local because the narrow phase runs in parallel.
+  thread_local std::vector<Face> facesBefore;
+
   std::optional<glm::vec3> previousClosestPoint;
   std::optional<float> previousMinDist;
 
   auto currentMinDist = findClosestFace();
 
-  constexpr uint8_t maxIterations = 25;
   uint8_t iteration = 0;
-  while (iteration < maxIterations)
+  while (iteration < maxEpaIterations)
   {
     if (closeEnough(currentMinDist, previousMinDist, m_closestFaceData.closestPoint, previousClosestPoint))
     {
@@ -514,7 +547,7 @@ void Polytope::EPA()
 
     const auto searchDirection = glm::normalize(getSearchDirection());
 
-    const auto supportPoint = getSupport(*m_collider, *m_otherCollider, searchDirection);
+    const auto supportPoint = getSupport(*m_shape, *m_otherShape, searchDirection);
 
     if (isDuplicateVertex(supportPoint) || reachesBoundary(supportPoint, searchDirection, currentMinDist))
     {
@@ -524,13 +557,13 @@ void Polytope::EPA()
     previousMinDist = currentMinDist;
     previousClosestPoint = m_closestFaceData.closestPoint;
 
-    const auto facesBefore = m_faces;
+    facesBefore.assign(m_faces.begin(), m_faces.end());
     const auto closestBefore = m_closestFaceData;
 
     currentMinDist = std::numeric_limits<float>::max();
     if (!reconstructPolytope(supportPoint, searchDirection, currentMinDist))
     {
-      m_faces = facesBefore;
+      m_faces.assign(facesBefore.begin(), facesBefore.end());
       m_closestFaceData = closestBefore;
       break;
     }
@@ -578,6 +611,10 @@ void Polytope::generatePolytope(Simplex &simplex)
   const auto facePointB = closestPointOnPlane(A, ACD);
   const auto facePointC = closestPointOnPlane(A, ADB);
   const auto facePointD = closestPointOnPlane(B, BCD);
+
+  // Room for every vertex and face EPA's iteration cap allows on a convex polytope, so it never regrows.
+  m_vertices.reserve(4 + maxEpaIterations);
+  m_faces.reserve(2 * (4 + maxEpaIterations));
 
   m_vertices = {
     simplex.getSupportA(),

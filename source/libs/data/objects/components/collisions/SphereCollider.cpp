@@ -109,16 +109,21 @@ glm::vec3 SphereCollider::getPosition()
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 {
+  return getWorldSupport().furthestPoint(direction);
+}
+
+const SphereSupport& SphereCollider::getWorldSupport()
+{
   if (const Transform& transform = cachedTransform();
       m_shapeDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
   {
-    m_worldCenter = transform.getPosition() + m_position.get();
-    m_worldRadius = compMax(glm::abs(transform.getScale())) * m_radius.get();
+    m_worldSupport.center = transform.getPosition() + m_position.get();
+    m_worldSupport.radius = compMax(glm::abs(transform.getScale())) * m_radius.get();
     m_currentTransformUpdateID = transform.getWorldUpdateID();
     m_shapeDirty = false;
   }
 
-  return direction * m_worldRadius + m_worldCenter;
+  return m_worldSupport;
 }
 
 void SphereCollider::pack(net::Message& message) const

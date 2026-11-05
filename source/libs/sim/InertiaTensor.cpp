@@ -239,7 +239,12 @@ namespace inertia {
   {
     if (owner)
     {
-      const auto shapes = bodyDistributions(*owner);
+      // Reused across calls so a response's repeated inertia queries allocate nothing once warm; thread_local
+      // keeps parallel callers independent.
+      thread_local std::vector<Distribution> shapes;
+      shapes.clear();
+      collect(*owner, shapes);
+
       if (!shapes.empty())
       {
         return tensorAbout(shapes, transform.getPosition());

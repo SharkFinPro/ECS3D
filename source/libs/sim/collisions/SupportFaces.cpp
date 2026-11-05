@@ -325,18 +325,38 @@ namespace {
     return face;
   }
 
+  // The outlines depend only on the hull's own vertices, so they are found once per hull and kept on the collider.
+  const ConvexMeshCollider::FaceOutlines& faceOutlinesOf(ConvexMeshCollider& collider)
+  {
+    if (!collider.getFaceOutlines())
+    {
+      const auto& hull = collider.getHull();
+      const auto triangles = trianglesOf(hull.vertices, hull.indices);
+      const Tolerance tolerance{ hull.vertices, coplanarDistanceShare * extentOf(hull.vertices) };
+
+      ConvexMeshCollider::FaceOutlines outlines;
+      for (const auto& group : groupCoplanar(triangles, tolerance))
+      {
+        outlines.push_back(outlineOf(group, hull.vertices));
+      }
+
+      collider.setFaceOutlines(std::move(outlines));
+    }
+
+    return *collider.getFaceOutlines();
+  }
+
   std::vector<SupportFace> hullFacesOf(ConvexMeshCollider& collider)
   {
-    const auto& hull = collider.getHull();
     const auto& world = collider.getWorldVertices();
-    const auto triangles = trianglesOf(hull.vertices, hull.indices);
-    const Tolerance tolerance{ hull.vertices, coplanarDistanceShare * extentOf(hull.vertices) };
+    const auto& outlines = faceOutlinesOf(collider);
     const auto hullCentroid = centroidOf(world);
 
     std::vector<SupportFace> faces;
-    for (const auto& group : groupCoplanar(triangles, tolerance))
+    faces.reserve(outlines.size());
+    for (const auto& outline : outlines)
     {
-      if (auto face = worldFace(outlineOf(group, hull.vertices), world, hullCentroid))
+      if (auto face = worldFace(outline, world, hullCentroid))
       {
         faces.push_back(std::move(*face));
       }

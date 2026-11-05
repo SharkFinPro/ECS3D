@@ -1,6 +1,7 @@
 #ifndef NARROWPHASE_H
 #define NARROWPHASE_H
 
+#include "Simplex.h"
 #include <glm/vec3.hpp>
 #include <array>
 #include <cstdint>
@@ -38,6 +39,17 @@ namespace collisions {
     [[nodiscard]] glm::vec3 normal() const;
   };
 
+  // GJK's terminating simplex for an overlapping pair, with the state of both colliders it was found in. While
+  // neither collider has moved or changed since, GJK would build the same simplex again, so findContact starts EPA
+  // from it instead.
+  struct OverlapWitness {
+    Simplex simplex;
+    uint64_t colliderUpdateID = 0;
+    uint64_t colliderRevision = 0;
+    uint64_t otherUpdateID = 0;
+    uint64_t otherRevision = 0;
+  };
+
   // GJK for the overlap, then EPA for the depth, normal and contact point.
   //
   // Both colliders by reference, like getSupport beside it: this reads their geometry, owns neither, and
@@ -46,6 +58,10 @@ namespace collisions {
   // is a non-const virtual.
   [[nodiscard]] std::optional<Contact> findContact(Collider& collider, Collider& other);
 
+  // The same, skipping GJK when witness was recorded for this ordered pair and is still current.
+  [[nodiscard]] std::optional<Contact> findContact(Collider& collider, Collider& other,
+                                                   const std::optional<OverlapWitness>& witness);
+
   // For a caller that only needs to know whether the pair touches, which is what the sweep asks. It
   // skips the work findContact does to describe the overlap - EPA on a general pair, the contact point
   // on a pair of spheres.
@@ -53,6 +69,10 @@ namespace collisions {
   // The two agree except in one case: on the general path this answers yes for a pair whose translation
   // out of the overlap EPA could not build, which findContact reports as no contact at all.
   [[nodiscard]] bool intersects(Collider& collider, Collider& other);
+
+  // The same, also recording the GJK result for findContact. witness stays empty for a pair of round shapes,
+  // which need no GJK, and for a pair apart.
+  [[nodiscard]] bool intersects(Collider& collider, Collider& other, std::optional<OverlapWitness>& witness);
 }
 
 #endif //NARROWPHASE_H

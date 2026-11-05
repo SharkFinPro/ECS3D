@@ -158,17 +158,12 @@ glm::vec3 CapsuleCollider::getRotation()
 
 glm::vec3 CapsuleCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  const auto& [segment, radius] = worldShape();
-  const auto& [start, end] = segment;
+  return worldShape().furthestPoint(direction);
+}
 
-  if (const float length = glm::length(direction); length > 0.0f)
-  {
-    const glm::vec3& endpoint = glm::dot(end, direction) > glm::dot(start, direction) ? end : start;
-
-    return endpoint + direction / length * radius;
-  }
-
-  return (start + end) * 0.5f;
+const CapsuleSupport& CapsuleCollider::getWorldSupport()
+{
+  return worldShape();
 }
 
 void CapsuleCollider::pack(net::Message& message) const

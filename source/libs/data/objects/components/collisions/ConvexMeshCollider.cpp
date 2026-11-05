@@ -10,6 +10,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <Protocol.h>
 
 namespace {
@@ -210,6 +211,26 @@ void ConvexMeshCollider::setMassCache(const MassCache& cache)
   m_massCache = cache;
 }
 
+const std::optional<ConvexMeshCollider::FaceOutlines>& ConvexMeshCollider::getFaceOutlines() const
+{
+  return m_faceOutlines;
+}
+
+void ConvexMeshCollider::setFaceOutlines(FaceOutlines outlines)
+{
+  m_faceOutlines = std::move(outlines);
+}
+
+const std::optional<ConvexMeshCollider::FaceNormalCache>& ConvexMeshCollider::getFaceNormalCache() const
+{
+  return m_faceNormalCache;
+}
+
+void ConvexMeshCollider::setFaceNormalCache(FaceNormalCache cache)
+{
+  m_faceNormalCache = std::move(cache);
+}
+
 nlohmann::json ConvexMeshCollider::serialize()
 {
   const auto position = m_position.getInitialValue();
@@ -287,10 +308,15 @@ glm::vec3 ConvexMeshCollider::getRotation()
 
 glm::vec3 ConvexMeshCollider::findFurthestPoint(const glm::vec3& direction)
 {
+  return furthestOf(getWorldVertices(), direction);
+}
+
+glm::vec3 ConvexMeshCollider::furthestOf(const std::span<const glm::vec3> vertices, const glm::vec3& direction)
+{
   float largestDot = std::numeric_limits<float>::lowest();
   glm::vec3 furthestVertex{ 0, 0, 0 };
 
-  for (const auto& vertex : getWorldVertices())
+  for (const auto& vertex : vertices)
   {
     if (const float currentDot = dot(vertex, direction); currentDot > largestDot)
     {
@@ -416,5 +442,7 @@ void ConvexMeshCollider::invalidateGeometry()
 {
   m_meshDirty = true;
   m_massCache.reset();
+  m_faceOutlines.reset();
+  m_faceNormalCache.reset();
   invalidateBoundingBox();
 }

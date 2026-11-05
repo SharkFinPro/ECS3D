@@ -11,6 +11,7 @@
 class Simplex;
 struct SupportVertex;
 class Collider;
+class SupportShape;
 
 using Edge = std::pair<uint8_t, uint8_t>;
 
@@ -41,20 +42,31 @@ struct FaceData {
 
 class Polytope {
 public:
-  // Both colliders by reference: a Polytope is built and consumed inside one narrow-phase call, so the
-  // caller's own shares outlive it and there is nothing here to own.
-  Polytope(Collider& collider, Collider& otherCollider, Simplex& simplex);
+  // Both colliders and their support shapes by reference: a Polytope is built and consumed inside one
+  // narrow-phase call, so the caller's own shares outlive it and there is nothing here to own.
+  Polytope(Collider& collider, Collider& otherCollider, const SupportShape& shape, const SupportShape& otherShape,
+           Simplex& simplex);
 
   [[nodiscard]] glm::vec3 getMinimumTranslationVector() const;
 
-  [[nodiscard]] glm::vec3 findCollisionPoint() const;
+  struct ContactPoints {
+    // A point on the overlap, in world space.
+    glm::vec3 point;
 
-  // Up to four distinct world-space points spanning the contact: the incident face's vertices clamped into
-  // the reference face on a box or hull pair, a capsule's cap points facing the other shape, or the single
-  // findCollisionPoint otherwise.
-  [[nodiscard]] std::vector<glm::vec3> findContactManifold() const;
+    // Up to four distinct world-space points spanning the contact: the incident face's vertices clamped into
+    // the reference face on a box or hull pair, or a capsule's cap points facing the other shape. Empty when
+    // only point applies, as against a sphere.
+    std::vector<glm::vec3> manifold;
+  };
+
+  [[nodiscard]] ContactPoints findContactPoints() const;
 
 private:
+  // Where a sphere in the pair touches the other shape.
+  [[nodiscard]] glm::vec3 sphereContactPoint() const;
+
+  [[nodiscard]] bool hasSphere() const;
+
   [[nodiscard]] std::vector<glm::vec3> boxContactPoints() const;
 
   [[nodiscard]] bool isCapsulePair() const;
@@ -72,6 +84,8 @@ private:
 
   Collider* m_collider;
   Collider* m_otherCollider;
+  const SupportShape* m_shape;
+  const SupportShape* m_otherShape;
 
   std::vector<SupportVertex> m_vertices;
   std::vector<Face> m_faces;

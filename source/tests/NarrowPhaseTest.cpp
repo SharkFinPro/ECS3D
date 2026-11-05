@@ -9,7 +9,9 @@
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -360,4 +362,82 @@ TEST(NarrowPhase, MirroredSpheresCollideOnlyWhenTheyOverlap)
   const auto contact = collisions::findContact(*first, *second);
   ASSERT_TRUE(contact.has_value());
   EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
+}
+
+TEST(NarrowPhase, AWitnessFromIntersectsGivesTheSameContactAsGjk)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0.3f, 0.2f });
+
+  std::optional<collisions::OverlapWitness> witness;
+  ASSERT_TRUE(collisions::intersects(*first, *second, witness));
+  ASSERT_TRUE(witness.has_value());
+
+  const auto fresh = collisions::findContact(*first, *second);
+  const auto reused = collisions::findContact(*first, *second, witness);
+  ASSERT_TRUE(fresh.has_value());
+  ASSERT_TRUE(reused.has_value());
+
+  EXPECT_EQ(reused->minimumTranslationVector, fresh->minimumTranslationVector);
+  EXPECT_EQ(reused->point, fresh->point);
+  ASSERT_EQ(reused->pointCount, fresh->pointCount);
+  for (std::uint8_t i = 0; i < fresh->pointCount; ++i)
+  {
+    EXPECT_EQ(reused->points[i], fresh->points[i]);
+  }
+}
+
+TEST(NarrowPhase, AWitnessIsIgnoredOnceAColliderMoves)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0, 0 });
+
+  std::optional<collisions::OverlapWitness> witness;
+  ASSERT_TRUE(collisions::intersects(*first, *second, witness));
+
+  moveTo(secondObject, { 10, 0, 0 });
+
+  EXPECT_FALSE(collisions::findContact(*first, *second, witness).has_value());
+}
+
+TEST(NarrowPhase, AWitnessIsIgnoredOnceAColliderResizes)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0, 0 });
+
+  std::optional<collisions::OverlapWitness> witness;
+  ASSERT_TRUE(collisions::intersects(*first, *second, witness));
+
+  second->setScale({ 0.1f, 0.1f, 0.1f });
+
+  EXPECT_FALSE(collisions::findContact(*first, *second, witness).has_value());
+}
+
+TEST(NarrowPhase, RoundPairsRecordNoWitness)
+{
+  const auto [firstObject, first] = makeCollider<SphereCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
+
+  std::optional<collisions::OverlapWitness> witness;
+  EXPECT_TRUE(collisions::intersects(*first, *second, witness));
+  EXPECT_FALSE(witness.has_value());
+}
+
+// The manifold reads a box's world frame from a cache; resizing the box alone, with no transform change,
+// has to refresh it.
+TEST(NarrowPhase, ABoxManifoldFollowsTheBoxsOwnResize)
+{
+  const auto [groundObject, ground] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [boxObject, box] = makeCollider<BoxCollider>({ 0, 1.5f, 0 });
+
+  const auto before = collisions::findContact(*ground, *box);
+  ASSERT_TRUE(before.has_value());
+  EXPECT_NEAR(before->point.y, 0.5f, tolerance);
+
+  box->setScale({ 1.0f, 0.8f, 1.0f });
+
+  const auto after = collisions::findContact(*ground, *box);
+  ASSERT_TRUE(after.has_value());
+  EXPECT_NEAR(after->depth(), 0.3f, tolerance);
+  EXPECT_NEAR(after->point.y, 0.7f, tolerance);
 }
