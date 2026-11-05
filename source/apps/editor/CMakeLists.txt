@@ -29,6 +29,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DLog
 )
 
+# Recorded in saved Profiler captures.
+target_compile_definitions(${PROJECT_NAME} PRIVATE ECS3D_ENGINE_VERSION="${ECS3D_VERSION}")
+
 # DarkTitleBar.cpp uses DwmSetWindowAttribute to match the native title bar to the editor's theme.
 if(WIN32)
   target_link_libraries(${PROJECT_NAME} PRIVATE dwmapi)

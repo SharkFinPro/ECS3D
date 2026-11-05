@@ -1,15 +1,20 @@
 #include "ProfilerPanel.h"
 #include "EditorTheme.h"
+#include "OpenFolder.h"
 #include <EditorViewportSettings.h>
 #include <Lane.h>
 #include <ProfilerCharts.h>
 #include <ProfilerView.h>
 #include <SettingsStore.h>
+#include <ProjectPaths.h>
+#include <UserDataDirectory.h>
 #include <imgui.h>
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 namespace {
   constexpr const char* windowName = "Profiler";
@@ -70,6 +75,8 @@ void ProfilerPanel::setOpen(const bool open)
     m_frozenServer.reset();
     m_frozenServerNodes.clear();
     m_frozenServerTicks.clear();
+    m_frozenSnapshots.clear();
+    m_frozenConnections = 0;
   }
 }
 
@@ -81,6 +88,77 @@ void ProfilerPanel::setServerLane(const ServerLaneInput* input)
 int ProfilerPanel::windowSeconds() const
 {
   return m_windowSeconds;
+}
+
+void ProfilerPanel::setCaptureEnvironment(const CaptureInput& environment)
+{
+  m_captureEnvironment = environment;
+  m_captureEnvironment.lanes.clear();
+  m_captureEnvironment.snapshots.clear();
+}
+
+void ProfilerPanel::saveCapture(const profile::History& history, const std::vector<profile::ViewNode>& nodes,
+                                const std::vector<profile::ViewNode>& serverNodes)
+{
+  CaptureInput input = m_captureEnvironment;
+
+  if (history.size() != 0)
+  {
+    input.lanes.push_back({"editor", profile::LaneKind::frame, &history, nodes,
+                           profile::windowSize(history, m_windowSeconds), std::nullopt, std::nullopt});
+  }
+
+  if (m_serverInput != nullptr)
+  {
+    const profile::History* serverHistory = m_frozenServer ? &*m_frozenServer : m_serverInput->history;
+
+    if (serverHistory != nullptr && serverHistory->size() != 0)
+    {
+      input.lanes.push_back({"server", profile::LaneKind::server, serverHistory, serverNodes,
+                             profile::windowSize(*serverHistory, m_windowSeconds), m_serverInput->ticksCounter,
+                             m_serverInput->droppedStepsCounter});
+    }
+
+    input.snapshots = m_frozenServer ? m_frozenSnapshots : m_serverInput->snapshots;
+    input.connectionCount = m_frozenServer ? m_frozenConnections : m_serverInput->connections;
+    input.serverState = captureServerStateName(m_serverInput->state);
+  }
+
+  input.paused = m_interaction.paused;
+
+  const auto result = writeCapture(std::move(input), userDataDirectory() / "captures",
+                                   std::chrono::system_clock::now());
+
+  m_savedCsv.reset();
+  m_captureError.clear();
+
+  if (result.ok())
+  {
+    m_savedCsv = result.csvPath;
+  }
+  else
+  {
+    m_captureError = result.error;
+  }
+}
+
+void ProfilerPanel::displayCaptureStatus()
+{
+  if (m_savedCsv)
+  {
+    ImGui::TextWrapped("Saved %s", pathToUtf8(*m_savedCsv).c_str());
+    ImGui::SameLine();
+
+    if (ImGui::Button("Open folder") && !openFolderInFileBrowser(m_savedCsv->parent_path()))
+    {
+      m_savedCsv.reset();
+      m_captureError = "could not open the captures folder";
+    }
+  }
+  else if (!m_captureError.empty())
+  {
+    ImGui::TextColored(theme::scriptAmber, "Could not save capture: %s", m_captureError.c_str());
+  }
 }
 
 void ProfilerPanel::freezeServer()
@@ -95,6 +173,8 @@ void ProfilerPanel::freezeServer()
   m_frozenServer.emplace(*m_serverInput->history);
   m_frozenServerNodes = m_serverInput->nodes;
   m_frozenServerTicks = m_serverInput->tickMicros;
+  m_frozenSnapshots = m_serverInput->snapshots;
+  m_frozenConnections = m_serverInput->connections;
 }
 
 void ProfilerPanel::toggle()
@@ -152,6 +232,13 @@ void ProfilerPanel::displayHeader()
 
   ImGui::SameLine();
 
+  if (ImGui::Button("Save capture..."))
+  {
+    m_saveRequested = true;
+  }
+
+  ImGui::SameLine();
+
   bool readout = editorViewportSettings::readStatsReadout(m_settings);
   if (ImGui::Checkbox("Corner readout", &readout))
   {
@@ -162,6 +249,8 @@ void ProfilerPanel::displayHeader()
   ImGui::SameLine();
   ImGui::TextColored(theme::scriptAmber, "Debug build");
 #endif
+
+  displayCaptureStatus();
 }
 
 void ProfilerPanel::displayLane(const profile::History& history, const std::vector<profile::ViewNode>& nodes)
@@ -384,6 +473,8 @@ void ProfilerPanel::displayGui()
       m_frozenServer.reset();
       m_frozenServerNodes.clear();
       m_frozenServerTicks.clear();
+      m_frozenSnapshots.clear();
+      m_frozenConnections = 0;
     }
     else
     {
@@ -409,6 +500,12 @@ void ProfilerPanel::displayGui()
     {
       serverNodes = m_frozenServer ? &m_frozenServerNodes : &m_serverInput->nodes;
       displayServerLane(*serverNodes);
+    }
+
+    if (m_saveRequested)
+    {
+      m_saveRequested = false;
+      saveCapture(history, nodes, *serverNodes);
     }
 
     if (history.size() != 0 || m_serverInput != nullptr)

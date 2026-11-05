@@ -1,10 +1,13 @@
 #ifndef PROFILERPANEL_H
 #define PROFILERPANEL_H
 
+#include "ProfilerCapture.h"
 #include "ProfilerPanelState.h"
 #include "ProfilerServerLane.h"
 #include <History.h>
+#include <filesystem>
 #include <optional>
+#include <string>
 #include <vector>
 
 class SettingsStore;
@@ -36,6 +39,9 @@ public:
 
   [[nodiscard]] int windowSeconds() const;
 
+  // The app, build and scene fields a saved capture records; the lanes and snapshots are filled when it is saved.
+  void setCaptureEnvironment(const CaptureInput& environment);
+
 private:
   const profile::Lane& m_lane;
   SettingsStore& m_settings;
@@ -50,6 +56,11 @@ private:
 
   const ServerLaneInput* m_serverInput = nullptr;
 
+  CaptureInput m_captureEnvironment;
+  bool m_saveRequested = false;
+  std::optional<std::filesystem::path> m_savedCsv;
+  std::string m_captureError;
+
   profilerPanelState::Interaction m_interaction;
 
   // A copy taken when pausing, so the frozen view neither moves nor loses its selection as the ring wraps.
@@ -57,6 +68,8 @@ private:
   std::optional<profile::History> m_frozenServer;
   std::vector<profile::ViewNode> m_frozenServerNodes;
   std::vector<uint32_t> m_frozenServerTicks;
+  std::vector<ServerSnapshotRow> m_frozenSnapshots;
+  uint16_t m_frozenConnections = 0;
 
   void displayHeader();
 
@@ -70,6 +83,11 @@ private:
   void displayNetwork() const;
 
   void freezeServer();
+
+  void saveCapture(const profile::History& history, const std::vector<profile::ViewNode>& nodes,
+                   const std::vector<profile::ViewNode>& serverNodes);
+
+  void displayCaptureStatus();
 };
 
 #endif

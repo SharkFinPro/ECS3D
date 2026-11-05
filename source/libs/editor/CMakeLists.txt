@@ -41,6 +41,10 @@ add_library(${PROJECT_NAME}
   ConsolePanel.h
   ConsolePanelLayout.h
   ConsoleView.h
+  OpenFolder.cpp
+  OpenFolder.h
+  ProfilerCapture.cpp
+  ProfilerCapture.h
   ProfilerPanel.cpp
   ProfilerPanel.h
   ProfilerPanelState.h

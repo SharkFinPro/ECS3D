@@ -76,7 +76,9 @@ selects in its own lane, and the Breakdown table shows the lane clicked last. Th
 `editor.viewport.statsReadout` (off by default;
 a checkbox in Settings > Viewport and "Corner readout" in the panel header), is drawn by
 `EditorApp::drawStatsReadout` in the scene overlay callback onto the scene view's draw list, so it survives F10
-hiding the GUI; its three lines are the headless `ProfilerReadout.h`), `AssetBrowserPanel` (its type
+hiding the GUI; its three lines are the headless `ProfilerReadout.h`). "Save capture..." writes the shown window
+through `ProfilerCapture.h` (see [profiling.md](profiling.md)) and the panel then shows the path with an "Open folder"
+button (`OpenFolder.h`, which launches the platform file browser without a shell), `AssetBrowserPanel` (its type
 filter is a union of toggled chips, with an "All" chip to clear: `AssetFilter.h`), `AssetDisplay` (shared asset
 label/name/icon/color rules, header-only), `PlayControls.h` (the headless play/pause/stop enable rules for the
 Scene Status toolbar's fixed row of icon buttons, which stay drawn and gray out when unavailable), `SaveUI`
