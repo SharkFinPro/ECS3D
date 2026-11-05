@@ -247,7 +247,7 @@ namespace {
   {
     auto ids = group.vertexIds;
     std::ranges::sort(ids);
-    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    ids.erase(std::ranges::unique(ids).begin(), ids.end());
 
     Vertices points;
     for (const auto id : ids)
