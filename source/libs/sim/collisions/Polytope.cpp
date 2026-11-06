@@ -596,14 +596,17 @@ std::optional<Polytope::EpaFace> Polytope::faceOf(const uint8_t a, const uint8_t
   const auto first = m_vertices[b] - pointA;
   const auto second = m_vertices[c] - pointA;
   const auto crossed = glm::cross(first, second);
-  const double length = glm::length(crossed);
 
-  if (!(length > slivery * glm::length(first) * glm::length(second)))
+  const auto crossedLengthSquared = glm::dot(crossed, crossed);
+  const auto firstLengthSquared = glm::dot(first, first);
+  const auto secondLengthSquared = glm::dot(second, second);
+
+  if (!(crossedLengthSquared > slivery * slivery * firstLengthSquared * secondLengthSquared))
   {
     return std::nullopt;
   }
 
-  const auto normal = crossed / length;
+  const auto normal = crossed / std::sqrt(crossedLengthSquared);
 
   return EpaFace{ { a, b, c }, normal, glm::dot(normal, pointA) };
 }
