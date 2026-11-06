@@ -391,6 +391,20 @@ namespace {
 }
 
 namespace collisions {
+  const std::vector<SupportFace>& hullSupportFaces(ConvexMeshCollider& collider)
+  {
+    // Refreshed first: the generation only moves when the vertices are rebuilt.
+    static_cast<void>(collider.getWorldVertices());
+    const auto generation = collider.getWorldVerticesGeneration();
+
+    if (const auto& cache = collider.getWorldFaceCache(); !cache || cache->generation != generation)
+    {
+      collider.setWorldFaceCache({ generation, hullFacesOf(collider) });
+    }
+
+    return collider.getWorldFaceCache()->faces;
+  }
+
   std::vector<SupportFace> supportFacesOf(Collider& collider)
   {
     switch (collider.getColliderType())
@@ -398,7 +412,7 @@ namespace collisions {
       case ColliderType::boxCollider:
         return boxFacesOf(collider);
       case ColliderType::convexMeshCollider:
-        return hullFacesOf(dynamic_cast<ConvexMeshCollider&>(collider));
+        return hullSupportFaces(dynamic_cast<ConvexMeshCollider&>(collider));
       case ColliderType::sphereCollider:
       case ColliderType::capsuleCollider:
         break;
@@ -414,8 +428,12 @@ namespace collisions {
       return boxFaceToward(collider, direction);
     }
 
-    const auto faces = supportFacesOf(collider);
-    if (const auto* face = faceToward(faces, direction))
+    if (collider.getColliderType() != ColliderType::convexMeshCollider)
+    {
+      return std::nullopt;
+    }
+
+    if (const auto* face = faceToward(hullSupportFaces(dynamic_cast<ConvexMeshCollider&>(collider)), direction))
     {
       return *face;
     }

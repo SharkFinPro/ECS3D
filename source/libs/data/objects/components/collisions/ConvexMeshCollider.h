@@ -4,6 +4,7 @@
 #include "Collider.h"
 #include "ConvexHull.h"
 #include "ConvexHullValidation.h"
+#include "WorldFace.h"
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <uuid.h>
@@ -33,6 +34,12 @@ public:
   struct FaceNormalCache {
     uint64_t generation = 0;
     std::vector<glm::vec3> normals;
+  };
+
+  // The hull's planar faces in world space, filled by the sim. Derived state, current while generation matches.
+  struct WorldFaceCache {
+    uint64_t generation = 0;
+    std::vector<WorldFace> faces;
   };
 
   ConvexMeshCollider();
@@ -73,6 +80,10 @@ public:
 
   void setFaceNormalCache(FaceNormalCache cache);
 
+  [[nodiscard]] const std::optional<WorldFaceCache>& getWorldFaceCache() const;
+
+  void setWorldFaceCache(WorldFaceCache cache);
+
   // The vertex furthest along direction, the first of equals winning; the origin when there are none.
   [[nodiscard]] static glm::vec3 furthestOf(std::span<const glm::vec3> vertices, const glm::vec3& direction);
 
@@ -111,6 +122,8 @@ private:
 
   std::optional<FaceNormalCache> m_faceNormalCache;
 
+  std::optional<WorldFaceCache> m_worldFaceCache;
+
   // Editing the collider's own offset or hull doesn't bump the transform's update id, so force a rebuild.
   bool m_meshDirty = true;
 
@@ -131,7 +144,7 @@ private:
     uint32_t mask = 0xFFFFFFFFu;
   };
 
-  void generateWorldVertices(const std::shared_ptr<Transform>& transform);
+  void generateWorldVertices(const Transform& transform);
 
   [[nodiscard]] std::shared_ptr<Transform> ownerTransform();
 

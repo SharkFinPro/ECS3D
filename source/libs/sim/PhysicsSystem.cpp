@@ -10,6 +10,7 @@
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -262,7 +263,7 @@ namespace {
       return face ? std::optional<RestingFaces>(RestingFaces{ {}, std::move(*face), 0.0f }) : std::nullopt;
     }
 
-    const auto faces = collisions::supportFacesOf(*collider);
+    const auto& faces = collisions::hullSupportFaces(static_cast<ConvexMeshCollider&>(*collider));
     const auto* toward = collisions::faceToward(faces, direction);
     if (!toward)
     {

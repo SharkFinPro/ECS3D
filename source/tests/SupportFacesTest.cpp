@@ -617,3 +617,21 @@ TEST(SupportFaces, KeptHullFacesFollowTheTransform)
     expectNear(after[i].center, before[i].center + glm::vec3(0.0f, 5.0f, 0.0f));
   }
 }
+
+TEST(SupportFaces, AKeptHullFaceTowardFollowsTheTransform)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  const auto before = collisions::supportFaceToward(*hull, { 0.0f, 1.0f, 0.0f });
+  ASSERT_TRUE(before.has_value());
+
+  transformOf(object)->setPosition({ 2.0f, 5.0f, 0.0f });
+
+  const auto after = collisions::supportFaceToward(*hull, { 0.0f, 1.0f, 0.0f });
+  ASSERT_TRUE(after.has_value());
+  expectNear(after->center, before->center + glm::vec3(2.0f, 5.0f, 0.0f));
+  expectNear(after->normal, before->normal);
+}

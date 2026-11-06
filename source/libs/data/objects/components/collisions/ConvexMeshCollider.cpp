@@ -185,9 +185,8 @@ bool ConvexMeshCollider::setHull(ConvexHull hull)
 
 const std::vector<glm::vec3>& ConvexMeshCollider::getWorldVertices()
 {
-  const std::shared_ptr<Transform> transform = ownerTransform();
-
-  if (m_meshDirty || m_currentTransformUpdateID != transform->getWorldUpdateID())
+  if (const Transform& transform = cachedTransform();
+      m_meshDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
   {
     generateWorldVertices(transform);
     m_meshDirty = false;
@@ -229,6 +228,16 @@ const std::optional<ConvexMeshCollider::FaceNormalCache>& ConvexMeshCollider::ge
 void ConvexMeshCollider::setFaceNormalCache(FaceNormalCache cache)
 {
   m_faceNormalCache = std::move(cache);
+}
+
+const std::optional<ConvexMeshCollider::WorldFaceCache>& ConvexMeshCollider::getWorldFaceCache() const
+{
+  return m_worldFaceCache;
+}
+
+void ConvexMeshCollider::setWorldFaceCache(WorldFaceCache cache)
+{
+  m_worldFaceCache = std::move(cache);
 }
 
 nlohmann::json ConvexMeshCollider::serialize()
@@ -376,25 +385,25 @@ void ConvexMeshCollider::stop()
   invalidateGeometry();
 }
 
-void ConvexMeshCollider::generateWorldVertices(const std::shared_ptr<Transform>& transform)
+void ConvexMeshCollider::generateWorldVertices(const Transform& transform)
 {
   glm::mat4 rotationMatrix;
-  if (!transform->hasParentTransform())
+  if (!transform.hasParentTransform())
   {
     // The same additive Euler sum getRotation reports, which the narrow phase and queries rebuild.
-    const auto rotation = transform->getRotation() + m_rotation.get();
+    const auto rotation = transform.getRotation() + m_rotation.get();
     rotationMatrix = rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
       * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0})
       * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0});
   }
   else
   {
-    rotationMatrix = glm::mat4_cast(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
+    rotationMatrix = glm::mat4_cast(transform.getOrientation() * eulerDegreesToQuat(m_rotation.get()));
   }
 
-  const auto transformationMatrix = translate(glm::mat4(1.0f), transform->getPosition() + m_position.get())
+  const auto transformationMatrix = translate(glm::mat4(1.0f), transform.getPosition() + m_position.get())
     * rotationMatrix
-    * glm::scale(glm::mat4(1.0f), transform->getScale() * m_scale.get());
+    * glm::scale(glm::mat4(1.0f), transform.getScale() * m_scale.get());
 
   m_worldVertices.resize(m_hull.vertices.size());
   for (size_t i = 0; i < m_hull.vertices.size(); ++i)
@@ -402,7 +411,7 @@ void ConvexMeshCollider::generateWorldVertices(const std::shared_ptr<Transform>&
     m_worldVertices[i] = glm::vec3(transformationMatrix * glm::vec4(m_hull.vertices[i], 1.0f));
   }
 
-  m_currentTransformUpdateID = transform->getWorldUpdateID();
+  m_currentTransformUpdateID = transform.getWorldUpdateID();
   ++m_worldVerticesGeneration;
 }
 
@@ -444,5 +453,6 @@ void ConvexMeshCollider::invalidateGeometry()
   m_massCache.reset();
   m_faceOutlines.reset();
   m_faceNormalCache.reset();
+  m_worldFaceCache.reset();
   invalidateBoundingBox();
 }

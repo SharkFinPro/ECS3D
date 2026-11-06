@@ -19,11 +19,18 @@ namespace {
     return ++g_stampClock;
   }
 
-  std::shared_ptr<Transform> parentTransformOf(const Object& owner)
+  // Reads the parent's component map directly, as getWorldUpdateID does: every world getter asks this, so a
+  // refcounted, type-checked getComponent per call per level is most of their cost. The parent object owns the
+  // transform, and the scene tree owns the parent for the length of the call.
+  const Transform* parentTransformOf(const Object& owner)
   {
-    if (const auto& parent = owner.getParent())
+    if (const auto parent = owner.getParent())
     {
-      return parent->getComponent<Transform>(ComponentType::transform);
+      const auto& components = parent->getComponents();
+      if (const auto transform = components.find(ComponentType::transform); transform != components.end())
+      {
+        return static_cast<const Transform*>(transform->second.get());
+      }
     }
 
     return nullptr;

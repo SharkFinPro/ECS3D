@@ -92,6 +92,7 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/InitialSimplex.h
   objects/components/collisions/QuickHull.cpp
   objects/components/collisions/QuickHull.h
+  objects/components/collisions/WorldFace.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
