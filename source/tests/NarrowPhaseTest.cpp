@@ -10,10 +10,13 @@
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace {
   // A collider needs a Transform on the same object to place its geometry; nothing else about the scene
@@ -470,5 +473,61 @@ TEST(NarrowPhase, AHullContactAfterATurnMatchesAFreshHull)
   for (std::uint8_t i = 0; i < expected->pointCount; ++i)
   {
     EXPECT_EQ(turned->points[i], expected->points[i]);
+  }
+}
+
+// The box support's vector paths have to pick exactly the corner a scalar scan of glm::dot picks, ties and
+// rounding included, or contacts change from one platform to the next.
+TEST(NarrowPhase, BoxSupportPicksTheCornerAScanPicks)
+{
+  const auto [object, box] = makeCollider<BoxCollider>({ 3.7f, -1.2f, 0.4f }, { 1.3f, 0.7f, 2.9f });
+  object->getComponent<Transform>(ComponentType::transform)->setRotation({ 23.0f, 71.0f, -38.0f });
+  const auto& support = box->getWorldSupport();
+
+  const auto scan = [&support](const glm::vec3& direction) {
+    float largest = std::numeric_limits<float>::lowest();
+    glm::vec3 furthest{ 0.0f };
+    for (const auto& vertex : support.vertices)
+    {
+      if (const float dot = glm::dot(vertex, direction); dot > largest)
+      {
+        largest = dot;
+        furthest = vertex;
+      }
+    }
+    return furthest;
+  };
+
+  std::vector<glm::vec3> directions = { { 1, 0, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, 0 },
+                                        { std::numeric_limits<float>::quiet_NaN(), 0, 0 } };
+  for (int i = 0; i < 2000; ++i)
+  {
+    const float a = static_cast<float>(i) * 0.731f;
+    const float b = static_cast<float>(i) * 1.913f;
+    directions.emplace_back(std::cos(a) * std::sin(b), std::cos(b), std::sin(a) * std::sin(b));
+  }
+
+  for (const auto& direction : directions)
+  {
+    EXPECT_EQ(support.furthestPoint(direction), scan(direction));
+  }
+
+  // Axis-aligned, every axis direction ties four corners.
+  const auto [alignedObject, aligned] = makeCollider<BoxCollider>({ 1.0f, 2.0f, 3.0f });
+  const auto& alignedSupport = aligned->getWorldSupport();
+  for (const auto& direction : { glm::vec3(1, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, -1, 0),
+                                 glm::vec3(0, 0, 1), glm::vec3(0, 0, -1) })
+  {
+    float largest = std::numeric_limits<float>::lowest();
+    glm::vec3 furthest{ 0.0f };
+    for (const auto& vertex : alignedSupport.vertices)
+    {
+      if (const float dot = glm::dot(vertex, direction); dot > largest)
+      {
+        largest = dot;
+        furthest = vertex;
+      }
+    }
+    EXPECT_EQ(alignedSupport.furthestPoint(direction), furthest);
   }
 }

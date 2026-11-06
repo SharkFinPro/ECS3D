@@ -56,7 +56,7 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
       {
         // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
         // every other pair's collision work for the tick.
-        if (!object->getComponent<Transform>(ComponentType::transform))
+        if (!object->getComponents().contains(ComponentType::transform))
         {
           continue;
         }
@@ -100,7 +100,10 @@ void CollisionSystem::checkCollisions(const float dt)
 
     for (auto& edge : m_collisionEdges)
     {
-      edge.position = edge.collider->getBoundingBox().minX;
+      edge.bounds = edge.collider->getBoundingBox();
+      edge.position = edge.bounds.minX;
+      edge.layer = edge.collider->getLayer();
+      edge.mask = edge.collider->getMask();
     }
 
     std::ranges::sort(m_collisionEdges, [](const CollisionEdge& a, const CollisionEdge& b)
@@ -180,7 +183,7 @@ std::vector<size_t> CollisionSystem::responseOrder() const
     }
 
     // A blown-up transform gives a NaN bound, which would break the sort's ordering; resolve it last.
-    const float bottom = m_collisionEdges[i].collider->cachedBoundingBox().minY;
+    const float bottom = m_collisionEdges[i].bounds.minY;
     bottoms.emplace_back(i, std::isnan(bottom) ? std::numeric_limits<float>::lowest() : bottom);
   }
 
@@ -244,11 +247,9 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
 {
   const auto& edge = m_collisionEdges[index];
 
-  // cachedBoundingBox(), not getBoundingBox(): this runs inside checkCollisions' parallel loop, where
-  // every collider's bounding box was already warmed serially and nothing moves a transform until the
-  // serial response pass after the loop. getBoundingBox() would recompute (and write) on a cache miss;
-  // cachedBoundingBox() only ever reads, which is what makes concurrent calls on a shared collider safe.
-  const auto& bbox = edge.collider->cachedBoundingBox();
+  // The bounds copied onto the edges serially, before this parallel loop: reading them never touches a
+  // collider, and nothing moves a transform until the serial response pass after the loop.
+  const auto& bbox = edge.bounds;
 
   for (size_t j = index + 1; j < m_collisionEdges.size(); ++j)
   {
@@ -265,7 +266,7 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
       continue;
     }
 
-    const auto& otherBbox = other.collider->cachedBoundingBox();
+    const auto& otherBbox = other.bounds;
 
     if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
         bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
@@ -276,7 +277,7 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
 
     // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
     // work, so filtered layers produce neither a physical response nor a collision event.
-    if (!layersCollide(edge.collider, other.collider))
+    if (!layersCollide(edge, other))
     {
       continue;
     }
@@ -384,11 +385,11 @@ bool CollisionSystem::isTriggerPair(const Collider& collider, const Collider& ot
   return collider.isTrigger() || other.isTrigger();
 }
 
-bool CollisionSystem::layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b)
+bool CollisionSystem::layersCollide(const CollisionEdge& a, const CollisionEdge& b)
 {
   // layer is 0-31 (clamped in Collider::setLayer), so the shift stays in range.
-  const uint32_t aBit = 1u << a->getLayer();
-  const uint32_t bBit = 1u << b->getLayer();
+  const uint32_t aBit = 1u << a.layer;
+  const uint32_t bBit = 1u << b.layer;
 
-  return (a->getMask() & bBit) != 0u && (b->getMask() & aBit) != 0u;
+  return (a.mask & bBit) != 0u && (b.mask & aBit) != 0u;
 }

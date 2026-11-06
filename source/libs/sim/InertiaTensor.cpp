@@ -83,10 +83,20 @@ namespace {
     return shape;
   }
 
+  // An object's own collider, read from its component map: this walk runs for every inertia query, and neither
+  // lookup reaches past the object, so a refcounted, type-checked getComponent for each would only add cost.
+  Collider* ownColliderOf(const Object& object)
+  {
+    const auto& components = object.getComponents();
+    const auto collider = components.find(ComponentType::collider);
+
+    return collider == components.end() ? nullptr : static_cast<Collider*>(collider->second.get());
+  }
+
   void collect(const Object& object, std::vector<inertia::Distribution>& shapes)
   {
-    const auto collider = object.getComponent<Collider>(ComponentType::collider);
-    if (collider && !collider->isTrigger() && object.getComponent<Transform>(ComponentType::transform))
+    const auto collider = ownColliderOf(object);
+    if (collider && !collider->isTrigger() && object.getComponents().contains(ComponentType::transform))
     {
       if (const auto shape = inertia::of(*collider); std::isfinite(shape.volume) && shape.volume > minVolume)
       {

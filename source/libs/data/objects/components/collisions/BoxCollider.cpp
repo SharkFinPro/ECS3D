@@ -251,6 +251,8 @@ void BoxCollider::generateTransformedMesh(const Transform& transform)
     m_worldSupport.vertices[i] = glm::vec3(transformedVertex);
   }
 
+  m_worldSupport.splitCoordinates();
+
   m_currentTransformUpdateID = transform.getWorldUpdateID();
 }
 

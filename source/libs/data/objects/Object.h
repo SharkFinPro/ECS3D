@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <uuid.h>
 
 namespace net {
@@ -141,9 +142,9 @@ private:
 template<typename T>
 std::shared_ptr<T> Object::getComponent(const ComponentType type) const
 {
-  const auto component = getComponent(type);
+  auto component = getComponent(type);
 
-  return component ? std::dynamic_pointer_cast<T>(component) : nullptr;
+  return component ? std::dynamic_pointer_cast<T>(std::move(component)) : nullptr;
 }
 
 #endif //OBJECT_H

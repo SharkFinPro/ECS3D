@@ -8,6 +8,14 @@
 #include <cstdint>
 #include <limits>
 
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#define ECS3D_BOX_SUPPORT_SSE2
+#include <emmintrin.h>
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define ECS3D_BOX_SUPPORT_NEON
+#include <arm_neon.h>
+#endif
+
 constexpr std::array<glm::vec3, 8> boxVertices = {{
   {1.0f, 1.0f, 1.0f},
   {-1.0f, 1.0f, 1.0f},
@@ -19,27 +27,83 @@ constexpr std::array<glm::vec3, 8> boxVertices = {{
   {1.0f, -1.0f, -1.0f}
 }};
 
-// A box's world-space corners.
+// A box's world-space corners, also laid out by coordinate so the eight support dots run four at a time.
 struct BoxSupport {
   std::array<glm::vec3, boxVertices.size()> vertices{};
 
+  alignas(16) std::array<float, boxVertices.size()> xs{};
+  alignas(16) std::array<float, boxVertices.size()> ys{};
+  alignas(16) std::array<float, boxVertices.size()> zs{};
+
+  // Fills xs, ys and zs from vertices.
+  void splitCoordinates()
+  {
+    for (size_t i = 0; i < vertices.size(); ++i)
+    {
+      xs[i] = vertices[i].x;
+      ys[i] = vertices[i].y;
+      zs[i] = vertices[i].z;
+    }
+  }
+
   // A full scan rather than picking the corner from the signs of the axis dots: the two break ties (a
   // direction square to a face) toward different corners, and the response is tuned on the scan's choice.
+  // Each dot is glm::dot's own sum, (x * dx + y * dy) + z * dz with every product rounded on its own, so the
+  // vector paths give the scalar scan's answer bit for bit.
   [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
   {
+    alignas(16) std::array<float, boxVertices.size()> dots{};
+    cornerDots(direction, dots);
+
     float largestDot = std::numeric_limits<float>::lowest();
     glm::vec3 furthestVertex{ 0, 0, 0 };
 
-    for (const auto& vertex : vertices)
+    for (size_t i = 0; i < dots.size(); ++i)
     {
-      if (const float currentDot = glm::dot(vertex, direction); currentDot > largestDot)
+      if (dots[i] > largestDot)
       {
-        largestDot = currentDot;
-        furthestVertex = vertex;
+        largestDot = dots[i];
+        furthestVertex = vertices[i];
       }
     }
 
     return furthestVertex;
+  }
+
+private:
+  void cornerDots(const glm::vec3& direction, std::array<float, boxVertices.size()>& dots) const
+  {
+#if defined(ECS3D_BOX_SUPPORT_SSE2)
+    const __m128 dx = _mm_set1_ps(direction.x);
+    const __m128 dy = _mm_set1_ps(direction.y);
+    const __m128 dz = _mm_set1_ps(direction.z);
+    for (size_t i = 0; i < dots.size(); i += 4)
+    {
+      const __m128 px = _mm_mul_ps(_mm_load_ps(&xs[i]), dx);
+      const __m128 py = _mm_mul_ps(_mm_load_ps(&ys[i]), dy);
+      const __m128 pz = _mm_mul_ps(_mm_load_ps(&zs[i]), dz);
+      _mm_store_ps(&dots[i], _mm_add_ps(_mm_add_ps(px, py), pz));
+    }
+#elif defined(ECS3D_BOX_SUPPORT_NEON)
+    const float32x4_t dx = vdupq_n_f32(direction.x);
+    const float32x4_t dy = vdupq_n_f32(direction.y);
+    const float32x4_t dz = vdupq_n_f32(direction.z);
+    for (size_t i = 0; i < dots.size(); i += 4)
+    {
+      const float32x4_t px = vmulq_f32(vld1q_f32(&xs[i]), dx);
+      const float32x4_t py = vmulq_f32(vld1q_f32(&ys[i]), dy);
+      const float32x4_t pz = vmulq_f32(vld1q_f32(&zs[i]), dz);
+      vst1q_f32(&dots[i], vaddq_f32(vaddq_f32(px, py), pz));
+    }
+#else
+    for (size_t i = 0; i < dots.size(); ++i)
+    {
+      const float px = xs[i] * direction.x;
+      const float py = ys[i] * direction.y;
+      const float pz = zs[i] * direction.z;
+      dots[i] = px + py + pz;
+    }
+#endif
   }
 };
 

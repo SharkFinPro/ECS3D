@@ -2,7 +2,13 @@
 #define COLLISIONSYSTEM_H
 
 #include "collisions/NarrowPhase.h"
+#include <objects/components/collisions/Collider.h>
+#include <array>
+#include <bit>
 #include <compare>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -18,6 +24,11 @@ struct CollisionEdge {
   std::shared_ptr<Collider> collider;
   float position;
   std::shared_ptr<RigidBody> body;
+
+  // Copied from the collider once per tick, so the sweep's inner loop reads them from the edge array.
+  BoundingBox bounds{};
+  uint32_t layer = 0;
+  uint32_t mask = 0;
 };
 
 // An unordered colliding pair, stored canonically (a < b) so the same contact recorded from either
@@ -32,10 +43,48 @@ struct CollisionPair {
     return x < y ? CollisionPair{x, y} : CollisionPair{y, x};
   }
 
-  // Lexicographic by (a, b). Defaulting the three-way comparison gives the full set of relational
-  // operators (uuid has only < and ==, which the compiler synthesizes from), so CollisionPair models
-  // totally_ordered - required by std::ranges::sort / set_difference.
-  std::strong_ordering operator<=>(const CollisionPair& other) const = default;
+  // Lexicographic by (a, b) over their bytes, the order uuid's own < gives, compared eight bytes at a time:
+  // the event diff sorts and merges these every tick. The full set of relational operators makes
+  // CollisionPair model totally_ordered, as std::ranges::sort and set_difference require.
+  std::strong_ordering operator<=>(const CollisionPair& other) const
+  {
+    const auto mine = words();
+    const auto theirs = other.words();
+    for (size_t i = 0; i < mine.size(); ++i)
+    {
+      if (mine[i] != theirs[i])
+      {
+        return mine[i] < theirs[i] ? std::strong_ordering::less : std::strong_ordering::greater;
+      }
+    }
+
+    return std::strong_ordering::equal;
+  }
+
+  bool operator==(const CollisionPair& other) const = default;
+
+private:
+  // Big-endian, so comparing the words compares the bytes in order.
+  [[nodiscard]] static uint64_t wordAt(const uuids::uuid& id, const size_t offset)
+  {
+    uint64_t word = 0;
+    std::memcpy(&word, id.as_bytes().data() + offset, sizeof(word));
+    if constexpr (std::endian::native == std::endian::little)
+    {
+#if defined(_MSC_VER) && !defined(__clang__)
+      word = _byteswap_uint64(word);
+#else
+      word = __builtin_bswap64(word);
+#endif
+    }
+
+    return word;
+  }
+
+  [[nodiscard]] std::array<uint64_t, 4> words() const
+  {
+    return { wordAt(a, 0), wordAt(a, 8), wordAt(b, 0), wordAt(b, 8) };
+  }
 };
 
 class CollisionSystem {
@@ -108,7 +157,7 @@ private:
   static bool isTriggerPair(const Collider& collider, const Collider& other);
 
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
-  static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
+  static bool layersCollide(const CollisionEdge& a, const CollisionEdge& b);
 };
 
 
