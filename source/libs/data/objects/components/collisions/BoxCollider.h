@@ -5,6 +5,7 @@
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 
@@ -22,11 +23,11 @@ constexpr std::array<glm::vec3, 8> boxVertices = {{
 // Maps a sign mask (bit 0 = +x, bit 1 = +y, bit 2 = +z) to the boxVertices index with those signs.
 inline constexpr std::array<uint8_t, 8> boxVertexBySignMask = [] {
   std::array<uint8_t, 8> table{};
-  for (uint8_t i = 0; i < boxVertices.size(); ++i)
+  for (size_t i = 0; i < boxVertices.size(); ++i)
   {
     const auto& v = boxVertices[i];
     const int mask = (v.x > 0 ? 1 : 0) | (v.y > 0 ? 2 : 0) | (v.z > 0 ? 4 : 0);
-    table[mask] = i;
+    table[mask] = static_cast<uint8_t>(i);
   }
   return table;
 }();
