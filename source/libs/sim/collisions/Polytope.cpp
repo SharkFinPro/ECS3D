@@ -734,9 +734,11 @@ bool Polytope::expandToward(const glm::dvec3& support)
   const auto supportIndex = static_cast<uint8_t>(m_vertices.size());
   m_vertices.push_back(support);
 
-  for (const auto& [from, to] : edges)
+  for (const auto& edge : edges)
   {
-    const bool shared = std::ranges::any_of(edges, [&](const auto& other) {
+    const auto from = edge.first;
+    const auto to = edge.second;
+    const bool shared = std::ranges::any_of(edges, [from, to](const auto& other) {
       return other.first == to && other.second == from;
     });
 
