@@ -251,7 +251,10 @@ void BoxCollider::generateTransformedMesh(const Transform& transform)
     m_worldSupport.vertices[i] = glm::vec3(transformedVertex);
   }
 
-  m_worldSupport.splitCoordinates();
+  // Each pair below differs only in the one axis's sign, so the difference is that axis' world-space edge.
+  m_worldSupport.axes[0] = m_worldSupport.vertices[0] - m_worldSupport.vertices[1];
+  m_worldSupport.axes[1] = m_worldSupport.vertices[0] - m_worldSupport.vertices[4];
+  m_worldSupport.axes[2] = m_worldSupport.vertices[0] - m_worldSupport.vertices[3];
 
   m_currentTransformUpdateID = transform.getWorldUpdateID();
 }
