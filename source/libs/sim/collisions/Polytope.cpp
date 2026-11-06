@@ -529,6 +529,11 @@ void Polytope::EPA(const Simplex& simplex)
 {
   m_closestFaceData.closestPoint = glm::vec3(0.0f);
 
+  // Room for a typical expansion up front, so a polytope grows without reallocating.
+  constexpr size_t typicalVertices = 32;
+  m_vertices.reserve(typicalVertices);
+  m_faces.reserve(2 * typicalVertices);
+
   if (!buildInitialPolytope(simplex))
   {
     return;
