@@ -195,6 +195,13 @@ const std::vector<glm::vec3>& ConvexMeshCollider::getWorldVertices()
   return m_worldVertices;
 }
 
+const glm::mat4& ConvexMeshCollider::getWorldMatrix()
+{
+  static_cast<void>(getWorldVertices());
+
+  return m_worldMatrix;
+}
+
 uint64_t ConvexMeshCollider::getWorldVerticesGeneration() const
 {
   return m_worldVerticesGeneration;
@@ -404,6 +411,8 @@ void ConvexMeshCollider::generateWorldVertices(const Transform& transform)
   const auto transformationMatrix = translate(glm::mat4(1.0f), transform.getPosition() + m_position.get())
     * rotationMatrix
     * glm::scale(glm::mat4(1.0f), transform.getScale() * m_scale.get());
+
+  m_worldMatrix = transformationMatrix;
 
   m_worldVertices.resize(m_hull.vertices.size());
   for (size_t i = 0; i < m_hull.vertices.size(); ++i)

@@ -66,21 +66,24 @@ namespace {
     return inertia::capsule(segment.start, segment.end, collider.getRadius());
   }
 
+  // The hull's own distribution is integrated once. An affine placement carries mass the way it carries points:
+  // the volume scales by the determinant of its linear part A, the centroid goes through the map, and the
+  // covariance becomes A C A^T - so a moving hull costs a few 3x3 products rather than a pass over its triangles.
   inertia::Distribution hullOf(ConvexMeshCollider& collider)
   {
-    // Refresh the vertices first: the generation only moves when they are rebuilt.
-    const auto& vertices = collider.getWorldVertices();
-    const auto generation = collider.getWorldVerticesGeneration();
-
-    if (const auto& cache = collider.getMassCache(); cache && cache->generation == generation)
+    if (!collider.getMassCache())
     {
-      return { cache->volume, cache->centroid, cache->covariance };
+      const auto& hull = collider.getHull();
+      const auto local = inertia::hull(hull.vertices, hull.indices);
+      collider.setMassCache({ local.volume, local.centroid, local.covariance });
     }
 
-    const auto shape = inertia::hull(vertices, collider.getHull().indices);
-    collider.setMassCache({ generation, shape.volume, shape.centroid, shape.covariance });
+    const auto& local = *collider.getMassCache();
+    const auto& world = collider.getWorldMatrix();
+    const glm::mat3 linear(world);
 
-    return shape;
+    return { local.volume * std::abs(glm::determinant(linear)), glm::vec3(world * glm::vec4(local.centroid, 1.0f)),
+             linear * local.covariance * glm::transpose(linear) };
   }
 
   // An object's own collider, read from its component map: this walk runs for every inertia query, and neither

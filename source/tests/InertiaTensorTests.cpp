@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <tuple>
 #include <span>
 #include <vector>
 
@@ -455,7 +456,7 @@ TEST(InertiaTensor, ACachedHullDistributionFollowsEveryChangeThatMovesTheWorldVe
   });
 }
 
-TEST(InertiaTensor, AnUnchangedHullIsServedFromItsCache)
+TEST(InertiaTensor, AHullsOwnDistributionIsIntegratedOnce)
 {
   const auto scene = makeScene();
   const auto object = addObject(scene, "Hull", { 1, 2, 3 });
@@ -466,45 +467,42 @@ TEST(InertiaTensor, AnUnchangedHullIsServedFromItsCache)
   EXPECT_FALSE(collider->getMassCache().has_value());
 
   const auto first = inertia::of(*collider);
-  const auto generation = collider->getWorldVerticesGeneration();
   ASSERT_TRUE(collider->getMassCache().has_value());
-  EXPECT_EQ(collider->getMassCache()->generation, generation);
+  EXPECT_TRUE(sameDistribution(first, inertia::of(*collider)));
 
-  const auto tensor = inertia::worldTensor(object.get(), *transformOf(object));
-  const auto second = inertia::of(*collider);
-
-  EXPECT_EQ(collider->getWorldVerticesGeneration(), generation);
-  EXPECT_EQ(collider->getMassCache()->generation, generation);
-  EXPECT_TRUE(sameDistribution(first, second));
-  expectMatrix(inertia::worldTensor(object.get(), *transformOf(object)), tensor, 1e-6f);
-
-  // A planted value at the current generation is returned as is, so a hit is not a recompute.
+  // A planted local value is used as is, before and after a move: a hit is not a recompute.
   constexpr float sentinel = 123.0f;
-  collider->setMassCache({ generation, sentinel, glm::vec3(0.0f), glm::mat3(0.0f) });
+  collider->setMassCache({ sentinel, glm::vec3(0.0f), glm::mat3(0.0f) });
   EXPECT_FLOAT_EQ(inertia::of(*collider).volume, sentinel);
 
   transformOf(object)->setPosition({ 4, 5, 6 });
-  const auto regenerated = inertia::of(*collider);
-  EXPECT_GT(collider->getWorldVerticesGeneration(), generation);
-  EXPECT_NEAR(regenerated.volume, first.volume, tolerance);
+  const auto moved = inertia::of(*collider);
+  EXPECT_FLOAT_EQ(moved.volume, sentinel);
+  convexFixtures::expectNear(moved.centroid, { 4, 5, 6 });
 }
 
-TEST(InertiaTensor, ACacheFromAnotherGenerationIsIgnored)
+// The local distribution carried to the world agrees with integrating the hull's world vertices directly.
+TEST(InertiaTensor, APlacedHullMatchesItsWorldIntegral)
 {
   const auto scene = makeScene();
-  const auto object = addObject(scene, "Hull");
+  const auto object = addObject(scene, "Hull", { 1, 2, 3 });
   const auto collider = addHull(object);
   ASSERT_TRUE(collider->setHull(convexFixtures::tetrahedron()));
 
-  const auto real = inertia::of(*collider);
-  const auto generation = collider->getWorldVerticesGeneration();
-
-  for (const auto other : { generation - 1, generation + 1 })
+  for (const auto& [position, rotation, scale] :
+       { std::tuple{ glm::vec3(1, 2, 3), glm::vec3(0), glm::vec3(1) },
+         std::tuple{ glm::vec3(-7, 0.5f, 12), glm::vec3(30, -45, 70), glm::vec3(2, 0.5f, 1.5f) },
+         std::tuple{ glm::vec3(0.25f, -3, 9), glm::vec3(-120, 10, 5), glm::vec3(-1, 3, 0.75f) } })
   {
-    collider->setMassCache({ other, 123.0f, glm::vec3(0.0f), glm::mat3(0.0f) });
+    transformOf(object)->setPosition(position);
+    transformOf(object)->setRotation(rotation);
+    transformOf(object)->setScale(scale);
 
-    const auto shape = inertia::of(*collider);
-    EXPECT_TRUE(sameDistribution(shape, real));
-    EXPECT_EQ(collider->getMassCache()->generation, generation);
+    const auto mapped = inertia::of(*collider);
+    const auto integrated = inertia::hull(collider->getWorldVertices(), collider->getHull().indices);
+
+    EXPECT_NEAR(mapped.volume, integrated.volume, 1e-4f * integrated.volume);
+    convexFixtures::expectNear(mapped.centroid, integrated.centroid);
+    expectMatrix(mapped.covariance, integrated.covariance, 1e-4f);
   }
 }

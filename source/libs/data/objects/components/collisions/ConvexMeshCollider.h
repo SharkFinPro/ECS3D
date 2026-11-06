@@ -6,6 +6,7 @@
 #include "ConvexHullValidation.h"
 #include "WorldFace.h"
 #include <glm/mat3x3.hpp>
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <uuid.h>
 #include <cstdint>
@@ -19,9 +20,9 @@
 // default BoxCollider until a model is picked.
 class ConvexMeshCollider final : public Collider {
 public:
-  // The hull's world-space mass distribution, filled by the sim. Derived state: never serialized or packed.
+  // The hull's mass distribution in its own local space, filled by the sim and cleared with the hull. Derived
+  // state: never serialized or packed.
   struct MassCache {
-    uint64_t generation = 0;
     float volume = 0.0f;
     glm::vec3 centroid{ 0.0f };
     glm::mat3 covariance{ 0.0f };
@@ -65,7 +66,10 @@ public:
   // The hull's vertices under the collider's current world placement, refreshed when the transform moved.
   [[nodiscard]] const std::vector<glm::vec3>& getWorldVertices();
 
-  // Counts the times the world vertices were rebuilt; a MassCache is current only while its generation matches.
+  // The map from the hull's local space to the world that the world vertices were built with, refreshed first.
+  [[nodiscard]] const glm::mat4& getWorldMatrix();
+
+  // Counts the times the world vertices were rebuilt; a cache keyed on it is current only while it matches.
   [[nodiscard]] uint64_t getWorldVerticesGeneration() const;
 
   [[nodiscard]] const std::optional<MassCache>& getMassCache() const;
@@ -111,6 +115,8 @@ private:
   uuids::uuid m_sourceModel;
 
   std::vector<glm::vec3> m_worldVertices;
+
+  glm::mat4 m_worldMatrix{ 1.0f };
 
   uint64_t m_currentTransformUpdateID = 255;
 
