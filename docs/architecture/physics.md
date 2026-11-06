@@ -85,8 +85,8 @@ point, and reports the best measured support translation: an exit short of conve
 with no reliable normal, the iteration cap) measures every remaining face normal and takes the least. The answer
 therefore never depends on which of several equally furthest corners a support function returns, which
 `EpaConvergenceTest` pins against an exact separating-axis depth. A flat GJK tetrahedron, which touching shapes
-give, starts from the triangle holding the origin plus the support above it; an overlap within the convergence band
-is reported as no contact, since the shapes only touch. `collisions/SupportFaces.h` returns a box's or convex mesh's world-space planar
+give, starts from the triangle holding the origin plus the support above it, or reports no overlap when no triangle
+holds it; an overlap within the convergence band is reported as no contact, since the shapes only touch. `collisions/SupportFaces.h` returns a box's or convex mesh's world-space planar
 faces (outward normal, counter-clockwise corners, center; coplanar hull triangles merged in the hull's own
 space) with `faceToward` and `clampToFace` queries; PhysicsSystem's resting logic uses it, and
 `supportFaceToward` builds the single face a box needs. A pair whose colliders resolve to the same rigid body,
