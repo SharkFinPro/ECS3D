@@ -7,6 +7,7 @@
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/Collider.h"
 #include "objects/components/collisions/ConvexMeshCollider.h"
+#include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -108,7 +109,7 @@ namespace {
     return depth;
   }
 
-  enum class Arrangement { stackedTurnedAlike, stackedTurnedApart, anyhow, flush };
+  enum class Arrangement { stackedTurnedAlike, stackedTurnedApart, anyhow, flush, coincident };
 
   struct Case {
     Arrangement arrangement;
@@ -121,7 +122,7 @@ namespace {
   };
 
   // Random pairs of boxes: stacked as on a slope, overlapping by up to a fifth of their height and often barely,
-  // exactly flush, or anyhow.
+  // exactly flush, anyhow, or sharing a center and a turn, which leaves GJK a flat simplex around a deep overlap.
   std::vector<Case> randomCases(const int count)
   {
     std::mt19937 random(1234);
@@ -132,7 +133,7 @@ namespace {
     std::vector<Case> cases;
     for (int n = 0; n < count; ++n)
     {
-      Case pair{ static_cast<Arrangement>(n % 4), scale(), scale() };
+      Case pair{ static_cast<Arrangement>(n % 5), scale(), scale() };
       const float tilt = 30.0f * unit(random);
       pair.lowerRotation = pair.arrangement == Arrangement::anyhow ? anyRotation() : glm::vec3(0, 0, tilt);
       pair.upperRotation = pair.arrangement == Arrangement::anyhow           ? anyRotation()
@@ -141,7 +142,11 @@ namespace {
       pair.lowerPosition = glm::vec3(40.0f * unit(random) - 20.0f, 5.0f * unit(random), 10.0f * unit(random) - 5.0f);
 
       const auto lower = makeBody<BoxCollider>(pair.lowerPosition, pair.lowerScale, pair.lowerRotation);
-      if (pair.arrangement == Arrangement::anyhow)
+      if (pair.arrangement == Arrangement::coincident)
+      {
+        pair.upperPosition = pair.lowerPosition;
+      }
+      else if (pair.arrangement == Arrangement::anyhow)
       {
         pair.upperPosition = pair.lowerPosition + glm::vec3(2 * unit(random) - 1, 2 * unit(random) - 1, 2 * unit(random) - 1) *
                                                     (pair.lowerScale + pair.upperScale) * 0.6f;
@@ -162,8 +167,9 @@ namespace {
     return cases;
   }
 
-  // The narrow phase's depth may differ from the exact one by float noise in the corners, no more.
-  constexpr double depthTolerance = 1e-4;
+  // The narrow phase's depth may differ from the exact one by float noise in the corners, no more. Tight enough that
+  // EPA's old 1e-5 * |support| stop, which erred by up to about 1e-4 on these boxes, would fail it.
+  constexpr double depthTolerance = 2e-5;
 
   // Below this the pair only touches, as far as float corners can tell.
   constexpr double touching = 1e-5;
@@ -233,9 +239,67 @@ TEST(EpaConvergence, AHullOfTheSameBoxGivesTheSameTranslation)
     if (fromBox)
     {
       ++compared;
-      ASSERT_LE(glm::distance(fromBox->minimumTranslationVector, fromHull->minimumTranslationVector), depthTolerance);
+      ASSERT_NEAR(fromBox->depth(), fromHull->depth(), depthTolerance);
+
+      // Boxes sharing a center leave the pair equally deep out of either side, so only the depth is unique there.
+      if (pair.arrangement != Arrangement::coincident)
+      {
+        ASSERT_LE(glm::distance(fromBox->minimumTranslationVector, fromHull->minimumTranslationVector), depthTolerance);
+      }
     }
   }
 
   EXPECT_GT(compared, 1000);
+}
+
+// A sphere's support is curved, so EPA closes in on the depth over many steps rather than landing on a face. With the
+// sphere's center outside a turned box, the exact depth is the radius less the center's distance to the box.
+TEST(EpaConvergence, SphereIntoBoxDepthsMatchTheClosestPoint)
+{
+  std::mt19937 random(4321);
+  std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+
+  int compared = 0;
+  for (int n = 0; n < 600; ++n)
+  {
+    const glm::vec3 scale(0.3f + 2.0f * unit(random), 0.3f + 2.0f * unit(random), 0.3f + 2.0f * unit(random));
+    const glm::vec3 rotation(360.0f * unit(random), 360.0f * unit(random), 360.0f * unit(random));
+    const glm::vec3 position(20.0f * unit(random) - 10.0f, 5.0f * unit(random), 20.0f * unit(random) - 10.0f);
+    const auto box = makeBody<BoxCollider>(position, scale, rotation);
+
+    // A center outside the box, off a face, an edge or a corner, in the box's own frame.
+    glm::dvec3 local(0.0);
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      local[axis] = (2.0 * unit(random) - 1.0) * 1.6 * scale[axis];
+    }
+    glm::dvec3 nearestLocal = glm::clamp(local, -glm::dvec3(scale), glm::dvec3(scale));
+    const double distance = glm::distance(local, nearestLocal);
+    if (!(distance > 1e-2))
+    {
+      continue;
+    }
+
+    const glm::dvec3 center = glm::dvec3(position) + box.axes[0] * local.x + box.axes[1] * local.y + box.axes[2] * local.z;
+    const glm::dvec3 nearest =
+      glm::dvec3(position) + box.axes[0] * nearestLocal.x + box.axes[1] * nearestLocal.y + box.axes[2] * nearestLocal.z;
+    const double overlap = 1e-3 + 0.3 * unit(random);
+
+    const auto sphereObject = std::make_shared<Object>("Sphere");
+    sphereObject->getComponent<Transform>(ComponentType::transform)->setPosition(glm::vec3(center));
+    const auto sphere = std::make_shared<SphereCollider>();
+    sphere->setRadius(static_cast<float>(distance + overlap));
+    sphereObject->addComponent(sphere);
+
+    const auto contact = collisions::findContact(*sphere, box.collider());
+    SCOPED_TRACE(testing::Message() << "case " << n << ", overlap " << overlap);
+    ASSERT_TRUE(contact.has_value());
+    ++compared;
+
+    // Float corners and a float radius put the reference itself a few ulps of the world coordinates off.
+    EXPECT_NEAR(contact->depth(), overlap, 5e-5);
+    EXPECT_GT(glm::dot(glm::dvec3(contact->normal()), glm::normalize(center - nearest)), 0.999);
+  }
+
+  EXPECT_GT(compared, 300);
 }

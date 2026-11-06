@@ -625,11 +625,11 @@ bool Polytope::buildAroundFlatSimplex()
 {
   // GJK ends on a flat tetrahedron when the origin lies on the overlap's boundary or the shapes only just touch.
   // Its four triangles cover its flat hull, so one of them holds the origin's projection onto its plane, and the
-  // polytope grows from that triangle.
+  // polytope grows from that triangle. When none does, the origin is outside the flat hull and GJK took rounding
+  // for an enclosed origin, so there is no overlap to measure.
   constexpr std::array<std::array<uint8_t, 3>, 4> triangles = { { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 3 }, { 1, 2, 3 } } };
 
   std::optional<std::array<uint8_t, 3>> chosen;
-  double largestArea = 0.0;
   for (const auto& triangle : triangles)
   {
     const auto& p = m_vertices[triangle[0]];
@@ -655,12 +655,6 @@ bool Polytope::buildAroundFlatSimplex()
     {
       chosen = triangle;
       break;
-    }
-
-    if (area > largestArea)
-    {
-      chosen = triangle;
-      largestArea = area;
     }
   }
 
