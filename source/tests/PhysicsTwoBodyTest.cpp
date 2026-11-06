@@ -116,12 +116,24 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
     }
   }
 
-  // How far each center is above the ground top (at 1) beyond its inside radius: negative means sunk into it.
+  // How far each center is above the ground top (at 1) beyond its inside radius: negative means sunk into it. A
+  // sphere has no rolling resistance, so one knocked hard enough rolls off the ground's edge (at 100) within the run
+  // and falls; that is not sinking, and which spheres roll that far differs between platforms' rounding.
+  size_t overGround = 0;
   for (size_t index = 0; index < bodies.size(); ++index)
   {
     const auto position = bodies[index]->getOwner()->getComponent<Transform>(ComponentType::transform)->getPosition();
+    if (std::fabs(position.x) > 100.0f || std::fabs(position.z) > 100.0f)
+    {
+      continue;
+    }
+
+    ++overGround;
     shallowestClearance = std::min(shallowestClearance, position.y - 1.0f - insideRadii[index]);
   }
+
+  // Positive control: most of the pile is still over the ground, so the clearance below covers it.
+  EXPECT_GE(overGround, bodies.size() * 3 / 4);
 
   // Units per second. The bodies land at up to 35 falling straight down, and knock each other sideways at up to
   // about 30. A heavy body used to squeeze a light one out at hundreds, and spin it to thousands of degrees a
