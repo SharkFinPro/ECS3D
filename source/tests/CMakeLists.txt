@@ -85,6 +85,7 @@ add_executable(${PROJECT_NAME}
   RecordEditsReorderTest.cpp
   CollisionMathTest.cpp
   ContactManifoldTest.cpp
+  BroadPhaseTest.cpp
   DynamicAabbTreeTest.cpp
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp

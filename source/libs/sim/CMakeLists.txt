@@ -10,6 +10,8 @@ add_library(${PROJECT_NAME}
   InertiaTensor.h
   CollisionSystem.cpp
   CollisionSystem.h
+  broadphase/BroadPhase.cpp
+  broadphase/BroadPhase.h
   broadphase/DynamicAabbTree.cpp
   broadphase/DynamicAabbTree.h
   collisions/NarrowPhase.cpp
