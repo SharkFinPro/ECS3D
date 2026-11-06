@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <functional>
 #include <iterator>
 #include <limits>
 #include <unordered_map>
@@ -171,7 +170,8 @@ bool CollisionSystem::edgesMatch(const ObjectManager& objectManager) const
     }
 
     const auto& edge = m_collisionEdges[index++];
-    if (edge.object != object || static_cast<const Component*>(edge.collider.get()) != collider->second.get() ||
+    if (edge.proxy == BroadPhase::nullProxy || edge.object != object ||
+        static_cast<const Component*>(edge.collider.get()) != collider->second.get() ||
         static_cast<const Component*>(edge.body.get()) != bodyOf(*object))
     {
       return false;

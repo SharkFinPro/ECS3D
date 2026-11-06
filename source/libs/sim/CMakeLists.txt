@@ -49,12 +49,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DProfile
 )
 
-# CollisionSystem holds the migrated sweep-and-prune (CollisionManager). The GJK/EPA that arrived with it
-# (Collider.cpp, Simplex, Polytope) now sits behind collisions/NarrowPhase, which CollisionSystem calls
-# into. Both were transplanted nearly verbatim. PhysicsSystem carries the physics bodies
-# (integrate, applyForce, handleCollision/respondToCollision, limitMovement)
-# lifted from RigidBody.cpp, and CollisionSystem routes its detected collisions into
-# PhysicsSystem::handleCollision.
+# CollisionSystem finds candidate pairs through the persistent broad phase under broadphase/ (a dynamic AABB
+# tree plus a fat-box pair cache), tests them with the GJK/EPA narrow phase under collisions/, and routes the
+# contacts into PhysicsSystem::handleCollision. PhysicsSystem carries the physics bodies (integrate,
+# applyForce, handleCollision/respondToCollision, limitMovement).
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

@@ -174,7 +174,6 @@ TEST(BroadPhaseCollision, ProxiesPersistAndNothingIsQueriedWhileNothingMoves)
   const auto scene = makeScene();
   const auto ground = addBox(scene, "Ground", { 0, -1.0f, 0 }, false);
   const auto body = addBox(scene, "Body", { 0, 0.5f, 0 }, true);
-  static_cast<void>(ground);
 
   CollisionSystem collisionSystem;
   collisionSystem.fixedUpdate(*scene.objectManager, dt);
@@ -484,6 +483,7 @@ TEST(BroadPhaseCollision, ContactOrderFollowsPositionNotTheOrderObjectsWereCreat
   }
 
   size_t topsMovedSideways = 0;
+  size_t topsMovedTowardMinX = 0;
   for (size_t i = 0; i < forwardBalls.size(); ++i)
   {
     const auto a = fixtures::transformOf(forwardBalls[i]);
@@ -494,11 +494,52 @@ TEST(BroadPhaseCollision, ContactOrderFollowsPositionNotTheOrderObjectsWereCreat
 
     if (i % 3 == 2)
     {
-      topsMovedSideways += a->getPosition().x != static_cast<float>(i / 3) * 8.0f + 1.75f;
+      const float center = static_cast<float>(i / 3) * 8.0f + 1.75f;
+      topsMovedSideways += a->getPosition().x != center;
+      topsMovedTowardMinX += a->getPosition().x < center;
     }
   }
 
   // Positive control: resolving one tied contact before the other knocks each top ball off center, so the
   // order had something to decide.
   EXPECT_EQ(topsMovedSideways, static_cast<size_t>(stacks));
+
+  // The direction is pinned too: the contact with the lower min x is resolved first.
+  EXPECT_EQ(topsMovedTowardMinX, static_cast<size_t>(stacks));
+}
+
+TEST(BroadPhaseCollision, AGridLargeEnoughToWarmBoundsInParallelMatchesAFullScan)
+{
+  const auto scene = makeScene();
+  Lcg random;
+
+  // Overlapping neighbors in a grid of statics and bodies: past 256 colliders the bounds warm goes parallel.
+  int count = 0;
+  for (int row = 0; row < 18; ++row)
+  {
+    for (int column = 0; column < 18; ++column)
+    {
+      const glm::vec3 position{ static_cast<float>(column) * 0.95f + random.next(-0.05f, 0.05f),
+                                random.next(0.0f, 0.2f), static_cast<float>(row) * 0.95f };
+      static_cast<void>(addBox(scene, "Box" + std::to_string(count), position, count % 3 != 0, count % 4 == 1));
+      ++count;
+    }
+  }
+
+  ASSERT_GE(count, 300);
+
+  CollisionSystem collisionSystem;
+  size_t reported = 0;
+  for (int tick = 0; tick < 4; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+    const auto expected = referencePairs(scene);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+
+    ASSERT_EQ(reportedPairs(collisionSystem), expected) << "tick " << tick;
+    reported += expected.size();
+  }
+
+  EXPECT_GT(reported, 500u);
 }

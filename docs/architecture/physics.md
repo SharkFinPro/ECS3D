@@ -113,7 +113,8 @@ at least one dynamic side, so two statics never pair. Each tick a proxy whose ti
 costs one containment test. A proxy that left its fat box, or whose box is far larger than its motion now needs, is
 reinserted, and only reinserted proxies query the trees again, in parallel blocks. `CollisionSystem` filters the
 cache against this tick's tight bounds, layers and assemblies, then runs the narrow phase over it in parallel. A
-collider whose bounds are not finite leaves both trees, and every pair, until they are.
+collider whose bounds, or the fat box built from them, are not finite leaves both trees and pairs with nothing until
+they are finite again.
 
 `CollisionSystem` keeps its edges, and with them the proxies, across ticks. When `ObjectManager` still holds the
 same colliders, owners and bodies in the same order, nothing is rebuilt. Otherwise the edges are rebuilt in
@@ -122,11 +123,9 @@ proxy in the other tree. `reset` drops the broad phase too. The bounds warm runs
 each collider writes only its own caches and transforms are only read.
 
 Contact resolution does not depend on the pair cache's order or the proxy ids. Each body's contacts are sorted by
-the other side's min x, ties by edge index, and responses run by min y descending with the same tie-break, which
-is the order a minX sweep produced. The result is bit-identical to that sweep wherever two edges do not share a min
-x exactly; there the old unstable sort left the order to the standard library, and edge order now decides.
-`ECS3DCollisionBench` (`source/tests/bench/`) times the phases on seeded scenes and prints a transform checksum
-for that comparison.
+the other side's min x, ties by edge index, and responses run by min y descending with the same tie-break, so
+contacts and responses come out in the same order whatever order the objects were created in. `ECS3DCollisionBench` (`source/tests/bench/`) times the phases on seeded
+scenes and prints a transform checksum, which a change to that order would alter.
 
 ## Contact clipping
 
