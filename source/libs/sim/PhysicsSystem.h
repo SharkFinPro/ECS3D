@@ -225,6 +225,11 @@ private:
   // Per unit mass, as a change of velocity turns the body whatever its mass, from the shapes of the body's
   // colliders (InertiaTensor.h). Empty for a body too degenerate to invert, which then gets no angular response.
   [[nodiscard]] static std::optional<glm::mat3> worldInverseInertia(const RigidBody& body, const Transform& transform);
+
+  [[nodiscard]] static std::optional<glm::mat3> computeWorldInverseInertia(const RigidBody& body,
+                                                                           const Transform& transform);
+
+  static void clearInertiaCache();
 };
 
 

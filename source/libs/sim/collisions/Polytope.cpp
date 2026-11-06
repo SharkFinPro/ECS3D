@@ -1,4 +1,5 @@
 #include "Polytope.h"
+#include "../ComponentAccess.h"
 #include "Simplex.h"
 #include "Support.h"
 #include "ContactManifold.h"
@@ -110,6 +111,7 @@ std::vector<glm::vec3> touchingVertices(const BoxGeometry& box, const glm::vec3&
   const float epsilon = 1e-3f * std::max({ box.halfExtents[0], box.halfExtents[1], box.halfExtents[2], 1.0f });
 
   std::vector<glm::vec3> selected;
+  selected.reserve(vertices.size());
   for (const auto& vertex : vertices)
   {
     if (glm::dot(vertex, towardOther) >= extreme - epsilon)
@@ -156,6 +158,7 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
   const float epsilon = 1e-3f * std::max(radius, 1.0f) + 0.02f * glm::distance(start, end);
 
   std::vector<glm::vec3> points;
+  points.reserve(candidates.size());
   for (const auto& candidate : candidates)
   {
     if (glm::dot(candidate, towardOther) >= extreme - epsilon)
@@ -282,7 +285,31 @@ Polytope::Polytope(Collider& collider, Collider& otherCollider, const SupportSha
                    const SupportShape& otherShape, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider), m_shape(&shape), m_otherShape(&otherShape)
 {
+  // A polytope built while another on this thread is alive finds the pool empty and allocates its own.
+  auto& pool = bufferPool();
+  m_vertices.swap(pool.vertices);
+  m_faces.swap(pool.faces);
+  m_vertices.clear();
+  m_faces.clear();
+
   EPA(simplex);
+}
+
+Polytope::BufferPool& Polytope::bufferPool()
+{
+  thread_local BufferPool pool;
+
+  return pool;
+}
+
+Polytope::~Polytope()
+{
+  m_vertices.clear();
+  m_faces.clear();
+
+  auto& pool = bufferPool();
+  m_vertices.swap(pool.vertices);
+  m_faces.swap(pool.faces);
 }
 
 glm::vec3 Polytope::getMinimumTranslationVector() const
@@ -318,7 +345,7 @@ Polytope::ContactPoints Polytope::findContactPoints() const
 glm::vec3 Polytope::sphereContactPoint() const
 {
   const auto transformOf = [](const Collider& collider) {
-    auto transform = collider.getOwner()->getComponent<Transform>(ComponentType::transform);
+    const auto transform = componentAccess::own<Transform>(*collider.getOwner(), ComponentType::transform);
     if (!transform)
     {
       throw std::runtime_error("Collider::EPA::Missing Transform");
@@ -418,6 +445,7 @@ std::vector<glm::vec3> Polytope::capsuleFeaturePoints() const
 std::vector<glm::vec3> Polytope::distinctPoints(const std::vector<glm::vec3>& points)
 {
   std::vector<glm::vec3> manifold;
+  manifold.reserve(points.size());
   for (const auto& point : points)
   {
     const bool duplicate = std::ranges::any_of(manifold, [&point](const glm::vec3& existing)
@@ -461,8 +489,12 @@ std::vector<glm::vec3> Polytope::boxContactPoints() const
 
   const auto incidentVertices = touchingVertices(incidentBox, towardReference);
 
+  // Four incident corners plus the reference corners that lie over them.
+  constexpr size_t typicalCandidates = 8;
   std::vector<collisions::detail::Candidate> candidates;
   std::vector<glm::vec3> placed;
+  candidates.reserve(typicalCandidates);
+  placed.reserve(typicalCandidates);
   const auto add = [&candidates, &placed](const glm::vec3& point)
   {
     if (!collisions::detail::containsNear(placed, point))
@@ -596,14 +628,17 @@ std::optional<Polytope::EpaFace> Polytope::faceOf(const uint8_t a, const uint8_t
   const auto first = m_vertices[b] - pointA;
   const auto second = m_vertices[c] - pointA;
   const auto crossed = glm::cross(first, second);
-  const double length = glm::length(crossed);
 
-  if (!(length > slivery * glm::length(first) * glm::length(second)))
+  const auto crossedLengthSquared = glm::dot(crossed, crossed);
+  const auto firstLengthSquared = glm::dot(first, first);
+  const auto secondLengthSquared = glm::dot(second, second);
+
+  if (!(crossedLengthSquared > slivery * slivery * firstLengthSquared * secondLengthSquared))
   {
     return std::nullopt;
   }
 
-  const auto normal = crossed / length;
+  const auto normal = crossed / std::sqrt(crossedLengthSquared);
 
   return EpaFace{ { a, b, c }, normal, glm::dot(normal, pointA) };
 }
@@ -744,7 +779,8 @@ bool Polytope::expandToward(const glm::dvec3& support)
   for (size_t i = 0; i < m_faces.size();)
   {
     const auto& face = m_faces[i];
-    if (glm::dot(face.normal, support - m_vertices[face.vertices[0]]) > visibility)
+    // The face's plane distance is already the normal dotted with its first vertex.
+    if (glm::dot(face.normal, support) - face.distance > visibility)
     {
       for (int edge = 0; edge < 3; ++edge)
       {

@@ -1,4 +1,5 @@
 #include "PhysicsSystem.h"
+#include "ComponentAccess.h"
 #include "InertiaTensor.h"
 #include "collisions/PlanarHull.h"
 #include "collisions/SupportFaces.h"
@@ -19,9 +20,24 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 namespace {
+  struct CachedInertia {
+    uint64_t worldID;
+    uint64_t geometryRevision;
+    bool trigger;
+    std::optional<glm::mat3> inverse;
+  };
+
+  std::unordered_map<const RigidBody*, CachedInertia>& inertiaCache()
+  {
+    thread_local std::unordered_map<const RigidBody*, CachedInertia> cache;
+
+    return cache;
+  }
+
   // A push closer to the center than this gives no spin: the lever arm is too short to divide by.
   constexpr float minLeverArm = 0.01f;
 
@@ -213,7 +229,7 @@ namespace {
 
   glm::vec3 spinOf(const std::shared_ptr<Object>& object)
   {
-    const auto body = object->getComponent<RigidBody>(ComponentType::rigidBody);
+    const auto body = componentAccess::bodyOf(*object);
 
     return body ? body->getAngularVelocity() : glm::vec3(0);
   }
@@ -405,6 +421,8 @@ namespace {
 
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
+  clearInertiaCache();
+
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto rigidBody = object->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -511,7 +529,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
     return;
   }
 
-  const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
+  const auto transform = componentAccess::own<Transform>(*body.getOwner(), ComponentType::transform);
   if (!transform)
   {
     return;
@@ -541,7 +559,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
     return;
   }
 
-  const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
+  const auto transform = componentAccess::own<Transform>(*body.getOwner(), ComponentType::transform);
   if (!transform)
   {
     return;
@@ -673,12 +691,12 @@ PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
   markRolling(pair.body, collider);
 
   // The other body turns about its rigid body's own center, which a child collider's owner may not be.
-  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto otherTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform)
-                                        : nullptr;
+  const auto otherBody = componentAccess::bodyOf(*other);
+  const auto otherTransform =
+    otherBody ? componentAccess::own<Transform>(*otherBody->getOwner(), ComponentType::transform) : nullptr;
   if (otherBody && otherTransform)
   {
-    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling() };
+    pair.other = { otherBody, otherTransform, !otherBody->isFalling() };
     markRolling(pair.other, other->getComponent<Collider>(ComponentType::collider));
     pair.body.resting = !body.isFalling();
   }
@@ -1217,8 +1235,9 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
   }
 
   // The support turns about its rigid body's own center, which a child collider's owner may not be.
-  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto otherTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform) : nullptr;
+  const auto otherBody = componentAccess::bodyOf(*other);
+  const auto otherTransform =
+    otherBody ? componentAccess::own<Transform>(*otherBody->getOwner(), ComponentType::transform) : nullptr;
   const bool supportSpins = otherBody && otherTransform;
   const auto supportSpin = supportSpins ? otherBody->getAngularVelocity() : glm::vec3(0);
 
@@ -1426,6 +1445,55 @@ void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, co
 }
 
 std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const RigidBody& body, const Transform& transform)
+{
+  // A response asks for the same body's inverse several times between moves. A body made of its own collider
+  // alone is keyed on everything its tensor reads: the world stamp (stamps are never reused, so a recycled
+  // address misses) and the collider's geometry and trigger flag. A body with descendants is not cached, since
+  // their transforms are not in the key.
+  auto& cache = inertiaCache();
+
+  const Object* owner = body.getOwner();
+  const bool cacheable = owner && owner->getChildren().empty();
+  uint64_t worldID = 0;
+  uint64_t geometryRevision = 0;
+  bool trigger = false;
+
+  if (cacheable)
+  {
+    const auto& components = owner->getComponents();
+    if (const auto it = components.find(ComponentType::collider); it != components.end())
+    {
+      const auto collider = static_cast<const Collider*>(it->second.get());
+      geometryRevision = collider->getGeometryRevision();
+      trigger = collider->isTrigger();
+    }
+
+    worldID = transform.getWorldUpdateID();
+
+    if (const auto found = cache.find(&body); found != cache.end() && found->second.worldID == worldID &&
+        found->second.geometryRevision == geometryRevision && found->second.trigger == trigger)
+    {
+      return found->second.inverse;
+    }
+  }
+
+  const auto inverse = computeWorldInverseInertia(body, transform);
+
+  if (cacheable)
+  {
+    cache[&body] = { worldID, geometryRevision, trigger, inverse };
+  }
+
+  return inverse;
+}
+
+void PhysicsSystem::clearInertiaCache()
+{
+  // Bounds the cache to the bodies alive this tick; entries validate themselves, so this is only housekeeping.
+  inertiaCache().clear();
+}
+
+std::optional<glm::mat3> PhysicsSystem::computeWorldInverseInertia(const RigidBody& body, const Transform& transform)
 {
   const auto inertiaTensor = inertia::worldTensor(body.getOwner(), transform);
 
