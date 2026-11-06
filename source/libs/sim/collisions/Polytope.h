@@ -4,40 +4,19 @@
 #include <glm/glm.hpp>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
 
 class Simplex;
-struct SupportVertex;
 class Collider;
 class SupportShape;
 
-using Edge = std::pair<uint8_t, uint8_t>;
-
-struct ClosestPoint {
-  glm::vec3 point;
-  float distance;
-};
-
-struct Face {
-  std::array<uint8_t, 3> vertices;
-  glm::vec3 normal;
-  ClosestPoint closestPoint;
-};
-
 struct ClosestFaceData {
+  // The translation EPA found, in the Minkowski difference: its direction runs from the first collider toward the
+  // second and its length is how far they overlap along it. Zero when they only touch.
   glm::vec3 closestPoint;
-  uint8_t closestFaceIndex;
-};
-
-struct FaceData {
-  uint8_t aIndex;
-  uint8_t bIndex;
-  glm::vec3 a;
-  glm::vec3 b;
-  glm::vec3 c;
-  glm::vec3 normal;
 };
 
 class Polytope {
@@ -87,33 +66,49 @@ private:
   const SupportShape* m_shape;
   const SupportShape* m_otherShape;
 
-  std::vector<SupportVertex> m_vertices;
-  std::vector<Face> m_faces;
+  // A face of the expanding polytope, wound counter-clockwise seen from outside, with its unit outward normal and
+  // its plane's distance from the origin. Double precision, so the polytope's own rounding stays far below the
+  // float support points it is built from.
+  struct EpaFace {
+    std::array<uint8_t, 3> vertices;
+    glm::dvec3 normal;
+    double distance;
+  };
+
+  std::vector<glm::dvec3> m_vertices;
+  std::vector<EpaFace> m_faces;
+
+  // Inside every polytope the expansion passes through, which is what a new face is wound away from.
+  glm::dvec3 m_interior{ 0.0 };
+
   ClosestFaceData m_closestFaceData{};
 
-  void EPA();
+  // The support point along a unit direction and how far the shapes overlap along it, with the band that overlap is
+  // known to.
+  struct Measured {
+    glm::dvec3 normal{ 0.0 };
+    glm::dvec3 support{ 0.0 };
+    double overlap = std::numeric_limits<double>::max();
+    double resolution = 0.0;
+  };
 
-  void generatePolytope(Simplex& simplex);
+  void EPA(const Simplex& simplex);
 
-  float findClosestFace();
+  [[nodiscard]] Measured measure(const glm::dvec3& normal) const;
 
-  [[nodiscard]] glm::vec3 getSearchDirection() const;
+  [[nodiscard]] bool buildInitialPolytope(const Simplex& simplex);
 
-  static bool closeEnough(float minDistance, const std::optional<float>& previousMinDistance,
-                          glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
+  [[nodiscard]] bool buildAroundFlatSimplex();
 
-  // The horizon lives in a per-thread buffer, valid until this thread's next call.
-  const std::vector<Edge>& deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
+  [[nodiscard]] std::optional<EpaFace> faceOf(uint8_t a, uint8_t b, uint8_t c) const;
 
-  [[nodiscard]] bool isFacingInward(const FaceData& faceData) const;
+  [[nodiscard]] bool addFace(uint8_t a, uint8_t b, uint8_t c);
 
-  [[nodiscard]] bool constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist);
+  [[nodiscard]] bool isKnownVertex(const glm::dvec3& point) const;
 
-  [[nodiscard]] bool reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, float& currentMinDist);
-
-  bool isDuplicateVertex(glm::vec3 supportPoint);
-
-  [[nodiscard]] static bool reachesBoundary(glm::vec3 supportPoint, glm::vec3 direction, float minDistSquared);
+  // Replaces the faces support is beyond with faces from their horizon to it. False when the polytope cannot grow
+  // there: nothing is visible, a new face has no reliable normal or would face inward.
+  [[nodiscard]] bool expandToward(const glm::dvec3& support);
 };
 
 

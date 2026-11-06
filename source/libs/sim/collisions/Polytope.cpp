@@ -18,19 +18,11 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
-
-glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
-{
-  const auto d = glm::dot(normal, a);
-
-  const auto p = d / glm::dot(normal, normal);
-
-  return normal * p;
-}
 
 // World-space box geometry from the position/scale/rotation Collider exposes, not BoxCollider's support mesh.
 using BoxGeometry = BoxWorldFrame;
@@ -283,19 +275,6 @@ OwnedFaces facesOf(Collider& collider)
   return faces;
 }
 
-// Float noise in a dot product grows with the magnitudes involved, so every EPA facing test scales this by them.
-constexpr float visibilityTolerance = 1e-5f;
-
-static bool isInFrontOf(const glm::vec3& normal, const glm::vec3& planePoint, const glm::vec3& point)
-{
-  // Not squared to skip the roots: the squared comparison rounds differently near the threshold, which moves which
-  // faces EPA removes.
-  const float beyond = visibilityTolerance * glm::length(normal) * std::max(1.0f, glm::length(point));
-  return glm::dot(normal, point - planePoint) > beyond;
-}
-
-constexpr uint8_t maxEpaIterations = 25;
-
 // Contact::points holds this many.
 constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
 
@@ -303,9 +282,7 @@ Polytope::Polytope(Collider& collider, Collider& otherCollider, const SupportSha
                    const SupportShape& otherShape, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider), m_shape(&shape), m_otherShape(&otherShape)
 {
-  generatePolytope(simplex);
-
-  EPA();
+  EPA(simplex);
 }
 
 glm::vec3 Polytope::getMinimumTranslationVector() const
@@ -520,358 +497,292 @@ std::vector<glm::vec3> Polytope::boxContactPoints() const
   return collisions::detail::spreadOut(candidates, maxManifoldPoints);
 }
 
-void Polytope::EPA()
-{
-  // A rollback copy reused across iterations and calls, so an iteration allocates nothing once warm.
-  // thread_local because the narrow phase runs in parallel.
-  thread_local std::vector<Face> facesBefore;
+namespace {
+  // The polytope's support points are floats, so where the shapes' boundary lies is known only to a few float ulps
+  // of the coordinates involved. Converging any tighter chases rounding; any looser and a resting overlap, which is
+  // itself only that deep, is lost in the tolerance.
+  constexpr double convergenceUlps = 8.0;
 
-  std::optional<glm::vec3> previousClosestPoint;
-  std::optional<float> previousMinDist;
+  // A support point beyond a face by less than this is on it. Below the convergence band, so the closest face is
+  // always visible from a support point that has not converged.
+  constexpr double visibilityUlps = 2.0;
 
-  auto currentMinDist = findClosestFace();
+  // A tetrahedron flatter than this share of its size cubed has no inside to expand from.
+  constexpr double flatVolumeShare = 1e-6;
 
-  uint8_t iteration = 0;
-  while (iteration < maxEpaIterations)
+  // A face whose doubled area is below this share of its two edges' lengths multiplied has no reliable normal.
+  constexpr double slivery = 1e-12;
+
+  constexpr double floatEpsilon = std::numeric_limits<float>::epsilon();
+
+  // Converging that tightly takes a curved shape more steps than a flat one; past this the best translation
+  // measured so far stands.
+  constexpr int maxEpaIterations = 64;
+
+  [[nodiscard]] double ulpScale(const glm::dvec3& point)
   {
-    if (closeEnough(currentMinDist, previousMinDist, m_closestFaceData.closestPoint, previousClosestPoint))
+    return floatEpsilon * std::max(1.0, glm::length(point));
+  }
+}
+
+void Polytope::EPA(const Simplex& simplex)
+{
+  m_closestFaceData.closestPoint = glm::vec3(0.0f);
+
+  if (!buildInitialPolytope(simplex))
+  {
+    return;
+  }
+
+  // Every support point measured below is a translation that separates the shapes along its direction, and its
+  // length bounds the depth from above; the closest face's distance bounds it from below. The answer is the best
+  // measured translation, so whatever stops the loop, it never reports a face from inside the overlap.
+  Measured best;
+  bool converged = false;
+
+  for (int iteration = 0; iteration < maxEpaIterations && !m_faces.empty(); ++iteration)
+  {
+    const auto& closest = *std::ranges::min_element(m_faces, {}, &EpaFace::distance);
+    const double lowerBound = closest.distance;
+    const auto measured = measure(closest.normal);
+    best = std::min(best, measured, [](const Measured& a, const Measured& b) { return a.overlap < b.overlap; });
+
+    if (measured.overlap - lowerBound <= measured.resolution)
     {
+      converged = true;
       break;
     }
 
-    const auto searchDirection = glm::normalize(getSearchDirection());
-
-    const auto supportPoint = getSupport(*m_shape, *m_otherShape, searchDirection);
-
-    if (isDuplicateVertex(supportPoint) || reachesBoundary(supportPoint, searchDirection, currentMinDist))
+    if (isKnownVertex(measured.support) || !expandToward(measured.support))
     {
       break;
     }
-
-    previousMinDist = currentMinDist;
-    previousClosestPoint = m_closestFaceData.closestPoint;
-
-    facesBefore.assign(m_faces.begin(), m_faces.end());
-    const auto closestBefore = m_closestFaceData;
-
-    currentMinDist = std::numeric_limits<float>::max();
-    if (!reconstructPolytope(supportPoint, searchDirection, currentMinDist))
-    {
-      m_faces.assign(facesBefore.begin(), facesBefore.end());
-      m_closestFaceData = closestBefore;
-      break;
-    }
-
-    ++iteration;
-  }
-}
-
-void Polytope::generatePolytope(Simplex &simplex)
-{
-  const auto A = simplex.getA();
-  const auto B = simplex.getB();
-  const auto C = simplex.getC();
-  const auto D = simplex.getD();
-
-  const auto AB = B - A;
-  const auto AC = C - A;
-  const auto AD = D - A;
-  const auto BC = C - B;
-  const auto BD = D - B;
-
-  auto ABC = glm::cross(AB, AC);
-  auto ACD = glm::cross(AC, AD);
-  auto ADB = glm::cross(AD, AB);
-  auto BCD = glm::cross(BC, BD);
-
-  if (sameDirection(ABC, D))
-  {
-    ABC *= -1;
-  }
-  if (sameDirection(ACD, B))
-  {
-    ACD *= -1;
-  }
-  if (sameDirection(ADB, C))
-  {
-    ADB *= -1;
-  }
-  if (sameDirection(BCD, A))
-  {
-    BCD *= -1;
   }
 
-  const auto facePointA = closestPointOnPlane(A, ABC);
-  const auto facePointB = closestPointOnPlane(A, ACD);
-  const auto facePointC = closestPointOnPlane(A, ADB);
-  const auto facePointD = closestPointOnPlane(B, BCD);
-
-  // Room for every vertex and face EPA's iteration cap allows on a convex polytope, so it never regrows.
-  m_vertices.reserve(4 + maxEpaIterations);
-  m_faces.reserve(2 * (4 + maxEpaIterations));
-
-  m_vertices = {
-    simplex.getSupportA(),
-    simplex.getSupportB(),
-    simplex.getSupportC(),
-    simplex.getSupportD()
-  };
-
-  m_faces = {{
-    {
-      .vertices = { 0, 1, 2 },
-      .normal = ABC,
-      .closestPoint = {
-        .point = facePointA,
-        .distance = glm::dot(facePointA, facePointA)
-      }
-    },
-    {
-      .vertices = { 0, 2, 3 },
-      .normal = ACD,
-      .closestPoint = {
-        .point = facePointB,
-        .distance = glm::dot(facePointB, facePointB)
-      }
-    },
-    {
-      .vertices = { 0, 1, 3 },
-      .normal = ADB,
-      .closestPoint = {
-        .point = facePointC,
-        .distance = glm::dot(facePointC, facePointC)
-      }
-    },
-    {
-      .vertices = { 1, 2, 3 },
-      .normal = BCD,
-      .closestPoint = {
-        .point = facePointD,
-        .distance = glm::dot(facePointD, facePointD)
-      }
-    }
-  }};
-}
-
-float Polytope::findClosestFace()
-{
-  float minDist = std::numeric_limits<float>::max();
-
-  for (int i = 0; i < m_faces.size(); ++i)
+  // Stopped short of converging: the polytope still bounds the overlap, and the true direction out is nearest one of
+  // its face normals, so the best of them all stands rather than the one direction that happened to be measured.
+  if (!converged)
   {
-    if (const float dist = m_faces[i].closestPoint.distance; dist < minDist)
+    for (const auto& face : m_faces)
     {
-      minDist = dist;
-      m_closestFaceData.closestPoint = m_faces[i].closestPoint.point;
-      m_closestFaceData.closestFaceIndex = i;
+      best = std::min(best, measure(face.normal), [](const Measured& a, const Measured& b) {
+        return a.overlap < b.overlap;
+      });
     }
   }
 
-  return minDist;
+  // An overlap within the band the boundary is known to is indistinguishable from the shapes only touching.
+  if (best.overlap > best.resolution && best.overlap != std::numeric_limits<double>::max())
+  {
+    m_closestFaceData.closestPoint = glm::vec3(best.normal * best.overlap);
+  }
 }
 
-glm::vec3 Polytope::getSearchDirection() const
+Polytope::Measured Polytope::measure(const glm::dvec3& normal) const
 {
-  glm::vec3 searchDirection = m_closestFaceData.closestPoint;
+  const glm::dvec3 support(getSupport(*m_shape, *m_otherShape, glm::vec3(normal)));
 
-  if (dot(searchDirection, searchDirection) < 1e-5f)
+  return { normal, support, glm::dot(normal, support), convergenceUlps * ulpScale(support) };
+}
+
+std::optional<Polytope::EpaFace> Polytope::faceOf(const uint8_t a, const uint8_t b, const uint8_t c) const
+{
+  const auto& pointA = m_vertices[a];
+  const auto first = m_vertices[b] - pointA;
+  const auto second = m_vertices[c] - pointA;
+  const auto crossed = glm::cross(first, second);
+  const double length = glm::length(crossed);
+
+  if (!(length > slivery * glm::length(first) * glm::length(second)))
   {
-    searchDirection = m_faces[m_closestFaceData.closestFaceIndex].normal;
+    return std::nullopt;
   }
 
-  return searchDirection;
+  const auto normal = crossed / length;
+
+  return EpaFace{ { a, b, c }, normal, glm::dot(normal, pointA) };
 }
 
-bool Polytope::closeEnough(const float minDistance, const std::optional<float>& previousMinDistance,
-                           const glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint)
+bool Polytope::addFace(const uint8_t a, const uint8_t b, const uint8_t c)
 {
-  constexpr float minDist = 1e-5f;
-
-  if (!previousClosestPoint.has_value())
+  auto face = faceOf(a, b, c);
+  if (!face)
   {
     return false;
   }
 
-  if (std::fabs(minDistance - previousMinDistance.value()) >= minDist)
+  // Wound so the normal points out, away from a point inside every polytope this one grows into.
+  if (glm::dot(face->normal, m_interior - m_vertices[a]) > 0.0)
   {
-    return false;
+    face = faceOf(a, c, b);
   }
 
-  if (length(currentClosestPoint) < minDist)
-  {
-    return false;
-  }
+  m_faces.push_back(*face);
 
-  const float deltaX = std::fabs(currentClosestPoint.x - previousClosestPoint.value().x);
-  const float deltaY = std::fabs(currentClosestPoint.y - previousClosestPoint.value().y);
-  const float deltaZ = std::fabs(currentClosestPoint.z - previousClosestPoint.value().z);
-
-  return deltaX + deltaY + deltaZ < minDist;
+  return true;
 }
 
-const std::vector<Edge>& Polytope::deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist)
+bool Polytope::buildInitialPolytope(const Simplex& simplex)
 {
-  // Reused across calls so the horizon search allocates nothing once warm; thread_local because the narrow
-  // phase runs in parallel.
-  thread_local std::vector<Edge> edges;
-  thread_local std::vector<uint16_t> undirectedKeys;
-  edges.clear();
-  undirectedKeys.clear();
+  m_vertices = { glm::dvec3(simplex.getA()), glm::dvec3(simplex.getB()), glm::dvec3(simplex.getC()),
+                 glm::dvec3(simplex.getD()) };
 
-  const auto addEdge = [](const uint8_t a, const uint8_t b)
+  const auto& a = m_vertices[0];
+  double size = 0.0;
+  for (size_t i = 0; i < m_vertices.size(); ++i)
   {
-    edges.emplace_back(a, b);
-    undirectedKeys.push_back(static_cast<uint16_t>(std::min(a, b) << 8 | std::max(a, b)));
-  };
-
-  for (int i = 0; i < m_faces.size();)
-  {
-    const auto& faceVertices = m_faces[i].vertices;
-
-    if (isInFrontOf(m_faces[i].normal, m_vertices[faceVertices[0]].vertex, supportPoint))
+    for (size_t j = i + 1; j < m_vertices.size(); ++j)
     {
-      addEdge(faceVertices[0], faceVertices[1]);
-      addEdge(faceVertices[1], faceVertices[2]);
-      addEdge(faceVertices[2], faceVertices[0]);
+      size = std::max(size, glm::distance(m_vertices[i], m_vertices[j]));
+    }
+  }
 
-      std::swap(m_faces[i], m_faces.back());
-      m_faces.pop_back();
+  const double volume = std::abs(glm::dot(m_vertices[1] - a, glm::cross(m_vertices[2] - a, m_vertices[3] - a)));
+  if (!(volume > flatVolumeShare * size * size * size))
+  {
+    return buildAroundFlatSimplex();
+  }
 
+  m_interior = (m_vertices[0] + m_vertices[1] + m_vertices[2] + m_vertices[3]) * 0.25;
+
+  m_faces.clear();
+  return addFace(0, 1, 2) && addFace(0, 2, 3) && addFace(0, 3, 1) && addFace(1, 3, 2);
+}
+
+bool Polytope::buildAroundFlatSimplex()
+{
+  // GJK ends on a flat tetrahedron when the origin lies on the overlap's boundary or the shapes only just touch.
+  // Its four triangles cover its flat hull, so one of them holds the origin's projection onto its plane, and the
+  // polytope grows from that triangle. When none does, the origin is outside the flat hull and GJK took rounding
+  // for an enclosed origin, so there is no overlap to measure.
+  constexpr std::array<std::array<uint8_t, 3>, 4> triangles = { { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 3 }, { 1, 2, 3 } } };
+
+  std::optional<std::array<uint8_t, 3>> chosen;
+  for (const auto& triangle : triangles)
+  {
+    const auto& p = m_vertices[triangle[0]];
+    const auto crossed = glm::cross(m_vertices[triangle[1]] - p, m_vertices[triangle[2]] - p);
+    const double area = glm::length(crossed);
+    if (!(area > 0.0))
+    {
       continue;
     }
 
-    if (const float dist = m_faces[i].closestPoint.distance; dist < currentMinDist)
+    const auto normal = crossed / area;
+    const auto projected = normal * glm::dot(normal, p);
+    bool holdsOrigin = true;
+    for (int edge = 0; edge < 3; ++edge)
     {
-      currentMinDist = dist;
-      m_closestFaceData.closestPoint = m_faces[i].closestPoint.point;
-      m_closestFaceData.closestFaceIndex = i;
+      const auto& from = m_vertices[triangle[edge]];
+      const auto& to = m_vertices[triangle[(edge + 1) % 3]];
+      // A little slack, so the origin on an edge two triangles share counts for both.
+      holdsOrigin = holdsOrigin && glm::dot(glm::cross(to - from, projected - from), normal) >= -1e-9 * area;
+    }
+
+    if (holdsOrigin)
+    {
+      chosen = triangle;
+      break;
+    }
+  }
+
+  if (!chosen)
+  {
+    return false;
+  }
+
+  const auto base = *chosen;
+  const auto& p = m_vertices[base[0]];
+  const auto normal = glm::normalize(glm::cross(m_vertices[base[1]] - p, m_vertices[base[2]] - p));
+
+  const glm::dvec3 above(getSupport(*m_shape, *m_otherShape, glm::vec3(normal)));
+  const glm::dvec3 below(getSupport(*m_shape, *m_otherShape, glm::vec3(-normal)));
+
+  // A side that does not rise off the plane is the overlap's own boundary there: the origin is on it, so the shapes
+  // only touch and there is no depth to report.
+  if (!(glm::dot(normal, above - p) > convergenceUlps * ulpScale(above)) ||
+      !(glm::dot(-normal, below - p) > convergenceUlps * ulpScale(below)))
+  {
+    return false;
+  }
+
+  // The base and the point above it: a tetrahedron, so convex, with the origin on its base. Expansion finds the side
+  // below. Both points together are not a start, since their segment need not pass through the base and the
+  // bipyramid they make need not be convex.
+  m_vertices = { m_vertices[base[0]], m_vertices[base[1]], m_vertices[base[2]], above };
+  m_interior = (m_vertices[0] + m_vertices[1] + m_vertices[2] + above) * 0.25;
+
+  m_faces.clear();
+  return addFace(0, 1, 2) && addFace(0, 1, 3) && addFace(1, 2, 3) && addFace(2, 0, 3);
+}
+
+bool Polytope::isKnownVertex(const glm::dvec3& point) const
+{
+  return std::ranges::any_of(m_vertices, [&point](const glm::dvec3& vertex) { return vertex == point; });
+}
+
+bool Polytope::expandToward(const glm::dvec3& support)
+{
+  if (m_vertices.size() >= std::numeric_limits<uint8_t>::max())
+  {
+    return false;
+  }
+
+  const double visibility = visibilityUlps * ulpScale(support);
+
+  // Every face the support point is beyond goes; the horizon is each of their directed edges whose reverse belongs
+  // to no removed face. Taken in the removed faces' winding, a horizon edge and the support point make a face wound
+  // outward like the one it replaces.
+  thread_local std::vector<std::pair<uint8_t, uint8_t>> edges;
+  edges.clear();
+
+  for (size_t i = 0; i < m_faces.size();)
+  {
+    const auto& face = m_faces[i];
+    if (glm::dot(face.normal, support - m_vertices[face.vertices[0]]) > visibility)
+    {
+      for (int edge = 0; edge < 3; ++edge)
+      {
+        edges.emplace_back(face.vertices[edge], face.vertices[(edge + 1) % 3]);
+      }
+
+      m_faces[i] = m_faces.back();
+      m_faces.pop_back();
+      continue;
     }
 
     ++i;
   }
 
-  // The horizon is every edge that only one removed face owns. The list is a few dozen edges at most, so a
-  // linear count over packed keys beats a tree. The counts read only the keys, so edges compacts in place.
-  size_t kept = 0;
-  for (size_t i = 0; i < edges.size(); ++i)
-  {
-    if (std::ranges::count(undirectedKeys, undirectedKeys[i]) == 1)
-    {
-      edges[kept++] = edges[i];
-    }
-  }
-  edges.resize(kept);
-
-  return edges;
-}
-
-bool Polytope::isFacingInward(const FaceData& faceData) const
-{
-  for (int i = 0; i < m_vertices.size(); ++i)
-  {
-    if (i == faceData.aIndex || i == faceData.bIndex)
-    {
-      continue;
-    }
-
-    if (isInFrontOf(faceData.normal, faceData.a, m_vertices[i].vertex))
-    {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-bool Polytope::constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist)
-{
-  FaceData faceData {
-    .aIndex = edge.first,
-    .bIndex = edge.second,
-    .a = m_vertices[edge.first].vertex,
-    .b = m_vertices[edge.second].vertex,
-    .c = supportPoint
-  };
-
-  const auto AB = faceData.b - faceData.a;
-  const auto AC = faceData.c - faceData.a;
-
-  faceData.normal = cross(AB, AC);
-
-  if (isFacingInward(faceData))
-  {
-    faceData.normal *= -1;
-
-    if (isFacingInward(faceData))
-    {
-      return false;
-    }
-  }
-
-  const auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
-  float distance = glm::dot(closestPoint, closestPoint);
-
-  if (distance < currentMinDist)
-  {
-    currentMinDist = distance;
-    m_closestFaceData.closestPoint = closestPoint;
-    m_closestFaceData.closestFaceIndex = m_faces.size();
-  }
-
-  m_faces.push_back({
-      .vertices = {
-        faceData.aIndex,
-        faceData.bIndex,
-        static_cast<uint8_t>(m_vertices.size())
-      },
-      .normal = faceData.normal,
-      .closestPoint = {
-        .point = closestPoint,
-        .distance = distance
-      }
-  });
-
-  return true;
-}
-
-bool Polytope::reconstructPolytope(const glm::vec3 supportPoint, const glm::vec3 direction, float& currentMinDist)
-{
-  const auto horizon = deconstructPolytope(supportPoint, currentMinDist);
-
-  size_t built = 0;
-  for (const auto& edge : horizon)
-  {
-    if (constructFace(edge, supportPoint, currentMinDist))
-    {
-      ++built;
-    }
-  }
-
-  if (built != horizon.size() || m_faces.empty() || currentMinDist == std::numeric_limits<float>::max())
+  if (edges.empty())
   {
     return false;
   }
 
-  m_vertices.push_back({supportPoint, direction});
+  const auto supportIndex = static_cast<uint8_t>(m_vertices.size());
+  m_vertices.push_back(support);
+
+  for (const auto& edge : edges)
+  {
+    const auto from = edge.first;
+    const auto to = edge.second;
+    const bool shared = std::ranges::any_of(edges, [from, to](const auto& other) {
+      return other.first == to && other.second == from;
+    });
+
+    if (shared)
+    {
+      continue;
+    }
+
+    auto face = faceOf(from, to, supportIndex);
+    if (!face || glm::dot(face->normal, m_interior - m_vertices[from]) > 0.0)
+    {
+      return false;
+    }
+
+    m_faces.push_back(*face);
+  }
+
   return true;
-}
-
-bool Polytope::reachesBoundary(const glm::vec3 supportPoint, const glm::vec3 direction, const float minDistSquared)
-{
-  // A support point on the closest face's plane would, through rounding, delete that face and its coplanar
-  // neighbors without a face to replace them, leaving a hole that EPA then reads a far wall through.
-  const float boundaryTolerance = visibilityTolerance * std::max(1.0f, glm::length(supportPoint));
-
-  return glm::dot(supportPoint, direction) - std::sqrt(minDistSquared) < boundaryTolerance;
-}
-
-bool Polytope::isDuplicateVertex(const glm::vec3 supportPoint)
-{
-  auto isEqual = [&](const SupportVertex& support) {
-    return support.vertex.x == supportPoint.x &&
-           support.vertex.y == supportPoint.y &&
-           support.vertex.z == supportPoint.z;
-  };
-
-  return std::ranges::any_of(m_vertices, isEqual);
 }

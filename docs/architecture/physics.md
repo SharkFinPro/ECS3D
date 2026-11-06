@@ -79,11 +79,16 @@ are its entry points. The sweep's `intersects` keeps GJK's final simplex (`Overl
 and EPA query each collider through a `SupportShape` refreshed once per call. A pair of spheres and capsules skips GJK, since a sphere is a capsule with a zero-length
 core segment. That pair is solved from the closest points between the two core segments, treated as two spheres.
 Parallel overlapping capsules report two manifold points. Every other pair goes through GJK/EPA, where a
-capsule's contact feature is its cap points facing the other shape, clamped onto a box's footprint. EPA stops
-once the support point lies on the closest face's plane, and treats a face as visible only beyond a tolerance
-scaled by magnitude, since rounding would otherwise delete coplanar faces and leave a hole. The same tolerance
-decides whether a new face looks inward, since a vertex on its plane is noise. A rebuild that cannot close its
-horizon is undone and ends EPA. `collisions/SupportFaces.h` returns a box's or convex mesh's world-space planar
+capsule's contact feature is its cap points facing the other shape, clamped onto a box's footprint. EPA grows its
+polytope in double precision, winding each new face from the horizon edge it replaces. The closest face's distance
+bounds the depth from below, and the support along its normal from above, since moving by that support distance
+separates the pair along that normal. EPA converges when the two agree to within a few float ulps of the support
+point, and reports the best measured support translation: an exit short of convergence (a repeated vertex, a face
+with no reliable normal, the iteration cap) measures every remaining face normal and takes the least. The answer
+therefore never depends on which of several equally furthest corners a support function returns, which
+`EpaConvergenceTest` pins against an exact separating-axis depth. A flat GJK tetrahedron, which touching shapes
+give, starts from the triangle holding the origin plus the support above it, or reports no overlap when no triangle
+holds it; an overlap within the convergence band is reported as no contact, since the shapes only touch. `collisions/SupportFaces.h` returns a box's or convex mesh's world-space planar
 faces (outward normal, counter-clockwise corners, center; coplanar hull triangles merged in the hull's own
 space) with `faceToward` and `clampToFace` queries; PhysicsSystem's resting logic uses it, and
 `supportFaceToward` builds the single face a box needs. A pair whose colliders resolve to the same rigid body,
