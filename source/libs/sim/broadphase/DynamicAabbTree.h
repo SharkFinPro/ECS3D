@@ -36,7 +36,7 @@ struct Aabb {
 };
 
 // An incremental bounding volume hierarchy over caller-supplied boxes: leaves are inserted by the surface
-// area heuristic and the path back to the root is rebalanced with AVL rotations, so the tree stays shallow
+// area heuristic and the path back to the root is rebalanced by rotations, so the tree stays shallow
 // whatever order boxes arrive in. Node ids are stable for a leaf's lifetime and are reused after removal.
 // Not thread safe to modify; concurrent queries are safe while nothing modifies it.
 class DynamicAabbTree {
@@ -95,7 +95,8 @@ public:
 
   [[nodiscard]] size_t getLeafCount() const { return m_leafCount; }
 
-  // Checks every link, height and enclosing box. For tests.
+  // Checks every link, height and enclosing box, and that every node is either in the tree or on the free
+  // list. For tests.
   [[nodiscard]] bool isValid() const;
 
   void clear();

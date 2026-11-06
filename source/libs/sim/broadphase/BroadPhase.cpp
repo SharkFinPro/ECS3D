@@ -46,6 +46,14 @@ void BroadPhase::removeFromTree(const int32_t proxy)
   m_removedFromTree = true;
 }
 
+void BroadPhase::park(const int32_t proxy)
+{
+  if (m_proxies[static_cast<size_t>(proxy)].leaf != DynamicAabbTree::nullNode)
+  {
+    removeFromTree(proxy);
+  }
+}
+
 int32_t BroadPhase::createProxy(const Aabb& tight, const bool dynamic, const int32_t userData)
 {
   int32_t proxy;
@@ -69,7 +77,11 @@ int32_t BroadPhase::createProxy(const Aabb& tight, const bool dynamic, const int
 
   if (tight.isFinite())
   {
-    insertIntoTree(proxy, fatten(tight, glm::vec3(0.0f)));
+    const Aabb fat = fatten(tight, glm::vec3(0.0f));
+    if (fat.isFinite())
+    {
+      insertIntoTree(proxy, fat);
+    }
   }
 
   return proxy;
@@ -95,22 +107,30 @@ void BroadPhase::moveProxy(const int32_t proxy, const Aabb& tight)
 
   if (!tight.isFinite())
   {
-    if (entry.leaf != DynamicAabbTree::nullNode)
-    {
-      removeFromTree(proxy);
-    }
-
+    park(proxy);
     return;
   }
 
   if (entry.leaf == DynamicAabbTree::nullNode)
   {
-    insertIntoTree(proxy, fatten(tight, glm::vec3(0.0f)));
+    const Aabb fat = fatten(tight, glm::vec3(0.0f));
+    if (fat.isFinite())
+    {
+      insertIntoTree(proxy, fat);
+    }
+
     return;
   }
 
   const glm::vec3 displacement = tight.min - previous.min;
   const Aabb fat = fatten(tight, displacement);
+
+  // The margin or the stretch can overflow a box that is itself finite; the trees take finite boxes only.
+  if (!fat.isFinite())
+  {
+    park(proxy);
+    return;
+  }
 
   // A fat box that still holds the tight box stays, unless it is far larger than this tick's motion needs -
   // left stretched by a mover that has since slowed - and would keep pairing with everything it swept past.

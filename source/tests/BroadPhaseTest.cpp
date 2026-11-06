@@ -46,6 +46,7 @@ namespace {
   struct Body {
     int32_t proxy = BroadPhase::nullProxy;
     Aabb tight;
+    Aabb hidden;
     bool dynamic = false;
     bool alive = false;
   };
@@ -251,6 +252,134 @@ TEST(BroadPhase, ANonFiniteBoxDropsOutOfEveryPairUntilItIsFiniteAgain)
   EXPECT_TRUE(hasPair(broadPhase, body, ground));
 }
 
+TEST(BroadPhase, AFiniteBoxWhoseFatBoxOverflowsIsParkedLikeANonFiniteOne)
+{
+  BroadPhase broadPhase;
+  const auto body = broadPhase.createProxy(boxAt({ 0, 0, 0 }), true, 0);
+  const auto ground = broadPhase.createProxy(boxAt({ 0, -0.5f, 0 }, 1.0f), false, 1);
+  broadPhase.updatePairs();
+  ASSERT_TRUE(hasPair(broadPhase, body, ground));
+
+  // The box is finite but stretching it four times the jump overflows.
+  broadPhase.moveProxy(body, boxAt({ 3.0e38f, 0, 0 }));
+  broadPhase.updatePairs();
+
+  EXPECT_TRUE(broadPhase.getPairs().empty());
+  EXPECT_EQ(broadPhase.getDynamicTree().getLeafCount(), 0u);
+  EXPECT_TRUE(broadPhase.getDynamicTree().isValid());
+
+  // Parked, it re-enters with no stretch at all, and a finite fat box lets it back in far from anything.
+  broadPhase.moveProxy(body, boxAt({ 3.0e38f, 0, 0 }));
+  broadPhase.updatePairs();
+
+  EXPECT_EQ(broadPhase.getDynamicTree().getLeafCount(), 1u);
+  EXPECT_TRUE(broadPhase.getDynamicTree().isValid());
+  EXPECT_TRUE(broadPhase.getFatBox(body).isFinite());
+  EXPECT_TRUE(broadPhase.getPairs().empty());
+
+  // A jump from one extreme to the other overflows the displacement itself.
+  broadPhase.moveProxy(body, boxAt({ -3.0e38f, 0, 0 }));
+  broadPhase.updatePairs();
+
+  EXPECT_EQ(broadPhase.getDynamicTree().getLeafCount(), 0u);
+  EXPECT_TRUE(broadPhase.getDynamicTree().isValid());
+  EXPECT_TRUE(broadPhase.getPairs().empty());
+
+  broadPhase.moveProxy(body, boxAt({ 0, 0, 0 }));
+  broadPhase.updatePairs();
+
+  EXPECT_EQ(broadPhase.getDynamicTree().getLeafCount(), 1u);
+  EXPECT_TRUE(hasPair(broadPhase, body, ground));
+  EXPECT_TRUE(broadPhase.getDynamicTree().isValid());
+}
+
+TEST(BroadPhase, AParkedProxyThatIsDestroyedFreesItsIdAtTheNextUpdate)
+{
+  BroadPhase broadPhase;
+  const auto doomed = broadPhase.createProxy(boxAt({ 0, 0, 0 }), true, 0);
+  const auto ground = broadPhase.createProxy(boxAt({ 0, -0.5f, 0 }, 1.0f), false, 1);
+  broadPhase.updatePairs();
+  ASSERT_TRUE(hasPair(broadPhase, doomed, ground));
+
+  Aabb blownUp = boxAt({ 0, 0, 0 });
+  blownUp.max.y = std::numeric_limits<float>::infinity();
+  broadPhase.moveProxy(doomed, blownUp);
+  broadPhase.updatePairs();
+  ASSERT_TRUE(broadPhase.getPairs().empty());
+
+  // Nothing else happens this tick: only the destroy asks for the refresh.
+  broadPhase.destroyProxy(doomed);
+  broadPhase.updatePairs();
+
+  EXPECT_TRUE(broadPhase.getPairs().empty());
+  EXPECT_EQ(broadPhase.getProxyCount(), 1u);
+
+  const auto reused = broadPhase.createProxy(boxAt({ 40, 0, 0 }), true, 2);
+  EXPECT_EQ(reused, doomed);
+  broadPhase.updatePairs();
+
+  EXPECT_TRUE(broadPhase.getPairs().empty());
+  EXPECT_EQ(broadPhase.getProxyCount(), 2u);
+}
+
+TEST(BroadPhase, ManyMovedProxiesQueryInParallelAndStillMatchBruteForce)
+{
+  BroadPhase broadPhase;
+  Lcg random;
+  std::vector<Body> bodies;
+
+  const auto spawn = [&](const bool dynamic) {
+    Body body;
+    body.tight = boxAt({ random.next(-25, 25), random.next(-3, 3), random.next(-25, 25) }, random.next(0.3f, 0.8f));
+    body.dynamic = dynamic;
+    body.alive = true;
+    body.proxy = broadPhase.createProxy(body.tight, dynamic, static_cast<int32_t>(bodies.size()));
+    bodies.push_back(body);
+  };
+
+  for (int i = 0; i < 30; ++i)
+  {
+    spawn(false);
+  }
+
+  for (int i = 0; i < 420; ++i)
+  {
+    spawn(true);
+  }
+
+  broadPhase.updatePairs();
+  expectCacheExact(broadPhase, bodies, 0);
+
+  size_t mostMoved = 0;
+  for (int tick = 1; tick <= 6; ++tick)
+  {
+    for (auto& body : bodies)
+    {
+      if (!body.dynamic)
+      {
+        continue;
+      }
+
+      // Far enough that the body leaves the fat box it was given, but not out of the crowd.
+      const glm::vec3 step{ random.next(-2, 2), random.next(-0.5f, 0.5f), random.next(-2, 2) };
+      body.tight.min += step;
+      body.tight.max += step;
+      broadPhase.moveProxy(body.proxy, body.tight);
+    }
+
+    broadPhase.updatePairs();
+    mostMoved = std::max(mostMoved, broadPhase.getLastMovedCount());
+    expectCacheExact(broadPhase, bodies, tick);
+    if (HasFatalFailure())
+    {
+      return;
+    }
+  }
+
+  // More than four blocks of 64 is what turns the parallel region on.
+  EXPECT_GT(mostMoved, 256u);
+}
+
 TEST(BroadPhase, TheCacheMatchesBruteForceThroughMotionSpawnsAndDestroys)
 {
   BroadPhase broadPhase;
@@ -294,6 +423,22 @@ TEST(BroadPhase, TheCacheMatchesBruteForceThroughMotionSpawnsAndDestroys)
     {
       if (!body.alive || !body.dynamic)
       {
+        continue;
+      }
+
+      // A box that went non-finite comes back finite on the next tick, and some go non-finite out of nowhere.
+      if (!body.tight.isFinite())
+      {
+        body.tight = body.hidden;
+        broadPhase.moveProxy(body.proxy, body.tight);
+        continue;
+      }
+
+      if (random.next(0, 1) < 0.05f)
+      {
+        body.hidden = body.tight;
+        body.tight.min.x = std::numeric_limits<float>::quiet_NaN();
+        broadPhase.moveProxy(body.proxy, body.tight);
         continue;
       }
 

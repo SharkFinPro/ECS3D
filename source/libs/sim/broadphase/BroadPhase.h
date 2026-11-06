@@ -104,6 +104,9 @@ private:
 
   [[nodiscard]] static Aabb fatten(const Aabb& tight, const glm::vec3& displacement);
 
+  // Takes the proxy out of its tree, and so out of every pair, if it is in one.
+  void park(int32_t proxy);
+
   [[nodiscard]] static uint64_t makePair(int32_t a, int32_t b);
 
   void markMoved(int32_t proxy);

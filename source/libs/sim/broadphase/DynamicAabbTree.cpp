@@ -170,14 +170,14 @@ void DynamicAabbTree::removeLeaf(const int32_t leaf)
 
 void DynamicAabbTree::replaceChild(const int32_t parent, const int32_t oldChild, const int32_t newChild)
 {
-  Node& node = this->node(parent);
-  if (node.left == oldChild)
+  Node& target = node(parent);
+  if (target.left == oldChild)
   {
-    node.left = newChild;
+    target.left = newChild;
   }
   else
   {
-    node.right = newChild;
+    target.right = newChild;
   }
 }
 
@@ -277,9 +277,18 @@ void DynamicAabbTree::clear()
 
 bool DynamicAabbTree::isValid() const
 {
+  size_t freeNodes = 0;
+  for (int32_t index = m_freeList; index != nullNode; index = node(index).parent)
+  {
+    if (++freeNodes > m_nodes.size() || node(index).height != -1)
+    {
+      return false;
+    }
+  }
+
   if (m_root == nullNode)
   {
-    return m_leafCount == 0;
+    return m_leafCount == 0 && freeNodes == m_nodes.size();
   }
 
   if (node(m_root).parent != nullNode)
@@ -288,7 +297,12 @@ bool DynamicAabbTree::isValid() const
   }
 
   size_t leaves = 0;
-  return isValidSubtree(m_root, leaves) && leaves == m_leafCount;
+  if (!isValidSubtree(m_root, leaves) || leaves != m_leafCount)
+  {
+    return false;
+  }
+
+  return 2 * leaves - 1 + freeNodes == m_nodes.size();
 }
 
 bool DynamicAabbTree::isValidSubtree(const int32_t index, size_t& leaves) const

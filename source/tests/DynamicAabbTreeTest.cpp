@@ -176,6 +176,46 @@ TEST(DynamicAabbTree, BoxesArrivingInSortedOrderStayShallow)
   EXPECT_GE(tree.getHeight(), static_cast<int>(std::log2(count)));
 }
 
+TEST(DynamicAabbTree, ChurnNeverLeaksOrLosesANode)
+{
+  DynamicAabbTree tree;
+  Lcg random;
+  std::vector<int32_t> leaves;
+
+  for (int round = 0; round < 40; ++round)
+  {
+    for (int i = 0; i < 25; ++i)
+    {
+      leaves.push_back(tree.insert(randomBox(random), round));
+    }
+
+    for (int i = 0; i < 15 && !leaves.empty(); ++i)
+    {
+      const auto at = static_cast<size_t>(random.next(0, static_cast<float>(leaves.size()) - 0.01f));
+      tree.remove(leaves[at]);
+      leaves.erase(leaves.begin() + static_cast<std::ptrdiff_t>(at));
+    }
+
+    for (int i = 0; i < 10 && !leaves.empty(); ++i)
+    {
+      const auto at = static_cast<size_t>(random.next(0, static_cast<float>(leaves.size()) - 0.01f));
+      tree.move(leaves[at], randomBox(random));
+    }
+
+    ASSERT_TRUE(tree.isValid()) << "round " << round;
+    ASSERT_EQ(tree.getLeafCount(), leaves.size()) << "round " << round;
+  }
+
+  while (!leaves.empty())
+  {
+    tree.remove(leaves.back());
+    leaves.pop_back();
+    ASSERT_TRUE(tree.isValid());
+  }
+
+  EXPECT_EQ(tree.getLeafCount(), 0u);
+}
+
 TEST(DynamicAabbTree, ClearEmptiesTheTree)
 {
   DynamicAabbTree tree;
@@ -200,4 +240,48 @@ TEST(Aabb, IsFiniteOnlyWhenEveryBoundIs)
   Aabb withInfinity = boxAt({ 0, 0, 0 }, 1.0f);
   withInfinity.min.z = -std::numeric_limits<float>::infinity();
   EXPECT_FALSE(withInfinity.isFinite());
+}
+
+TEST(Aabb, OverlapsIsInclusiveAndChecksEachAxisOnItsOwn)
+{
+  const Aabb box{ { 0, 0, 0 }, { 1, 1, 1 } };
+
+  EXPECT_TRUE(box.overlaps({ { 0.5f, 0.5f, 0.5f }, { 2, 2, 2 } }));
+  EXPECT_TRUE(box.overlaps({ { 1, 0, 0 }, { 2, 1, 1 } }));
+  EXPECT_TRUE(box.overlaps({ { 0, 1, 0 }, { 1, 2, 1 } }));
+  EXPECT_TRUE(box.overlaps({ { 0, 0, 1 }, { 1, 1, 2 } }));
+  EXPECT_TRUE(box.overlaps({ { 0.25f, 0.25f, 0.25f }, { 0.75f, 0.75f, 0.75f } }));
+
+  EXPECT_FALSE(box.overlaps({ { 2, 0, 0 }, { 3, 1, 1 } }));
+  EXPECT_FALSE(box.overlaps({ { -3, 0, 0 }, { -2, 1, 1 } }));
+  EXPECT_FALSE(box.overlaps({ { 0, 2, 0 }, { 1, 3, 1 } }));
+  EXPECT_FALSE(box.overlaps({ { 0, -3, 0 }, { 1, -2, 1 } }));
+  EXPECT_FALSE(box.overlaps({ { 0, 0, 2 }, { 1, 1, 3 } }));
+  EXPECT_FALSE(box.overlaps({ { 0, 0, -3 }, { 1, 1, -2 } }));
+}
+
+TEST(Aabb, ContainsNeedsEveryFaceInsideOrEqual)
+{
+  const Aabb box{ { 0, 0, 0 }, { 4, 4, 4 } };
+
+  EXPECT_TRUE(box.contains({ { 1, 1, 1 }, { 2, 2, 2 } }));
+  EXPECT_TRUE(box.contains(box));
+
+  EXPECT_FALSE(box.contains({ { -1, 1, 1 }, { 2, 2, 2 } }));
+  EXPECT_FALSE(box.contains({ { 1, -1, 1 }, { 2, 2, 2 } }));
+  EXPECT_FALSE(box.contains({ { 1, 1, -1 }, { 2, 2, 2 } }));
+  EXPECT_FALSE(box.contains({ { 1, 1, 1 }, { 5, 2, 2 } }));
+  EXPECT_FALSE(box.contains({ { 1, 1, 1 }, { 2, 5, 2 } }));
+  EXPECT_FALSE(box.contains({ { 1, 1, 1 }, { 2, 2, 5 } }));
+}
+
+TEST(Aabb, SurfaceAreaAndMergedFollowTheBounds)
+{
+  EXPECT_FLOAT_EQ((Aabb{ { 0, 0, 0 }, { 1, 2, 3 } }).surfaceArea(), 2.0f * (2.0f + 6.0f + 3.0f));
+  EXPECT_FLOAT_EQ((Aabb{ { 1, 1, 1 }, { 1, 1, 1 } }).surfaceArea(), 0.0f);
+
+  const Aabb merged = Aabb::merged({ { 0, 5, -1 }, { 2, 6, 0 } }, { { -3, 4, 0 }, { 1, 9, 7 } });
+
+  EXPECT_EQ(merged.min, glm::vec3(-3, 4, -1));
+  EXPECT_EQ(merged.max, glm::vec3(2, 9, 7));
 }
