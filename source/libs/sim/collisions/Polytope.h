@@ -26,6 +26,13 @@ public:
   Polytope(Collider& collider, Collider& otherCollider, const SupportShape& shape, const SupportShape& otherShape,
            Simplex& simplex);
 
+  // Returns the vertex and face buffers to a per-thread pool, so the next polytope on the thread grows into
+  // capacity that is already there instead of allocating.
+  ~Polytope();
+
+  Polytope(const Polytope&) = delete;
+  Polytope& operator=(const Polytope&) = delete;
+
   [[nodiscard]] glm::vec3 getMinimumTranslationVector() const;
 
   struct ContactPoints {
@@ -74,6 +81,13 @@ private:
     glm::dvec3 normal;
     double distance;
   };
+
+  struct BufferPool {
+    std::vector<glm::dvec3> vertices;
+    std::vector<EpaFace> faces;
+  };
+
+  [[nodiscard]] static BufferPool& bufferPool();
 
   std::vector<glm::dvec3> m_vertices;
   std::vector<EpaFace> m_faces;

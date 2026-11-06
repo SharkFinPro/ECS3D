@@ -5,6 +5,7 @@ add_library(${PROJECT_NAME}
   PhysicsSystem.h
   FixedTimestep.cpp
   FixedTimestep.h
+  ComponentAccess.h
   InertiaTensor.cpp
   InertiaTensor.h
   CollisionSystem.cpp
