@@ -39,6 +39,8 @@ namespace collisions {
     [[nodiscard]] std::vector<glm::vec3> spreadOut(const std::vector<Candidate>& candidates, const size_t maxPoints)
     {
       std::vector<glm::vec3> chosen;
+      chosen.reserve(std::min(candidates.size(), maxPoints));
+
       if (candidates.size() <= maxPoints)
       {
         for (const auto& candidate : candidates)

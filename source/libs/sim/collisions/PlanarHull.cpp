@@ -2,6 +2,7 @@
 #include <glm/geometric.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace {
   // A turn below this share of the product of the two edge lengths is straight.
@@ -10,25 +11,26 @@ namespace {
   struct Point {
     float x;
     float y;
-    size_t index;
+    uint32_t index;
   };
 
   bool keepsTurn(const Point& o, const Point& a, const Point& b)
   {
+    // hypot rather than a squared comparison, which rounds differently at the collinear threshold.
     const float turn = (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
     const float lengths = std::hypot(a.x - o.x, a.y - o.y) * std::hypot(b.x - o.x, b.y - o.y);
 
     return turn > collinearShare * lengths;
   }
 
-  void extend(std::vector<Point>& hull, const Point& point, const size_t floor)
+  void extend(Point* hull, size_t& count, const Point& point, const size_t floor)
   {
-    while (hull.size() >= floor && !keepsTurn(hull[hull.size() - 2], hull.back(), point))
+    while (count >= floor && !keepsTurn(hull[count - 2], hull[count - 1], point))
     {
-      hull.pop_back();
+      --count;
     }
 
-    hull.push_back(point);
+    hull[count++] = point;
   }
 }
 
@@ -46,30 +48,38 @@ namespace collisions {
     const auto u = glm::normalize(glm::cross(helper, normal));
     const auto v = glm::cross(normal, u);
 
-    std::vector<Point> sorted;
+    // Per-thread scratch keeps capacity across calls, so the hot path does not allocate.
+    thread_local std::vector<Point> sorted;
+    thread_local std::vector<Point> hull;
+
+    sorted.clear();
     for (size_t i = 0; i < points.size(); ++i)
     {
-      sorted.push_back({ glm::dot(points[i], u), glm::dot(points[i], v), i });
+      sorted.push_back({ glm::dot(points[i], u), glm::dot(points[i], v), static_cast<uint32_t>(i) });
     }
     std::ranges::sort(sorted, [](const Point& a, const Point& b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
 
-    std::vector<Point> hull;
+    if (hull.size() < points.size() + 1)
+    {
+      hull.resize(points.size() + 1);
+    }
+    size_t count = 0;
     for (const auto& point : sorted)
     {
-      extend(hull, point, 2);
+      extend(hull.data(), count, point, 2);
     }
 
-    const size_t lower = hull.size() + 1;
+    const size_t lower = count + 1;
     for (auto point = sorted.rbegin() + 1; point != sorted.rend(); ++point)
     {
-      extend(hull, *point, lower);
+      extend(hull.data(), count, *point, lower);
     }
-    hull.pop_back();
+    --count;
 
-    std::vector<size_t> outline;
-    for (const auto& point : hull)
+    std::vector<size_t> outline(count);
+    for (size_t i = 0; i < count; ++i)
     {
-      outline.push_back(point.index);
+      outline[i] = hull[i].index;
     }
 
     return outline;
@@ -77,8 +87,11 @@ namespace collisions {
 
   std::vector<glm::vec3> convexOutline(const std::span<const glm::vec3> points, const glm::vec3& normal)
   {
+    const auto indices = convexOutlineIndices(points, normal);
+
     std::vector<glm::vec3> outline;
-    for (const auto index : convexOutlineIndices(points, normal))
+    outline.reserve(indices.size());
+    for (const auto index : indices)
     {
       outline.push_back(points[index]);
     }

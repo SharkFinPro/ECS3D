@@ -73,6 +73,14 @@ public:
   [[nodiscard]] virtual glm::vec3 getScale() { return glm::vec3(1); }
   [[nodiscard]] virtual glm::vec3 getRotation() { return glm::vec3(0); }
 
+  // The owner transform's Transform::getWorldUpdateID. Throws if the owner has no transform. Writes nothing, so the
+  // parallel narrow phase can ask it of a collider another thread is reading.
+  [[nodiscard]] uint64_t getWorldUpdateID() const;
+
+  // Moves whenever the collider's own geometry (offset, size, radius, hull) changes. Together with
+  // getWorldUpdateID it tells a cache built from this collider's world geometry that it is stale.
+  [[nodiscard]] uint64_t getGeometryRevision() const;
+
 protected:
   std::weak_ptr<Transform> m_transform_ptr;
 
@@ -93,6 +101,18 @@ protected:
   bool m_renderCollider = false;
 
   void invalidateBoundingBox();
+
+  // m_transform_ptr's target without lock()'s atomic ref-count traffic, for per-query hot paths like
+  // findFurthestPoint. Throws if the owner has no transform.
+  [[nodiscard]] Transform& cachedTransform();
+
+private:
+  // m_cachedTransformSource pins the control block m_cachedTransform came from, so a replaced transform
+  // is detected and its address cannot be reused while the cache still points at it.
+  Transform* m_cachedTransform = nullptr;
+  std::weak_ptr<Transform> m_cachedTransformSource;
+
+  uint64_t m_geometryRevision = 0;
 };
 
 

@@ -10,6 +10,8 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <uuid.h>
 
 namespace net {
@@ -82,6 +84,9 @@ public:
 
   [[nodiscard]] uuids::uuid getUUID() const;
 
+  // Valid until this object is destroyed or its uuid is reassigned by unpack/loadFromJSON; do not store it.
+  [[nodiscard]] std::string_view getUUIDString() const;
+
   // True when object sits somewhere below this one in the hierarchy. An object is not its own
   // ancestor, so a caller guarding against cycles has to check for self separately.
   [[nodiscard]] bool isAncestorOf(const std::shared_ptr<Object>& object) const;
@@ -115,6 +120,8 @@ private:
 
   uuids::uuid m_uuid;
 
+  mutable std::string m_uuidString;
+
   std::string m_name;
 
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
@@ -135,9 +142,9 @@ private:
 template<typename T>
 std::shared_ptr<T> Object::getComponent(const ComponentType type) const
 {
-  const auto component = getComponent(type);
+  auto component = getComponent(type);
 
-  return component ? std::dynamic_pointer_cast<T>(component) : nullptr;
+  return component ? std::dynamic_pointer_cast<T>(std::move(component)) : nullptr;
 }
 
 #endif //OBJECT_H

@@ -5,12 +5,19 @@
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
+#include <vector>
 
 namespace {
   // A collider needs a Transform on the same object to place its geometry; nothing else about the scene
@@ -360,4 +367,147 @@ TEST(NarrowPhase, MirroredSpheresCollideOnlyWhenTheyOverlap)
   const auto contact = collisions::findContact(*first, *second);
   ASSERT_TRUE(contact.has_value());
   EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
+}
+
+TEST(NarrowPhase, AWitnessFromIntersectsGivesTheSameContactAsGjk)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0.3f, 0.2f });
+
+  std::optional<collisions::OverlapWitness> witness;
+  ASSERT_TRUE(collisions::intersects(*first, *second, witness));
+  ASSERT_TRUE(witness.has_value());
+
+  const auto fresh = collisions::findContact(*first, *second);
+  const auto reused = collisions::findContact(*first, *second, witness);
+  ASSERT_TRUE(fresh.has_value());
+  ASSERT_TRUE(reused.has_value());
+
+  EXPECT_EQ(reused->minimumTranslationVector, fresh->minimumTranslationVector);
+  EXPECT_EQ(reused->point, fresh->point);
+  ASSERT_EQ(reused->pointCount, fresh->pointCount);
+  for (std::uint8_t i = 0; i < fresh->pointCount; ++i)
+  {
+    EXPECT_EQ(reused->points[i], fresh->points[i]);
+  }
+}
+
+TEST(NarrowPhase, AWitnessIsIgnoredOnceAColliderMoves)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0, 0 });
+
+  std::optional<collisions::OverlapWitness> witness;
+  ASSERT_TRUE(collisions::intersects(*first, *second, witness));
+
+  moveTo(secondObject, { 10, 0, 0 });
+
+  EXPECT_FALSE(collisions::findContact(*first, *second, witness).has_value());
+}
+
+TEST(NarrowPhase, AWitnessIsIgnoredOnceAColliderResizes)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0, 0 });
+
+  std::optional<collisions::OverlapWitness> witness;
+  ASSERT_TRUE(collisions::intersects(*first, *second, witness));
+
+  second->setScale({ 0.1f, 0.1f, 0.1f });
+
+  EXPECT_FALSE(collisions::findContact(*first, *second, witness).has_value());
+}
+
+TEST(NarrowPhase, RoundPairsRecordNoWitness)
+{
+  const auto [firstObject, first] = makeCollider<SphereCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
+
+  std::optional<collisions::OverlapWitness> witness;
+  EXPECT_TRUE(collisions::intersects(*first, *second, witness));
+  EXPECT_FALSE(witness.has_value());
+}
+
+// The manifold reads a box's world frame from a cache; resizing the box alone, with no transform change,
+// has to refresh it.
+TEST(NarrowPhase, ABoxManifoldFollowsTheBoxsOwnResize)
+{
+  const auto [groundObject, ground] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [boxObject, box] = makeCollider<BoxCollider>({ 0, 1.5f, 0 });
+
+  const auto before = collisions::findContact(*ground, *box);
+  ASSERT_TRUE(before.has_value());
+  EXPECT_NEAR(before->point.y, 0.5f, tolerance);
+
+  box->setScale({ 1.0f, 0.8f, 1.0f });
+
+  const auto after = collisions::findContact(*ground, *box);
+  ASSERT_TRUE(after.has_value());
+  EXPECT_NEAR(after->depth(), 0.3f, tolerance);
+  EXPECT_NEAR(after->point.y, 0.7f, tolerance);
+}
+
+// A hull's face normals are cached per world-vertex rebuild. After the hull turns, its contact has to match a
+// hull that never cached anything at that pose.
+TEST(NarrowPhase, AHullContactAfterATurnMatchesAFreshHull)
+{
+  const auto [groundObject, ground] = makeCollider<BoxCollider>({ 0, 0, 0 }, { 5, 1, 5 });
+  const auto [hullObject, hull] = makeCollider<ConvexMeshCollider>({ 0, 1.8f, 0 });
+
+  ASSERT_TRUE(collisions::findContact(*hull, *ground).has_value());
+
+  const auto transform = hullObject->getComponent<Transform>(ComponentType::transform);
+  transform->setPosition({ 0, 2.0f, 0 });
+  transform->setRotation({ 0, 0, 30 });
+
+  const auto [freshObject, fresh] = makeCollider<ConvexMeshCollider>({ 0, 2.0f, 0 });
+  freshObject->getComponent<Transform>(ComponentType::transform)->setRotation({ 0, 0, 30 });
+
+  const auto turned = collisions::findContact(*hull, *ground);
+  const auto expected = collisions::findContact(*fresh, *ground);
+  ASSERT_TRUE(turned.has_value());
+  ASSERT_TRUE(expected.has_value());
+
+  EXPECT_EQ(turned->minimumTranslationVector, expected->minimumTranslationVector);
+  EXPECT_EQ(turned->point, expected->point);
+  ASSERT_EQ(turned->pointCount, expected->pointCount);
+  for (std::uint8_t i = 0; i < expected->pointCount; ++i)
+  {
+    EXPECT_EQ(turned->points[i], expected->points[i]);
+  }
+}
+
+// The box support picks a corner from the signs of the axis dots. Any corner of a tied face is as far as
+// another, so what has to hold is that no corner lies further along the direction than the one picked.
+TEST(NarrowPhase, BoxSupportPicksAFurthestCorner)
+{
+  const auto [object, box] = makeCollider<BoxCollider>({ 3.7f, -1.2f, 0.4f }, { 1.3f, 0.7f, 2.9f });
+  object->getComponent<Transform>(ComponentType::transform)->setRotation({ 23.0f, 71.0f, -38.0f });
+  const auto [alignedObject, aligned] = makeCollider<BoxCollider>({ 1.0f, 2.0f, 3.0f });
+
+  std::vector<glm::vec3> directions = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 },
+                                        { 0, 0, -1 } };
+  for (int i = 0; i < 2000; ++i)
+  {
+    const float a = static_cast<float>(i) * 0.731f;
+    const float b = static_cast<float>(i) * 1.913f;
+    directions.emplace_back(std::cos(a) * std::sin(b), std::cos(b), std::sin(a) * std::sin(b));
+  }
+
+  for (const auto* collider : { box.get(), aligned.get() })
+  {
+    const auto& support = const_cast<BoxCollider*>(collider)->getWorldSupport();
+    for (const auto& direction : directions)
+    {
+      const auto picked = support.furthestPoint(direction);
+      EXPECT_TRUE(std::ranges::find(support.vertices, picked) != support.vertices.end());
+
+      float furthest = std::numeric_limits<float>::lowest();
+      for (const auto& vertex : support.vertices)
+      {
+        furthest = std::max(furthest, glm::dot(vertex, direction));
+      }
+      EXPECT_NEAR(glm::dot(picked, direction), furthest, 1e-5f * std::max(1.0f, std::fabs(furthest)));
+    }
+  }
 }

@@ -198,7 +198,7 @@ public:
   }
 
   // Length-prefixed string (uint32 size + bytes). The pairing read is MessageReader::readString.
-  Message& writeString(const std::string& value) {
+  Message& writeString(std::string_view value) {
     // Checked before anything is written: a size that does not fit the uint32 prefix would wrap, and a
     // wrapped prefix desyncs every field the pairing readString and every read after it expect to find.
     if (value.size() > std::numeric_limits<uint32_t>::max())

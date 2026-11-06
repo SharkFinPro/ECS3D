@@ -74,7 +74,9 @@ the center of mass to the two ends, and that arm is (a^2 + b^2) / (2 (a + b)). `
 when either side is dynamic and handing the hit to every dynamic side, with each edge's hits kept in ascending
 edge order - but responses resolve top-down by bounding-box minY so a stack settles the same whichever side of
 it the load sits), calling the narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects`
-are its entry points. A pair of spheres and capsules skips GJK, since a sphere is a capsule with a zero-length
+are its entry points. The sweep's `intersects` keeps GJK's final simplex (`OverlapWitness`), and the response's
+`findContact` starts EPA from it while neither collider's world update id or geometry revision has moved since. GJK
+and EPA query each collider through a `SupportShape` refreshed once per call. A pair of spheres and capsules skips GJK, since a sphere is a capsule with a zero-length
 core segment. That pair is solved from the closest points between the two core segments, treated as two spheres.
 Parallel overlapping capsules report two manifold points. Every other pair goes through GJK/EPA, where a
 capsule's contact feature is its cap points facing the other shape, clamped onto a box's footprint. EPA grows its

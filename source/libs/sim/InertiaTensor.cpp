@@ -66,27 +66,40 @@ namespace {
     return inertia::capsule(segment.start, segment.end, collider.getRadius());
   }
 
+  // The hull's own distribution is integrated once. An affine placement carries mass the way it carries points:
+  // the volume scales by the determinant of its linear part A, the centroid goes through the map, and the
+  // covariance becomes A C A^T - so a moving hull costs a few 3x3 products rather than a pass over its triangles.
   inertia::Distribution hullOf(ConvexMeshCollider& collider)
   {
-    // Refresh the vertices first: the generation only moves when they are rebuilt.
-    const auto& vertices = collider.getWorldVertices();
-    const auto generation = collider.getWorldVerticesGeneration();
-
-    if (const auto& cache = collider.getMassCache(); cache && cache->generation == generation)
+    if (!collider.getMassCache())
     {
-      return { cache->volume, cache->centroid, cache->covariance };
+      const auto& hull = collider.getHull();
+      const auto local = inertia::hull(hull.vertices, hull.indices);
+      collider.setMassCache({ local.volume, local.centroid, local.covariance });
     }
 
-    const auto shape = inertia::hull(vertices, collider.getHull().indices);
-    collider.setMassCache({ generation, shape.volume, shape.centroid, shape.covariance });
+    const auto& local = *collider.getMassCache();
+    const auto& world = collider.getWorldMatrix();
+    const glm::mat3 linear(world);
 
-    return shape;
+    return { local.volume * std::abs(glm::determinant(linear)), glm::vec3(world * glm::vec4(local.centroid, 1.0f)),
+             linear * local.covariance * glm::transpose(linear) };
+  }
+
+  // An object's own collider, read from its component map: this walk runs for every inertia query, and neither
+  // lookup reaches past the object, so a refcounted, type-checked getComponent for each would only add cost.
+  Collider* ownColliderOf(const Object& object)
+  {
+    const auto& components = object.getComponents();
+    const auto collider = components.find(ComponentType::collider);
+
+    return collider == components.end() ? nullptr : static_cast<Collider*>(collider->second.get());
   }
 
   void collect(const Object& object, std::vector<inertia::Distribution>& shapes)
   {
-    const auto collider = object.getComponent<Collider>(ComponentType::collider);
-    if (collider && !collider->isTrigger() && object.getComponent<Transform>(ComponentType::transform))
+    const auto collider = ownColliderOf(object);
+    if (collider && !collider->isTrigger() && object.getComponents().contains(ComponentType::transform))
     {
       if (const auto shape = inertia::of(*collider); std::isfinite(shape.volume) && shape.volume > minVolume)
       {
@@ -239,7 +252,12 @@ namespace inertia {
   {
     if (owner)
     {
-      const auto shapes = bodyDistributions(*owner);
+      // Reused across calls so a response's repeated inertia queries allocate nothing once warm; thread_local
+      // keeps parallel callers independent.
+      thread_local std::vector<Distribution> shapes;
+      shapes.clear();
+      collect(*owner, shapes);
+
       if (!shapes.empty())
       {
         return tensorAbout(shapes, transform.getPosition());

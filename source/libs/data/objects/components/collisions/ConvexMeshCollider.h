@@ -4,11 +4,14 @@
 #include "Collider.h"
 #include "ConvexHull.h"
 #include "ConvexHullValidation.h"
+#include "WorldFace.h"
 #include <glm/mat3x3.hpp>
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <uuid.h>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 // A convex hull collider. The hull lives inline in the component (local-space vertices and triangle
@@ -17,12 +20,27 @@
 // default BoxCollider until a model is picked.
 class ConvexMeshCollider final : public Collider {
 public:
-  // The hull's world-space mass distribution, filled by the sim. Derived state: never serialized or packed.
+  // The hull's mass distribution in its own local space, filled by the sim and cleared with the hull. Derived
+  // state: never serialized or packed.
   struct MassCache {
-    uint64_t generation = 0;
     float volume = 0.0f;
     glm::vec3 centroid{ 0.0f };
     glm::mat3 covariance{ 0.0f };
+  };
+
+  // The face outlines of the hull as hull vertex ids, filled by the sim. Derived state, cleared with the hull.
+  using FaceOutlines = std::vector<std::vector<uint32_t>>;
+
+  // The hull's world-space unit face normals, filled by the sim. Derived state, current while generation matches.
+  struct FaceNormalCache {
+    uint64_t generation = 0;
+    std::vector<glm::vec3> normals;
+  };
+
+  // The hull's planar faces in world space, filled by the sim. Derived state, current while generation matches.
+  struct WorldFaceCache {
+    uint64_t generation = 0;
+    std::vector<WorldFace> faces;
   };
 
   ConvexMeshCollider();
@@ -48,12 +66,30 @@ public:
   // The hull's vertices under the collider's current world placement, refreshed when the transform moved.
   [[nodiscard]] const std::vector<glm::vec3>& getWorldVertices();
 
-  // Counts the times the world vertices were rebuilt; a MassCache is current only while its generation matches.
+  // The map from the hull's local space to the world that the world vertices were built with, refreshed first.
+  [[nodiscard]] const glm::mat4& getWorldMatrix();
+
+  // Counts the times the world vertices were rebuilt; a cache keyed on it is current only while it matches.
   [[nodiscard]] uint64_t getWorldVerticesGeneration() const;
 
   [[nodiscard]] const std::optional<MassCache>& getMassCache() const;
 
   void setMassCache(const MassCache& cache);
+
+  [[nodiscard]] const std::optional<FaceOutlines>& getFaceOutlines() const;
+
+  void setFaceOutlines(FaceOutlines outlines);
+
+  [[nodiscard]] const std::optional<FaceNormalCache>& getFaceNormalCache() const;
+
+  void setFaceNormalCache(FaceNormalCache cache);
+
+  [[nodiscard]] const std::optional<WorldFaceCache>& getWorldFaceCache() const;
+
+  void setWorldFaceCache(WorldFaceCache cache);
+
+  // The vertex furthest along direction, the first of equals winning; the origin when there are none.
+  [[nodiscard]] static glm::vec3 furthestOf(std::span<const glm::vec3> vertices, const glm::vec3& direction);
 
   [[nodiscard]] nlohmann::json serialize() override;
 
@@ -80,11 +116,19 @@ private:
 
   std::vector<glm::vec3> m_worldVertices;
 
+  glm::mat4 m_worldMatrix{ 1.0f };
+
   uint64_t m_currentTransformUpdateID = 255;
 
   uint64_t m_worldVerticesGeneration = 0;
 
   std::optional<MassCache> m_massCache;
+
+  std::optional<FaceOutlines> m_faceOutlines;
+
+  std::optional<FaceNormalCache> m_faceNormalCache;
+
+  std::optional<WorldFaceCache> m_worldFaceCache;
 
   // Editing the collider's own offset or hull doesn't bump the transform's update id, so force a rebuild.
   bool m_meshDirty = true;
@@ -106,7 +150,7 @@ private:
     uint32_t mask = 0xFFFFFFFFu;
   };
 
-  void generateWorldVertices(const std::shared_ptr<Transform>& transform);
+  void generateWorldVertices(const Transform& transform);
 
   [[nodiscard]] std::shared_ptr<Transform> ownerTransform();
 

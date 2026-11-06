@@ -10,6 +10,7 @@
 #include "objects/components/Component.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
+#include "objects/components/collisions/Collider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 
@@ -89,6 +90,18 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidBringsItDown)
   walkPlayer(objectManager, player, { 0.0f, 0.0f, -1.0f }, topSpeed, walkTicks);
   walkPlayer(objectManager, player, glm::vec3(0.0f), topSpeed, settleTicks);
 
+  // A cube the player shoves along can reach the Ground's edge and fall off the world, which platform rounding
+  // decides one run at a time. Only a cube still over the Ground, a unit clear of its edge, has to be on it: one
+  // there below the floor went through it.
+  const auto ground = objectNamedExactly(objectManager, "Ground");
+  ASSERT_NE(ground, nullptr);
+  const auto& groundBounds = ground->getComponent<Collider>(ComponentType::collider)->getBoundingBox();
+  const auto overGround = [&groundBounds](const glm::vec3& position) {
+    constexpr float edgeMargin = 1.0f;
+    return position.x > groundBounds.minX + edgeMargin && position.x < groundBounds.maxX - edgeMargin &&
+           position.z > groundBounds.minZ + edgeMargin && position.z < groundBounds.maxZ - edgeMargin;
+  };
+
   // Measured at top speeds 4 and 9: the top cube fell 1.0 and 3.0, and 2 and 8 cubes dropped over half a unit.
   EXPECT_LT(fixtures::positionOf(cubes[topIndex]).y, startHeights[topIndex] - 0.5f);
   int dropped = 0;
@@ -97,7 +110,10 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidBringsItDown)
     const auto position = fixtures::positionOf(cubes[i]);
     SCOPED_TRACE(i);
     EXPECT_TRUE(std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z));
-    EXPECT_GT(position.y, 0.0f);
+    if (overGround(position))
+    {
+      EXPECT_GT(position.y, 0.0f);
+    }
     dropped += position.y < startHeights[i] - 0.5f ? 1 : 0;
   }
   EXPECT_GE(dropped, 2);

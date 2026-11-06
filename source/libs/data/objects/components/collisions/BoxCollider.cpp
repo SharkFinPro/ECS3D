@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
-#include <limits>
+#include <cstdint>
 #include <stdexcept>
 #include <Protocol.h>
 
@@ -147,30 +147,51 @@ glm::vec3 BoxCollider::getRotation()
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  updateTransformPointer();
+  return getWorldSupport().furthestPoint(direction);
+}
 
-  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
+const BoxSupport& BoxCollider::getWorldSupport()
+{
+  if (const Transform& transform = cachedTransform();
+      m_meshDirty || m_currentTransformUpdateID != transform.getWorldUpdateID())
   {
-    if (m_meshDirty || m_currentTransformUpdateID != transform->getWorldUpdateID())
-    {
-      generateTransformedMesh(transform);
-      m_meshDirty = false;
-    }
+    generateTransformedMesh(transform);
+    m_meshDirty = false;
   }
 
-  float largestDot = std::numeric_limits<float>::lowest();
-  glm::vec3 furthestVertex{ 0, 0, 0 };
+  return m_worldSupport;
+}
 
-  for (auto& vertex : m_transformedBoxVertices)
+const BoxWorldFrame& BoxCollider::getWorldFrame()
+{
+  const uint64_t updateID = getWorldUpdateID();
+  if (m_worldFrameValid && m_worldFrameUpdateID == updateID && m_worldFrameRevision == getGeometryRevision())
   {
-    if (const float currentDot = dot(vertex, direction); currentDot > largestDot)
-    {
-      largestDot = currentDot;
-      furthestVertex = vertex;
-    }
+    return m_worldFrame;
   }
 
-  return furthestVertex;
+  const auto rotation = glm::radians(getRotation());
+  const auto scale = glm::abs(getScale());
+
+  const auto rotationMatrix = glm::mat3(
+    glm::rotate(glm::mat4(1.0f), rotation.z, { 0, 0, 1 }) *
+    glm::rotate(glm::mat4(1.0f), rotation.y, { 0, 1, 0 }) *
+    glm::rotate(glm::mat4(1.0f), rotation.x, { 1, 0, 0 }));
+
+  m_worldFrame = {
+    .center = getPosition(),
+    .axes = {
+      rotationMatrix * glm::vec3{ 1, 0, 0 },
+      rotationMatrix * glm::vec3{ 0, 1, 0 },
+      rotationMatrix * glm::vec3{ 0, 0, 1 }
+    },
+    .halfExtents = { scale.x, scale.y, scale.z }
+  };
+  m_worldFrameUpdateID = updateID;
+  m_worldFrameRevision = getGeometryRevision();
+  m_worldFrameValid = true;
+
+  return m_worldFrame;
 }
 
 void BoxCollider::pack(net::Message& message) const
@@ -200,23 +221,23 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
   invalidateBoundingBox();
 }
 
-void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)
+void BoxCollider::generateTransformedMesh(const Transform& transform)
 {
-  const auto scale = transform->getScale() * m_scale.get();
-  const auto position = transform->getPosition() + m_position.get();
+  const auto scale = transform.getScale() * m_scale.get();
+  const auto position = transform.getPosition() + m_position.get();
 
   glm::mat4 rotationMatrix;
-  if (!transform->hasParentTransform())
+  if (!transform.hasParentTransform())
   {
     // Built exactly as getRotation's additive sum describes it, which the narrow phase and queries rebuild.
-    const auto rotation = transform->getRotation() + m_rotation.get();
+    const auto rotation = transform.getRotation() + m_rotation.get();
     rotationMatrix = rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
       * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0})
       * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0});
   }
   else
   {
-    rotationMatrix = glm::mat4_cast(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
+    rotationMatrix = glm::mat4_cast(transform.getOrientation() * eulerDegreesToQuat(m_rotation.get()));
   }
 
   const auto transformationMatrix = translate(glm::mat4(1.0f), position)
@@ -227,10 +248,15 @@ void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& tran
   {
     const auto transformedVertex = transformationMatrix * glm::vec4(boxVertices[i], 1.0f);
 
-    m_transformedBoxVertices[i] = glm::vec3(transformedVertex);
+    m_worldSupport.vertices[i] = glm::vec3(transformedVertex);
   }
 
-  m_currentTransformUpdateID = transform->getWorldUpdateID();
+  // Each pair below differs only in the one axis's sign, so the difference is that axis' world-space edge.
+  m_worldSupport.axes[0] = m_worldSupport.vertices[0] - m_worldSupport.vertices[1];
+  m_worldSupport.axes[1] = m_worldSupport.vertices[0] - m_worldSupport.vertices[4];
+  m_worldSupport.axes[2] = m_worldSupport.vertices[0] - m_worldSupport.vertices[3];
+
+  m_currentTransformUpdateID = transform.getWorldUpdateID();
 }
 
 void BoxCollider::updateTransformPointer()

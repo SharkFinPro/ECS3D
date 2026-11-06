@@ -200,6 +200,7 @@ void Object::setManager(ObjectManager* objectManager)
   if (m_uuid.is_nil())
   {
     m_uuid = m_manager->createUUID();
+    m_uuidString.clear();
   }
 }
 
@@ -296,6 +297,16 @@ uuids::uuid Object::getUUID() const
   return m_uuid;
 }
 
+std::string_view Object::getUUIDString() const
+{
+  if (m_uuidString.empty())
+  {
+    m_uuidString = uuids::to_string(m_uuid);
+  }
+
+  return m_uuidString;
+}
+
 bool Object::isAncestorOf(const std::shared_ptr<Object>& object) const
 {
   if (!object)
@@ -329,7 +340,7 @@ const std::vector<std::shared_ptr<Component>>& Object::getScripts() const
 
 void Object::pack(net::Message& message) const
 {
-  message.writeString(uuids::to_string(m_uuid));
+  message.writeString(getUUIDString());
 
   std::string cleanName = m_name;
   cleanName.erase(std::ranges::find(cleanName, '\0'), cleanName.end());
@@ -404,6 +415,7 @@ void Object::unpack(net::MessageReader& messageReader, const std::size_t depth)
 void Object::unpackFields(net::MessageReader& messageReader, const std::size_t depth)
 {
   m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
+  m_uuidString.clear();
   m_name = messageReader.readString();
 
   const auto& registry = m_manager->getComponentRegistry();
@@ -630,6 +642,7 @@ std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 void Object::loadFromJSON(const nlohmann::json& objectData)
 {
   m_uuid = uuids::uuid::from_string(std::string(objectData.at("uuid"))).value();
+  m_uuidString.clear();
   m_name = objectData.at("name");
 
   const auto& registry = m_manager->getComponentRegistry();

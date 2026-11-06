@@ -245,18 +245,26 @@ namespace {
   // The convex outline of a group's vertices in its plane, counter-clockwise about its normal, as vertex ids.
   std::vector<uint32_t> outlineOf(const Group& group, const Vertices& vertices)
   {
-    auto ids = group.vertexIds;
+    // Scratch buffers are reused across calls to avoid a heap allocation per group; thread_local keeps
+    // parallel callers independent.
+    thread_local std::vector<uint32_t> ids;
+    thread_local Vertices points;
+
+    ids.assign(group.vertexIds.begin(), group.vertexIds.end());
     std::ranges::sort(ids);
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
 
-    Vertices points;
+    points.clear();
     for (const auto id : ids)
     {
       points.push_back(vertices[id]);
     }
 
+    const auto indices = collisions::convexOutlineIndices(points, group.normal);
+
     std::vector<uint32_t> outline;
-    for (const auto index : collisions::convexOutlineIndices(points, group.normal))
+    outline.reserve(indices.size());
+    for (const auto index : indices)
     {
       outline.push_back(ids[index]);
     }
@@ -317,18 +325,38 @@ namespace {
     return face;
   }
 
+  // The outlines depend only on the hull's own vertices, so they are found once per hull and kept on the collider.
+  const ConvexMeshCollider::FaceOutlines& faceOutlinesOf(ConvexMeshCollider& collider)
+  {
+    if (!collider.getFaceOutlines())
+    {
+      const auto& hull = collider.getHull();
+      const auto triangles = trianglesOf(hull.vertices, hull.indices);
+      const Tolerance tolerance{ hull.vertices, coplanarDistanceShare * extentOf(hull.vertices) };
+
+      ConvexMeshCollider::FaceOutlines outlines;
+      for (const auto& group : groupCoplanar(triangles, tolerance))
+      {
+        outlines.push_back(outlineOf(group, hull.vertices));
+      }
+
+      collider.setFaceOutlines(std::move(outlines));
+    }
+
+    return *collider.getFaceOutlines();
+  }
+
   std::vector<SupportFace> hullFacesOf(ConvexMeshCollider& collider)
   {
-    const auto& hull = collider.getHull();
     const auto& world = collider.getWorldVertices();
-    const auto triangles = trianglesOf(hull.vertices, hull.indices);
-    const Tolerance tolerance{ hull.vertices, coplanarDistanceShare * extentOf(hull.vertices) };
+    const auto& outlines = faceOutlinesOf(collider);
     const auto hullCentroid = centroidOf(world);
 
     std::vector<SupportFace> faces;
-    for (const auto& group : groupCoplanar(triangles, tolerance))
+    faces.reserve(outlines.size());
+    for (const auto& outline : outlines)
     {
-      if (auto face = worldFace(outlineOf(group, hull.vertices), world, hullCentroid))
+      if (auto face = worldFace(outline, world, hullCentroid))
       {
         faces.push_back(std::move(*face));
       }
@@ -363,6 +391,20 @@ namespace {
 }
 
 namespace collisions {
+  const std::vector<SupportFace>& hullSupportFaces(ConvexMeshCollider& collider)
+  {
+    // Refreshed first: the generation only moves when the vertices are rebuilt.
+    static_cast<void>(collider.getWorldVertices());
+    const auto generation = collider.getWorldVerticesGeneration();
+
+    if (const auto& cache = collider.getWorldFaceCache(); !cache || cache->generation != generation)
+    {
+      collider.setWorldFaceCache({ generation, hullFacesOf(collider) });
+    }
+
+    return collider.getWorldFaceCache()->faces;
+  }
+
   std::vector<SupportFace> supportFacesOf(Collider& collider)
   {
     switch (collider.getColliderType())
@@ -370,7 +412,7 @@ namespace collisions {
       case ColliderType::boxCollider:
         return boxFacesOf(collider);
       case ColliderType::convexMeshCollider:
-        return hullFacesOf(dynamic_cast<ConvexMeshCollider&>(collider));
+        return hullSupportFaces(dynamic_cast<ConvexMeshCollider&>(collider));
       case ColliderType::sphereCollider:
       case ColliderType::capsuleCollider:
         break;
@@ -386,8 +428,12 @@ namespace collisions {
       return boxFaceToward(collider, direction);
     }
 
-    const auto faces = supportFacesOf(collider);
-    if (const auto* face = faceToward(faces, direction))
+    if (collider.getColliderType() != ColliderType::convexMeshCollider)
+    {
+      return std::nullopt;
+    }
+
+    if (const auto* face = faceToward(hullSupportFaces(dynamic_cast<ConvexMeshCollider&>(collider)), direction))
     {
       return *face;
     }
