@@ -30,3 +30,22 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/tests
   RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/tests
 )
+
+# Research harness behind the broad-phase decision: replays recorded bounds through each candidate algorithm,
+# checks every one finds exactly the reference pairs, and times it. See the Collision Detection Findings page.
+add_executable(ECS3DBroadPhaseCandidates EXCLUDE_FROM_ALL
+  BenchScenes.cpp
+  BenchScenes.h
+  BroadPhaseCandidates.cpp
+  ../TestScene.cpp
+  ../TestScene.h
+)
+
+target_include_directories(ECS3DBroadPhaseCandidates PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(ECS3DBroadPhaseCandidates PRIVATE ECS3DData ECS3DLog ECS3DProfile ECS3DSim GTest::gtest)
+set_target_properties(ECS3DBroadPhaseCandidates PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/tests
+  RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/tests
+  RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/tests
+)
