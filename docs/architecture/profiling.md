@@ -223,6 +223,6 @@ guide is [profiling-your-game.md](../guides/profiling-your-game.md).
 
 ## Collision phases
 
-`CollisionSystem` records `Broad phase` (building the edge list, bounding boxes, sort and dynamic flags), `Narrow
-phase` (the whole OpenMP loop, timed once from the calling thread) and `Response` (pair assembly through
-`recordCollisionEvents`). A scope never opens inside the parallel region, and with no lane bound they do nothing.
+`CollisionSystem` records `Broad phase` (with `Gather`, `Bounds`, `Tree update` and `Pair update` under it), `Narrow
+phase` (the whole OpenMP pair loop, timed once from the calling thread) and `Response` (with `Touches` under it, then
+the responses through `recordCollisionEvents`). A scope never opens inside the parallel region, and with no lane bound they do nothing.

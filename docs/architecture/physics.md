@@ -30,7 +30,7 @@ through its center; "into" and "along" are taken against the support's contact n
 a stack on a slope holds as on flat ground, and the load a body passes to its support is taken along that normal
 too, and a vertical speed under `minRiseSpeed` does not count as a body rising; a contact between two resting
 bodies is resolved only from the upper one, since resolving it again from below leaves the pair touching
-exactly, which the sweep misses, but one the resting body below does resolve, because the body landing on it had
+exactly, which the overlap test misses, but one the resting body below does resolve, because the body landing on it had
 no contact in its own pass, has its friction and passed-on load resolved with the roles swapped, so it acts as
 it would from above, the push landing at the landing body's own center of mass clamped into the manifold; then
 Coulomb friction opposes the contact point's sliding up to the coefficient (the geometric mean of two bodies',
@@ -70,11 +70,11 @@ points counts as supported. Friction there rolls it only by the part across the 
 through the center, since the line's far end holds the capsule against pitching. It grinds against turning about
 the normal with the mean lever arm of a load spread evenly along the line. Take a and b as the distances from
 the center of mass to the two ends, and that arm is (a^2 + b^2) / (2 (a + b)). `CollisionSystem`
-(sweep-and-prune in minX order - each edge scans forward only, testing a pair once from its lower-indexed edge
-when either side is dynamic and handing the hit to every dynamic side, with each edge's hits kept in ascending
-edge order - but responses resolve top-down by bounding-box minY so a stack settles the same whichever side of
-it the load sits), calling the narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects`
-are its entry points. The sweep's `intersects` keeps GJK's final simplex (`OverlapWitness`), and the response's
+(candidate pairs from the persistent broad phase described under [Broad phase](#broad-phase), each tested once
+and handed to every dynamic side, with each body's contacts kept in min x order - but responses resolve top-down
+by bounding-box minY so a stack settles the same whichever side of it the load sits), calling the narrow phase
+under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. The pair test's
+`intersects` keeps GJK's final simplex (`OverlapWitness`), and the response's
 `findContact` starts EPA from it while neither collider's world update id or geometry revision has moved since. GJK
 and EPA query each collider through a `SupportShape` refreshed once per call. A pair of spheres and capsules skips GJK, since a sphere is a capsule with a zero-length
 core segment. That pair is solved from the closest points between the two core segments, treated as two spheres.
@@ -102,6 +102,31 @@ not along the contact normal. On a slope a body past its downhill edge then tips
 `ECS3DData` via accessors. OpenMP if available. `queries/HullQueries` answers raycasts and sphere overlaps
 against a convex hull exactly, orienting each face away from the hull center so a mirrored transform still
 works.
+
+## Broad phase
+
+`sim/broadphase/` finds the candidate pairs. `BroadPhase` keeps one proxy per collider in one of two
+`DynamicAabbTree`s, static or dynamic, chosen by whether the collider resolves to a `RigidBody`. Each proxy sits
+under a fat box: its tight bounds plus `BroadPhase::margin` (0.1) on every side, stretched four times its last
+tick's displacement in the direction it moved. A sorted cache holds every proxy pair whose fat boxes overlap with
+at least one dynamic side, so two statics never pair. Each tick a proxy whose tight box stayed inside its fat box
+costs one containment test. A proxy that left its fat box, or whose box is far larger than its motion now needs, is
+reinserted, and only reinserted proxies query the trees again, in parallel blocks. `CollisionSystem` filters the
+cache against this tick's tight bounds, layers and assemblies, then runs the narrow phase over it in parallel. A
+collider whose bounds are not finite leaves both trees, and every pair, until they are.
+
+`CollisionSystem` keeps its edges, and with them the proxies, across ticks. When `ObjectManager` still holds the
+same colliders, owners and bodies in the same order, nothing is rebuilt. Otherwise the edges are rebuilt in
+`ObjectManager` order and a collider keeps its proxy while it keeps a body; gaining or losing one gives it a new
+proxy in the other tree. `reset` drops the broad phase too. The bounds warm runs in parallel, which is safe because
+each collider writes only its own caches and transforms are only read.
+
+Contact resolution does not depend on the pair cache's order or the proxy ids. Each body's contacts are sorted by
+the other side's min x, ties by edge index, and responses run by min y descending with the same tie-break, which
+is the order a minX sweep produced. The result is bit-identical to that sweep wherever two edges do not share a min
+x exactly; there the old unstable sort left the order to the standard library, and edge order now decides.
+`ECS3DCollisionBench` (`source/tests/bench/`) times the phases on seeded scenes and prints a transform checksum
+for that comparison.
 
 ## Contact clipping
 

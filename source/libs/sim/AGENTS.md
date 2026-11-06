@@ -17,5 +17,7 @@ resting or the contact manifold: that behavior is tuned as a whole, and the suit
   load sits.
 - The `CollisionSystem` profile scopes (`Broad phase`, `Narrow phase`, `Response`) open on the calling thread around
   each phase; never put one inside the OpenMP region.
+- Contact resolution must not depend on the broad phase's pair order or proxy ids: contacts and responses fall back
+  to min x then edge index, as the minX sweep did. `BroadPhaseCollisionTest` pins it.
 - The narrow phase entry points are `collisions::findContact` and `collisions::intersects` (`collisions/NarrowPhase.h`).
 - Compare physics results in tests with a tolerance: results pass through matrix math and accumulation.

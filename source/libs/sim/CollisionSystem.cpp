@@ -11,9 +11,11 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <unordered_map>
 #include <utility>
 
 namespace {
@@ -41,6 +43,30 @@ namespace {
 
     return a.object->isAncestorOf(b.object) || b.object->isAncestorOf(a.object);
   }
+
+  bool boundsOverlap(const BoundingBox& a, const BoundingBox& b)
+  {
+    return a.maxX >= b.minX && a.minX <= b.maxX &&
+           a.maxY >= b.minY && a.minY <= b.maxY &&
+           a.maxZ >= b.minZ && a.minZ <= b.maxZ;
+  }
+
+  Aabb toAabb(const BoundingBox& bounds)
+  {
+    return { { bounds.minX, bounds.minY, bounds.minZ }, { bounds.maxX, bounds.maxY, bounds.maxZ } };
+  }
+
+  // A blown-up transform gives a NaN bound, which has no place in an ordering; it sorts after every number.
+  float orderable(const float value, const float nanValue)
+  {
+    return std::isnan(value) ? nanValue : value;
+  }
+
+  // The rigid body getComponent would hand back for the object, its own or an ancestor's, without the cast.
+  const Component* bodyOf(const Object& object)
+  {
+    return object.getComponent<Component>(ComponentType::rigidBody).get();
+  }
 }
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
@@ -48,42 +74,187 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
   {
     ECS3D_PROFILE_SCOPE("Broad phase");
 
-    m_collisionEdges.clear();
-
-    for (const auto& object : objectManager.getAllObjects())
     {
-      if (const auto collider = object->getComponent<Collider>(ComponentType::collider))
-      {
-        // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
-        // every other pair's collision work for the tick.
-        if (!object->getComponents().contains(ComponentType::transform))
-        {
-          continue;
-        }
+      ECS3D_PROFILE_SCOPE("Gather");
+      gatherEdges(objectManager);
+    }
 
-        m_collisionEdges.push_back({ object, collider, 0.0f, object->getComponent<RigidBody>(ComponentType::rigidBody) });
+    {
+      ECS3D_PROFILE_SCOPE("Bounds");
+      warmEdges();
+    }
+
+    {
+      ECS3D_PROFILE_SCOPE("Tree update");
+      for (const auto& edge : m_collisionEdges)
+      {
+        m_broadPhase.moveProxy(edge.proxy, toAabb(edge.bounds));
       }
+    }
+
+    {
+      ECS3D_PROFILE_SCOPE("Pair update");
+      m_broadPhase.updatePairs();
     }
   }
 
   checkCollisions(dt);
 }
 
+void CollisionSystem::warmEdges()
+{
+  // Named, non-const locals so the OpenMP clause below can list them on every compiler.
+  auto& edges = m_collisionEdges;
+  auto& sweepKeys = m_sweepKeys;
+  sweepKeys.resize(edges.size());
+  int edgeCount = static_cast<int>(edges.size());
+  std::exception_ptr failure;
+
+  // Safe in parallel because each edge is a different collider and getBoundingBox writes only that collider's
+  // own caches: a transform, its parents' included, is only read. A throw cannot leave an OpenMP region, so the
+  // first one is carried out and rethrown, abandoning the tick as a serial pass would.
+#pragma omp parallel for default(none) shared(edges, sweepKeys, edgeCount, failure) schedule(static, 64) \
+  num_threads(6) if(edgeCount >= 256)
+  for (int i = 0; i < edgeCount; ++i)
+  {
+    try
+    {
+      auto& edge = edges[static_cast<size_t>(i)];
+      edge.bounds = edge.collider->getBoundingBox();
+      edge.layer = edge.collider->getLayer();
+      edge.mask = edge.collider->getMask();
+      sweepKeys[static_cast<size_t>(i)] = orderable(edge.bounds.minX, std::numeric_limits<float>::infinity());
+    }
+    catch (...)
+    {
+#pragma omp critical
+      {
+        if (!failure)
+        {
+          failure = std::current_exception();
+        }
+      }
+    }
+  }
+
+  if (failure)
+  {
+    std::rethrow_exception(failure);
+  }
+}
+
+void CollisionSystem::gatherEdges(const ObjectManager& objectManager)
+{
+  if (!edgesMatch(objectManager))
+  {
+    rebuildEdges(objectManager);
+  }
+}
+
+bool CollisionSystem::edgesMatch(const ObjectManager& objectManager) const
+{
+  // The edges hold their objects and components alive, so an address seen here cannot belong to a different
+  // object than the one the edge was built for.
+  size_t index = 0;
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    const auto& components = object->getComponents();
+    const auto collider = components.find(ComponentType::collider);
+    if (collider == components.end() || !collider->second || !components.contains(ComponentType::transform))
+    {
+      continue;
+    }
+
+    if (index == m_collisionEdges.size())
+    {
+      return false;
+    }
+
+    const auto& edge = m_collisionEdges[index++];
+    if (edge.object != object || static_cast<const Component*>(edge.collider.get()) != collider->second.get() ||
+        static_cast<const Component*>(edge.body.get()) != bodyOf(*object))
+    {
+      return false;
+    }
+  }
+
+  return index == m_collisionEdges.size();
+}
+
+void CollisionSystem::rebuildEdges(const ObjectManager& objectManager)
+{
+  // A collider keeps its proxy, and so its cached pairs, while it keeps its body; gaining or losing one
+  // moves it between the static and dynamic trees, which takes a new proxy.
+  std::unordered_map<const Collider*, size_t> previous;
+  previous.reserve(m_collisionEdges.size());
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    previous.emplace(m_collisionEdges[i].collider.get(), i);
+  }
+
+  std::vector<char> kept(m_collisionEdges.size(), 0);
+  std::vector<CollisionEdge> edges;
+  edges.reserve(m_collisionEdges.size());
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    const auto collider = object->getComponent<Collider>(ComponentType::collider);
+    if (!collider)
+    {
+      continue;
+    }
+
+    // A collider with no Transform has nothing to place it; its accessors throw, which would abandon every
+    // other pair's collision work for the tick.
+    if (!object->getComponents().contains(ComponentType::transform))
+    {
+      continue;
+    }
+
+    CollisionEdge edge{ object, collider, object->getComponent<RigidBody>(ComponentType::rigidBody) };
+
+    if (const auto found = previous.find(collider.get()); found != previous.end())
+    {
+      const auto& old = m_collisionEdges[found->second];
+      if (!kept[found->second] && (old.body != nullptr) == (edge.body != nullptr))
+      {
+        kept[found->second] = 1;
+        edge.proxy = old.proxy;
+      }
+    }
+
+    edges.push_back(std::move(edge));
+  }
+
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    if (!kept[i])
+    {
+      m_broadPhase.destroyProxy(m_collisionEdges[i].proxy);
+    }
+  }
+
+  m_collisionEdges = std::move(edges);
+
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    auto& edge = m_collisionEdges[i];
+    if (edge.proxy == BroadPhase::nullProxy)
+    {
+      edge.proxy = m_broadPhase.createProxy(toAabb(edge.collider->getBoundingBox()), edge.body != nullptr,
+                                            static_cast<int32_t>(i));
+    }
+    else
+    {
+      m_broadPhase.setUserData(edge.proxy, static_cast<int32_t>(i));
+    }
+  }
+}
+
 void CollisionSystem::checkCollisions(const float dt)
 {
   const size_t edgeCount = m_collisionEdges.size();
 
-  // Named locals so the OpenMP clause below can list them. Each edge's forward-sweep hits (higher edge
-  // indices, ascending) are indexed by edge so the parallel loop can record them lock-free: every thread
-  // writes only its own slot.
-  auto& isDynamic = m_isDynamic;
-  auto& forwardHits = m_forwardHits;
-
-  isDynamic.resize(edgeCount);
-  if (forwardHits.size() < edgeCount)
-  {
-    forwardHits.resize(edgeCount);
-  }
   if (m_touches.size() < edgeCount)
   {
     m_touches.resize(edgeCount);
@@ -91,68 +262,38 @@ void CollisionSystem::checkCollisions(const float dt)
 
   for (size_t i = 0; i < edgeCount; ++i)
   {
-    forwardHits[i].clear();
     m_touches[i].clear();
   }
 
-  {
-    ECS3D_PROFILE_SCOPE("Broad phase");
+  // Named, non-const locals so the OpenMP clause below can list them on every compiler. Each pair's result has
+  // its own slot, so the parallel loop records them lock-free.
+  auto pairs = m_broadPhase.getPairs();
+  auto& pairHits = m_pairHits;
+  pairHits.resize(pairs.size());
+  int pairCount = static_cast<int>(pairs.size());
 
-    for (auto& edge : m_collisionEdges)
-    {
-      edge.bounds = edge.collider->getBoundingBox();
-      edge.position = edge.bounds.minX;
-      edge.layer = edge.collider->getLayer();
-      edge.mask = edge.collider->getMask();
-    }
-
-    std::ranges::sort(m_collisionEdges, [](const CollisionEdge& a, const CollisionEdge& b)
-    {
-      return a.position < b.position;
-    });
-
-    for (size_t i = 0; i < m_collisionEdges.size(); ++i)
-    {
-      isDynamic[i] = m_collisionEdges[i].body != nullptr;
-    }
-  }
-
-  // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
-  // transformed meshes that live on the same Collider another thread's iteration can also read. That is
-  // only safe because every collider in m_collisionEdges was just warmed serially above, and nothing in
-  // this loop moves a transform - collision responses, which do, are deferred to the serial pass below.
-  // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
-  // it into two threads racing a write on m_boundingBox / the collider's support mesh.
-  // Dynamic scheduling because the work per edge depends on how many colliders overlap it in x.
+  // This loop has to stay read-only: testPair reads bounding boxes and (through the narrow phase) transformed
+  // meshes that live on the same Collider another thread's iteration can also read. That is only safe because
+  // every collider in m_collisionEdges was just warmed by warmEdges, and nothing in this loop moves
+  // a transform - collision responses, which do, are deferred to the serial pass below. Losing either half of
+  // that (a collider left cold, or a response sneaking back into this loop) turns it into two threads racing a
+  // write on m_boundingBox / the collider's support mesh.
   {
     ECS3D_PROFILE_SCOPE("Narrow phase");
 
-#pragma omp parallel for default(none) shared(forwardHits, isDynamic) schedule(dynamic, 8) num_threads(6)
-    for (int i = 0; i < m_collisionEdges.size(); ++i)
+#pragma omp parallel for default(none) shared(pairHits, pairs, pairCount) schedule(dynamic, 32) num_threads(6)
+    for (int i = 0; i < pairCount; ++i)
     {
-      findCollisions(i, isDynamic, forwardHits[i]);
+      testPair(pairs[static_cast<size_t>(i)], pairHits[static_cast<size_t>(i)]);
     }
   }
 
   {
     ECS3D_PROFILE_SCOPE("Response");
 
-    // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in
-    // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
-    for (size_t i = 0; i < edgeCount; ++i)
     {
-      for (auto& hit : forwardHits[i])
-      {
-        if (hit.lowerSees)
-        {
-          m_touches[i].push_back({ hit.other, std::move(hit.lowerWitness) });
-        }
-
-        if (hit.higherSees)
-        {
-          m_touches[hit.other].push_back({ i, std::move(hit.higherWitness) });
-        }
-      }
+      ECS3D_PROFILE_SCOPE("Touches");
+      collectTouches();
     }
 
     // Applied serially, now that the parallel region is done: a response moves the transform of either
@@ -172,9 +313,79 @@ void CollisionSystem::checkCollisions(const float dt)
   }
 }
 
+void CollisionSystem::testPair(const uint64_t pair, PairHit& hit) const
+{
+  hit.first = static_cast<size_t>(m_broadPhase.getUserData(BroadPhase::firstOf(pair)));
+  hit.second = static_cast<size_t>(m_broadPhase.getUserData(BroadPhase::secondOf(pair)));
+  hit.firstSees = false;
+  hit.secondSees = false;
+  hit.firstWitness.reset();
+  hit.secondWitness.reset();
+
+  const auto& edge = m_collisionEdges[hit.first];
+  const auto& other = m_collisionEdges[hit.second];
+
+  // The cache pairs fat boxes; the bounds copied onto the edges in fixedUpdate say whether the colliders
+  // themselves overlap this tick.
+  if (!boundsOverlap(edge.bounds, other.bounds))
+  {
+    return;
+  }
+
+  // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
+  // work, so filtered layers produce neither a physical response nor a collision event.
+  if (!layersCollide(edge, other) || partOfSameAssembly(edge, other))
+  {
+    return;
+  }
+
+  // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
+  // keeps its own answer.
+  hit.firstSees = edge.body && collisions::intersects(*edge.collider, *other.collider, hit.firstWitness);
+  hit.secondSees = other.body && collisions::intersects(*other.collider, *edge.collider, hit.secondWitness);
+}
+
+bool CollisionSystem::sweepsBefore(const size_t a, const size_t b) const
+{
+  return m_sweepKeys[a] < m_sweepKeys[b] || (m_sweepKeys[a] == m_sweepKeys[b] && a < b);
+}
+
+void CollisionSystem::collectTouches()
+{
+  for (auto& hit : m_pairHits)
+  {
+    if (hit.firstSees)
+    {
+      m_touches[hit.first].push_back({ hit.second, std::move(hit.firstWitness) });
+    }
+
+    if (hit.secondSees)
+    {
+      m_touches[hit.second].push_back({ hit.first, std::move(hit.secondWitness) });
+    }
+  }
+
+  // A body resolves its contacts deepest first, and contacts of equal depth in the order a sweep over min x
+  // meets the other side; the stable depth sort in handleCollisions relies on this order.
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    auto& touches = m_touches[i];
+    if (touches.size() > 1)
+    {
+      std::ranges::sort(touches, [this](const Touch& a, const Touch& b) { return sweepsBefore(a.other, b.other); });
+    }
+  }
+}
+
 std::vector<size_t> CollisionSystem::responseOrder() const
 {
-  std::vector<std::pair<size_t, float>> bottoms;
+  struct Bottom {
+    float minY;
+    float sweepKey;
+    size_t index;
+  };
+
+  std::vector<Bottom> bottoms;
   for (size_t i = 0; i < m_collisionEdges.size(); ++i)
   {
     if (m_touches[i].empty())
@@ -183,21 +394,34 @@ std::vector<size_t> CollisionSystem::responseOrder() const
     }
 
     // A blown-up transform gives a NaN bound, which would break the sort's ordering; resolve it last.
-    const float bottom = m_collisionEdges[i].bounds.minY;
-    bottoms.emplace_back(i, std::isnan(bottom) ? std::numeric_limits<float>::lowest() : bottom);
+    bottoms.push_back({ orderable(m_collisionEdges[i].bounds.minY, std::numeric_limits<float>::lowest()),
+                        m_sweepKeys[i], i });
   }
 
   // Highest first, not sweep (minX) order. A response pushes both bodies of a dynamic pair apart, so
   // resolving a body before the one resting on it lets that later push drive it back into its own support
   // for the rest of the tick. Top-down, each push is absorbed by the contact beneath it, and the order no
   // longer depends on horizontal position. Gravity only acts along -y, which is what makes y "up" here.
-  std::ranges::stable_sort(bottoms, std::ranges::greater{}, &std::pair<size_t, float>::second);
+  // Bodies at the same height go in sweep order.
+  std::ranges::sort(bottoms, [](const Bottom& a, const Bottom& b) {
+    if (a.minY != b.minY)
+    {
+      return a.minY > b.minY;
+    }
+
+    if (a.sweepKey != b.sweepKey)
+    {
+      return a.sweepKey < b.sweepKey;
+    }
+
+    return a.index < b.index;
+  });
 
   std::vector<size_t> order;
   order.reserve(bottoms.size());
   for (const auto& entry : bottoms)
   {
-    order.push_back(entry.first);
+    order.push_back(entry.index);
   }
 
   return order;
@@ -240,64 +464,10 @@ void CollisionSystem::reset()
   m_enters.clear();
   m_stays.clear();
   m_exits.clear();
-}
 
-void CollisionSystem::findCollisions(const size_t index, const std::vector<char>& isDynamic,
-                                     std::vector<SweepHit>& hits) const
-{
-  const auto& edge = m_collisionEdges[index];
-
-  // The bounds copied onto the edges serially, before this parallel loop: reading them never touches a
-  // collider, and nothing moves a transform until the serial response pass after the loop.
-  const auto& bbox = edge.bounds;
-
-  for (size_t j = index + 1; j < m_collisionEdges.size(); ++j)
-  {
-    const auto& other = m_collisionEdges[j];
-
-    if (other.position > bbox.maxX)
-    {
-      break;
-    }
-
-    // A pair of static colliders never needs testing.
-    if (!isDynamic[index] && !isDynamic[j])
-    {
-      continue;
-    }
-
-    const auto& otherBbox = other.bounds;
-
-    if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
-        bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
-        bbox.maxZ < otherBbox.minZ || bbox.minZ > otherBbox.maxZ)
-    {
-      continue;
-    }
-
-    // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
-    // work, so filtered layers produce neither a physical response nor a collision event.
-    if (!layersCollide(edge, other))
-    {
-      continue;
-    }
-
-    if (partOfSameAssembly(edge, other))
-    {
-      continue;
-    }
-
-    // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
-    // keeps its own answer.
-    SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
-    hit.lowerSees = isDynamic[index] && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
-    hit.higherSees = isDynamic[j] && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
-
-    if (hit.lowerSees || hit.higherSees)
-    {
-      hits.push_back(std::move(hit));
-    }
-  }
+  m_collisionEdges.clear();
+  m_broadPhase.clear();
+  m_pairHits.clear();
 }
 
 void CollisionSystem::handleCollisions(const size_t index, const float dt) const

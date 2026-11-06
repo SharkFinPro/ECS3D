@@ -39,7 +39,7 @@ public:
   // Read-only view of whatever getBoundingBox() last computed: no dirty check, no recompute, so it never
   // writes m_boundingBox. Only safe where getBoundingBox() is known to have already warmed the cache for
   // every collider involved and nothing has moved a transform since - e.g. CollisionSystem's parallel
-  // narrow phase, which warms every collider serially before the parallel region and defers collision
+  // narrow phase, which warms every collider before that parallel region starts and defers collision
   // responses (which do move transforms) to a serial pass after it.
   [[nodiscard]] const BoundingBox& cachedBoundingBox() const;
 

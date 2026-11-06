@@ -61,7 +61,7 @@
 | `source/libs/protocol/` | `ECS3DNetProtocol` (interface library): `Protocol.h`, the wire format (`MessageType`, `Message`/`MessageReader`, `Role`, ports). |
 | `source/libs/settings/` | `ECS3DSettings` - per-user editor preferences (`SettingsStore`), the keybind model and the recent-projects list. **Not** project data. |
 | `source/libs/data/` | `ECS3DData` - component data, `Object`/`ObjectManager`, scenes, assets, prefabs, serialization, replication payloads, the convex hull builder and the undo/redo model. **No Vulkan, no ImGui.** |
-| `source/libs/sim/` | `ECS3DSim` - `PhysicsSystem`, `CollisionSystem` (sweep-and-prune, then the GJK/EPA narrow phase under `collisions/`) and `SceneQueries`. |
+| `source/libs/sim/` | `ECS3DSim` - `PhysicsSystem`, `CollisionSystem` (a dynamic AABB tree broad phase under `broadphase/`, then the GJK/EPA narrow phase under `collisions/`) and `SceneQueries`. |
 | `source/libs/render/` | `ECS3DRender` - `RenderSystem`, `GpuAssetCache` (uuid -> `vke` GPU objects), gizmo meshes and headless render helpers. |
 | `source/libs/editor/` | `ECS3DEditorLib` - the ImGui editing UI: object tree, inspector, asset browser, settings, console, scene scripts panel, save/load and the viewport gizmo. |
 | `source/libs/net/` | `ECS3DNet` - `NetServer`/`NetClient`, `MessageQueue`, `ServerProcess`, editor authorization and server-log packing (C++), plus the `Transport/` C# assembly with TCP and WebSocket backends. |
