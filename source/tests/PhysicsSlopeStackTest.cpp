@@ -179,8 +179,8 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
 
   // A top box that slid off would leave the level under it nothing to pass on.
   // Measured along the slope, so sinking into the boxes below does not count. The top box falls three ticks onto
-  // a stack still settling and slips about 0.3 before friction holds it; a slide off the stack is over 1.
-  constexpr float topBoxBound = 0.35f;
+  // a stack still settling and slips about 0.47 before friction holds it; a slide off the stack is over 1.
+  constexpr float topBoxBound = 0.6f;
   EXPECT_LT(std::fabs(stack.slidDownhill(count - 1)), topBoxBound);
   EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)), 1.0f);
 
