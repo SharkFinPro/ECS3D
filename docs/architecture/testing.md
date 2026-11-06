@@ -45,6 +45,15 @@ cobertura output in `<build-dir>/coverage/managed`; the native side is read with
 `render/ThumbnailImage.cpp` is also compiled straight into the suite; it needs only stb_image_write.
 VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
 
+## Collision benchmark
+
+`source/tests/bench/` builds `ECS3DCollisionBench`, a timing tool rather than a test: it is left out of the default
+build and out of CTest, and lands in `<build-dir>/tests`. It compiles `TestScene.cpp` in and links data, sim, profile
+and log. `--scene pile|scatter|tiles|wall|mixed`, with `--size`, `--layers`, `--seed`, `--ticks` and `--warmup`,
+steps a seeded scene through `PhysicsSystem` and `CollisionSystem` and prints the mean per tick of each collision
+profile scope and a checksum of every final transform, so two builds can be compared for identical stepping as well
+as for speed.
+
 ## Per-suite registration
 
 Under the sanitize and coverage presets each process pays a large fixed startup cost, which dominates when ~2,200

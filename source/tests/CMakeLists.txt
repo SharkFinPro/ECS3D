@@ -556,3 +556,6 @@ add_custom_target(check
 )
 
 add_dependencies(check ${PROJECT_NAME})
+
+# The collision benchmark shares the scene fixtures but is not part of the suite.
+add_subdirectory(bench)
