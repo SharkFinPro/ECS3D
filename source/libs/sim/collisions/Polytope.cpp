@@ -774,12 +774,14 @@ bool Polytope::expandToward(const glm::dvec3& support)
   // to no removed face. Taken in the removed faces' winding, a horizon edge and the support point make a face wound
   // outward like the one it replaces.
   thread_local std::vector<std::pair<uint8_t, uint8_t>> edges;
+  thread_local std::vector<uint16_t> edgeKeys;
   edges.clear();
 
   for (size_t i = 0; i < m_faces.size();)
   {
     const auto& face = m_faces[i];
-    if (glm::dot(face.normal, support - m_vertices[face.vertices[0]]) > visibility)
+    // The face's plane distance is already the normal dotted with its first vertex.
+    if (glm::dot(face.normal, support) - face.distance > visibility)
     {
       for (int edge = 0; edge < 3; ++edge)
       {
@@ -802,13 +804,23 @@ bool Polytope::expandToward(const glm::dvec3& support)
   const auto supportIndex = static_cast<uint8_t>(m_vertices.size());
   m_vertices.push_back(support);
 
+  const auto keyOf = [](const uint8_t from, const uint8_t to) {
+    return static_cast<uint16_t>((from << 8) | to);
+  };
+
+  // Sorted once so each edge finds its reverse by binary search rather than scanning every edge.
+  edgeKeys.clear();
+  for (const auto& edge : edges)
+  {
+    edgeKeys.push_back(keyOf(edge.first, edge.second));
+  }
+  std::ranges::sort(edgeKeys);
+
   for (const auto& edge : edges)
   {
     const auto from = edge.first;
     const auto to = edge.second;
-    const bool shared = std::ranges::any_of(edges, [from, to](const auto& other) {
-      return other.first == to && other.second == from;
-    });
+    const bool shared = std::ranges::binary_search(edgeKeys, keyOf(to, from));
 
     if (shared)
     {
