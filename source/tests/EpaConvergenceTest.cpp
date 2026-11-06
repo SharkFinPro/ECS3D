@@ -24,9 +24,13 @@ namespace {
   // mesh, so the reference below sees the same geometry the narrow phase does.
   struct Body {
     std::shared_ptr<Object> object;
-    std::shared_ptr<Collider> collider;
     std::array<glm::dvec3, 8> corners{};
     std::array<glm::dvec3, 3> axes{};
+
+    [[nodiscard]] Collider& collider() const
+    {
+      return *object->getComponent<Collider>(ComponentType::collider);
+    }
   };
 
   template <typename T>
@@ -38,15 +42,14 @@ namespace {
     transform->setScale(scale);
     transform->setRotation(rotation);
 
-    auto collider = std::make_shared<T>();
-    object->addComponent(collider);
+    object->addComponent(std::make_shared<T>());
 
     const auto turn = glm::rotate(glm::mat4(1.0f), glm::radians(rotation.z), { 0, 0, 1 }) *
                       glm::rotate(glm::mat4(1.0f), glm::radians(rotation.y), { 0, 1, 0 }) *
                       glm::rotate(glm::mat4(1.0f), glm::radians(rotation.x), { 1, 0, 0 });
     const auto world = glm::translate(glm::mat4(1.0f), position) * turn * glm::scale(glm::mat4(1.0f), scale);
 
-    Body body{ object, collider };
+    Body body{ object };
     for (size_t i = 0; i < boxVertices.size(); ++i)
     {
       body.corners[i] = glm::dvec3(glm::vec3(world * glm::vec4(boxVertices[i], 1.0f)));
@@ -183,8 +186,8 @@ TEST(EpaConvergence, BoxPairDepthsMatchTheSeparatingAxes)
       SCOPED_TRACE(testing::Message() << "arrangement " << static_cast<int>(pair.arrangement) << ", upper first "
                                       << upperFirst << ", reference depth " << reference);
 
-      const auto contact = upperFirst ? collisions::findContact(*upper.collider, *lower.collider)
-                                      : collisions::findContact(*lower.collider, *upper.collider);
+      const auto contact = upperFirst ? collisions::findContact(upper.collider(), lower.collider())
+                                      : collisions::findContact(lower.collider(), upper.collider());
 
       if (contact)
       {
@@ -214,8 +217,8 @@ TEST(EpaConvergence, AHullOfTheSameBoxGivesTheSameTranslation)
     const auto box = makeBody<BoxCollider>(pair.upperPosition, pair.upperScale, pair.upperRotation);
     const auto hull = makeBody<ConvexMeshCollider>(pair.upperPosition, pair.upperScale, pair.upperRotation);
 
-    const auto fromBox = collisions::findContact(*box.collider, *lower.collider);
-    const auto fromHull = collisions::findContact(*hull.collider, *lower.collider);
+    const auto fromBox = collisions::findContact(box.collider(), lower.collider());
+    const auto fromHull = collisions::findContact(hull.collider(), lower.collider());
 
     SCOPED_TRACE(testing::Message() << "arrangement " << static_cast<int>(pair.arrangement));
 
