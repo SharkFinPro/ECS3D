@@ -112,6 +112,14 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
   net::MessageReader reader(message);
 
   const uint32_t count = reader.read<uint32_t>();
+  if (count == 0)
+  {
+    return;
+  }
+
+  // One pass over the scene instead of a linear scan per entry; the writes below never change structure.
+  const auto index = objectManager.buildUUIDIndex();
+
   for (uint32_t i = 0; i < count; ++i)
   {
     const auto uuid = reader.readString();
@@ -125,11 +133,13 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
       continue;
     }
 
-    const auto object = objectManager.getObjectByUUID(parsed.value());
-    if (!object)
+    const auto found = index.find(parsed.value());
+    if (found == index.end())
     {
       continue;
     }
+
+    const auto& object = found->second;
 
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
     if (!transform)
