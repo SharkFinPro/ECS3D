@@ -398,7 +398,7 @@ void ObjectGUIManager::displayReorderDropZone(const std::shared_ptr<Object>& par
     return;
   }
 
-  ImGui::PushID(parent ? uuids::to_string(parent->getUUID()).c_str() : "root");
+  ImGui::PushID(parent ? parent->getUUIDCString() : "root");
   ImGui::PushID(static_cast<int>(index));
 
   constexpr float zoneHeight = 6.0f;
@@ -493,7 +493,7 @@ void ObjectGUIManager::displaySortControl()
 
 void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 {
-  ImGui::PushID(uuids::to_string(object->getUUID()).c_str());
+  ImGui::PushID(object->getUUIDCString());
 
   // Recorded in display order regardless of selection - this row is on screen either way, and a
   // Shift-click range is measured against exactly this list (see m_visibleOrder).
