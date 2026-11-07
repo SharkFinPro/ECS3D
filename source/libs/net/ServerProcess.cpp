@@ -1,5 +1,6 @@
 #include "ServerProcess.h"
 #include "CommandLineSplit.h"
+#include "ChildProcess.h"
 #include <filesystem>
 #include <string>
 #include <utility>
