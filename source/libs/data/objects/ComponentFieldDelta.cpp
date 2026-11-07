@@ -239,7 +239,7 @@ namespace componentFieldDelta {
 
           if (disagrees)
           {
-            mixed.push_back(keyName + "." + name);
+            mixed.push_back(keyName + "." += name);
           }
         }
 
@@ -280,7 +280,7 @@ namespace componentFieldDelta {
 
   std::vector<std::string> withLinkedKeys(const std::vector<std::string>& keys, const nlohmann::json& after)
   {
-    const auto inGroup = inHullGroup;
+    constexpr auto inGroup = inHullGroup;
 
     std::vector<std::string> linked = keys;
 

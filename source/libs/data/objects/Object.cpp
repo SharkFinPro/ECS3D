@@ -307,6 +307,16 @@ std::string_view Object::getUUIDString() const
   return m_uuidString;
 }
 
+const char* Object::getUUIDCString() const
+{
+  if (m_uuidString.empty())
+  {
+    m_uuidString = uuids::to_string(m_uuid);
+  }
+
+  return m_uuidString.c_str();
+}
+
 bool Object::isAncestorOf(const std::shared_ptr<Object>& object) const
 {
   if (!object)

@@ -183,6 +183,21 @@ TEST(InputStatePayload, TheViewBlockRoundTripsAfterTheMouseBlock)
   EXPECT_EQ(payload->view->height, 360.0f);
 }
 
+// The builder reserves its exact payload size up front, so the per-frame message costs one allocation. Every
+// mainstream standard library allocates exactly what reserve asks of an empty vector; a builder that under-reserved
+// would regrow past size(), and one that over-reserved would leave capacity above it.
+TEST(InputStatePayload, TheBuilderReservesExactlyThePayloadItWrites)
+{
+  const auto withoutView = replication::buildInputState(true, { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, 1.0f, 2.0f, 3.0f, 4.0f,
+                                                        5.0f, 0b1u);
+  EXPECT_EQ(withoutView.capacity(), withoutView.size());
+
+  const replication::InputView view{ "0b0d0f6c-3f1c-4f3b-9d56-0d6f4b6a1c11", 1.0f, 2.0f, 640.0f, 360.0f };
+  const auto withView = replication::buildInputState(true, { 87, 65 }, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 0b10u, view);
+  EXPECT_EQ(withView.capacity(), withView.size());
+  EXPECT_TRUE(replication::parseInputState(withView)->view.has_value());
+}
+
 TEST(InputStatePayload, AMessageWrittenWithoutTheViewBlockKeepsItsMouseAndHasNoView)
 {
   // The bytes the format had before the view block: keys, then the mouse block, nothing after.

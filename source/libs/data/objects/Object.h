@@ -87,6 +87,9 @@ public:
   // Valid until this object is destroyed or its uuid is reassigned by unpack/loadFromJSON; do not store it.
   [[nodiscard]] std::string_view getUUIDString() const;
 
+  // Null-terminated view of the same cached string, with the same lifetime.
+  [[nodiscard]] const char* getUUIDCString() const;
+
   // True when object sits somewhere below this one in the hierarchy. An object is not its own
   // ancestor, so a caller guarding against cycles has to check for self separately.
   [[nodiscard]] bool isAncestorOf(const std::shared_ptr<Object>& object) const;

@@ -586,6 +586,24 @@ std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) c
   return nullptr;
 }
 
+std::unordered_map<uuids::uuid, std::shared_ptr<Object>> ObjectManager::buildUUIDIndex() const
+{
+  std::unordered_map<uuids::uuid, std::shared_ptr<Object>> index;
+  index.reserve(m_allObjects.size() + m_pendingAdditions.size());
+
+  for (const auto& object : m_allObjects)
+  {
+    index.emplace(object->getUUID(), object);
+  }
+
+  for (const auto& object : m_pendingAdditions)
+  {
+    index.emplace(object->getUUID(), object);
+  }
+
+  return index;
+}
+
 const std::vector<std::shared_ptr<Object>>& ObjectManager::getObjects() const
 {
   return m_objects;
