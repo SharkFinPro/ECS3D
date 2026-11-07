@@ -43,6 +43,7 @@ empty test set and would otherwise report green for a suite that registered noth
 Under the `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves the managed suite's
 cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
 `render/ThumbnailImage.cpp` is also compiled straight into the suite; it needs only stb_image_write.
+ImGui's core sources and `editor/ObjectGUIManager.cpp` compile in too, so panel tests can run a real headless frame (the backends and Vulkan stay out).
 VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
 
 ## Per-suite registration
