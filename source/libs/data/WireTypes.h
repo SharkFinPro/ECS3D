@@ -1,7 +1,7 @@
 #ifndef WIRETYPES_H
 #define WIRETYPES_H
-
 #include <Protocol.h>
+
 
 #include <glm/vec3.hpp>
 #include <uuid.h>

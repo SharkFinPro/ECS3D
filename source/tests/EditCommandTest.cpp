@@ -4,7 +4,6 @@
 #include "assets/AssetRegistry.h"
 #include "edits/EditCommand.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
 
 #include <Protocol.h>

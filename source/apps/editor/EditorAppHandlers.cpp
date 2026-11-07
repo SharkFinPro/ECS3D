@@ -13,7 +13,6 @@
 #include <AssetDragDrop.h>
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <cstdint>

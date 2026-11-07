@@ -13,7 +13,6 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
-#include "objects/components/Transform.h"
 #include "objects/components/collisions/ConvexHullValidation.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"

@@ -2,8 +2,8 @@
 #define PROFILESTATS_H
 
 #include "History.h"
-
 #include <cstddef>
+
 #include <cstdint>
 #include <vector>
 

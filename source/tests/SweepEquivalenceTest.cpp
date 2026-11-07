@@ -5,10 +5,8 @@
 #include "PhysicsSystem.h"
 #include "collisions/NarrowPhase.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
-#include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/Collider.h"
 
 #include <glm/vec3.hpp>

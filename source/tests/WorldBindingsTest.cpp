@@ -10,7 +10,6 @@
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
-#include "objects/components/Transform.h"
 #include <Protocol.h>
 
 #include <glm/vec3.hpp>
@@ -131,9 +130,9 @@ namespace {
       BindingContext::setAssetRegistry(nullptr);
       BindingContext::setRaycast(nullptr);
       BindingContext::setOverlapSphere(nullptr);
-      BindingContext::takeSpawned();
-      BindingContext::takeDestroyed();
-      BindingContext::takeComponentEdits();
+      static_cast<void>(BindingContext::takeSpawned());
+      static_cast<void>(BindingContext::takeDestroyed());
+      static_cast<void>(BindingContext::takeComponentEdits());
       (void)BindingContext::takeStructuralComponentChanges();
     }
 

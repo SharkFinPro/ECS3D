@@ -2,8 +2,8 @@
 #define SCOPETREE_H
 
 #include "ProfileScope.h"
-
 #include <cstddef>
+
 #include <cstdint>
 #include <optional>
 #include <vector>

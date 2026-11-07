@@ -4,8 +4,6 @@
 #include "CollisionSystem.h"
 #include "Lane.h"
 #include "ProfileScope.h"
-#include "objects/Object.h"
-#include "objects/ObjectManager.h"
 
 #include <glm/vec3.hpp>
 #include <chrono>

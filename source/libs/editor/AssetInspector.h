@@ -1,7 +1,7 @@
 #ifndef ASSETINSPECTOR_H
 #define ASSETINSPECTOR_H
-
 #include <nlohmann/json_fwd.hpp>
+
 #include <array>
 #include <cstddef>
 #include <functional>

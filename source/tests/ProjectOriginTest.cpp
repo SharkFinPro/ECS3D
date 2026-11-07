@@ -41,11 +41,16 @@ namespace {
       return path;
     }
 
+    void addFile(const fs::path& relative, const std::string& content = "x") const
+    {
+      static_cast<void>(touch(relative, content));
+    }
+
     fs::path makeTemplate(const std::string& name) const
     {
-      touch("tpl/project.ecs3d", "{}");
-      touch("tpl/assets/models/rock.glb", "rock");
-      touch("tpl/scripts/Mover.cs", "script");
+      addFile("tpl/project.ecs3d", "{}");
+      addFile("tpl/assets/models/rock.glb", "rock");
+      addFile("tpl/scripts/Mover.cs", "script");
       touch("tpl/template.json",
             R"({"id":"empty-3d","name":")" + name + R"(","description":"d","category":"template","tags":[],)"
             R"("thumbnail":"t.png","entryScene":"Main","minEngineVersion":"0.0.1"})");
@@ -74,7 +79,7 @@ TEST_F(ProjectOriginTest, NoProjectFileIsTheBuiltInTemplate)
 TEST_F(ProjectOriginTest, FolderWithManifestIsATemplateAndWithoutIsNot)
 {
   const auto tpl = makeTemplate("Empty 3D");
-  touch("mine/project.ecs3d", "{}");
+  addFile("mine/project.ecs3d", "{}");
 
   EXPECT_TRUE(isTemplateProject(locateProject(tpl)));
   EXPECT_TRUE(isTemplateProject(locateProject(tpl / "project.ecs3d")));
@@ -94,8 +99,8 @@ TEST_F(ProjectOriginTest, DisplayNameIsTheManifestNameThenTheFolderName)
   const auto tpl = makeTemplate("Empty 3D");
   EXPECT_EQ(templateDisplayName(locateProject(tpl)), std::optional<std::string>("Empty 3D"));
 
-  touch("broken/project.ecs3d", "{}");
-  touch("broken/template.json", "not json");
+  addFile("broken/project.ecs3d", "{}");
+  addFile("broken/template.json", "not json");
   EXPECT_EQ(templateDisplayName(locateProject(m_dir / "broken")), std::optional<std::string>("broken"));
 
   EXPECT_FALSE(templateDisplayName(locateProject({})).has_value());
@@ -164,7 +169,7 @@ TEST_F(ProjectOriginTest, FolderHoldingOnlyEmptyProjectSubfoldersIsFree)
   fs::create_directories(m_dir / "retry" / "scripts");
   EXPECT_TRUE(folderIsFreeForNewProject(m_dir / "retry"));
 
-  touch("retry/assets/a.glb");
+  addFile("retry/assets/a.glb");
   EXPECT_FALSE(folderIsFreeForNewProject(m_dir / "retry"));
 
   fs::create_directories(m_dir / "other" / "elsewhere");
@@ -181,7 +186,7 @@ TEST_F(ProjectOriginTest, AssetWritesAreBlockedOnlyOnAnUnsavedTemplate)
 
 TEST_F(ProjectOriginTest, DefaultSaveFolderSkipsFilledFoldersButNotEmptyOnes)
 {
-  touch("Empty 3D/project.ecs3d", "{}");
+  addFile("Empty 3D/project.ecs3d", "{}");
   EXPECT_EQ(defaultSaveFolder(m_dir, "Empty 3D"), m_dir / "Empty 3D 2");
 
   fs::create_directories(m_dir / "Empty 3D 2");
@@ -191,7 +196,7 @@ TEST_F(ProjectOriginTest, DefaultSaveFolderSkipsFilledFoldersButNotEmptyOnes)
 TEST_F(ProjectOriginTest, FolderIsFreeWhenMissingOrEmptyOnly)
 {
   fs::create_directories(m_dir / "empty");
-  touch("full/a.txt");
+  addFile("full/a.txt");
 
   EXPECT_TRUE(folderIsFreeForNewProject(m_dir / "missing"));
   EXPECT_TRUE(folderIsFreeForNewProject(m_dir / "empty"));
@@ -210,7 +215,7 @@ TEST_F(ProjectOriginTest, SaveActsAsSaveAsUntilTheTemplateIsSavedToAFolder)
 TEST_F(ProjectOriginTest, TemplateSaveRefusesTheTemplateItsSubfoldersAndFilledFolders)
 {
   const auto tpl = makeTemplate("Empty 3D");
-  touch("full/a.txt");
+  addFile("full/a.txt");
 
   EXPECT_FALSE(templateSaveRefusal(m_dir / "fresh", tpl).has_value());
   EXPECT_EQ(templateSaveRefusal(tpl, tpl), "the folder is not empty");

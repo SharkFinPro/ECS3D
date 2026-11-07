@@ -5,7 +5,6 @@
 #include "Replication.h"
 #include "WireTypes.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "objects/components/collisions/BoxCollider.h"

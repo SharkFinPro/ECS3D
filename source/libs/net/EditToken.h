@@ -1,7 +1,7 @@
 #ifndef EDITTOKEN_H
 #define EDITTOKEN_H
-
 #include <cstddef>
+
 #include <random>
 #include <string>
 

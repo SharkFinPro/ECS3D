@@ -4,7 +4,6 @@
 #include "../MixedFields.h"
 #include <objects/components/Transform.h>
 #include <glm/vec3.hpp>
-#include <imgui.h>
 #include <memory>
 
 void registerTransformEditor(ComponentEditor& componentEditor)

@@ -2,7 +2,6 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
-#include <assets/AssetRegistry.h>
 #include <Keybinds.h>
 #include <imgui.h>
 #include <optional>

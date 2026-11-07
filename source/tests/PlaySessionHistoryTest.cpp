@@ -4,8 +4,8 @@
 #include "edits/EditCommand.h"
 #include "edits/PlaySessionHistory.h"
 #include "scenes/SceneManager.h"
-
 #include <cstddef>
+
 #include <string>
 #include <uuid.h>
 

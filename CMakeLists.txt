@@ -130,6 +130,7 @@ endif()
 
 if (MSVC)
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
 add_subdirectory(source)

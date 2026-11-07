@@ -67,7 +67,7 @@ namespace gizmoFixtures {
   inline gizmo::Frame beginDragOnHandle(GizmoFixture& f, const glm::vec2& handleScreenPoint)
   {
     f.input.mouse = handleScreenPoint;
-    gizmo::update(f.state, f.input);
+    static_cast<void>(gizmo::update(f.state, f.input));
     f.input.mouseDown = true;
     return gizmo::update(f.state, f.input);
   }

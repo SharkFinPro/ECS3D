@@ -8,7 +8,6 @@
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/RigidBody.h"
-#include "objects/components/Transform.h"
 #include "SceneEditFixtures.h"
 
 #include <memory>
