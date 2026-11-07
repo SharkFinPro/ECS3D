@@ -70,7 +70,7 @@ private:
     std::uint64_t halves[2];
     std::memcpy(halves, uuid.as_bytes().data(), sizeof(halves));
 
-    return splitmix(halves[0]) ^ splitmix(halves[1] + 0x632be59bd9b4e019ULL);
+    return splitmix(halves[0] ^ splitmix(halves[1] + 0x632be59bd9b4e019ULL));
   }
 
   std::vector<uuids::uuid> m_frameUUIDs;

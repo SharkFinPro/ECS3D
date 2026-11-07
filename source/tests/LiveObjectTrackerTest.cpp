@@ -2,6 +2,8 @@
 
 #include <LiveObjectTracker.h>
 
+#include <array>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <unordered_set>
@@ -13,6 +15,29 @@ namespace {
     char text[40];
     std::snprintf(text, sizeof(text), "%08x-0000-4000-8000-%012x", n * 7919 + 1, n);
     return uuids::uuid::from_string(std::string(text)).value();
+  }
+
+  uuids::uuid fromHalves(const std::uint64_t high, const std::uint64_t low)
+  {
+    std::array<std::uint8_t, 16> bytes{};
+    for (int i = 0; i < 8; ++i)
+    {
+      bytes[i] = static_cast<std::uint8_t>(high >> (8 * i));
+      bytes[8 + i] = static_cast<std::uint8_t>(low >> (8 * i));
+    }
+
+    return uuids::uuid(bytes);
+  }
+
+  bool runUuids(LiveObjectTracker& tracker, const std::vector<uuids::uuid>& frame)
+  {
+    tracker.beginFrame();
+    for (const auto& uuid : frame)
+    {
+      tracker.add(uuid);
+    }
+
+    return tracker.endFrame();
   }
 
   bool runFrame(LiveObjectTracker& tracker, const std::vector<int>& ids)
@@ -108,4 +133,33 @@ TEST(LiveObjectTracker, TwoEmptyFramesInARowReportUnchangedAfterTheFirst)
 
   EXPECT_TRUE(runFrame(tracker, {}));
   EXPECT_FALSE(runFrame(tracker, {}));
+}
+
+TEST(LiveObjectTracker, SwappingAUuidForOneDifferingOnlyInTheLowBytesReportsChanged)
+{
+  LiveObjectTracker tracker;
+  ASSERT_TRUE(runUuids(tracker, {fromHalves(5, 1), fromHalves(6, 2)}));
+
+  EXPECT_TRUE(runUuids(tracker, {fromHalves(5, 3), fromHalves(6, 2)}));
+  EXPECT_TRUE(tracker.liveUUIDs().contains(fromHalves(5, 3)));
+  EXPECT_FALSE(tracker.liveUUIDs().contains(fromHalves(5, 1)));
+}
+
+TEST(LiveObjectTracker, SwappingAUuidForOneDifferingOnlyInTheHighBytesReportsChanged)
+{
+  LiveObjectTracker tracker;
+  ASSERT_TRUE(runUuids(tracker, {fromHalves(1, 5), fromHalves(2, 6)}));
+
+  EXPECT_TRUE(runUuids(tracker, {fromHalves(3, 5), fromHalves(2, 6)}));
+  EXPECT_TRUE(tracker.liveUUIDs().contains(fromHalves(3, 5)));
+  EXPECT_FALSE(tracker.liveUUIDs().contains(fromHalves(1, 5)));
+}
+
+TEST(LiveObjectTracker, ExchangingHalvesBetweenTwoUuidsReportsChanged)
+{
+  LiveObjectTracker tracker;
+  ASSERT_TRUE(runUuids(tracker, {fromHalves(1, 2), fromHalves(3, 4)}));
+
+  EXPECT_TRUE(runUuids(tracker, {fromHalves(1, 4), fromHalves(3, 2)}));
+  EXPECT_TRUE(tracker.liveUUIDs().contains(fromHalves(1, 4)));
 }
