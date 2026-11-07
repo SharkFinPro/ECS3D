@@ -239,7 +239,7 @@ namespace componentFieldDelta {
 
           if (disagrees)
           {
-            mixed.push_back(keyName + "." + name);
+            mixed.push_back(keyName + "." += name);
           }
         }
 
