@@ -2,12 +2,8 @@
 
 #include "CollisionSystem.h"
 #include "DefaultShapes.h"
-#include "PhysicsSystem.h"
 #include "CoinRushTestHelpers.h"
 #include "TemplateTestHelpers.h"
-#include "TestScene.h"
-#include "objects/Object.h"
-#include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "objects/components/Script.h"
 #include "scenes/SceneAsset.h"
@@ -18,7 +14,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
-#include <uuid.h>
 #include <algorithm>
 #include <array>
 #include <cmath>

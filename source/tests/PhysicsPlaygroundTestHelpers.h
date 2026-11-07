@@ -12,8 +12,8 @@
 #include "objects/components/Component.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
-
 #include <glm/geometric.hpp>
+
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>

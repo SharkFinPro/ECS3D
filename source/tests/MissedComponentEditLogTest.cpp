@@ -5,7 +5,6 @@
 #include "TestScene.h"
 #include "Replication.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Script.h"
 #include "objects/components/Transform.h"

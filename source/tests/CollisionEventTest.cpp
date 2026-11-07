@@ -9,7 +9,6 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/Collider.h"
-#include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
 #include <algorithm>

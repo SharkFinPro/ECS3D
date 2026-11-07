@@ -4,7 +4,6 @@
 #include "../MixedFields.h"
 #include <objects/components/Camera.h>
 #include <glm/vec3.hpp>
-#include <imgui.h>
 #include <algorithm>
 #include <memory>
 

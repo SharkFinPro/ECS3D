@@ -215,7 +215,7 @@ TEST(GizmoDragTest, RotateAccumulatesPastOneEightyDegrees)
   {
     const float angle = glm::radians(300.0f) * static_cast<float>(i) / static_cast<float>(steps);
     f.input.mouse = ringPointScreen(centerScreen, angle);
-    gizmo::update(f.state, f.input);
+    static_cast<void>(gizmo::update(f.state, f.input));
   }
 
   EXPECT_GT(std::abs(f.state.dragTotalAngleDegrees), 180.0f);

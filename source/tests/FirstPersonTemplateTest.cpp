@@ -1,32 +1,20 @@
 #include <gtest/gtest.h>
 
 #include "CollisionSystem.h"
-#include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "DefaultShapes.h"
-#include "PhysicsSystem.h"
-#include "ProjectSerializer.h"
-#include "DefaultProject.h"
 #include "TemplateTestHelpers.h"
-#include "TestScene.h"
-#include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "objects/components/LightRenderer.h"
-#include "objects/components/RigidBody.h"
-#include "objects/components/RotationConvention.h"
-#include "objects/components/Script.h"
-#include "objects/components/Transform.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "templates/TemplateManifest.h"
 
 #include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
-#include <uuid.h>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>

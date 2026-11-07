@@ -1,7 +1,7 @@
 #ifndef INPUTVIEW_H
 #define INPUTVIEW_H
-
 #include "InputCapture.h"
+
 
 #include <optional>
 #include <uuid.h>

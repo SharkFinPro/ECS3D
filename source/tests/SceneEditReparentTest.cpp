@@ -7,8 +7,8 @@
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 #include "SceneEditFixtures.h"
-
 #include <cmath>
+
 #include <glm/vec3.hpp>
 #include <memory>
 #include <vector>

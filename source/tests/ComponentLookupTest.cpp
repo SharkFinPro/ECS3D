@@ -4,7 +4,6 @@
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
 #include "objects/components/Camera.h"
 #include "objects/components/Component.h"
 #include "objects/components/RigidBody.h"

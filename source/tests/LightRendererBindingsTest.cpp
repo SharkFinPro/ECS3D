@@ -6,8 +6,8 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/LightRenderer.h"
-
 #include <cmath>
+
 #include <memory>
 #include <string>
 #include <uuid.h>
@@ -32,7 +32,7 @@ namespace {
     void TearDown() override
     {
       BindingContext::setObjectManager(nullptr);
-      BindingContext::takeComponentEdits();
+      static_cast<void>(BindingContext::takeComponentEdits());
     }
 
     fixtures::Scene m_scene;

@@ -5,16 +5,12 @@
 #include "edits/EditCommand.h"
 #include "edits/EditHistory.h"
 #include "edits/RecordEdits.h"
-#include "assets/AssetRegistry.h"
-#include "scenes/SceneManager.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
-#include "objects/components/Script.h"
-#include <Protocol.h>
 #include "RecordEditsFixtures.h"
-
 #include <cstddef>
+
 #include <cstdint>
 #include <memory>
 #include <nlohmann/json.hpp>

@@ -1,6 +1,6 @@
 #include "ScriptSystemTestFixtures.h"
-
 #include "ComponentRegistry.h"
+
 #include "scenes/SceneAsset.h"
 
 #include <chrono>

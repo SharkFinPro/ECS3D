@@ -309,14 +309,14 @@ TEST(ConvexMeshManifoldParity, ADomedFaceClampsAgainstItsOuterOutlineNotItsInter
                                             glm::normalize(glm::vec3(0, 1, -2e-4f)), { 0, -1, 0 } };
 
   // A small cube resting on it, all four bottom corners inside the outline but off its diagonals.
-  std::vector<glm::vec3> boxVertices;
+  std::vector<glm::vec3> cubeVertices;
   for (const float x : { -0.6f, -0.4f })
   {
     for (const float y : { 1.0f, 1.2f })
     {
       for (const float z : { 0.1f, 0.3f })
       {
-        boxVertices.emplace_back(x, y, z);
+        cubeVertices.emplace_back(x, y, z);
       }
     }
   }
@@ -324,7 +324,7 @@ TEST(ConvexMeshManifoldParity, ADomedFaceClampsAgainstItsOuterOutlineNotItsInter
                                            { 0, 0, -1 } };
 
   const auto points = collisions::referenceFaceManifold({ hullVertices, hullNormals, 1e-3f },
-                                                        { boxVertices, boxNormals, 1e-3f }, { 0, 1, 0 }, 4);
+                                                        { cubeVertices, boxNormals, 1e-3f }, { 0, 1, 0 }, 4);
 
   ASSERT_EQ(points.size(), 4u);
   for (const float x : { -0.6f, -0.4f })

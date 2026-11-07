@@ -40,9 +40,9 @@ namespace {
     {
       BindingContext::setObjectManager(nullptr);
       BindingContext::setAssetRegistry(nullptr);
-      BindingContext::takeSpawned();
-      BindingContext::takeDestroyed();
-      BindingContext::takeComponentEdits();
+      static_cast<void>(BindingContext::takeSpawned());
+      static_cast<void>(BindingContext::takeDestroyed());
+      static_cast<void>(BindingContext::takeComponentEdits());
     }
 
     fixtures::Scene scene;

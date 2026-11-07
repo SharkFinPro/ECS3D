@@ -39,6 +39,11 @@ namespace {
       return path;
     }
 
+    void addFile(const fs::path& relative) const
+    {
+      static_cast<void>(touch(relative));
+    }
+
     fs::path m_dir;
   };
 
@@ -119,7 +124,7 @@ TEST_F(ProjectPathsTest, EmptyArgumentIsEmptyLocation)
 
 TEST_F(ProjectPathsTest, ProjectCopyWinsWhenItExists)
 {
-  touch("assets/models/a.glb");
+  addFile("assets/models/a.glb");
 
   const auto resolved = resolveAssetPath(m_dir, "assets/models/a.glb");
 
@@ -129,7 +134,7 @@ TEST_F(ProjectPathsTest, ProjectCopyWinsWhenItExists)
 
 TEST_F(ProjectPathsTest, FallsBackToBuiltInWhenMissingFromProject)
 {
-  touch("assets/models/a.glb");
+  addFile("assets/models/a.glb");
 
   const auto resolved = resolveAssetPath(m_dir, "assets/models/b.glb");
 
@@ -158,7 +163,7 @@ TEST_F(ProjectPathsTest, AbsolutePathIsUntouched)
 
 TEST_F(ProjectPathsTest, RefusesPathsThatEscape)
 {
-  touch("assets/x");
+  addFile("assets/x");
   ASSERT_TRUE(resolveAssetPath(m_dir, "assets/x").has_value());
 
   EXPECT_FALSE(resolveAssetPath(m_dir, "../x").has_value());
@@ -181,7 +186,7 @@ TEST_F(ProjectPathsTest, AnEmptyFilePathStaysEmptyEvenWithAProjectRoot)
 
 TEST_F(ProjectPathsTest, AllowsDotDotThatStaysInside)
 {
-  touch("assets/x");
+  addFile("assets/x");
 
   const auto resolved = resolveAssetPath(m_dir, "assets/../assets/x");
 
@@ -287,11 +292,11 @@ TEST_F(ProjectPathsTest, ImportDestinationPutsATextureUnderAssetsTextures)
 
 TEST_F(ProjectPathsTest, ImportDestinationSuffixesANameThatIsTaken)
 {
-  touch("assets/models/rock.glb");
+  addFile("assets/models/rock.glb");
 
   EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "rock", ImportKind::model).relative, "assets/models/rock-1.glb");
 
-  touch("assets/models/rock-1.glb");
+  addFile("assets/models/rock-1.glb");
   const auto third = importDestination(m_dir, "x/rock.glb", "rock", ImportKind::model);
 
   EXPECT_EQ(third.relative, "assets/models/rock-2.glb");
@@ -309,7 +314,7 @@ TEST_F(ProjectPathsTest, ImportDestinationWithNoRootIsRelativeAndOverwrites)
 
 TEST_F(ProjectPathsTest, ImportDestinationWithNoRootNeverLooksAtTheWorkingDirectory)
 {
-  touch("cwd/assets/models/rock.glb");
+  addFile("cwd/assets/models/rock.glb");
   const ScopedCurrentPath cwd(m_dir / "cwd");
 
   const auto destination = importDestination({}, "x/rock.glb", "rock", ImportKind::model);
@@ -320,10 +325,10 @@ TEST_F(ProjectPathsTest, ImportDestinationWithNoRootNeverLooksAtTheWorkingDirect
 
 TEST_F(ProjectPathsTest, CopyProjectContentCopiesAssetsAndScriptsButKeepsExistingFiles)
 {
-  touch("a/assets/models/m.glb");
-  touch("a/scripts/S.cs");
-  touch("a/project.ecs3d");
-  touch("b/assets/models/m.glb");
+  addFile("a/assets/models/m.glb");
+  addFile("a/scripts/S.cs");
+  addFile("a/project.ecs3d");
+  addFile("b/assets/models/m.glb");
   { std::ofstream(m_dir / "b/assets/models/m.glb") << "keep"; }
 
   std::error_code error;
@@ -337,7 +342,7 @@ TEST_F(ProjectPathsTest, CopyProjectContentCopiesAssetsAndScriptsButKeepsExistin
 
 TEST_F(ProjectPathsTest, CopyProjectContentIgnoresEmptyOrNestedTargets)
 {
-  touch("a/assets/m.glb");
+  addFile("a/assets/m.glb");
   std::error_code error;
 
   copyProjectContent({}, m_dir / "b", error);
@@ -358,7 +363,7 @@ TEST_F(ProjectPathsTest, CopyProjectContentIgnoresEmptyOrNestedTargets)
 
 TEST_F(ProjectPathsTest, CopyProjectContentWritesNothingForAnEmptyTarget)
 {
-  touch("a/assets/m.glb");
+  addFile("a/assets/m.glb");
   const ScopedCurrentPath cwd(m_dir / "cwd");
   std::error_code error;
 
@@ -385,7 +390,7 @@ TEST(PathFromUtf8Test, KeepsNonAsciiCharacters)
 
 TEST_F(ProjectPathsTest, SaveFolderHoldsOtherProjectOnlyForADifferentFolderWithAProject)
 {
-  touch("a/project.ecs3d");
+  addFile("a/project.ecs3d");
   fs::create_directories(m_dir / "empty");
 
   EXPECT_TRUE(saveFolderHoldsOtherProject(m_dir / "a", {}));

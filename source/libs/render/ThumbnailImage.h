@@ -1,7 +1,7 @@
 #ifndef THUMBNAILIMAGE_H
 #define THUMBNAILIMAGE_H
-
 #include <cstddef>
+
 #include <cstdint>
 #include <span>
 #include <vector>

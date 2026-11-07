@@ -1,6 +1,6 @@
 #include "ScriptSystemTestFixtures.h"
-
 #include "ComponentRegistry.h"
+
 #include "SceneObjectDiff.h"
 #include "scenes/SceneAsset.h"
 
@@ -35,6 +35,11 @@ namespace {
       return script;
     }
 
+    void declareSceneScript(const std::string& className) const
+    {
+      static_cast<void>(addSceneScript(className));
+    }
+
     std::shared_ptr<Object> addObjectScripts(const std::string& name, const std::vector<std::string>& classNames) const
     {
       const auto object = std::make_shared<Object>(name);
@@ -63,8 +68,8 @@ namespace {
 
   TEST_F(SceneEventsTest, StartDeliversLoadedToEachStartedSceneScriptInListOrderAfterEveryScriptHasStarted)
   {
-    addSceneScript("Alpha");
-    addSceneScript("Beta");
+    declareSceneScript("Alpha");
+    declareSceneScript("Beta");
     const auto object = addObjectScripts("Thing", { "Mover" });
 
     scriptSystem.start(*mainScene);
@@ -83,8 +88,8 @@ namespace {
 
   TEST_F(SceneEventsTest, StopDeliversUnloadingBeforeAnyScriptIsStopped)
   {
-    addSceneScript("Alpha");
-    addSceneScript("Beta");
+    declareSceneScript("Alpha");
+    declareSceneScript("Beta");
     const auto object = addObjectScripts("Thing", { "Mover" });
     scriptSystem.start(*mainScene);
     state.sceneEvents.clear();
@@ -105,7 +110,7 @@ namespace {
 
   TEST_F(SceneEventsTest, DispatchCarriesTheObjectAndSlotThroughToTheRuntime)
   {
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     scriptSystem.start(*mainScene);
     state.sceneEvents.clear();
 
@@ -124,9 +129,9 @@ namespace {
 
   TEST_F(SceneEventsTest, DispatchReachesEveryStartedSceneScriptInListOrder)
   {
-    addSceneScript("Beta");
-    addSceneScript("Alpha");
-    addSceneScript("Gamma");
+    declareSceneScript("Beta");
+    declareSceneScript("Alpha");
+    declareSceneScript("Gamma");
     scriptSystem.start(*mainScene);
     state.sceneEvents.clear();
 
@@ -138,7 +143,7 @@ namespace {
 
   TEST_F(SceneEventsTest, ASceneScriptThatIsAttachedButNotStartedHearsNothingUntilItStarts)
   {
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     scriptSystem.attachAll(*mainScene);
     ASSERT_EQ(count(sceneCall("attachScene", "Alpha")), 1);
     ASSERT_EQ(count(sceneCall("start", "Alpha")), 0);
@@ -155,7 +160,7 @@ namespace {
 
   TEST_F(SceneEventsTest, ObjectScriptsNeverReceiveSceneEvents)
   {
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     const auto object = addObjectScripts("Thing", { "Mover" });
     scriptSystem.start(*mainScene);
     ASSERT_EQ(count(call("start", object, "Mover")), 1);
@@ -175,8 +180,8 @@ namespace {
   TEST_F(SceneEventsTest, AnUnresolvedSceneScriptIsSkippedWhileItsNeighborStillHearsTheEvent)
   {
     state.unresolvedClasses.insert("Broken");
-    addSceneScript("Broken");
-    addSceneScript("Alpha");
+    declareSceneScript("Broken");
+    declareSceneScript("Alpha");
 
     scriptSystem.start(*mainScene);
     scriptSystem.dispatchSceneEvent(*mainScene, SceneEvent::playerLeft, nullptr, 5);
@@ -186,9 +191,9 @@ namespace {
 
   TEST_F(SceneEventsTest, NothingReachesTheRuntimeWhenNoSceneScriptIsStarted)
   {
-    addObjectScripts("Thing", { "Mover" });
+    static_cast<void>(addObjectScripts("Thing", { "Mover" }));
     state.unresolvedClasses.insert("Broken");
-    addSceneScript("Broken");
+    declareSceneScript("Broken");
 
     scriptSystem.dispatchSceneEvent(*mainScene, SceneEvent::playerJoined, nullptr, 1);
     scriptSystem.start(*mainScene);
@@ -198,7 +203,7 @@ namespace {
 
     EXPECT_TRUE(state.sceneEvents.empty());
 
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     scriptSystem.start(*mainScene);
     scriptSystem.dispatchSceneEvent(*mainScene, SceneEvent::playerJoined, nullptr, 1);
 
@@ -207,7 +212,7 @@ namespace {
 
   TEST_F(SceneEventsTest, AStoppedSceneHearsNothingMoreAfterItsUnloading)
   {
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     scriptSystem.start(*mainScene);
     scriptSystem.stop(*mainScene);
     state.sceneEvents.clear();
@@ -223,7 +228,7 @@ namespace {
 
   TEST_F(SceneEventsTest, AHandlerThatSpawnsLeavesTheObjectPendingUntilTheNextFlush)
   {
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     scriptSystem.start(*mainScene);
     const auto objects = mainScene->getObjectManager();
     const auto spawned = std::make_shared<Object>("Spawned");
@@ -246,7 +251,7 @@ namespace {
 
   TEST_F(SceneEventsTest, DispatchPointsTheBindingsAtTheScenesObjectManager)
   {
-    addSceneScript("Alpha");
+    declareSceneScript("Alpha");
     scriptSystem.start(*mainScene);
     BindingContext::setObjectManager(nullptr);
 

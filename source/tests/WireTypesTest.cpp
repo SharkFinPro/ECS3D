@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-
 #include "WireTypes.h"
+
 #include "TestPrinters.h"
 
 #include "objects/components/Component.h"

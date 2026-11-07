@@ -2,10 +2,8 @@
 #include "DefaultProjectParts.h"
 #include "DefaultShapes.h"
 #include "RestPose.h"
-#include "objects/components/RotationConvention.h"
 #include <nlohmann/json.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <cmath>

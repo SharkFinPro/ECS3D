@@ -50,7 +50,7 @@ namespace {
   };
 
   // Found by ADL. Without it a failed comparison of two 800-element vectors is 800 hex dumps.
-  void PrintTo(const Delivery& delivery, std::ostream* out)
+  [[maybe_unused]] void PrintTo(const Delivery& delivery, std::ostream* out)
   {
     *out << "(sender " << delivery.senderId << ", #" << delivery.sequence << ")";
   }

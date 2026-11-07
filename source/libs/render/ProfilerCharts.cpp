@@ -39,8 +39,9 @@ namespace {
         continue;
       }
 
-      const auto& label = groups[i].label;
-      ImGui::Text("%.*s: %.2f ms", static_cast<int>(label.size()), label.data(), millis(column.groupMicros[i]));
+      const auto& groupLabel = groups[i].label;
+      ImGui::Text("%.*s: %.2f ms", static_cast<int>(groupLabel.size()), groupLabel.data(),
+                  millis(column.groupMicros[i]));
     }
 
     ImGui::EndTooltip();
