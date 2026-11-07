@@ -1930,7 +1930,12 @@ net::Message buildInputState(const bool focused, const std::vector<int>& keysPre
                              const float mouseDeltaY, const float scrollY, const uint8_t buttons,
                              const std::optional<InputView>& view)
 {
+  constexpr std::size_t fixedBytes = sizeof(uint8_t) + sizeof(uint32_t) + 5 * sizeof(float) + sizeof(uint8_t);
+  constexpr std::size_t viewFixedBytes = sizeof(uint32_t) + 4 * sizeof(float);
+  const std::size_t viewBytes = view ? viewFixedBytes + view->camera.size() : 0;
+
   net::Message message(net::MessageType::inputState);
+  message.reserve(fixedBytes + keysPressed.size() * sizeof(int32_t) + viewBytes);
   message.write(focused);
   message.write(static_cast<uint32_t>(keysPressed.size()));
   for (const auto& key : keysPressed)
