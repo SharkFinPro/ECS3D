@@ -94,4 +94,6 @@ missing model the `missing_model.glb` cube wearing that texture. Both are built-
 project resets, and are never registered in a project. A missing asset is logged once per uuid, and an entry showing
 a placeholder is rebuilt when the real asset resolves, so an undone delete draws on the next frame), `InputCapture`,
 `ThumbnailImage` (headless letterbox resize and PNG encode for project thumbnails, via stb_image_write; nothing calls
-it yet). Depends on `ECS3DData` + `VulkanEngine`.
+it yet). `RenderSystem` gathers each object's render components in one pass over its component map through the
+headless `RenderComponents.h`, and prunes its per-uuid caches only when the set of drawn uuids changes, which the
+headless `LiveObjectTracker.h` detects with an order-independent signature. Depends on `ECS3DData` + `VulkanEngine`.

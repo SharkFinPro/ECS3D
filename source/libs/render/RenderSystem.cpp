@@ -3,6 +3,7 @@
 #include "Billboard.h"
 #include "CapsuleGizmo.h"
 #include "OutlineColors.h"
+#include "RenderComponents.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/CameraSelection.h>
@@ -108,12 +109,13 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     entry.second = false;
   }
 
-  m_liveUUIDs.clear();
+  m_liveObjects.beginFrame();
   m_selectionOutlines.clear();
 
   for (const auto& object : objectManager.getAllObjects())
   {
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    const auto components = gatherRenderComponents(*object);
+    const auto transform = components.transform;
 
     if (!transform)
     {
@@ -122,9 +124,9 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
     const auto uuid = object->getUUID();
 
-    m_liveUUIDs.insert(uuid);
+    m_liveObjects.add(uuid);
 
-    if (const auto modelRenderer = object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
+    if (const auto modelRenderer = components.modelRenderer;
         modelRenderer && modelRenderer->getShouldRender() && modelRenderer->canRender())
     {
       const auto renderObject = assetCache.getRenderObject(uuid,
@@ -155,8 +157,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       }
     }
 
-    if (const auto lightRenderer = object->getComponent<LightRenderer>(ComponentType::lightRenderer);
-        lightRenderer)
+    if (const auto lightRenderer = components.lightRenderer; lightRenderer)
     {
       auto& light = m_lights[uuid];
 
@@ -211,7 +212,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     // outline only, so the object inside stays visible, when its render flag is on.
     std::size_t gizmoParts = 0;
     bool drawsHullGizmo = false;
-    if (const auto box = object->getComponent<BoxCollider>(ComponentType::collider); box && box->getRenderCollider())
+    if (const auto box = components.box; box && box->getRenderCollider())
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
       {
@@ -224,7 +225,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
       gizmoParts = 1;
     }
-    else if (const auto sphere = object->getComponent<SphereCollider>(ComponentType::collider); sphere && sphere->getRenderCollider())
+    else if (const auto sphere = components.sphere; sphere && sphere->getRenderCollider())
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb"))
       {
@@ -236,13 +237,11 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
       gizmoParts = 1;
     }
-    else if (const auto capsule = object->getComponent<CapsuleCollider>(ComponentType::collider);
-             capsule && capsule->getRenderCollider())
+    else if (const auto capsule = components.capsule; capsule && capsule->getRenderCollider())
     {
       gizmoParts = drawCapsuleGizmo(renderer, assetCache, uuid, *capsule);
     }
-    else if (const auto convex = object->getComponent<ConvexMeshCollider>(ComponentType::collider);
-             convex && convex->getRenderCollider())
+    else if (const auto convex = components.convexMesh; convex && convex->getRenderCollider())
     {
       drawsHullGizmo = true;
 
@@ -279,10 +278,17 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   // vke object being dropped (Light, RenderObject) blocks on vkDeviceWaitIdle in its own destructor
   // (see VulkanEngine's Light::~Light and UniformBuffer::~UniformBuffer), so nothing here can race a
   // command buffer that is still using it.
-  std::erase_if(m_lights, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
-  std::erase_if(m_selected, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
+  // Every per-uuid cache is filled only for uuids added in the loop above, so pruning matters only when that
+  // set changes.
+  if (m_liveObjects.endFrame())
+  {
+    const auto& liveUUIDs = m_liveObjects.liveUUIDs();
 
-  assetCache.pruneStale(m_liveUUIDs);
+    std::erase_if(m_lights, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
+    std::erase_if(m_selected, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
+
+    assetCache.pruneStale(liveUUIDs);
+  }
 }
 
 void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetCache& assetCache,
@@ -295,9 +301,10 @@ void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetC
 
   for (const auto& object : objectManager.getAllObjects())
   {
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    const auto components = gatherRenderComponents(*object);
+    const auto transform = components.transform;
 
-    if (!transform || !object->getComponent<LightRenderer>(ComponentType::lightRenderer))
+    if (!transform || !components.lightRenderer)
     {
       continue;
     }
