@@ -4,8 +4,8 @@ Agents load this file when they read a file in `source/tests/`. It holds what a 
 are in [docs/architecture/testing.md](../../docs/architecture/testing.md).
 
 - The suite stays headless: no window, GPU or server. It links `ECS3DData`, `ECS3DSim`, `ECS3DSettings`, `ECS3DProfile`
-  and `ECS3DNetProtocol`. A few sources from other libraries compile straight into it because they need no CLR, Vulkan or
-  ImGui; `CMakeLists.txt` explains when another one may join them.
+  and `ECS3DNetProtocol`. A few sources from other libraries compile straight into it because they need no CLR or Vulkan (ImGui
+  core and `ObjectGUIManager.cpp` are the one ImGui exception); `CMakeLists.txt` explains when another one may join them.
 - Add each new test file to the `add_executable` source list in `CMakeLists.txt`. A file left out compiles nothing
   and adds no coverage.
 - Build a scene through `fixtures::Scene` and the helpers in `TestScene.h` instead of repeating the setup.

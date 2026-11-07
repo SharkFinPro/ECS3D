@@ -106,12 +106,17 @@ TEST_F(ObjectTreeRowCullingTest, RowsScrolledOutOfViewAddNoGeometry)
 TEST_F(ObjectTreeRowCullingTest, ScrollingBringsRowsBackIntoView)
 {
   addRoots(400);
-  const int top = settledVertexCount();
+  settledVertexCount();
   ASSERT_GT(maxScroll(), 0.0f);
 
+  // Both positions are past the header, so they show the same number of rows apart from partial ones at the
+  // window edges; a row's worth of vertices bounds that difference.
+  scrollTo(maxScroll() * 0.25f);
+  const int quarter = settledVertexCount();
   scrollTo(maxScroll() * 0.5f);
   const int middle = settledVertexCount();
 
+  EXPECT_GT(quarter, 0);
   EXPECT_GT(middle, 0);
-  EXPECT_NEAR(static_cast<double>(middle), static_cast<double>(top), top * 0.25);
+  EXPECT_NEAR(static_cast<double>(middle), static_cast<double>(quarter), quarter * 0.15);
 }

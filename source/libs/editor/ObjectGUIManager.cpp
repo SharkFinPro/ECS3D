@@ -526,9 +526,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::PopStyleVar();
   ImGui::PopStyleColor(3);
 
-  // ImDrawList shape calls do not cull against the clip rect, so a row scrolled out of view would still
-  // build its icon, text and button vertices. Only the drawing is gated; the row's item and the
-  // interaction below stay submitted.
+  // ImDrawList shape calls (icon, selection bar, button glyphs) do not cull, so an off-screen row skips its
+  // drawing and row buttons. Its tree node, drag/drop and context menu stay submitted.
   const bool rowVisible = ImGui::IsItemVisible();
 
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())

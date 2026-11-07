@@ -356,7 +356,7 @@ add_executable(${PROJECT_NAME}
   ../apps/server/ShutdownSignal.cpp
 
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
-  # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
+  # of ECS3DEditorLib (which pulls in Vulkan through ECS3DRender).
   ../libs/editor/Gizmo.cpp
 
   # The gizmo's edit sending depends only on ECS3DData, Gizmo.h and json.
