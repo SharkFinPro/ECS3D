@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <SnapshotLog.h>
-
 #include <cstddef>
+
 #include <cstdint>
 #include <set>
 #include <string>

@@ -6,7 +6,6 @@
 #include "edits/EditHistory.h"
 #include "edits/RecordEdits.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
 
 #include <ObjectNameField.h>
 #include <nlohmann/json.hpp>

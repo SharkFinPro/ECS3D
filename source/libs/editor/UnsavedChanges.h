@@ -1,7 +1,7 @@
 #ifndef UNSAVEDCHANGES_H
 #define UNSAVEDCHANGES_H
-
 #include <cstddef>
+
 
 // What a request to discard the loaded project should do, given whether it has unsaved edits and whether
 // an unsaved-changes prompt is already waiting on an answer.

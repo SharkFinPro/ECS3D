@@ -3,8 +3,6 @@
 #include "TestPrinters.h"
 #include "TestScene.h"
 #include "objects/Object.h"
-#include "objects/ObjectManager.h"
-#include "objects/components/Transform.h"
 #include "objects/components/collisions/ConvexHull.h"
 #include "objects/components/collisions/ConvexMeshCollider.h"
 #include "queries/HullQueries.h"

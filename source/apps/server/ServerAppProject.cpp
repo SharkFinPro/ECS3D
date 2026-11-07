@@ -1,16 +1,12 @@
 #include "ServerApp.h"
-#include <ProjectSerializer.h>
 #include <ProjectPacker.h>
-#include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
-#include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
 #include <Log.h>
-#include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <exception>
 #include <string>

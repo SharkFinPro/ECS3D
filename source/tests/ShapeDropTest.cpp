@@ -13,7 +13,6 @@
 #include "objects/components/collisions/ConvexMeshCollider.h"
 
 #include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <cmath>

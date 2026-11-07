@@ -3,7 +3,6 @@
 #include "CapsuleGizmo.h"
 #include "TestPrinters.h"
 #include "TestScene.h"
-#include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 

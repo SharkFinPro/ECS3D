@@ -41,10 +41,10 @@ namespace {
       BindingContext::setAssetRegistry(nullptr);
       BindingContext::setRaycast(nullptr);
       BindingContext::setOverlapSphere(nullptr);
-      BindingContext::takeSpawned();
-      BindingContext::takeDestroyed();
-      BindingContext::takeComponentEdits();
-      BindingContext::takeStructuralComponentChanges();
+      static_cast<void>(BindingContext::takeSpawned());
+      static_cast<void>(BindingContext::takeDestroyed());
+      static_cast<void>(BindingContext::takeComponentEdits());
+      static_cast<void>(BindingContext::takeStructuralComponentChanges());
     }
 
     fixtures::Scene scene;

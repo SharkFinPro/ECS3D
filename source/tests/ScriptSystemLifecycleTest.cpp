@@ -1,6 +1,6 @@
 #include "ScriptSystemTestFixtures.h"
-
 #include "ComponentRegistry.h"
+
 #include "WorldBindings.h"
 #include "scenes/SceneAsset.h"
 
@@ -401,7 +401,7 @@ namespace {
     addScriptedObjects();
     const auto sceneScript = std::make_shared<Script>("Director");
     ASSERT_TRUE(spawnScene->addScript(sceneScript));
-    state.startHook = [this, inner = spawner()](const std::string& uuid, const std::string& className)
+    state.startHook = [inner = spawner()](const std::string& uuid, const std::string& className)
     {
       if (className == "Director")
       {

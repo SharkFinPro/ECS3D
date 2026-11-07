@@ -2,7 +2,6 @@
 
 #include "Billboard.h"
 #include <cmath>
-#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>

@@ -5,22 +5,18 @@
 #include "ComponentRegistry.h"
 #include "DefaultShapes.h"
 #include "PhysicsSystem.h"
-#include "ProjectSerializer.h"
-#include "DefaultProject.h"
 #include "TemplateTestHelpers.h"
 #include "TestScene.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
-#include "objects/components/LightRenderer.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/RotationConvention.h"
 #include "objects/components/Script.h"
 #include "objects/components/Transform.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
-#include "templates/TemplateManifest.h"
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -65,50 +61,6 @@ namespace
 
     const auto start = begin + marker.size();
     return text.substr(start, text.find('"', start) - start);
-  }
-
-  // The body after a load, so keys the loader defaults compare alike; the uuid and a hull's triangulation
-  // (which differs by how it was built) are dropped.
-  nlohmann::json normalizedBody(const nlohmann::json& body)
-  {
-    const auto componentRegistry = std::make_shared<ComponentRegistry>();
-    registerDataComponents(*componentRegistry);
-    ObjectManager scratch(componentRegistry);
-
-    auto loaded = scratch.instantiate(body)->serialize();
-    loaded.erase("uuid");
-    for (auto& component : loaded.at("components"))
-    {
-      if (component.value("subType", std::string()) == "ConvexMesh")
-      {
-        component.erase("vertices");
-        component.erase("indices");
-      }
-    }
-
-    // A copy into a vector: json iterators are bidirectional, which std::ranges::sort rejects.
-    std::vector<nlohmann::json> components(loaded.at("components").begin(), loaded.at("components").end());
-    const auto key = [](const nlohmann::json& component) {
-      return component.at("type").get<std::string>() + component.value("subType", std::string());
-    };
-    std::sort(components.begin(), components.end(),
-              [&key](const nlohmann::json& a, const nlohmann::json& b) { return key(a) < key(b); });
-    loaded["components"] = components;
-    return loaded;
-  }
-
-  nlohmann::json prefabBodyNamed(const nlohmann::json& project, const std::string& name)
-  {
-    for (const auto& prefab : project.at("assets").at("prefabs"))
-    {
-      if (prefab.at("name") == name)
-      {
-        return prefab.at("body");
-      }
-    }
-
-    ADD_FAILURE() << "no prefab named " << name;
-    return nlohmann::json::object();
   }
 }
 

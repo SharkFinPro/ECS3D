@@ -42,9 +42,9 @@ namespace {
       // BindingContext's buffers/pointer are static, so a leftover from one test would otherwise leak
       // into the next.
       BindingContext::setObjectManager(nullptr);
-      BindingContext::takeSpawned();
-      BindingContext::takeDestroyed();
-      BindingContext::takeComponentEdits();
+      static_cast<void>(BindingContext::takeSpawned());
+      static_cast<void>(BindingContext::takeDestroyed());
+      static_cast<void>(BindingContext::takeComponentEdits());
     }
 
     fixtures::Scene scene;

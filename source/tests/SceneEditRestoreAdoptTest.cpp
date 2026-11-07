@@ -63,8 +63,6 @@ TEST(SceneEdit, RestoreObjectWithAdoptReclaimsPromotedChildrenUnderAParentedRest
   transformOf(c2)->setPosition({ 4, 5, 6 });
 
   const auto xUUID = x->getUUID();
-  const auto c1UUID = c1->getUUID();
-  const auto c2UUID = c2->getUUID();
   const auto body = x->serialize(); // pre-removal: c1/c2 still carry their own local values
 
   ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);

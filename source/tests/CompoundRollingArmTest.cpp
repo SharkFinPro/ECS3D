@@ -3,7 +3,6 @@
 #include "PhysicsSystem.h"
 #include "PhysicsTestHelpers.h"
 #include "TestScene.h"
-#include "objects/Object.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"

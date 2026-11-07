@@ -6,7 +6,6 @@
 #include <scenes/SceneAsset.h>
 #include <scenes/SceneScriptEdits.h>
 #include <objects/ObjectManager.h>
-#include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <objects/components/Script.h>
 #include <ScriptSystem.h>

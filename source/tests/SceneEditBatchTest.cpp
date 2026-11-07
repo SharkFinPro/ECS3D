@@ -2,7 +2,6 @@
 
 #include "TestScene.h"
 #include "Replication.h"
-#include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "SceneEditFixtures.h"

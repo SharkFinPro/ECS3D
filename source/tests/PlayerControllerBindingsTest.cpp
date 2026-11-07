@@ -31,7 +31,7 @@ namespace {
     void TearDown() override
     {
       BindingContext::setObjectManager(nullptr);
-      BindingContext::takeComponentEdits();
+      static_cast<void>(BindingContext::takeComponentEdits());
     }
 
     fixtures::Scene m_scene;

@@ -7,8 +7,8 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
-
 #include <cstddef>
+
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>

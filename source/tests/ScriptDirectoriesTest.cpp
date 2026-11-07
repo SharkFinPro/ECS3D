@@ -36,7 +36,7 @@ namespace {
 
   TEST(ScriptDirectoriesTest, TheBridgeFormIsUtf8ForNonAsciiPaths)
   {
-    const std::filesystem::path path(u8"caf\u00e9");
+    const std::filesystem::path path(std::u8string{ u8'c', u8'a', u8'f', char8_t{ 0xC3 }, char8_t{ 0xA9 } });
 
     EXPECT_EQ(scripting::joinScriptDirectories({ path }), "caf\xC3\xA9");
   }

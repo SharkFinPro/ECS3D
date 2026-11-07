@@ -23,10 +23,13 @@ namespace {
     net::RemoteStats::Clock::time_point now{1000s};
     net::RemoteStats stats{[this] { return now; }};
 
+  protected:
     void SetUp() override
     {
       stats.subscribed();
     }
+
+  public:
 
     // One batch covering `wallMicros` of server time.
     void deliver(const uint32_t wallMicros, std::vector<net::ServerStatsTraffic> out,
