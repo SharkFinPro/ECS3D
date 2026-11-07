@@ -296,7 +296,7 @@ void ScriptSystem::fixedUpdateObjects(ObjectManager& objectManager, const float 
       // was built - gets its one start() before this first tick.
       startIfNeeded(object->getUUID(), script->getClassName());
 
-      m_engine->fixedUpdate(uuids::to_string(object->getUUID()).c_str(), script->getClassName().c_str(), dt);
+      m_engine->fixedUpdate(object->getUUIDCString(), script->getClassName().c_str(), dt);
     }
   }
 }
@@ -372,7 +372,7 @@ void ScriptSystem::variableUpdateObjects(ObjectManager& objectManager)
       // running whenever this runs.
       startIfNeeded(object->getUUID(), script->getClassName());
 
-      m_engine->variableUpdate(uuids::to_string(object->getUUID()).c_str(), script->getClassName().c_str());
+      m_engine->variableUpdate(object->getUUIDCString(), script->getClassName().c_str());
     }
   }
 }

@@ -217,7 +217,14 @@ public:
     return *this;
   }
 
+  // A builder that knows its payload size up front reserves it, so the writes after it never regrow the buffer.
+  Message& reserve(const std::size_t bytes) {
+    m_payload.reserve(bytes);
+    return *this;
+  }
+
   [[nodiscard]] std::size_t size() const noexcept { return m_payload.size(); }
+  [[nodiscard]] std::size_t capacity() const noexcept { return m_payload.capacity(); }
   [[nodiscard]] std::span<const uint8_t> bytes() const noexcept { return m_payload; }
 
   [[nodiscard]] MessageType getType() const noexcept { return m_type; }

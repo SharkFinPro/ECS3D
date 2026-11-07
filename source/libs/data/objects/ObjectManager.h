@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <memory>
 #include <random>
+#include <unordered_map>
 #include <vector>
 #include <uuid.h>
 
@@ -149,6 +150,12 @@ public:
   void removeSubtree(const std::shared_ptr<Object>& object);
 
   [[nodiscard]] std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
+
+  // A snapshot of every object (pending additions included) keyed by uuid, for a caller that resolves many
+  // uuids in a row. Not kept in sync: an object's uuid is assigned after addObject during unpack, so the
+  // index is only valid until the next structural change. Where uuids repeat, the first match wins, as in
+  // getObjectByUUID.
+  [[nodiscard]] std::unordered_map<uuids::uuid, std::shared_ptr<Object>> buildUUIDIndex() const;
 
   [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getObjects() const;
 

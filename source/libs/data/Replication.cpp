@@ -112,6 +112,14 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
   net::MessageReader reader(message);
 
   const uint32_t count = reader.read<uint32_t>();
+  if (count == 0)
+  {
+    return;
+  }
+
+  // One pass over the scene instead of a linear scan per entry; the writes below never change structure.
+  const auto index = objectManager.buildUUIDIndex();
+
   for (uint32_t i = 0; i < count; ++i)
   {
     const auto uuid = reader.readString();
@@ -125,11 +133,13 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
       continue;
     }
 
-    const auto object = objectManager.getObjectByUUID(parsed.value());
-    if (!object)
+    const auto found = index.find(parsed.value());
+    if (found == index.end())
     {
       continue;
     }
+
+    const auto& object = found->second;
 
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
     if (!transform)
@@ -1920,7 +1930,12 @@ net::Message buildInputState(const bool focused, const std::vector<int>& keysPre
                              const float mouseDeltaY, const float scrollY, const uint8_t buttons,
                              const std::optional<InputView>& view)
 {
+  constexpr std::size_t fixedBytes = sizeof(uint8_t) + sizeof(uint32_t) + 5 * sizeof(float) + sizeof(uint8_t);
+  constexpr std::size_t viewFixedBytes = sizeof(uint32_t) + 4 * sizeof(float);
+  const std::size_t viewBytes = view ? viewFixedBytes + view->camera.size() : 0;
+
   net::Message message(net::MessageType::inputState);
+  message.reserve(fixedBytes + keysPressed.size() * sizeof(int32_t) + viewBytes);
   message.write(focused);
   message.write(static_cast<uint32_t>(keysPressed.size()));
   for (const auto& key : keysPressed)
