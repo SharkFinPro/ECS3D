@@ -10,7 +10,7 @@ Related design notes: [camera-and-input.md](../../../docs/architecture/camera-an
 - The server does not link this library. Logic worth testing goes in a headless header (`Billboard.h`,
   `CapsuleGizmo.h`, `HullGizmoMesh.h`, `SharedAssetLoads.h`, `MissingAssetFallback.h`, `GridVisibility.h`,
   `LightGizmoVisibility.h`, `OutlineColors.h`, `InputView.h`, `InputFocus.h`, `ProfilerChartLayout.h`,
-  `StatsOverlay.h`) that the test suite compiles without Vulkan.
+  `StatsOverlay.h`, `RenderComponents.h`, `LiveObjectTracker.h`) that the test suite compiles without Vulkan.
 - The engine's loaders throw rather than return null. `GpuAssetCache` loads through `SharedAssetLoads.h`, which logs a
   failed load once and remembers it, so `getModel` and `getTexture` return null instead, and every caller tolerates
   that. `getRenderObject` alone substitutes the magenta and black `missing_model.glb` and `missing_texture.png`

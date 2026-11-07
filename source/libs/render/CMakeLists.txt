@@ -3,6 +3,8 @@ project(ECS3DRender)
 add_library(${PROJECT_NAME}
   RenderSystem.cpp
   RenderSystem.h
+  RenderComponents.h
+  LiveObjectTracker.h
   GpuAssetCache.cpp
   GpuAssetCache.h
   Billboard.cpp

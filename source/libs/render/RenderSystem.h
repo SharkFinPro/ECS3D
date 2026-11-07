@@ -1,12 +1,12 @@
 #ifndef RENDERSYSTEM_H
 #define RENDERSYSTEM_H
 
+#include "LiveObjectTracker.h"
 #include <glm/mat4x4.hpp>
 #include <memory>
 #include <optional>
 #include <span>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include <uuid.h>
 
@@ -113,10 +113,9 @@ private:
   bool m_freeFlyActive = true;
   glm::mat4 m_componentCameraView{ 1.0f };
 
-  // Reused across calls to avoid a per-frame allocation: variableUpdate refills it with every uuid
-  // seen this frame, then prunes m_lights/m_selected/GpuAssetCache's per-object caches of any uuid
-  // that is no longer present (object deleted, scene switched, project reloaded).
-  std::unordered_set<uuids::uuid> m_liveUUIDs;
+  // variableUpdate adds every uuid it draws; m_lights, m_selected and GpuAssetCache's per-object caches are
+  // pruned of absent uuids (object deleted, scene switched, project reloaded) only when that set changes.
+  LiveObjectTracker m_liveObjects;
 
   std::vector<std::shared_ptr<vke::RenderObject>> m_selectionOutlines;
 };
