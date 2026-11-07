@@ -21,6 +21,20 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(googletest)
 
+# VulkanEngine fetches imgui, which libs/ configures before this directory. Read its source directory from
+# the global FetchContent property, as for stb below, and compile the core files directly: linking the
+# imgui target would pull in Vulkan and glfw.
+FetchContent_GetProperties(imgui SOURCE_DIR ECS3D_IMGUI_SOURCE_DIR)
+if(NOT ECS3D_IMGUI_SOURCE_DIR)
+  message(FATAL_ERROR "imgui was not fetched; ECS3DTests needs it for ObjectGUIManager")
+endif()
+set(ECS3D_IMGUI_SOURCES
+  ${ECS3D_IMGUI_SOURCE_DIR}/imgui.cpp
+  ${ECS3D_IMGUI_SOURCE_DIR}/imgui_draw.cpp
+  ${ECS3D_IMGUI_SOURCE_DIR}/imgui_tables.cpp
+  ${ECS3D_IMGUI_SOURCE_DIR}/imgui_widgets.cpp
+)
+
 add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
@@ -51,6 +65,7 @@ add_executable(${PROJECT_NAME}
   SettingsPanelLayoutTest.cpp
   DashedBoxLayoutTest.cpp
   ObjectTreeOrderTest.cpp
+  ObjectTreeRowCullingTest.cpp
   OutlineColorsTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
@@ -343,7 +358,7 @@ add_executable(${PROJECT_NAME}
   ../apps/server/ShutdownSignal.cpp
 
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
-  # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
+  # of ECS3DEditorLib (which pulls in Vulkan through ECS3DRender).
   ../libs/editor/Gizmo.cpp
 
   # The gizmo's edit sending depends only on ECS3DData, Gizmo.h and json.
@@ -371,6 +386,11 @@ add_executable(${PROJECT_NAME}
 
   # The thumbnail letterbox and PNG encode depend only on the standard library and stb_image_write.
   ../libs/render/ThumbnailImage.cpp
+
+  # ImGui's core is backend-free and needs no window or GPU, so it compiles in with the Objects panel to
+  # let the suite drive a real frame of it headlessly. The glfw and Vulkan backends stay out.
+  ../libs/editor/ObjectGUIManager.cpp
+  ${ECS3D_IMGUI_SOURCES}
 )
 
 
@@ -383,6 +403,7 @@ endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${ECS3D_STB_SOURCE_DIR}
+  ${ECS3D_IMGUI_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/../apps/server
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings

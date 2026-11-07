@@ -526,6 +526,10 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::PopStyleVar();
   ImGui::PopStyleColor(3);
 
+  // ImDrawList shape calls (icon, selection bar, button glyphs) do not cull, so an off-screen row skips its
+  // drawing and row buttons. Its tree node, drag/drop and context menu stay submitted.
+  const bool rowVisible = ImGui::IsItemVisible();
+
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
     // Deferred to applyPendingClick(), once the full display order for this frame is known (a
@@ -537,6 +541,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   // Icon + name + accent selection bar, drawn over the (empty-label) node row.
   const float rowHeight = ImGui::GetItemRectMax().y - ImGui::GetItemRectMin().y;
+  if (rowVisible)
   {
     const ImVec2 rmin = ImGui::GetItemRectMin();
     const ImVec2 rmax = ImGui::GetItemRectMax();
@@ -624,26 +629,29 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   }
 
   // Add/Delete Buttons, flush to the right edge of the row.
-  ImGui::SameLine();
-
-  const float buttonWidth = rowHeight;
-  constexpr float buttonGap = 3.0f;
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f - buttonGap);
-
-  ImGui::SetNextItemAllowOverlap();
-  if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth, rowHeight))
+  if (rowVisible)
   {
-    const auto parent = object->getUUID();
-    const auto created = newObjectUUID();
-    m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
-  }
+    ImGui::SameLine();
 
-  ImGui::SameLine(0.0f, buttonGap);
+    const float buttonWidth = rowHeight;
+    constexpr float buttonGap = 3.0f;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f - buttonGap);
 
-  ImGui::SetNextItemAllowOverlap();
-  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight))
-  {
-    performDelete(targetsFor(object));
+    ImGui::SetNextItemAllowOverlap();
+    if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth, rowHeight))
+    {
+      const auto parent = object->getUUID();
+      const auto created = newObjectUUID();
+      m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
+    }
+
+    ImGui::SameLine(0.0f, buttonGap);
+
+    ImGui::SetNextItemAllowOverlap();
+    if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight))
+    {
+      performDelete(targetsFor(object));
+    }
   }
 
   if (open && !isLeaf)

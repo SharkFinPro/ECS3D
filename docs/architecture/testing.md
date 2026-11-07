@@ -27,8 +27,8 @@ which the tests fake; the CLR-backed `Managed*Transport` classes stay out. See t
 way, as is
 `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
 `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), `editor/GizmoEditSending.cpp` (depends only on `ECS3DData`, `Gizmo.h` and json), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/MissingAssetFallback.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
-json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
-carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `ConsoleView.h`, `AssetCreateFlow.h`, `KeyHoldRepeat.h`, `ProjectLoadTracker.h`, `RecentProjectRecording.h`, `ScriptFieldAsset.h` and `ScriptFieldLabel.h` are reached
+json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the Vulkan (and
+ImGui backends) it carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `ConsoleView.h`, `AssetCreateFlow.h`, `KeyHoldRepeat.h`, `ProjectLoadTracker.h`, `RecentProjectRecording.h`, `ScriptFieldAsset.h` and `ScriptFieldLabel.h` are reached
 through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h` and `StatsSummary.h`
 (mutation authorization, scene-control plans, token generation check, inbox and disconnect drain order, edit-refusal resync, capped log forwarding, the sample-close rule, the stats line text) and `StructuralChanges.h` (the order a tick's spawns, destroys and component changes replicate in) are covered the same way, by including them, and the
 header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. `PresetsTest` reads `CMakePresets.json` from the repo root via the `ECS3D_SOURCE_DIR` compile definition. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
@@ -43,6 +43,8 @@ empty test set and would otherwise report green for a suite that registered noth
 Under the `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves the managed suite's
 cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
 `render/ThumbnailImage.cpp` is also compiled straight into the suite; it needs only stb_image_write.
+ImGui's core sources and `editor/ObjectGUIManager.cpp` compile in too, so panel tests can run a real headless
+frame (the backends and Vulkan stay out).
 VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
 
 ## Per-suite registration
