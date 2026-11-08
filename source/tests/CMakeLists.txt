@@ -153,6 +153,7 @@ add_executable(${PROJECT_NAME}
   GridVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
   ClientDisplaySettingsTest.cpp
+  FramePacingSettingsTest.cpp
   EditorLayoutSettingsTest.cpp
   GizmoTest.cpp
   GizmoEditSendingTest.cpp
