@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <system_error>
 
 namespace framePacingSettings {
   int clampMaxFps(const int framesPerSecond)
@@ -30,7 +31,7 @@ namespace framePacingSettings {
     // Read as a double so a hand-written huge or fractional number is clamped rather than converted out of range.
     const double value = settings.get<double>(keys.maxFps, static_cast<double>(defaultMaxFps));
 
-    if (!std::isfinite(value))
+    if (std::isnan(value))
     {
       return defaultMaxFps;
     }
@@ -63,6 +64,11 @@ namespace framePacingSettings {
     int value = 0;
     const char* end = text.data() + text.size();
     const auto [parsedEnd, error] = std::from_chars(text.data(), end, value);
+
+    if (error == std::errc::result_out_of_range && parsedEnd == end)
+    {
+      return maxMaxFps;
+    }
 
     if (error != std::errc() || parsedEnd != end)
     {

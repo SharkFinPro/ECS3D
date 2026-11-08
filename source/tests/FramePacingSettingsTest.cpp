@@ -193,6 +193,33 @@ TEST_F(FramePacingSettings, WrongTypesFallBackToTheDefaults)
   EXPECT_FALSE(framePacingSettings::readVsync(settings, keys));
 }
 
+TEST_F(FramePacingSettings, StoredBoolAndNullFallBackToTheDefaults)
+{
+  SettingsStore settings(m_file);
+  const auto& keys = framePacingSettings::clientKeys;
+
+  settings.set(keys.maxFps, true);
+  settings.set(keys.vsync, nlohmann::json());
+  EXPECT_EQ(framePacingSettings::readMaxFps(settings, keys), framePacingSettings::unlimited);
+  EXPECT_TRUE(framePacingSettings::readVsync(settings, keys));
+
+  settings.set(keys.maxFps, nlohmann::json());
+  EXPECT_EQ(framePacingSettings::readMaxFps(settings, keys), framePacingSettings::unlimited);
+}
+
+TEST_F(FramePacingSettings, ANumberBeyondDoubleRangeInTheFileYieldsDefaults)
+{
+  {
+    std::ofstream out(m_file);
+    out << R"({"client.display.vsync": false, "client.display.maxFps": 1e999})";
+  }
+
+  const SettingsStore settings(m_file);
+
+  EXPECT_TRUE(framePacingSettings::readVsync(settings, framePacingSettings::clientKeys));
+  EXPECT_EQ(framePacingSettings::readMaxFps(settings, framePacingSettings::clientKeys), framePacingSettings::unlimited);
+}
+
 TEST_F(FramePacingSettings, AFileThatIsNotJsonYieldsDefaults)
 {
   {
@@ -217,13 +244,16 @@ TEST_F(FramePacingSettings, ParseMaxFpsAcceptsWholeNumbers)
   EXPECT_EQ(parseMaxFps("60"), std::optional<int>(60));
   EXPECT_EQ(parseMaxFps("5"), std::optional<int>(10));
   EXPECT_EQ(parseMaxFps("100000"), std::optional<int>(1000));
+  EXPECT_EQ(parseMaxFps("007"), std::optional<int>(10));
+  EXPECT_EQ(parseMaxFps("2147483648"), std::optional<int>(1000));
+  EXPECT_EQ(parseMaxFps("99999999999999999999"), std::optional<int>(1000));
 }
 
 TEST_F(FramePacingSettings, ParseMaxFpsRejectsEverythingElse)
 {
   using framePacingSettings::parseMaxFps;
 
-  for (const char* text : { "", "-1", "+60", "60fps", "6.5", " 60", "abc", "99999999999999999999" })
+  for (const char* text : { "", "-1", "+60", "60fps", "6.5", " 60", "abc", "0x10", "1e3", "99999999999999999999x" })
   {
     EXPECT_FALSE(parseMaxFps(text).has_value()) << "'" << text << "'";
   }

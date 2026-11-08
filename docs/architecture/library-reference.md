@@ -29,7 +29,8 @@ catalogue, and the bijective `KeybindTable`) - the headless keybind model, the n
 `vke::Camera::setSpeed`), `EditorViewportSettings` (the viewport grid's show/hide preference, default shown),
 `ClientDisplaySettings` (the client's fullscreen preference, kept in its own `client-settings.json`),
 `FramePacingSettings` (vsync and the frame rate cap under separate client and editor keys, the cap clamped on read
-and write, `0` unlimited; a command-line flag overrides for one launch without persisting),
+and write, `0` unlimited; the `resolve*` helpers let a command-line flag override for one launch without
+persisting; the client keys live in `client-settings.json`, the editor keys in `settings.json`),
 `EditorLayoutSettings` (the ImGui ini text under `editor.layout.imgui`, plus `hasDockLayout`, which decides whether
 a saved string holds a dock tree),
 `EditorGizmoSettings` (clamped get/set for the viewport gizmo's snap toggle and translate/rotate/scale step

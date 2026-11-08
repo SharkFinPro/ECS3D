@@ -31,12 +31,13 @@ namespace framePacingSettings {
   void writeVsync(SettingsStore& settings, const Keys& keys, bool vsync);
 
   // Clamped on read as well as on write, so a hand-edited file cannot ask for an out-of-range cap.
+  // Infinity clamps like any huge value; NaN falls back to the default.
   [[nodiscard]] int readMaxFps(const SettingsStore& settings, const Keys& keys);
   void writeMaxFps(SettingsStore& settings, const Keys& keys, int framesPerSecond);
 
   // Parses a command-line cap: a whole decimal number, 0 for unlimited. Returns nullopt for anything else
-  // (empty, sign, fraction, trailing characters, overflow) so the caller can reject the flag. A valid but
-  // out-of-range value is returned clamped (e.g. "5" -> 10, "100000" -> 1000).
+  // (empty, sign, fraction, trailing characters) so the caller can reject the flag. A digits-only value is
+  // returned clamped, including one too large for int (e.g. "5" -> 10, "100000" and "99999999999999999999" -> 1000).
   [[nodiscard]] std::optional<int> parseMaxFps(std::string_view text);
 
   // A command-line flag overrides the remembered preference for this launch and never changes it
