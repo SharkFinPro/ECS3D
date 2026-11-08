@@ -1,8 +1,6 @@
 #include "CollisionSystem.h"
 #include "PhysicsSystem.h"
 #include "collisions/NarrowPhase.h"
-#include "collisions/SupportFaces.h"
-#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <ProfileScope.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
@@ -125,7 +123,7 @@ void CollisionSystem::checkCollisions(const float dt)
   // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
   // transformed meshes that live on the same Collider another thread's iteration can also read. That is
   // only safe because every collider in m_collisionEdges was just warmed serially above, and nothing in
-  // this loop moves a transform - collision responses, which do, are deferred to the serial pass below.
+  // this loop moves a transform - collision responses, which do, are deferred to the island pass below.
   // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
   // it into two threads racing a write on m_boundingBox / the collider's support mesh.
   // Dynamic scheduling because the work per edge depends on how many colliders overlap it in x.
@@ -192,7 +190,7 @@ void CollisionSystem::resolveInIslands(const float dt)
   std::unordered_map<const Object*, size_t> edgeOfRootBody;
 
   // A response moves both bodies of a dynamic pair, so those bodies share an island. A static collider is only
-  // read, so it links nothing - but its lazily built hull face cache is filled here, before any thread reads it.
+  // read, so it links nothing - but its lazily built contact caches are filled here, before any thread reads it.
   for (size_t i = 0; i < edgeCount; ++i)
   {
     if (!m_collisionEdges[i].body)
@@ -224,9 +222,9 @@ void CollisionSystem::resolveInIslands(const float dt)
       {
         parent[find(i)] = find(touch.other);
       }
-      else if (other.collider->getColliderType() == ColliderType::convexMeshCollider)
+      else
       {
-        static_cast<void>(collisions::hullSupportFaces(static_cast<ConvexMeshCollider&>(*other.collider)));
+        collisions::warmContactCaches(*other.collider);
       }
     }
   }
@@ -252,28 +250,37 @@ void CollisionSystem::resolveInIslands(const float dt)
   }
 
   // Largest first, so the long islands start early and the small ones fill in the gaps behind them.
-  std::ranges::stable_sort(islands, std::ranges::greater{}, &std::vector<size_t>::size);
+  std::ranges::stable_sort(islands, std::ranges::greater{}, [](const std::vector<size_t>& island)
+  {
+    return island.size();
+  });
 
   std::exception_ptr failure;
   const int islandCount = static_cast<int>(islands.size());
 
-#pragma omp parallel for default(none) shared(islands, failure, dt, islandCount) schedule(dynamic) num_threads(6)
-  for (int n = 0; n < islandCount; ++n)
+#pragma omp parallel default(none) shared(islands, failure, dt, islandCount) num_threads(6)
   {
-    try
+    // A worker's inertia cache would otherwise carry entries from earlier ticks.
+    PhysicsSystem::clearInertiaCache();
+
+#pragma omp for schedule(dynamic)
+    for (int n = 0; n < islandCount; ++n)
     {
-      for (const auto i : islands[n])
+      try
       {
-        handleCollisions(i, dt);
-      }
-    }
-    catch (...)
-    {
-#pragma omp critical(collisionIslandFailure)
-      {
-        if (!failure)
+        for (const auto i : islands[n])
         {
-          failure = std::current_exception();
+          handleCollisions(i, dt);
+        }
+      }
+      catch (...)
+      {
+#pragma omp critical(collisionIslandFailure)
+        {
+          if (!failure)
+          {
+            failure = std::current_exception();
+          }
         }
       }
     }
@@ -358,7 +365,7 @@ void CollisionSystem::reset()
 void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& hits) const
 {
   // The bounds copied into m_sweepBoxes serially, before this parallel loop: reading them never touches a
-  // collider, and nothing moves a transform until the serial response pass after the loop.
+  // collider, and nothing moves a transform until the response pass after the loop.
   const auto& self = m_sweepBoxes[index];
   const auto& bbox = self.bounds;
   const bool selfDynamic = self.dynamic;

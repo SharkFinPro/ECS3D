@@ -6,6 +6,7 @@
 #include "FaceManifold.h"
 #include "ManifoldInternal.h"
 #include "NarrowPhase.h"
+#include "SupportFaces.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
@@ -231,6 +232,26 @@ const std::vector<glm::vec3>& hullFaceNormalsOf(ConvexMeshCollider& hullCollider
   }
 
   return hullCollider.getFaceNormalCache()->normals;
+}
+
+void collisions::warmContactCaches(Collider& collider)
+{
+  switch (collider.getColliderType())
+  {
+    case ColliderType::boxCollider:
+      static_cast<void>(static_cast<BoxCollider&>(collider).getWorldFrame());
+      break;
+    case ColliderType::convexMeshCollider:
+    {
+      auto& hull = static_cast<ConvexMeshCollider&>(collider);
+      static_cast<void>(hullFaceNormalsOf(hull));
+      static_cast<void>(hullSupportFaces(hull));
+      break;
+    }
+    case ColliderType::sphereCollider:
+    case ColliderType::capsuleCollider:
+      break;
+  }
 }
 
 // The touching tolerance scales with the shape's own size along its local axes, so a box-shaped hull selects

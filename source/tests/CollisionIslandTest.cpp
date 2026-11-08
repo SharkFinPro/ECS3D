@@ -7,6 +7,7 @@
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -61,14 +62,17 @@ namespace {
     return box;
   }
 
-  // A static floor with a stack of boxes dropped on it; the variant changes heights and offsets so piles differ.
-  Pile addPile(const fixtures::Scene& scene, const int variant, const float originX)
+  bool metDuringRun(const std::vector<CollisionPair>& seen, const std::shared_ptr<Object>& a,
+                    const std::shared_ptr<Object>& b)
+  {
+    return std::ranges::find(seen, CollisionPair::make(a->getUUID(), b->getUUID())) != seen.end();
+  }
+
+  // A stack of boxes dropped on it; the variant changes heights and offsets so piles differ.
+  Pile addBoxes(const fixtures::Scene& scene, const int variant, const float originX)
   {
     const float lift = 0.05f * static_cast<float>(variant % 4);
     const float shift = 0.15f * static_cast<float>(variant % 3);
-
-    const auto floor = addObject(scene, "Floor", { originX, 0, 0 }, { 10, 1, 10 });
-    fixtures::addBoxCollider(floor);
 
     Pile pile;
     pile.bodies.push_back(addDynamicBox(scene, { originX, 2.2f + lift, 0 }));
@@ -81,11 +85,67 @@ namespace {
     return pile;
   }
 
-
-  bool metDuringRun(const std::vector<CollisionPair>& seen, const std::shared_ptr<Object>& a,
-                    const std::shared_ptr<Object>& b)
+  Pile addPile(const fixtures::Scene& scene, const int variant, const float originX)
   {
-    return std::ranges::find(seen, CollisionPair::make(a->getUUID(), b->getUUID())) != seen.end();
+    const auto floor = addObject(scene, "Floor", { originX, 0, 0 }, { 10, 1, 10 });
+    fixtures::addBoxCollider(floor);
+
+    return addBoxes(scene, variant, originX);
+  }
+
+  enum class FloorShape { box, hull };
+
+  // Piles spread along x on one static floor built fresh here, so its lazy collider caches start cold.
+  std::vector<std::vector<BodyState>> simulateOnSharedFloor(const std::vector<int>& variants, const float spacing,
+                                                            const FloorShape shape)
+  {
+    const auto scene = makeScene();
+
+    const float length = spacing * static_cast<float>(variants.size());
+    const auto floor = addObject(scene, "Floor", { length / 2, 0, 0 }, { length + 20, 1, 20 });
+    if (shape == FloorShape::box)
+    {
+      fixtures::addBoxCollider(floor);
+    }
+    else
+    {
+      floor->addComponent(std::make_shared<ConvexMeshCollider>());
+    }
+
+    std::vector<Pile> piles;
+    for (size_t i = 0; i < variants.size(); ++i)
+    {
+      piles.push_back(addBoxes(scene, variants[i], spacing * static_cast<float>(i)));
+    }
+
+    CollisionSystem collisionSystem;
+    std::vector<CollisionPair> seen;
+    for (int tick = 0; tick < 120; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+      seen.insert(seen.end(), collisionSystem.getCollisionEnters().begin(),
+                  collisionSystem.getCollisionEnters().end());
+    }
+
+    std::vector<std::vector<BodyState>> result;
+    for (const auto& pile : piles)
+    {
+      EXPECT_TRUE(metDuringRun(seen, pile.bodies[0], pile.bodies[1]));
+      EXPECT_GT(transformOf(pile.bodies[0])->getPosition().y, 1.9f);
+
+      std::vector<BodyState> states;
+      for (const auto& body : pile.bodies)
+      {
+        auto state = stateOf(body);
+        state.position.x -= spacing * static_cast<float>(result.size());
+        states.push_back(state);
+      }
+
+      result.push_back(std::move(states));
+    }
+
+    return result;
   }
 
   // Runs the given piles in one scene, each at its own x, and returns every body's final state pile by pile.
@@ -209,3 +269,46 @@ TEST(CollisionIslandTest, ACompoundBodyTouchingTwoSeparateBodiesStaysDeterminist
     }
   }
 }
+
+class SharedFloorIslandTest : public testing::TestWithParam<FloorShape> {};
+
+TEST_P(SharedFloorIslandTest, PilesOnOneStaticFloorResolveAsTheyWouldOnTheirOwn)
+{
+  // Whether islands race to fill a shared collider's caches is only probabilistically detectable here; the
+  // sanitizer preset is the stronger check.
+  const std::vector<int> variants{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  const auto shape = GetParam();
+
+  const auto first = simulateOnSharedFloor(variants, pileSpacing, shape);
+  ASSERT_EQ(first.size(), variants.size());
+
+  for (size_t i = 0; i < variants.size(); ++i)
+  {
+    const auto alone = simulateOnSharedFloor({ variants[i] }, pileSpacing, shape);
+    ASSERT_EQ(alone.size(), 1u);
+    ASSERT_EQ(first[i].size(), alone[0].size());
+
+    for (size_t b = 0; b < alone[0].size(); ++b)
+    {
+      SCOPED_TRACE("pile " + std::to_string(i) + " body " + std::to_string(b));
+      expectSameState(first[i][b], alone[0][b], 1e-4f);
+    }
+  }
+
+  for (int run = 1; run < 5; ++run)
+  {
+    const auto again = simulateOnSharedFloor(variants, pileSpacing, shape);
+    ASSERT_EQ(again.size(), first.size());
+
+    for (size_t i = 0; i < first.size(); ++i)
+    {
+      for (size_t b = 0; b < first[i].size(); ++b)
+      {
+        SCOPED_TRACE("run " + std::to_string(run) + " pile " + std::to_string(i) + " body " + std::to_string(b));
+        expectSameState(again[i][b], first[i][b], 1e-6f);
+      }
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Floors, SharedFloorIslandTest, testing::Values(FloorShape::box, FloorShape::hull));

@@ -73,6 +73,10 @@ namespace collisions {
   // The same, also recording the GJK result for findContact. witness stays empty for a pair of round shapes,
   // which need no GJK, and for a pair apart.
   [[nodiscard]] bool intersects(Collider& collider, Collider& other, std::optional<OverlapWitness>& witness);
+
+  // Fills every cache findContact and the contact response build lazily on a collider (box world frame, hull face
+  // normals and support faces), so threads that only read the collider afterward never write it.
+  void warmContactCaches(Collider& collider);
 }
 
 #endif //NARROWPHASE_H

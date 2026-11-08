@@ -50,6 +50,10 @@ public:
   // and any spin below it is too slow to turn a body at all.
   static constexpr float restAngularSpeed = 0.01f;
 
+  // The inertia cache is per thread and only trusted within a tick; every thread that resolves contacts clears its
+  // own before its first response of the tick.
+  static void clearInertiaCache();
+
 private:
   struct Support {
     glm::vec3 point;
@@ -228,8 +232,6 @@ private:
 
   [[nodiscard]] static std::optional<glm::mat3> computeWorldInverseInertia(const RigidBody& body,
                                                                            const Transform& transform);
-
-  static void clearInertiaCache();
 };
 
 
