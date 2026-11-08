@@ -121,11 +121,20 @@ private:
     std::optional<collisions::OverlapWitness> witness;
   };
 
+  // What the sweep's inner loop reads per candidate, packed so scanning neighbors streams through a few cache
+  // lines instead of striding over whole CollisionEdges.
+  struct SweepBox {
+    BoundingBox bounds;
+    uint32_t layer;
+    uint32_t mask;
+    bool dynamic;
+  };
+
   std::vector<CollisionEdge> m_collisionEdges;
 
   // Per-edge scratch, kept across ticks so its capacity carries over. Only the first m_collisionEdges.size()
-  // entries belong to the current tick.
-  std::vector<char> m_isDynamic;
+  // entries belong to the current tick. m_sweepBoxes is index-aligned with the sorted m_collisionEdges.
+  std::vector<SweepBox> m_sweepBoxes;
   std::vector<std::vector<SweepHit>> m_forwardHits;
   std::vector<std::vector<Touch>> m_touches;
 
@@ -142,13 +151,17 @@ private:
   // refresh m_enters/m_stays/m_exits.
   void recordCollisionEvents();
 
+  // Applies the responses island by island: bodies linked by dynamic-vs-dynamic touches resolve serially in
+  // response order on one thread, and separate islands resolve in parallel.
+  void resolveInIslands(float dt);
+
   // Indices of the edges with something to resolve, in the order their responses should run. Reads the
   // bounding boxes the sweep just warmed, so it has to run before any response moves a transform.
   [[nodiscard]] std::vector<size_t> responseOrder() const;
 
   // Forward sweep from one edge: appends a hit for every higher-indexed edge it meets, ascending. A pair is
   // visited once, from its lower-indexed edge, and only if at least one side is dynamic.
-  void findCollisions(size_t index, const std::vector<char>& isDynamic, std::vector<SweepHit>& hits) const;
+  void findCollisions(size_t index, std::vector<SweepHit>& hits) const;
 
   // Resolves every touch the edge's body has, deepest first.
   void handleCollisions(size_t index, float dt) const;
@@ -157,7 +170,7 @@ private:
   static bool isTriggerPair(const Collider& collider, const Collider& other);
 
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
-  static bool layersCollide(const CollisionEdge& a, const CollisionEdge& b);
+  static bool layersCollide(const SweepBox& a, const SweepBox& b);
 };
 
 

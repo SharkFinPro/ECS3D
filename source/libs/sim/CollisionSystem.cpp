@@ -1,6 +1,8 @@
 #include "CollisionSystem.h"
 #include "PhysicsSystem.h"
 #include "collisions/NarrowPhase.h"
+#include "collisions/SupportFaces.h"
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <ProfileScope.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
@@ -11,9 +13,12 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <numeric>
+#include <unordered_map>
 #include <utility>
 
 namespace {
@@ -76,10 +81,8 @@ void CollisionSystem::checkCollisions(const float dt)
   // Named locals so the OpenMP clause below can list them. Each edge's forward-sweep hits (higher edge
   // indices, ascending) are indexed by edge so the parallel loop can record them lock-free: every thread
   // writes only its own slot.
-  auto& isDynamic = m_isDynamic;
   auto& forwardHits = m_forwardHits;
 
-  isDynamic.resize(edgeCount);
   if (forwardHits.size() < edgeCount)
   {
     forwardHits.resize(edgeCount);
@@ -111,9 +114,11 @@ void CollisionSystem::checkCollisions(const float dt)
       return a.position < b.position;
     });
 
-    for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+    m_sweepBoxes.resize(edgeCount);
+    for (size_t i = 0; i < edgeCount; ++i)
     {
-      isDynamic[i] = m_collisionEdges[i].body != nullptr;
+      const auto& edge = m_collisionEdges[i];
+      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr };
     }
   }
 
@@ -127,10 +132,10 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     ECS3D_PROFILE_SCOPE("Narrow phase");
 
-#pragma omp parallel for default(none) shared(forwardHits, isDynamic) schedule(dynamic, 8) num_threads(6)
+#pragma omp parallel for default(none) shared(forwardHits) schedule(dynamic, 8) num_threads(6)
     for (int i = 0; i < m_collisionEdges.size(); ++i)
     {
-      findCollisions(i, isDynamic, forwardHits[i]);
+      findCollisions(i, forwardHits[i]);
     }
   }
 
@@ -155,20 +160,128 @@ void CollisionSystem::checkCollisions(const float dt)
       }
     }
 
-    // Applied serially, now that the parallel region is done: a response moves the transform of either
+    // Applied after the narrow phase's parallel region is done: a response moves the transform of either
     // object in a pair, which would invalidate a collider cache another thread might still be reading if
     // this ran inside the loop above.
-    for (const auto i : responseOrder())
-    {
-      if (!m_collisionEdges[i].body)
-      {
-        continue;
-      }
-
-      handleCollisions(i, dt);
-    }
+    resolveInIslands(dt);
 
     recordCollisionEvents();
+  }
+}
+
+void CollisionSystem::resolveInIslands(const float dt)
+{
+  const size_t edgeCount = m_collisionEdges.size();
+
+  std::vector<size_t> parent(edgeCount);
+  std::iota(parent.begin(), parent.end(), size_t{ 0 });
+
+  const auto find = [&parent](size_t x)
+  {
+    while (parent[x] != x)
+    {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+
+    return x;
+  };
+
+  // Colliders of one body, or of a body nested under another body, move together, so a response through any of
+  // them writes state the others read. A static parent (a grouping folder) moves nothing and links nothing.
+  std::unordered_map<const Object*, size_t> edgeOfRootBody;
+
+  // A response moves both bodies of a dynamic pair, so those bodies share an island. A static collider is only
+  // read, so it links nothing - but its lazily built hull face cache is filled here, before any thread reads it.
+  for (size_t i = 0; i < edgeCount; ++i)
+  {
+    if (!m_collisionEdges[i].body)
+    {
+      continue;
+    }
+
+    const Object* root = m_collisionEdges[i].body->getOwner();
+    while (const auto up = root->getParent())
+    {
+      const auto outer = up->getComponent<RigidBody>(ComponentType::rigidBody);
+      if (!outer)
+      {
+        break;
+      }
+
+      root = outer->getOwner();
+    }
+
+    if (const auto [entry, inserted] = edgeOfRootBody.try_emplace(root, i); !inserted)
+    {
+      parent[find(i)] = find(entry->second);
+    }
+
+    for (const auto& touch : m_touches[i])
+    {
+      const auto& other = m_collisionEdges[touch.other];
+      if (other.body)
+      {
+        parent[find(i)] = find(touch.other);
+      }
+      else if (other.collider->getColliderType() == ColliderType::convexMeshCollider)
+      {
+        static_cast<void>(collisions::hullSupportFaces(static_cast<ConvexMeshCollider&>(*other.collider)));
+      }
+    }
+  }
+
+  // Walking the global response order keeps each island's own order identical to the serial pass.
+  std::vector<std::vector<size_t>> islands;
+  std::vector<size_t> islandOf(edgeCount, std::numeric_limits<size_t>::max());
+  for (const auto i : responseOrder())
+  {
+    if (!m_collisionEdges[i].body)
+    {
+      continue;
+    }
+
+    auto& slot = islandOf[find(i)];
+    if (slot == std::numeric_limits<size_t>::max())
+    {
+      slot = islands.size();
+      islands.emplace_back();
+    }
+
+    islands[slot].push_back(i);
+  }
+
+  // Largest first, so the long islands start early and the small ones fill in the gaps behind them.
+  std::ranges::stable_sort(islands, std::ranges::greater{}, &std::vector<size_t>::size);
+
+  std::exception_ptr failure;
+  const int islandCount = static_cast<int>(islands.size());
+
+#pragma omp parallel for default(none) shared(islands, failure, dt, islandCount) schedule(dynamic) num_threads(6)
+  for (int n = 0; n < islandCount; ++n)
+  {
+    try
+    {
+      for (const auto i : islands[n])
+      {
+        handleCollisions(i, dt);
+      }
+    }
+    catch (...)
+    {
+#pragma omp critical(collisionIslandFailure)
+      {
+        if (!failure)
+        {
+          failure = std::current_exception();
+        }
+      }
+    }
+  }
+
+  if (failure)
+  {
+    std::rethrow_exception(failure);
   }
 }
 
@@ -242,31 +355,30 @@ void CollisionSystem::reset()
   m_exits.clear();
 }
 
-void CollisionSystem::findCollisions(const size_t index, const std::vector<char>& isDynamic,
-                                     std::vector<SweepHit>& hits) const
+void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& hits) const
 {
-  const auto& edge = m_collisionEdges[index];
-
-  // The bounds copied onto the edges serially, before this parallel loop: reading them never touches a
+  // The bounds copied into m_sweepBoxes serially, before this parallel loop: reading them never touches a
   // collider, and nothing moves a transform until the serial response pass after the loop.
-  const auto& bbox = edge.bounds;
+  const auto& self = m_sweepBoxes[index];
+  const auto& bbox = self.bounds;
+  const bool selfDynamic = self.dynamic;
 
-  for (size_t j = index + 1; j < m_collisionEdges.size(); ++j)
+  for (size_t j = index + 1; j < m_sweepBoxes.size(); ++j)
   {
-    const auto& other = m_collisionEdges[j];
+    const auto& box = m_sweepBoxes[j];
 
-    if (other.position > bbox.maxX)
+    if (box.bounds.minX > bbox.maxX)
     {
       break;
     }
 
     // A pair of static colliders never needs testing.
-    if (!isDynamic[index] && !isDynamic[j])
+    if (!selfDynamic && !box.dynamic)
     {
       continue;
     }
 
-    const auto& otherBbox = other.bounds;
+    const auto& otherBbox = box.bounds;
 
     if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
         bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
@@ -277,10 +389,13 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
 
     // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
     // work, so filtered layers produce neither a physical response nor a collision event.
-    if (!layersCollide(edge, other))
+    if (!layersCollide(self, box))
     {
       continue;
     }
+
+    const auto& edge = m_collisionEdges[index];
+    const auto& other = m_collisionEdges[j];
 
     if (partOfSameAssembly(edge, other))
     {
@@ -290,8 +405,8 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
     // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
     // keeps its own answer.
     SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
-    hit.lowerSees = isDynamic[index] && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
-    hit.higherSees = isDynamic[j] && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
+    hit.lowerSees = selfDynamic && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
+    hit.higherSees = box.dynamic && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
 
     if (hit.lowerSees || hit.higherSees)
     {
@@ -385,7 +500,7 @@ bool CollisionSystem::isTriggerPair(const Collider& collider, const Collider& ot
   return collider.isTrigger() || other.isTrigger();
 }
 
-bool CollisionSystem::layersCollide(const CollisionEdge& a, const CollisionEdge& b)
+bool CollisionSystem::layersCollide(const SweepBox& a, const SweepBox& b)
 {
   // layer is 0-31 (clamped in Collider::setLayer), so the shift stays in range.
   const uint32_t aBit = 1u << a.layer;

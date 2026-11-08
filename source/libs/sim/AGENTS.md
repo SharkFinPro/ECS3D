@@ -14,7 +14,8 @@ resting or the contact manifold: that behavior is tuned as a whole, and the suit
 - Scripts reach physics only through data: forces queue on the `RigidBody` with a `ForceMode`, and collision events
   cross to scripts as plain uuid pairs that `ServerApp` carries. This library does not link scripting.
 - `CollisionSystem` resolves responses top-down by bounding-box minY, so a stack settles the same whichever side the
-  load sits.
+  load sits. Islands resolve in parallel, so a response may write only its own island's bodies. A static collider it
+  reads must not fill a lazy cache there unless `resolveInIslands` warms that cache first.
 - The `CollisionSystem` profile scopes (`Broad phase`, `Narrow phase`, `Response`) open on the calling thread around
   each phase; never put one inside the OpenMP region.
 - The narrow phase entry points are `collisions::findContact` and `collisions::intersects` (`collisions/NarrowPhase.h`).
