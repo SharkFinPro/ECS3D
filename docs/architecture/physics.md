@@ -99,7 +99,10 @@ instead of two diagonal corners. A contact holds a resting body like a stacked l
 within 45 degrees of that body's support normal. A flatter push, such as a leaning domino, can tip it.
 `findSupport` decides whether the center of mass is over the support by dropping it straight down along world y,
 not along the contact normal. On a slope a body past its downhill edge then tips or rolls. Operates on
-`ECS3DData` via accessors. OpenMP if available. `queries/HullQueries` answers raycasts and sphere overlaps
+`ECS3DData` via accessors. OpenMP if available: the narrow phase runs per sweep edge, and the response runs per
+island. An island is the bodies linked by dynamic-vs-dynamic contacts or by one body's hierarchy; static colliders
+link nothing. Each island resolves in the top-down order on one thread, and islands run in parallel, so results
+match a serial pass. `queries/HullQueries` answers raycasts and sphere overlaps
 against a convex hull exactly, orienting each face away from the hull center so a mirrored transform still
 works.
 

@@ -133,6 +133,7 @@ add_executable(${PROJECT_NAME}
   UnresolvedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
+  CollisionIslandTest.cpp
   CollisionProfileTest.cpp
   CompoundBodyCollisionTest.cpp
   CompoundFlushTest.cpp
