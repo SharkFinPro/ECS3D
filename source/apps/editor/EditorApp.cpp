@@ -16,6 +16,8 @@
 #include <LightGizmoVisibility.h>
 #include <GridVisibility.h>
 #include <EditorViewportSettings.h>
+#include <FramePacing.h>
+#include <FramePacingSettings.h>
 #include <RenderSystem.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
@@ -450,6 +452,9 @@ void EditorApp::run()
 
 void EditorApp::createRenderer()
 {
+  const bool vsync = framePacingSettings::readVsync(*m_settings, framePacingSettings::editorKeys);
+  const int maxFps = framePacingSettings::readMaxFps(*m_settings, framePacingSettings::editorKeys);
+
   // Unlike the client, the editor keeps the custom ImGui style.
   const vke::EngineConfig engineConfig {
     .window {
@@ -467,6 +472,10 @@ void EditorApp::createRenderer()
         setupImGuiStyle();
         restoreLayout();
       }
+    },
+    .rendering {
+      .presentMode = presentModeFor(vsync),
+      .frameRateLimit = static_cast<double>(maxFps)
     }
   };
 
@@ -477,6 +486,10 @@ void EditorApp::createRenderer()
   m_renderer->getCamera()->setSpeed(editorCameraSettings::readSpeed(*m_settings));
 
   m_sceneViewName = engineConfig.imGui.sceneViewName;
+
+  Log::info(LogCategory::editor, "Frame pacing: vsync " + std::string(vsync ? "on" : "off") + " (present mode " +
+            vke::toString(m_renderer->getRenderingManager()->getActivePresentMode()) + "), " +
+            (maxFps > 0 ? std::to_string(maxFps) + " fps limit" : std::string("no frame rate limit")));
 
   // The title bar is native chrome ImGui never touches; follow the theme by luminance of the panel
   // token, the same surface the rest of the window is drawn on.

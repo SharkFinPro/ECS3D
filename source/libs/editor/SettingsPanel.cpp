@@ -1,15 +1,19 @@
 #include "SettingsPanel.h"
 #include "EditorTheme.h"
 #include "GuiComponents.h"
+#include "FramePacing.h"
+#include "FramePacingNotes.h"
 #include "KeybindDispatcher.h"
 #include "SettingsPanelLayout.h"
 #include <EditorCameraSettings.h>
 #include <EditorGizmoSettings.h>
 #include <EditorViewportSettings.h>
+#include <FramePacingSettings.h>
 #include <Keybinds.h>
 #include <SettingsStore.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/camera/Camera.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <imgui.h>
 #include <algorithm>
 #include <array>
@@ -23,8 +27,12 @@ namespace {
   constexpr const char* openKey = "panels.settings.open";
   constexpr float minNavWidth = 158.0f;
 
+  // The cap restored when "Unlimited frame rate" is unchecked and no earlier cap is known.
+  constexpr int defaultLimitedFps = 60;
+
   constexpr const char* appearanceLabel = "Appearance";
   constexpr const char* viewportLabel = "Viewport";
+  constexpr const char* displayLabel = "Display";
   constexpr const char* keybindsLabel = "Keybinds";
 
   // Mirrors the label's left inset in gc::menuRow when an icon is drawn.
@@ -44,6 +52,7 @@ namespace {
   [[nodiscard]] float navWidth()
   {
     const float widestLabel = std::max({ textWidth(appearanceLabel), textWidth(viewportLabel),
+                                         textWidth(displayLabel),
                                          textWidth(keybindsLabel) });
 
     return std::max(minNavWidth, navLabelInset * 2.0f + widestLabel + 2.0f * ImGui::GetStyle().WindowPadding.x);
@@ -191,6 +200,10 @@ void SettingsPanel::displayGui()
         displayViewport();
         break;
 
+      case Section::display:
+        displayFramePacing();
+        break;
+
       case Section::keybinds:
         displayKeybinds();
         break;
@@ -221,6 +234,11 @@ void SettingsPanel::displayNav()
   if (gc::menuRow(viewportLabel, gc::SecIcon::pan, 34.0f, m_section == Section::viewport))
   {
     m_section = Section::viewport;
+  }
+
+  if (gc::menuRow(displayLabel, gc::SecIcon::play, 34.0f, m_section == Section::display))
+  {
+    m_section = Section::display;
   }
 
   if (gc::menuRow(keybindsLabel, gc::SecIcon::block, 34.0f, m_section == Section::keybinds))
@@ -367,6 +385,109 @@ void SettingsPanel::displayViewport()
     editorGizmoSettings::writeTranslateStep(*m_settings, editorGizmoSettings::defaultTranslateStep);
     editorGizmoSettings::writeRotateStepDegrees(*m_settings, editorGizmoSettings::defaultRotateStepDegrees);
     editorGizmoSettings::writeScaleStep(*m_settings, editorGizmoSettings::defaultScaleStep);
+  }
+}
+
+void SettingsPanel::displayFramePacing()
+{
+  const auto rendering = m_renderer->getRenderingManager();
+
+  gc::sectionLabel("Frame pacing");
+
+  ImGui::TextColored(theme::t2, "How fast the editor draws frames. Applies as you change it.");
+
+  ImGui::Spacing();
+
+  bool vsync = framePacingSettings::readVsync(*m_settings, framePacingSettings::editorKeys);
+  if (gc::accentCheckbox("Vertical sync", &vsync))
+  {
+    framePacingSettings::writeVsync(*m_settings, framePacingSettings::editorKeys, vsync);
+    rendering->setPresentMode(presentModeFor(vsync));
+  }
+
+  int maxFps = framePacingSettings::readMaxFps(*m_settings, framePacingSettings::editorKeys);
+  if (maxFps != framePacingSettings::unlimited)
+  {
+    m_lastLimitedFps = maxFps;
+  }
+
+  bool unlimited = maxFps == framePacingSettings::unlimited;
+  if (gc::accentCheckbox("Unlimited frame rate", &unlimited))
+  {
+    maxFps = unlimited ? framePacingSettings::unlimited
+                       : (m_lastLimitedFps != 0 ? m_lastLimitedFps : defaultLimitedFps);
+    framePacingSettings::writeMaxFps(*m_settings, framePacingSettings::editorKeys, maxFps);
+    rendering->setFrameRateLimit(static_cast<double>(maxFps));
+  }
+
+  if (maxFps != framePacingSettings::unlimited)
+  {
+    // Reseeded while the field is idle so it never shows a value the store no longer holds.
+    if (!m_maxFpsEditing)
+    {
+      m_maxFpsDraft = maxFps;
+    }
+
+    ImGui::SetNextItemWidth(textWidth("00000") + 2.0f * ImGui::GetStyle().FramePadding.x);
+    ImGui::InputInt("Frame rate limit", &m_maxFpsDraft, 0, 0);
+    m_maxFpsEditing = ImGui::IsItemActive();
+
+    // Committed on deactivation only: applying per keystroke would clamp "50" to 10 on the way through "5".
+    if (ImGui::IsItemDeactivatedAfterEdit())
+    {
+      maxFps = framePacingSettings::clampMaxFps(m_maxFpsDraft);
+      framePacingSettings::writeMaxFps(*m_settings, framePacingSettings::editorKeys, maxFps);
+      rendering->setFrameRateLimit(static_cast<double>(maxFps));
+      m_maxFpsDraft = maxFps;
+    }
+
+    ImGui::SameLine();
+    ImGui::TextColored(theme::t2, "%d - %d fps", framePacingSettings::minMaxFps, framePacingSettings::maxMaxFps);
+  }
+  else
+  {
+    m_maxFpsEditing = false;
+  }
+
+  ImGui::Spacing();
+
+  const vke::PresentMode activeMode = rendering->getActivePresentMode();
+  const double appliedLimit = rendering->getFrameRateLimit();
+
+  ImGui::Text("Presenting with: %s", vke::toString(activeMode));
+  if (appliedLimit > 0.0)
+  {
+    ImGui::Text("Frame rate limit: %.0f fps", appliedLimit);
+  }
+  else
+  {
+    ImGui::TextUnformatted("Frame rate limit: none");
+  }
+
+  const auto notes = framePacingNotes(vsync, presentModeWaitsForVblank(activeMode), maxFps);
+
+  ImGui::PushTextWrapPos(0.0f);
+  if (notes.vsyncOffUnavailable)
+  {
+    ImGui::TextColored(theme::t2, "This display does not offer vsync off, so frames still wait for the display.");
+  }
+
+  if (notes.capAboveRefreshIgnored)
+  {
+    ImGui::TextColored(theme::t2, "While vsync is on, a limit above the display's refresh rate has no effect.");
+  }
+  ImGui::PopTextWrapPos();
+
+  ImGui::Spacing();
+
+  if (ImGui::Button("Reset to defaults"))
+  {
+    framePacingSettings::writeVsync(*m_settings, framePacingSettings::editorKeys,
+                                    framePacingSettings::defaultVsync);
+    framePacingSettings::writeMaxFps(*m_settings, framePacingSettings::editorKeys,
+                                     framePacingSettings::defaultMaxFps);
+    rendering->setPresentMode(presentModeFor(framePacingSettings::defaultVsync));
+    rendering->setFrameRateLimit(static_cast<double>(framePacingSettings::defaultMaxFps));
   }
 }
 
