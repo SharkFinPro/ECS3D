@@ -43,6 +43,8 @@ public:
     std::string project;
     bool showStats = false;  // start with the F3 stats overlay in its compact mode
     bool windowed = false;  // start windowed whatever the remembered fullscreen preference says
+    std::optional<bool> vsync;  // overrides the remembered vsync preference for this launch only
+    std::optional<int> maxFps;  // overrides the remembered frame rate cap for this launch only; 0 = unlimited
   };
 
   explicit ClientApp(ConnectOptions options);
@@ -101,6 +103,8 @@ private:
   std::string m_connectionNotice;
 
   void createRenderer();
+
+  void logFramePacing(bool vsyncRequested) const;
 
   void toggleFullscreen();
 

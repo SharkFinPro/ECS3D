@@ -1,10 +1,12 @@
 #include "ClientApp.h"
 #include "ConsoleWindow.h"
+#include <FramePacingSettings.h>
 #include <ProjectPaths.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
 #include <memory>
+#include <stdexcept>
 #include <iostream>
 #include <string>
 
@@ -21,6 +23,19 @@ namespace
     }
 
     return false;
+  }
+
+  int parseFpsLimit(const char* text)
+  {
+    const auto parsed = text ? framePacingSettings::parseMaxFps(text) : std::nullopt;
+    if (!parsed)
+    {
+      throw std::invalid_argument(std::string("--fps-limit needs a whole number of frames per second (0 for unlimited, "
+        "otherwise clamped to ") + std::to_string(framePacingSettings::minMaxFps) + "-"
+        + std::to_string(framePacingSettings::maxMaxFps) + "), got " + (text ? "\"" + std::string(text) + "\"" : "nothing"));
+    }
+
+    return *parsed;
   }
 
   // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
@@ -56,6 +71,18 @@ namespace
       else if (arg == "--server-console")
       {
         options.showServerConsole = true;
+      }
+      else if (arg == "--vsync")
+      {
+        options.vsync = true;
+      }
+      else if (arg == "--no-vsync")
+      {
+        options.vsync = false;
+      }
+      else if (arg == "--fps-limit")
+      {
+        options.maxFps = parseFpsLimit(i + 1 < argc ? argv[++i] : nullptr);
       }
     }
 
