@@ -17,6 +17,8 @@ add_library(${PROJECT_NAME}
   EditorViewportSettings.h
   ClientDisplaySettings.cpp
   ClientDisplaySettings.h
+  FramePacingSettings.cpp
+  FramePacingSettings.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
