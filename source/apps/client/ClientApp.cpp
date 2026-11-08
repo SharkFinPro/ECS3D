@@ -439,10 +439,10 @@ void ClientApp::logFramePacing(const bool vsyncRequested) const
   Log::info(LogCategory::client, std::string("Frame pacing: vsync ") + (vsyncOn ? "on" : "off") + " (present mode "
     + vke::toString(active) + "), " + limitText);
 
-  if (!vsyncRequested && vsyncOn)
+  if (!vsyncRequested && active != vke::PresentMode::immediate)
   {
-    Log::warn(LogCategory::client, std::string("Vsync off is not supported by this display; presenting with ")
-      + vke::toString(active) + ".");
+    Log::warn(LogCategory::client, std::string("Vsync off is not fully available on this display; presenting with ")
+      + vke::toString(active) + " instead, so frames still follow the display's refresh.");
   }
 }
 

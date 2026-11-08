@@ -115,7 +115,8 @@ firewall allows incoming TCP on the port you chose.
   the remembered defaults (vsync on, no cap) are used otherwise; they live under `client.display.vsync` and
   `client.display.maxFps` in `client-settings.json` in your user data folder, are used by nothing else, and change
   only if you edit that file. The client log records the result at startup, and F3 shows the live frame rate. If
-  your display cannot turn vsync off, the log says so.
+  your display cannot turn vsync off, the log warns and names the mode used instead. A bad `--fps-limit` value stops
+  the client with the reason in the client log, which is visible on screen only with `--console`.
 
 ## Test two players on one machine
 
