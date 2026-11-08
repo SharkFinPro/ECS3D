@@ -59,7 +59,7 @@
 | `source/libs/log/` | `ECS3DLog` - the `Log` facade, its sinks (console, file, ring buffer, remote), `LogFilter` and the per-user data directory. |
 | `source/libs/profile/` | `ECS3DProfile` - scope timers recorded into per-thread lanes and a sample history. Depends on nothing. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (interface library): `Protocol.h`, the wire format (`MessageType`, `Message`/`MessageReader`, `Role`, ports). |
-| `source/libs/settings/` | `ECS3DSettings` - per-user editor preferences (`SettingsStore`), the keybind model and the recent-projects list. **Not** project data. |
+| `source/libs/settings/` | `ECS3DSettings` - per-user editor and client preferences (`SettingsStore`), the keybind model and the recent-projects list. **Not** project data. |
 | `source/libs/data/` | `ECS3DData` - component data, `Object`/`ObjectManager`, scenes, assets, prefabs, serialization, replication payloads, the convex hull builder and the undo/redo model. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` - `PhysicsSystem`, `CollisionSystem` (sweep-and-prune, then the GJK/EPA narrow phase under `collisions/`) and `SceneQueries`. |
 | `source/libs/render/` | `ECS3DRender` - `RenderSystem`, `GpuAssetCache` (uuid -> `vke` GPU objects), gizmo meshes and headless render helpers. |
@@ -172,8 +172,8 @@ Folders with their own `AGENTS.md`: `source/libs/{data,sim,render,editor,net,pro
 
 - **ECS3DServer** (`apps/server`) - the headless authoritative simulation. Links Data, Sim, Scripting, Net, ClrHost,
   Profile and Log. Generates the built-in default project when started without `--project`.
-- **ECS3DClient** (`apps/client`) - the lightweight view. Links Data, Render, Net, ClrHost, Profile and Log. Spawns a local
-  server for singleplayer; `--host` connects to an existing one.
+- **ECS3DClient** (`apps/client`) - the lightweight view. Links Data, Render, Settings, Net, ClrHost, Profile and Log.
+  Spawns a local server for singleplayer; `--host` connects to an existing one.
 - **ECS3DEditor** (`apps/editor`) - a client plus the ImGui tooling. Links Data, Render, EditorLib, Net, ClrHost,
   Profile and Log. Spawns its own `--edit` server with a generated token unless `--host` names one.
 - **ECS3DLauncher** (`apps/launcher`) - the standalone C# project hub, built by `dotnet publish` through CMake.

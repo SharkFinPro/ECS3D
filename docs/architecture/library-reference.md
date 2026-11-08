@@ -21,12 +21,13 @@ at startup.
 
 ## ECS3DSettings
 
-`ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s
+`ECS3DSettings` — `SettingsStore`, per-user editor and client preferences on disk (in the directory `ECS3DLog`'s
 `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction`
 catalogue, and the bijective `KeybindTable`) - the headless keybind model, the numeric key/mod values of GLFW
 (the windowing library) spelled out as literals so this library still depends on nothing but json and ECS3DLog -
 `EditorCameraSettings` (clamped get/set for the editor viewport's free-fly camera speed, applied to
 `vke::Camera::setSpeed`), `EditorViewportSettings` (the viewport grid's show/hide preference, default shown),
+`ClientDisplaySettings` (the client's fullscreen preference, kept in its own `client-settings.json`),
 `EditorLayoutSettings` (the ImGui ini text under `editor.layout.imgui`, plus `hasDockLayout`, which decides whether
 a saved string holds a dock tree),
 `EditorGizmoSettings` (clamped get/set for the viewport gizmo's snap toggle and translate/rotate/scale step

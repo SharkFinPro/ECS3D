@@ -49,6 +49,10 @@ namespace
       {
         options.showStats = true;
       }
+      else if (arg == "--windowed")
+      {
+        options.windowed = true;
+      }
       else if (arg == "--server-console")
       {
         options.showServerConsole = true;

@@ -23,6 +23,7 @@ class SceneManager;
 class ProjectPacker;
 class GpuAssetCache;
 class RenderSystem;
+class SettingsStore;
 
 namespace net {
   class NetClient;
@@ -41,6 +42,7 @@ public:
     bool showServerConsole = false;  // whether the spawned local server gets its own console window
     std::string project;
     bool showStats = false;  // start with the F3 stats overlay in its compact mode
+    bool windowed = false;  // start windowed whatever the remembered fullscreen preference says
   };
 
   explicit ClientApp(ConnectOptions options);
@@ -62,6 +64,8 @@ private:
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectPacker> m_projectPacker;
+
+  std::unique_ptr<SettingsStore> m_settings;
 
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<GpuAssetCache> m_assetCache;
@@ -97,6 +101,8 @@ private:
   std::string m_connectionNotice;
 
   void createRenderer();
+
+  void toggleFullscreen();
 
   void connectToServer();
 
