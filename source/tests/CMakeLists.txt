@@ -63,6 +63,7 @@ add_executable(${PROJECT_NAME}
   AssetFilterTest.cpp
   ConsolePanelLayoutTest.cpp
   SettingsPanelLayoutTest.cpp
+  FramePacingNotesTest.cpp
   DashedBoxLayoutTest.cpp
   ObjectTreeOrderTest.cpp
   ObjectTreeRowCullingTest.cpp

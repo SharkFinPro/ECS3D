@@ -47,6 +47,7 @@ private:
   enum class Section {
     appearance,
     viewport,
+    display,
     keybinds
   };
 
@@ -63,11 +64,21 @@ private:
   bool m_open;
   bool m_focusRequested = false;
 
+  // What the frame rate field shows while it is being edited; the store only sees it on commit.
+  int m_maxFpsDraft = 0;
+  bool m_maxFpsEditing = false;
+  bool m_framePacingDrawn = false;
+
+  // The last limited cap, restored when "Unlimited frame rate" is unchecked.
+  int m_lastLimitedFps = 0;
+
   void displayNav();
 
   void displayAppearance();
 
   void displayViewport();
+
+  void displayFramePacing();
 
   void displayKeybinds();
 

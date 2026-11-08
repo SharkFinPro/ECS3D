@@ -130,11 +130,14 @@ in your scripts appear here too.
 
 ## Settings
 
-Open Window, then Settings. It has three sections.
+Open Window, then Settings. It has four sections.
 
 - Appearance: the editor's colors.
 - Viewport: camera speed, Show Grid, the Stats readout (frame, server tick and network figures in the viewport
   corner) and the gizmo snap options. The grid shows only through the Editor Camera.
+- Display: Vertical sync and a frame rate limit (10 to 1000 fps, or Unlimited frame rate). Type a limit and press
+  Enter or click away to apply it. The section shows the present mode in use; if the display cannot turn vsync off,
+  it says so.
 - Keybinds: every action with its current key, plus Rebind, Unbind and Reset buttons, and Reset all to
   defaults. Rebinding to a key another action already uses is refused and names that action.
 
