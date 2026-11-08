@@ -49,8 +49,10 @@ while playing) the same way it already undoes an edited Transform.
   (opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`/`--stats`
   (starts with the stats overlay in its compact mode; F3 cycles off, compact and detailed, and is fixed in the
-  client). Links Data+Render+Net+ClrHost+Profile+Log. Spawns a local server for singleplayer; `--host` connects to an
-  existing server instead.
+  client). F11 toggles borderless fullscreen and is fixed in the client; the choice is remembered under
+  `client.display.fullscreen` in `client-settings.json` in the per-user data directory, and the window opens in the
+  remembered mode. Links Data+Render+Settings+Net+ClrHost+Profile+Log. Spawns a local server for singleplayer;
+  `--host` connects to an existing server instead.
 - **ECS3DEditor** (`apps/editor`) — client + ImGui tooling (object tree, inspector, asset browser, scene
   controls, the viewport transform gizmo, save/load). `--host`/`--port`/`--project` (folder or file; both it and `--port` are also passed to the spawned server)/`--token` (edit token when attaching to an existing
   edit server)/`--console`/`--server-console` (`--console` opens a console window; Windows builds are GUI-subsystem and have none by

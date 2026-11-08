@@ -13,6 +13,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DLog
   ECS3DProfile
   ECS3DRender
+  ECS3DSettings
   ECS3DNet
   ECS3DClrHost
   ECS3DLog

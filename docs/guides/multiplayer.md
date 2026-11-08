@@ -106,6 +106,8 @@ firewall allows incoming TCP on the port you chose.
   editor to see its log in a console window as well.
 - **Frame and network figures.** Press F3 in a client to cycle a statistics overlay through off, compact and
   detailed; start a client with `--stats` to open it in compact mode.
+- **Fullscreen.** Press F11 in a client to switch between windowed and fullscreen. The client remembers the choice
+  for the next launch.
 
 ## Test two players on one machine
 

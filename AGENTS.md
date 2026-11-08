@@ -172,8 +172,8 @@ Folders with their own `AGENTS.md`: `source/libs/{data,sim,render,editor,net,pro
 
 - **ECS3DServer** (`apps/server`) - the headless authoritative simulation. Links Data, Sim, Scripting, Net, ClrHost,
   Profile and Log. Generates the built-in default project when started without `--project`.
-- **ECS3DClient** (`apps/client`) - the lightweight view. Links Data, Render, Net, ClrHost, Profile and Log. Spawns a local
-  server for singleplayer; `--host` connects to an existing one.
+- **ECS3DClient** (`apps/client`) - the lightweight view. Links Data, Render, Settings, Net, ClrHost, Profile and Log.
+  Spawns a local server for singleplayer; `--host` connects to an existing one.
 - **ECS3DEditor** (`apps/editor`) - a client plus the ImGui tooling. Links Data, Render, EditorLib, Net, ClrHost,
   Profile and Log. Spawns its own `--edit` server with a generated token unless `--host` names one.
 - **ECS3DLauncher** (`apps/launcher`) - the standalone C# project hub, built by `dotnet publish` through CMake.

@@ -152,6 +152,7 @@ add_executable(${PROJECT_NAME}
   PlayControlsTest.cpp
   GridVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
+  ClientDisplaySettingsTest.cpp
   EditorLayoutSettingsTest.cpp
   GizmoTest.cpp
   GizmoEditSendingTest.cpp

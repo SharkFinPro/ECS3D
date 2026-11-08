@@ -28,6 +28,8 @@
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <ProfilerCharts.h>
+#include <ClientDisplaySettings.h>
+#include <SettingsStore.h>
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -40,7 +42,8 @@ ClientApp::ClientApp(ConnectOptions options)
     m_host(std::make_shared<ManagedHost>()),
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
-    m_sceneManager(std::make_shared<SceneManager>())
+    m_sceneManager(std::make_shared<SceneManager>()),
+    m_settings(std::make_unique<SettingsStore>(clientDisplaySettings::defaultFile()))
 {
   // Boot the CLR from the net transport's runtimeconfig (the client only needs the socket assembly).
   m_host->init("net/Transport");
@@ -163,6 +166,13 @@ void ClientApp::run()
     {
       m_statsMode = nextStatsOverlayMode(m_statsMode);
     }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F11, false) && !ImGui::GetIO().WantTextInput)
+    {
+      toggleFullscreen();
+    }
+
+    m_settings->update();
 
     displayStatsOverlay();
 
@@ -379,7 +389,8 @@ void ClientApp::createRenderer()
     .window {
       .width = 1280,
       .height = 720,
-      .title = "ECS3D Client"
+      .title = "ECS3D Client",
+      .fullscreen = clientDisplaySettings::readFullscreen(*m_settings)
     },
     .camera {
       .position = { 0, 5, -50 }
@@ -394,6 +405,18 @@ void ClientApp::createRenderer()
 
   // ImGui lives in the VulkanEngine library, so this executable's copy of the context pointer starts null.
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
+}
+
+void ClientApp::toggleFullscreen()
+{
+  const auto window = m_renderer->getWindow();
+  window->setFullscreen(!window->isFullscreen());
+
+  // Read back rather than store the request: the switch fails when there is no monitor to go fullscreen on.
+  const bool fullscreen = window->isFullscreen();
+  clientDisplaySettings::writeFullscreen(*m_settings, fullscreen);
+
+  Log::info(LogCategory::client, fullscreen ? "Switched to fullscreen." : "Switched to windowed mode.");
 }
 
 void ClientApp::variableUpdate() const

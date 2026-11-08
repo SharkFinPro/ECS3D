@@ -23,6 +23,7 @@ class SceneManager;
 class ProjectPacker;
 class GpuAssetCache;
 class RenderSystem;
+class SettingsStore;
 
 namespace net {
   class NetClient;
@@ -63,6 +64,8 @@ private:
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectPacker> m_projectPacker;
 
+  std::unique_ptr<SettingsStore> m_settings;
+
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<RenderSystem> m_renderSystem;
@@ -97,6 +100,8 @@ private:
   std::string m_connectionNotice;
 
   void createRenderer();
+
+  void toggleFullscreen();
 
   void connectToServer();
 

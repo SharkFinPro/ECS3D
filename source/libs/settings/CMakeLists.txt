@@ -15,6 +15,8 @@ add_library(${PROJECT_NAME}
   EditorLayoutSettings.h
   EditorViewportSettings.cpp
   EditorViewportSettings.h
+  ClientDisplaySettings.cpp
+  ClientDisplaySettings.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
