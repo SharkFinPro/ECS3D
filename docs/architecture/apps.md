@@ -52,8 +52,12 @@ while playing) the same way it already undoes an edited Transform.
   client). F11 toggles fullscreen at the monitor's current video mode and is fixed in the client; the choice is remembered under
   `client.display.fullscreen` in `client-settings.json` in the per-user data directory, and the window opens in the
   remembered mode unless `--windowed` is given, which starts windowed for that launch without changing the
-  remembered choice. Links Data+Render+Settings+Net+ClrHost+Profile+Log. Spawns a local server for singleplayer;
-  `--host` connects to an existing server instead.
+  remembered choice. `--vsync`/`--no-vsync`/`--fps-limit <n>` (0 = unlimited, else clamped to 10-1000; a bad value
+  is logged and stops the client) override, for that launch only, the preferences remembered under
+  `client.display.vsync` and `client.display.maxFps` in `client-settings.json` (default vsync on, no cap); vsync on
+  is FIFO and off is immediate with the engine's fallback, and the effective mode is logged at startup (a warning
+  when vsync off ended on any other mode). Links Data+Render+Settings+Net+ClrHost+Profile+Log. Spawns a local server
+  for singleplayer; `--host` connects to an existing server instead.
 - **ECS3DEditor** (`apps/editor`) — client + ImGui tooling (object tree, inspector, asset browser, scene
   controls, the viewport transform gizmo, save/load). `--host`/`--port`/`--project` (folder or file; both it and `--port` are also passed to the spawned server)/`--token` (edit token when attaching to an existing
   edit server)/`--console`/`--server-console` (`--console` opens a console window; Windows builds are GUI-subsystem and have none by

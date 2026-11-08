@@ -109,6 +109,14 @@ firewall allows incoming TCP on the port you chose.
 - **Fullscreen.** Press F11 in a client to switch between windowed and fullscreen. The client remembers the choice
   for the next launch. Start a client with `--windowed` to open it windowed this once without changing the
   remembered choice.
+- **Frame rate.** Start a client with `--no-vsync` to stop waiting for the display's refresh (`--vsync` turns it
+  back on; the last one given wins) and with `--fps-limit <n>` to cap the frame rate, where `0` means unlimited and
+  other values are held between 10 and 1000. These apply to that launch only. The client has no menu for them, so
+  the remembered defaults (vsync on, no cap) are used otherwise; they live under `client.display.vsync` and
+  `client.display.maxFps` in `client-settings.json` in your user data folder, are used by nothing else, and change
+  only if you edit that file. The client log records the result at startup, and F3 shows the live frame rate. If
+  your display cannot turn vsync off, the log warns and names the mode used instead. A bad `--fps-limit` value stops
+  the client with the reason in the client log, which is visible on screen only with `--console`.
 
 ## Test two players on one machine
 

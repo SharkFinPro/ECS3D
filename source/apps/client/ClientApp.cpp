@@ -27,8 +27,10 @@
 #include <VulkanEngine/components/window/Window.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/window/PresentMode.h>
 #include <ProfilerCharts.h>
 #include <ClientDisplaySettings.h>
+#include <FramePacingSettings.h>
 #include <SettingsStore.h>
 #include <imgui.h>
 #include <algorithm>
@@ -36,6 +38,14 @@
 #include <exception>
 #include <random>
 #include <thread>
+
+namespace
+{
+  vke::PresentMode presentModeFor(const bool vsync)
+  {
+    return vsync ? vke::PresentMode::fifo : vke::PresentMode::immediate;
+  }
+}
 
 ClientApp::ClientApp(ConnectOptions options)
   : m_options(std::move(options)),
@@ -384,6 +394,9 @@ void ClientApp::connectToServer()
 
 void ClientApp::createRenderer()
 {
+  const bool vsync = framePacingSettings::resolveVsync(*m_settings, framePacingSettings::clientKeys, m_options.vsync);
+  const int maxFps = framePacingSettings::resolveMaxFps(*m_settings, framePacingSettings::clientKeys, m_options.maxFps);
+
   // The client is a lightweight view, so no custom ImGui style.
   const vke::EngineConfig engineConfig {
     .window {
@@ -398,13 +411,39 @@ void ClientApp::createRenderer()
     .imGui {
       .useDockspace = false,
       .maxTextures = 100
+    },
+    .rendering {
+      .presentMode = presentModeFor(vsync),
+      .frameRateLimit = static_cast<double>(maxFps)
     }
   };
 
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
 
+  logFramePacing(vsync);
+
   // ImGui lives in the VulkanEngine library, so this executable's copy of the context pointer starts null.
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
+}
+
+void ClientApp::logFramePacing(const bool vsyncRequested) const
+{
+  const auto rendering = m_renderer->getRenderingManager();
+  const vke::PresentMode active = rendering->getActivePresentMode();
+  const double limit = rendering->getFrameRateLimit();
+
+  const std::string limitText = limit > 0.0 ? "limited to " + std::to_string(static_cast<int>(limit)) + " fps"
+                                            : "no frame rate limit";
+  const bool vsyncOn = active == vke::PresentMode::fifo || active == vke::PresentMode::fifoRelaxed;
+
+  Log::info(LogCategory::client, std::string("Frame pacing: vsync ") + (vsyncOn ? "on" : "off") + " (present mode "
+    + vke::toString(active) + "), " + limitText);
+
+  if (!vsyncRequested && active != vke::PresentMode::immediate)
+  {
+    Log::warn(LogCategory::client, std::string("Vsync off is not fully available on this display; presenting with ")
+      + vke::toString(active) + " instead, so frames still follow the display's refresh.");
+  }
 }
 
 void ClientApp::toggleFullscreen()
