@@ -42,6 +42,7 @@ public:
     bool showServerConsole = false;  // whether the spawned local server gets its own console window
     std::string project;
     bool showStats = false;  // start with the F3 stats overlay in its compact mode
+    bool windowed = false;  // start windowed whatever the remembered fullscreen preference says
   };
 
   explicit ClientApp(ConnectOptions options);

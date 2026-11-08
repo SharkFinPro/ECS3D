@@ -21,7 +21,7 @@ at startup.
 
 ## ECS3DSettings
 
-`ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s
+`ECS3DSettings` — `SettingsStore`, per-user editor and client preferences on disk (in the directory `ECS3DLog`'s
 `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction`
 catalogue, and the bijective `KeybindTable`) - the headless keybind model, the numeric key/mod values of GLFW
 (the windowing library) spelled out as literals so this library still depends on nothing but json and ECS3DLog -

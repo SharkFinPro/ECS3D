@@ -390,7 +390,7 @@ void ClientApp::createRenderer()
       .width = 1280,
       .height = 720,
       .title = "ECS3D Client",
-      .fullscreen = clientDisplaySettings::readFullscreen(*m_settings)
+      .fullscreen = clientDisplaySettings::startsFullscreen(*m_settings, m_options.windowed)
     },
     .camera {
       .position = { 0, 5, -50 }

@@ -17,4 +17,9 @@ namespace clientDisplaySettings {
   {
     settings.set(fullscreenKey, fullscreen);
   }
+
+  bool startsFullscreen(const SettingsStore& settings, const bool windowedFlag)
+  {
+    return !windowedFlag && readFullscreen(settings);
+  }
 }

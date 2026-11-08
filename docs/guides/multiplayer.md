@@ -107,7 +107,8 @@ firewall allows incoming TCP on the port you chose.
 - **Frame and network figures.** Press F3 in a client to cycle a statistics overlay through off, compact and
   detailed; start a client with `--stats` to open it in compact mode.
 - **Fullscreen.** Press F11 in a client to switch between windowed and fullscreen. The client remembers the choice
-  for the next launch.
+  for the next launch. Start a client with `--windowed` to open it windowed this once without changing the
+  remembered choice.
 
 ## Test two players on one machine
 
@@ -118,5 +119,7 @@ ECS3DServer --project templates/coin-rush
 ECS3DClient --host 127.0.0.1
 ECS3DClient --host 127.0.0.1
 ```
+
+If you switched clients to fullscreen with F11, add `--windowed` to each one so they open side by side.
 
 Each client is its own player, with its own body.

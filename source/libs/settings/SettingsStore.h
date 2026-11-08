@@ -8,7 +8,7 @@
 #include <functional>
 #include <string>
 
-// Per-user, per-machine editor preferences, held outside project data on purpose: project state is
+// Per-user, per-machine editor and client preferences, held outside project data on purpose: project state is
 // authoritative and replicated to every connected client as a snapshot, so a preference stored there
 // would travel on the wire and be shared between users.
 //

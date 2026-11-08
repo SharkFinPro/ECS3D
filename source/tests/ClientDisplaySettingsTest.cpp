@@ -96,6 +96,26 @@ TEST_F(ClientDisplaySettings, FullscreenOfTheWrongTypeFallsBackToTheDefault)
   EXPECT_TRUE(clientDisplaySettings::readFullscreen(settings));
 }
 
+TEST_F(ClientDisplaySettings, WindowedFlagForcesWindowedOverAStoredFullscreen)
+{
+  SettingsStore settings(m_file);
+  clientDisplaySettings::writeFullscreen(settings, true);
+
+  EXPECT_FALSE(clientDisplaySettings::startsFullscreen(settings, true));
+  EXPECT_TRUE(clientDisplaySettings::readFullscreen(settings));
+}
+
+TEST_F(ClientDisplaySettings, WithoutTheWindowedFlagTheStoredValueWins)
+{
+  SettingsStore settings(m_file);
+
+  clientDisplaySettings::writeFullscreen(settings, true);
+  EXPECT_TRUE(clientDisplaySettings::startsFullscreen(settings, false));
+
+  clientDisplaySettings::writeFullscreen(settings, false);
+  EXPECT_FALSE(clientDisplaySettings::startsFullscreen(settings, false));
+}
+
 TEST(ClientDisplaySettingsFile, SitsBesideTheEditorSettingsUnderItsOwnName)
 {
   const auto client = clientDisplaySettings::defaultFile();

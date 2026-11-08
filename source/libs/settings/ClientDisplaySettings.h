@@ -16,6 +16,9 @@ namespace clientDisplaySettings {
 
   [[nodiscard]] bool readFullscreen(const SettingsStore& settings);
   void writeFullscreen(SettingsStore& settings, bool fullscreen);
+
+  // The --windowed flag overrides the remembered preference for this launch and never changes it.
+  [[nodiscard]] bool startsFullscreen(const SettingsStore& settings, bool windowedFlag);
 }
 
 #endif  // CLIENTDISPLAYSETTINGS_H
