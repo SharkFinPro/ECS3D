@@ -157,6 +157,13 @@ void SettingsPanel::setOpen(const bool open)
 
 void SettingsPanel::displayGui()
 {
+  // A frame that skipped the Display section abandons any edit, so the field reseeds when it returns.
+  if (!m_framePacingDrawn)
+  {
+    m_maxFpsEditing = false;
+  }
+  m_framePacingDrawn = false;
+
   if (!m_open)
   {
     return;
@@ -392,6 +399,8 @@ void SettingsPanel::displayFramePacing()
 {
   const auto rendering = m_renderer->getRenderingManager();
 
+  m_framePacingDrawn = true;
+
   gc::sectionLabel("Frame pacing");
 
   ImGui::TextColored(theme::t2, "How fast the editor draws frames. Applies as you change it.");
@@ -442,7 +451,8 @@ void SettingsPanel::displayFramePacing()
     }
 
     ImGui::SameLine();
-    ImGui::TextColored(theme::t2, "%d - %d fps", framePacingSettings::minMaxFps, framePacingSettings::maxMaxFps);
+    ImGui::TextColored(theme::t2, "%d - %d fps, or 0 for unlimited", framePacingSettings::minMaxFps,
+                       framePacingSettings::maxMaxFps);
   }
   else
   {
@@ -464,7 +474,14 @@ void SettingsPanel::displayFramePacing()
     ImGui::TextUnformatted("Frame rate limit: none");
   }
 
-  const auto notes = framePacingNotes(vsync, presentModeWaitsForVblank(activeMode), maxFps);
+  const auto& supportedModes = rendering->getSupportedPresentModes();
+  const auto offers = [&supportedModes](const vke::PresentMode mode)
+  {
+    return std::find(supportedModes.begin(), supportedModes.end(), mode) != supportedModes.end();
+  };
+
+  const auto notes = framePacingNotes(vsync, offers(vke::PresentMode::immediate), offers(vke::PresentMode::mailbox),
+                                      maxFps);
 
   ImGui::PushTextWrapPos(0.0f);
   if (notes.vsyncOffUnavailable)

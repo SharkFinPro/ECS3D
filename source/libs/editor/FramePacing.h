@@ -8,9 +8,4 @@
   return vsync ? vke::PresentMode::fifo : vke::PresentMode::immediate;
 }
 
-[[nodiscard]] inline bool presentModeWaitsForVblank(const vke::PresentMode mode)
-{
-  return mode == vke::PresentMode::fifo || mode == vke::PresentMode::fifoRelaxed;
-}
-
 #endif  // FRAMEPACING_H

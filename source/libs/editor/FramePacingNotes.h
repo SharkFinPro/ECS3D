@@ -10,12 +10,13 @@ struct FramePacingNotes {
   bool capAboveRefreshIgnored = false;
 };
 
-// presentWaitsForVblank is whether the mode the swapchain actually presents with is fifo or fifoRelaxed.
-[[nodiscard]] inline FramePacingNotes framePacingNotes(const bool vsyncRequested, const bool presentWaitsForVblank,
-                                                       const int maxFps)
+// The surface flags say whether the display offers a non-blocking mode. The engine resolves vsync off to immediate,
+// then mailbox, then fifo, so only a surface with neither leaves frames waiting for the vertical blank.
+[[nodiscard]] inline FramePacingNotes framePacingNotes(const bool vsyncRequested, const bool surfaceHasImmediate,
+                                                       const bool surfaceHasMailbox, const int maxFps)
 {
   return {
-    .vsyncOffUnavailable = !vsyncRequested && presentWaitsForVblank,
+    .vsyncOffUnavailable = !vsyncRequested && !surfaceHasImmediate && !surfaceHasMailbox,
     .capAboveRefreshIgnored = vsyncRequested && maxFps > 0
   };
 }
