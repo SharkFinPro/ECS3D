@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "WireTypes.h"
+#include "edits/AssetWireType.h"
 #include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
@@ -1643,7 +1644,7 @@ namespace {
     return scene;
   }
 
-  void addSceneAsset(AssetRegistry& assetRegistry,
+  bool addSceneAsset(AssetRegistry& assetRegistry,
                      SceneManager& sceneManager,
                      const std::shared_ptr<ComponentRegistry>& componentRegistry,
                      const uuids::uuid& uuid,
@@ -1651,7 +1652,7 @@ namespace {
   {
     if (sceneManager.getScene(uuid))
     {
-      return;
+      return true;
     }
 
     const std::string name = asset.value("name", std::string{ "New Scene" });
@@ -1668,16 +1669,50 @@ namespace {
                                            asset.value("body", std::string{}));
     if (!scene)
     {
-      return;
+      return false;
     }
 
     sceneManager.addScene(scene);
     // Also register it as an asset so it shows in the browser (double-click to load).
     assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = uniqueName });
+
+    return true;
+  }
+
+  // registerAsset is first-wins on the path key, so a record of another type already owning it would
+  // silently swallow the add. Same-type owners are left to registerAsset (prefab body update, file no-op).
+  bool refuseCrossTypeKey(const AssetRegistry& assetRegistry, const AssetType type, const std::string& key)
+  {
+    if (key.empty())
+    {
+      return false;
+    }
+
+    const auto* owner = assetRegistry.getByPath(key);
+    if (!owner || owner->type == type)
+    {
+      return false;
+    }
+
+    Log::warn(LogCategory::assets, "Ignored an addAsset for " + edits::assetTypeToWireString(type) + " '" + key +
+                                   "': the name belongs to a " + edits::assetTypeToWireString(owner->type) + ".");
+    return true;
+  }
+
+  // registerAsset silently drops an unusable record (a prefab body that is not a JSON object, a uuid already
+  // registered under another path), so report whether the record, or one under its key, is now present.
+  bool registerReportingPresence(AssetRegistry& assetRegistry, const AssetRecord& record)
+  {
+    const auto versionBefore = assetRegistry.getVersion();
+    assetRegistry.registerAsset(record);
+
+    return assetRegistry.getVersion() != versionBefore ||
+           (!record.path.empty() && assetRegistry.getByPath(record.path) != nullptr) ||
+           assetRegistry.getByUUID(record.uuid) != nullptr;
   }
 }
 
-void applyAddAsset(AssetRegistry& assetRegistry,
+bool applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,
                    const nlohmann::json& asset)
@@ -1685,43 +1720,53 @@ void applyAddAsset(AssetRegistry& assetRegistry,
   const auto parsed = uuids::uuid::from_string(asset.value("uuid", std::string{}));
   if (!parsed.has_value())
   {
-    return;
+    return false;
   }
 
   const auto uuid = parsed.value();
   const std::string type = asset.value("assetType", std::string{});
   const std::string displayName = asset.value("displayName", std::string{});
 
-  if (type == "model")
+  if (type == "scene")
   {
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Model,
-      .path = asset.value("path", std::string{}), .displayName = displayName });
+    return addSceneAsset(assetRegistry, sceneManager, componentRegistry, uuid, asset);
   }
-  else if (type == "texture")
+
+  if (type == "model" || type == "texture" || type == "script")
   {
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Texture,
-      .path = asset.value("path", std::string{}), .displayName = displayName });
+    const std::string path = asset.value("path", std::string{});
+    const AssetType assetType = edits::assetTypeFromWireString(type);
+    if (refuseCrossTypeKey(assetRegistry, assetType, path))
+    {
+      return false;
+    }
+
+    AssetRecord record = { .uuid = uuid, .type = assetType, .path = path, .displayName = displayName };
+    if (assetType == AssetType::Script)
+    {
+      record.className = asset.value("className", std::string{});
+    }
+
+    return registerReportingPresence(assetRegistry, record);
   }
-  else if (type == "script")
-  {
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Script,
-      .path = asset.value("path", std::string{}), .className = asset.value("className", std::string{}),
-      .displayName = displayName });
-  }
-  else if (type == "prefab")
+
+  if (type == "prefab")
   {
     // Keyed by display name (like a scene) and carrying its body inline. Re-registering an existing name
     // updates that prefab's body in place, so "Save as Prefab" over an existing name means "update it" -
     // registerAsset's in-place branch only touches body, so an existing record's own displayName survives
     // a body-only update untouched even though this record carries an empty one.
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab,
-      .path = asset.value("name", std::string{}), .body = asset.value("body", std::string{}),
-      .displayName = displayName });
+    const std::string name = asset.value("name", std::string{});
+    if (refuseCrossTypeKey(assetRegistry, AssetType::Prefab, name))
+    {
+      return false;
+    }
+
+    return registerReportingPresence(assetRegistry, { .uuid = uuid, .type = AssetType::Prefab, .path = name,
+      .body = asset.value("body", std::string{}), .displayName = displayName });
   }
-  else if (type == "scene")
-  {
-    addSceneAsset(assetRegistry, sceneManager, componentRegistry, uuid, asset);
-  }
+
+  return false;
 }
 
 net::Message packAddAsset(const nlohmann::json& asset)

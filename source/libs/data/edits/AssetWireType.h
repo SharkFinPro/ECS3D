@@ -4,9 +4,9 @@
 #include "assets/AssetRegistry.h"
 #include <string>
 
-// The addAsset blob's "assetType" strings, both directions. Internal to edits/: there is no buildAddAsset
-// in Replication.h to borrow the mapping from - the editor assembles that blob itself (see EditorApp's
-// addAsset/updatePrefabBody lambdas) and applyAddAsset reads it back.
+// The addAsset blob's "assetType" strings, both directions. Shared by edits/ and Replication.cpp: there is no
+// buildAddAsset in Replication.h to borrow the mapping from - the editor assembles that blob itself (see
+// EditorApp's addAsset/updatePrefabBody lambdas) and applyAddAsset reads it back.
 namespace edits {
 
 [[nodiscard]] inline std::string assetTypeToWireString(const AssetType type)
