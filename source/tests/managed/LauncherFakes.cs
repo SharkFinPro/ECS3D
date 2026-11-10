@@ -92,7 +92,11 @@ internal sealed class RecordingLauncherLog : ILauncherLog
 {
   public List<string> Warnings { get; } = [];
 
+  public List<string> Errors { get; } = [];
+
   public void Warn(string message) => Warnings.Add(message);
+
+  public void Error(string message) => Errors.Add(message);
 }
 
 internal sealed class FakeRunningProcess : IRunningProcess

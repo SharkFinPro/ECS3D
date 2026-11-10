@@ -362,6 +362,19 @@ public sealed class LauncherPhysicalFileTests : IDisposable
   }
 
   [Fact]
+  public void LauncherLogWritesErrorsAtTheErrorLevel()
+  {
+    var path = Path.Combine(_folder, "logs", "launcher.log");
+    var log = new FileLauncherLog(path, () => DateTimeOffset.UnixEpoch);
+
+    log.Error("bad");
+    log.Warn("odd");
+
+    var expected = new[] { "1970-01-01T00:00:00.000Z [error] bad", "1970-01-01T00:00:00.000Z [warn] odd" };
+    Assert.Equal(expected, File.ReadAllLines(path));
+  }
+
+  [Fact]
   public void LauncherLogSwallowsFailures()
   {
     var blocker = Path.Combine(_folder, "blocker");
