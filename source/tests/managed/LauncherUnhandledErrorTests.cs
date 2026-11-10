@@ -219,9 +219,9 @@ public class LauncherUnhandledErrorTests
 
   private sealed class ThrowingLog : ILauncherLog
   {
-    public void Warn(string message) => throw new InvalidOperationException("log failed");
+    public void Warn(string message) => throw new InvalidOperationException($"log failed: {message}");
 
-    public void Error(string message) => throw new InvalidOperationException("log failed");
+    public void Error(string message) => throw new InvalidOperationException($"log failed: {message}");
   }
 
   private UnhandledErrorPolicy NewClockedPolicy(Func<DateTimeOffset> now) =>

@@ -6,9 +6,9 @@ namespace ECS3DLauncher.Services;
 // What the launcher does with an exception nothing caught: write it down and, on the UI thread, tell the user.
 public sealed class UnhandledErrorPolicy
 {
-    public const string ToastMessage = "Something went wrong - see launcher.log";
+    public static string ToastMessage => "Something went wrong - see launcher.log";
 
-    public const int StormLimit = 5;
+    public static int StormLimit => 5;
 
     public static readonly TimeSpan StormWindow = TimeSpan.FromSeconds(10);
 
