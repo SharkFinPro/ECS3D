@@ -205,9 +205,15 @@ void ServerApp::handleAddAsset(const net::Message& message) const
     return;
   }
 
-  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
-
-  Log::info(LogCategory::server, "Registered asset (" + asset.value("assetType", std::string{}) + ").");
+  const std::string type = asset.value("assetType", std::string{});
+  if (replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset))
+  {
+    Log::info(LogCategory::server, "Registered asset (" + type + ").");
+  }
+  else
+  {
+    Log::warn(LogCategory::server, "Refused to add an asset (" + type + ").");
+  }
 
   broadcastSnapshot(net::SnapshotReason::assetChange);
 }

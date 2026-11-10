@@ -236,7 +236,11 @@ void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Messa
 // no file on disk). `displayName`, when present, restores a rename override on the record - undo of a
 // removeAsset carries the removed record's own displayName this way, so the asset comes back under
 // whatever name it was renamed to.
-void applyAddAsset(AssetRegistry& assetRegistry,
+// Returns false when the add was refused: an unparseable uuid, an unknown assetType, a scene body that does
+// not load, or a prefab/model/texture/script whose key already belongs to a record of another type (logged
+// as a warning). A scene add for a uuid already loaded is a no-op that returns true, as is re-adding a file
+// asset of the same type.
+bool applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,
                    const nlohmann::json& asset);
