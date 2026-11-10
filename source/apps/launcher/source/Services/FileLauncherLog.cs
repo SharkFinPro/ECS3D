@@ -22,10 +22,16 @@ public sealed class FileLauncherLog : ILauncherLog
         _now = now;
     }
 
-    public void Warn(string message)
+    public string FilePath => _path;
+
+    public void Warn(string message) => Append("warn", message);
+
+    public void Error(string message) => Append("error", message);
+
+    private void Append(string level, string message)
     {
         var stamp = _now().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-        var line = $"{stamp} [warn] {message}{Environment.NewLine}";
+        var line = $"{stamp} [{level}] {message}{Environment.NewLine}";
         lock (_lock)
         {
             try

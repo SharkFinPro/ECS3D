@@ -46,7 +46,7 @@ public class MainWindowViewModel : ObservableObject
     private LaunchCoordinator _coordinator;
 
     // One instance, so the log file is truncated once per launch rather than by each user of it.
-    private static readonly FileLauncherLog SharedLog = new(new UserDataDirectory());
+    internal static readonly FileLauncherLog SharedLog = new(new UserDataDirectory());
 
     private const string DefaultTemplateId = "empty-3d";
 
@@ -1164,7 +1164,7 @@ public class MainWindowViewModel : ObservableObject
     }
 
     // Notices come from background continuations, so they are handed to the UI thread explicitly.
-    private void ShowNotice(LaunchNotice notice) => _post(() => ApplyNotice(notice));
+    public void ShowNotice(LaunchNotice notice) => _post(() => ApplyNotice(notice));
 
     private void ApplyNotice(LaunchNotice notice)
     {
