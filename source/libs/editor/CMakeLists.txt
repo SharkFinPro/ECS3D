@@ -32,6 +32,7 @@ add_library(${PROJECT_NAME}
   UnsavedChanges.h
   UndoRequestGate.h
   PlayControls.h
+  SceneStatusLayout.h
   AssetReferences.cpp
   AssetReferences.h
   SettingsPanel.cpp

@@ -7,6 +7,7 @@
 #include <EditorTheme.h>
 #include <GuiComponents.h>
 #include <PlayControls.h>
+#include <SceneStatusLayout.h>
 #include <ViewportGizmo.h>
 #include <Gizmo.h>
 #include <EditorGizmoSettings.h>
@@ -23,6 +24,8 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -115,7 +118,12 @@ namespace {
   // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
   void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
   {
-    constexpr int modeButtonWidth = 60;
+    constexpr float minimumModeButtonWidth = 60.0f;
+
+    const float widestLabel = std::max({ ImGui::CalcTextSize("Move").x, ImGui::CalcTextSize("Rotate").x,
+                                         ImGui::CalcTextSize("Scale").x });
+    const float modeButtonWidth = uniformLabelButtonWidth(widestLabel, ImGui::GetStyle().FramePadding.x,
+                                                          minimumModeButtonWidth);
 
     const auto modeButton = [&](const char* label, const gizmo::Mode mode) {
       const bool active = viewportGizmo.mode() == mode;
@@ -179,21 +187,65 @@ void EditorApp::displayMessageLog()
 
 void EditorApp::displaySceneStatus()
 {
-  ImGui::Begin("Scene Status");
+  if (!ImGui::Begin("Scene Status"))
+  {
+    ImGui::End();
+    return;
+  }
 
-  displayPlayControls();
+  ToolbarFlow flow(ImGui::GetContentRegionAvail().x);
 
-  displayRayTracingToggle();
+  // A group's width is measured as drawn and used for the next frame's placement.
+  std::size_t groupIndex = 0;
+  const auto drawGroup = [&](const float gap, const auto& draw) {
+    const std::size_t index = groupIndex++;
+    assert(index < sceneStatusGroupCount);
 
-  displayCameraSelector();
+    if (flow.place(m_sceneStatusGroupWidths[index], gap))
+    {
+      ImGui::SameLine(0.0f, gap);
+    }
 
-  displayPlayerSelector();
+    ImGui::BeginGroup();
+    draw();
+    ImGui::EndGroup();
 
-  displayGizmoControls();
+    m_sceneStatusGroupWidths[index] = ImGui::GetItemRectSize().x;
+  };
 
-  displaySceneReadout();
+  constexpr float groupGap = 18.0f;
+  constexpr float optionsGap = 14.0f;
+
+  drawGroup(groupGap, [&] { displayPlayControls(); });
+  drawGroup(groupGap, [&] { displayRayTracingToggle(); });
+  drawGroup(groupGap, [&] { displayCameraSelector(); });
+  drawGroup(groupGap, [&] { displayPlayerSelector(); });
+  drawGroup(groupGap, [&] { displayGizmoModeControls(); });
+  drawGroup(optionsGap, [&] { displayGizmoOptions(); });
+
+  assert(groupIndex == sceneStatusGroupCount);
+
+  const float readoutWidth = sceneReadoutWidth();
+  const bool readoutContinuesRow = flow.place(readoutWidth, groupGap);
+  displaySceneReadout(readoutWidth, readoutContinuesRow, groupGap);
+
+  updateSceneStatusMinimumSize(flow.rows());
 
   ImGui::End();
+}
+
+void EditorApp::updateSceneStatusMinimumSize(const int rows)
+{
+  float height = sceneStatusBaseMinimumHeight;
+  if (rows > 1)
+  {
+    const float contentScale = m_renderer->getWindow()->getContentScale();
+    const float panelHeight = toolbarPanelHeight(rows, ImGui::GetFrameHeight(), ImGui::GetStyle().WindowPadding.y,
+                                                 ImGui::GetFrameHeightWithSpacing());
+    height = std::max(height, panelHeight / contentScale);
+  }
+
+  m_renderer->getImGuiInstance()->setDockedWindowMinimumSize("Scene Status", { 0.0f, height });
 }
 
 void EditorApp::displayPlayControls()
@@ -233,7 +285,6 @@ void EditorApp::displayRayTracingToggle() const
   // Ray tracing toggle: a local render setting (this view's vke renderer only, never replicated), so
   // it stays enabled on a read-only server. Greyed out when the device can't ray trace.
   const auto renderingManager = m_renderer->getRenderingManager();
-  ImGui::SameLine(0.0f, 18.0f);
   ImGui::BeginDisabled(!renderingManager->supportsRayTracing());
   bool rayTracing = renderingManager->isRayTracingEnabled();
   if (gc::accentCheckboxCompact("Ray Tracing", &rayTracing))
@@ -250,7 +301,26 @@ void EditorApp::displayRayTracingToggle() const
   ImGui::EndDisabled();
 }
 
-void EditorApp::displaySceneReadout() const
+namespace {
+  constexpr float readoutNameGap = 14.0f;     // scene name -> divider
+  constexpr float readoutDividerGap = 14.0f;  // divider -> dot block
+  constexpr float readoutDotToLabel = 18.0f;  // dot block start -> label text
+}
+
+float EditorApp::sceneReadoutWidth() const
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+
+  float width = readoutDividerGap + readoutDotToLabel + ImGui::CalcTextSize(sceneStatusLabel(m_sceneStatus)).x;
+  if (scene)
+  {
+    width += ImGui::CalcTextSize(scene->getName().c_str()).x + readoutNameGap;
+  }
+
+  return width;
+}
+
+void EditorApp::displaySceneReadout(const float width, const bool continuesRow, const float gap) const
 {
   // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
   // buttons stay put on the left regardless of the readout's width.
@@ -258,20 +328,18 @@ void EditorApp::displaySceneReadout() const
   const ImVec4 dotCol = sceneStatusColor(m_sceneStatus);
   const auto scene = m_sceneManager->getCurrentScene();
 
-  constexpr float nameGap = 14.0f;     // scene name -> divider
-  constexpr float dividerGap = 14.0f;  // divider -> dot block
-  constexpr float dotToLabel = 18.0f;  // dot block start -> label text
-  float readoutWidth = dividerGap + dotToLabel + ImGui::CalcTextSize(label).x;
-  if (scene)
+  constexpr float nameGap = readoutNameGap;
+  constexpr float dividerGap = readoutDividerGap;
+  constexpr float dotToLabel = readoutDotToLabel;
+
+  // Anchor to the right edge, but never overlap the previous group on a narrow panel.
+  if (continuesRow)
   {
-    readoutWidth += ImGui::CalcTextSize(scene->getName().c_str()).x + nameGap;
+    ImGui::SameLine(0.0f, gap);
   }
 
-  // Anchor to the right edge, but never overlap the play buttons on a narrow panel.
-  ImGui::SameLine();
-  const float readoutX = std::max(ImGui::GetCursorPosX() + 4.0f,
-                                  ImGui::GetContentRegionMax().x - readoutWidth);
-  ImGui::SetCursorPosX(readoutX);
+  const float minimumX = ImGui::GetCursorPosX() + (continuesRow ? 4.0f : 0.0f);
+  ImGui::SetCursorPosX(std::max(minimumX, ImGui::GetContentRegionMax().x - width));
 
   // Current scene name (muted) first, mirroring the mockup's toolbar.
   if (scene)
@@ -309,7 +377,6 @@ void EditorApp::displayCameraSelector()
   // A view choice, not a scene edit, so this stays enabled on a read-only server.
   const std::string preview = cameraPreviewLabel(objectManager, m_viewCameraObject, freeFlyLabel);
 
-  ImGui::SameLine(0.0f, 18.0f);
   ImGui::AlignTextToFramePadding();
   ImGui::TextColored(theme::t2, "%s", "View");
   ImGui::SameLine();
@@ -338,7 +405,6 @@ void EditorApp::displayPlayerSelector()
 
   const std::string preview = m_playerSlot >= 0 ? "Player " + std::to_string(m_playerSlot) : std::string("-");
 
-  ImGui::SameLine(0.0f, 18.0f);
   ImGui::AlignTextToFramePadding();
   ImGui::TextColored(theme::t2, "%s", "Player");
   ImGui::SameLine();
@@ -380,14 +446,18 @@ void EditorApp::expirePlayerSlotRequest()
   m_requestedPlayerSlot.reset();
 }
 
-void EditorApp::displayGizmoControls() const
+void EditorApp::displayGizmoModeControls() const
 {
-  ImGui::SameLine(0.0f, 18.0f);
   ImGui::BeginDisabled(!m_serverEditable);
 
   displayGizmoModeButtons(*m_viewportGizmo);
 
-  ImGui::SameLine(0.0f, 14.0f);
+  ImGui::EndDisabled();
+}
+
+void EditorApp::displayGizmoOptions() const
+{
+  ImGui::BeginDisabled(!m_serverEditable);
 
   // Scale is always local (it's applied in the object's own axes), so the toggle would have nothing to
   // change there.

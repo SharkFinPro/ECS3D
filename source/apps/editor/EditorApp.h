@@ -18,7 +18,9 @@
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -235,6 +237,16 @@ private:
   // Edge-detect the mouse so viewport picking only fires on a fresh click.
   bool m_mouseWasPressed = false;
 
+  // The height of the Scene Status dock with its controls on one row, in unscaled pixels.
+  static constexpr float sceneStatusBaseMinimumHeight = 88.0f;
+
+  // The groups drawn through drawGroup in displaySceneStatus; the readout is placed separately.
+  static constexpr std::size_t sceneStatusGroupCount = 6;
+
+  // Each control group's width as drawn last frame, which is what decides this frame's wrapping. Zero until
+  // measured, so the first frame draws on one row.
+  std::array<float, sceneStatusGroupCount> m_sceneStatusGroupWidths{};
+
   void createRenderer();
 
   void launchServer();
@@ -395,7 +407,11 @@ private:
 
   void displayRayTracingToggle() const;
 
-  void displaySceneReadout() const;
+  // The readout's width, so it can be placed before it is drawn.
+  [[nodiscard]] float sceneReadoutWidth() const;
+
+  // continuesRow: whether it shares the previous group's row (after a gap) or starts its own.
+  void displaySceneReadout(float width, bool continuesRow, float gap) const;
 
   // The "View" combo: the editor's free-fly camera, or any Camera in the scene (a client's player camera
   // is labelled with its slot).
@@ -405,9 +421,14 @@ private:
   // slot (and the camera) only move once the server's reply confirms it.
   void displayPlayerSelector();
 
-  // Move/Rotate/Scale mode buttons, the World/Local toggle, and the Snap checkbox - the viewport gizmo's
-  // controls, disabled on a read-only server.
-  void displayGizmoControls() const;
+  // Move/Rotate/Scale mode buttons, disabled on a read-only server.
+  void displayGizmoModeControls() const;
+
+  // The World/Local toggle and the Snap checkbox, disabled on a read-only server.
+  void displayGizmoOptions() const;
+
+  // Raises the Scene Status dock's height floor to fit the wrapped rows.
+  void updateSceneStatusMinimumSize(int rows);
 
   void restoreLayout();
   void saveLayoutIfRequested();

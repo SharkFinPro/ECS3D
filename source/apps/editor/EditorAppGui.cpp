@@ -14,6 +14,7 @@
 #include <ProfilerPanel.h>
 #include <SceneScriptsPanel.h>
 #include <SettingsStore.h>
+#include <SceneStatusLayout.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <objects/Object.h>
@@ -251,7 +252,7 @@ void EditorApp::applyDockMinimumSizes() const
   const ImVec2 objectsMinimumSize{260.0f, 0.0f};
   const ImVec2 inspectorMinimumSize{310.0f, 0.0f};
   const ImVec2 sceneScriptsMinimumSize{310.0f, 0.0f};
-  const ImVec2 sceneStatusMinimumSize{0.0f, 88.0f};
+  const ImVec2 sceneStatusMinimumSize{0.0f, sceneStatusBaseMinimumHeight};
   const ImVec2 assetsMinimumSize{0.0f, 200.0f};
   const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
   const ImVec2 consoleMinimumSize{0.0f, 120.0f};
@@ -292,11 +293,12 @@ bool EditorApp::applyDockPercents() const
   const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
   const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
 
-  // Scene Status draws its controls on a single row (see displaySceneStatus): title bar + padding + one
-  // control row fits it exactly at any font size or DPI, with no scrollbar.
+  // The default layout sizes Scene Status for one row of controls: title bar + padding + one control row
+  // fits it exactly at any font size or DPI, with no scrollbar. A narrow window wraps the controls onto more
+  // rows and displaySceneStatus raises the floor to fit them.
   constexpr int sceneStatusRows = 1;
-  const float topHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f
-                         + ImGui::GetFrameHeightWithSpacing() * sceneStatusRows;
+  const float topHeight = toolbarPanelHeight(sceneStatusRows, ImGui::GetFrameHeight(),
+                                             ImGui::GetStyle().WindowPadding.y, ImGui::GetFrameHeightWithSpacing());
 
   const auto gui = m_renderer->getImGuiInstance();
 

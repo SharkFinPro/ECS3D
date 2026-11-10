@@ -85,7 +85,9 @@ through `ProfilerCapture.h` (see [profiling.md](profiling.md)) and the panel the
 button (`OpenFolder.h`, which launches the platform file browser without a shell), `AssetBrowserPanel` (its type
 filter is a union of toggled chips, with an "All" chip to clear: `AssetFilter.h`), `AssetDisplay` (shared asset
 label/name/icon/color rules, header-only), `PlayControls.h` (the headless play/pause/stop enable rules for the
-Scene Status toolbar's fixed row of icon buttons, which stay drawn and gray out when unavailable), `SaveUI`
+Scene Status toolbar's icon buttons, which stay drawn and gray out when unavailable), `SceneStatusLayout.h`
+(the toolbar wraps its control groups onto more rows when the panel is too narrow and raises the docked panel's
+height floor to fit), `SaveUI`
 (file I/O on the project folder layout, `<folder>/project.ecs3d` beside `assets/` and `scripts/`: Save As picks
 a folder, creates the subfolders, copies the previous folder's `assets/` and `scripts/` when the folder differs,
 and moves the editor's project root there, refusing a folder that already holds another project; Open takes a
