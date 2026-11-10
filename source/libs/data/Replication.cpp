@@ -1698,6 +1698,18 @@ namespace {
                                    "': the name belongs to a " + edits::assetTypeToWireString(owner->type) + ".");
     return true;
   }
+
+  // registerAsset silently drops an unusable record (a prefab body that is not a JSON object, a uuid already
+  // registered under another path), so report whether the record, or one under its key, is now present.
+  bool registerReportingPresence(AssetRegistry& assetRegistry, const AssetRecord& record)
+  {
+    const auto versionBefore = assetRegistry.getVersion();
+    assetRegistry.registerAsset(record);
+
+    return assetRegistry.getVersion() != versionBefore ||
+           (!record.path.empty() && assetRegistry.getByPath(record.path) != nullptr) ||
+           assetRegistry.getByUUID(record.uuid) != nullptr;
+  }
 }
 
 bool applyAddAsset(AssetRegistry& assetRegistry,
@@ -1735,8 +1747,7 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
       record.className = asset.value("className", std::string{});
     }
 
-    assetRegistry.registerAsset(record);
-    return true;
+    return registerReportingPresence(assetRegistry, record);
   }
 
   if (type == "prefab")
@@ -1751,9 +1762,8 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
       return false;
     }
 
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab, .path = name,
+    return registerReportingPresence(assetRegistry, { .uuid = uuid, .type = AssetType::Prefab, .path = name,
       .body = asset.value("body", std::string{}), .displayName = displayName });
-    return true;
   }
 
   return false;

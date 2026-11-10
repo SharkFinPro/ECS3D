@@ -633,6 +633,63 @@ TEST(AssetRegistry, ApplyAddAssetTreatsReimportingASameTypeFileAssetAsSuccess)
   EXPECT_EQ(registry.getAssets().size(), 1u);
 }
 
+TEST(AssetRegistry, ApplyAddAssetRefusesAPrefabWithAnUnusableBody)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  for (const std::string body : { std::string{ "garbage" }, std::string{} })
+  {
+    EXPECT_FALSE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                            { { "assetType", "prefab" }, { "uuid", uuids::to_string(prefabUUID) },
+                                              { "name", "Block" }, { "body", body } }));
+    EXPECT_EQ(registry.getByUUID(prefabUUID), nullptr);
+    EXPECT_EQ(registry.getByPath("Block"), nullptr);
+  }
+
+  EXPECT_TRUE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                         { { "assetType", "prefab" }, { "uuid", uuids::to_string(prefabUUID) },
+                                           { "name", "Block" }, { "body", prefabBody("Block") } }));
+  EXPECT_NE(registry.getByUUID(prefabUUID), nullptr);
+}
+
+TEST(AssetRegistry, ApplyAddAssetRefusesAScriptWhosePathIsAScenesName)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  ASSERT_TRUE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                         { { "assetType", "scene" }, { "uuid", uuids::to_string(otherUUID) },
+                                           { "name", "Main" } }));
+
+  EXPECT_FALSE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                          { { "assetType", "script" }, { "uuid", uuids::to_string(modelUUID) },
+                                            { "path", "Main" }, { "className", "Spinner" } }));
+  EXPECT_EQ(registry.getByUUID(modelUUID), nullptr);
+
+  EXPECT_TRUE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                         { { "assetType", "script" }, { "uuid", uuids::to_string(modelUUID) },
+                                           { "path", "scripts/Spinner.cs" }, { "className", "Spinner" } }));
+  EXPECT_NE(registry.getByUUID(modelUUID), nullptr);
+}
+
+TEST(AssetRegistry, ApplyAddAssetAcceptsAModelWithANewUuidAtAnExistingModelPath)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  ASSERT_TRUE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                         { { "assetType", "model" }, { "uuid", uuids::to_string(modelUUID) },
+                                           { "path", "x.glb" } }));
+  EXPECT_TRUE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                         { { "assetType", "model" }, { "uuid", uuids::to_string(otherUUID) },
+                                           { "path", "x.glb" } }));
+  EXPECT_EQ(registry.getByPath("x.glb")->uuid, modelUUID);
+}
+
 TEST(AssetRegistry, ApplyAddAssetKeepsAFreeSceneNameNextToAPrefab)
 {
   const fixtures::Scene scene;
