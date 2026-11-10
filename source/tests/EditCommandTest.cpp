@@ -165,6 +165,22 @@ TEST(EditCommand, ObjectLabelsUseTheLiveNameOrAGenericOneWhenTheObjectIsGone)
             "Duplicate Object");
 }
 
+TEST(EditCommand, ObjectLabelsReadAsGenericWhenTheLiveNameIsEmpty)
+{
+  const fixtures::Scene scene;
+  const auto named = addObject(scene, "Named");
+  const auto unnamed = addObject(scene, "");
+
+  EXPECT_EQ(labelOf(edits::EditCommand::reparentObject(named->getUUID(), std::nullopt, std::nullopt), scene),
+            "Move Named");
+  EXPECT_EQ(labelOf(edits::EditCommand::reparentObject(unnamed->getUUID(), std::nullopt, std::nullopt), scene),
+            "Move Object");
+  EXPECT_EQ(labelOf(edits::EditCommand::reorderObject(unnamed->getUUID(), std::nullopt, 0, std::nullopt, 1), scene),
+            "Reorder Object");
+  EXPECT_EQ(labelOf(edits::EditCommand::duplicateObject(unnamed->getUUID(), testUUID(8), std::nullopt, 1), scene),
+            "Duplicate Object");
+}
+
 TEST(EditCommand, BlankNamesInACommandReadAsTheGenericKindName)
 {
   const fixtures::Scene scene;
@@ -200,6 +216,35 @@ TEST(EditCommand, AssetLabelsNameTheAssetTheWayTheAssetBrowserDoes)
   EXPECT_EQ(labelOf(edits::EditCommand::removeAsset(id, AssetType::Texture, "textures/wall/brick.png", "", "", ""),
                     scene),
             "Delete Asset brick.png");
+}
+
+TEST(EditCommand, AssetLabelsReadAsGenericWhenTheDerivedNameIsEmpty)
+{
+  const fixtures::Scene scene;
+  const auto id = testUUID(1);
+
+  EXPECT_EQ(labelOf(edits::EditCommand::addAsset(id, AssetType::Model, "", "", ""), scene), "Add Asset Asset");
+  EXPECT_EQ(labelOf(edits::EditCommand::addAsset(id, AssetType::Model, "models/", "", ""), scene),
+            "Add Asset Asset");
+  EXPECT_EQ(labelOf(edits::EditCommand::addAsset(id, AssetType::Script, "scripts/Mover.cs", "", ""), scene),
+            "Add Asset Asset");
+  EXPECT_EQ(labelOf(edits::EditCommand::replaceAsset(id, AssetType::Prefab, "Old", "", "{}", "", "", "{}"), scene),
+            "Replace Asset Asset");
+  EXPECT_EQ(labelOf(edits::EditCommand::removeAsset(id, AssetType::Texture, "", "", "", ""), scene),
+            "Delete Asset Asset");
+
+  AssetRegistry registry;
+  const auto named = testUUID(2);
+  const auto unnamed = testUUID(3);
+  registry.registerAsset({ .uuid = named, .type = AssetType::Prefab, .path = "Block", .body = "{}" });
+  registry.registerAsset({ .uuid = unnamed, .type = AssetType::Prefab, .path = "", .body = "{}" });
+
+  EXPECT_EQ(labelOf(edits::EditCommand::instantiatePrefab(named, testUUID(4), std::nullopt, 0, "{}"), scene,
+                    &registry),
+            "Instantiate Block");
+  EXPECT_EQ(labelOf(edits::EditCommand::instantiatePrefab(unnamed, testUUID(4), std::nullopt, 0, "{}"), scene,
+                    &registry),
+            "Instantiate Prefab");
 }
 
 // --- A command that cannot be recorded in the first place: the registry key is read straight off the
