@@ -20,6 +20,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -239,14 +240,12 @@ private:
   // The height of the Scene Status dock with its controls on one row, in unscaled pixels.
   static constexpr float sceneStatusBaseMinimumHeight = 88.0f;
 
-  static constexpr size_t sceneStatusGroupCount = 7;
+  // The groups drawn through drawGroup in displaySceneStatus; the readout is placed separately.
+  static constexpr std::size_t sceneStatusGroupCount = 6;
 
   // Each control group's width as drawn last frame, which is what decides this frame's wrapping. Zero until
   // measured, so the first frame draws on one row.
   std::array<float, sceneStatusGroupCount> m_sceneStatusGroupWidths{};
-
-  // The row count the Scene Status dock's height floor was last raised for.
-  int m_sceneStatusRows = 1;
 
   void createRenderer();
 

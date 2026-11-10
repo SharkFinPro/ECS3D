@@ -70,7 +70,7 @@ The selected object shows a gizmo for moving, rotating or scaling it.
 ## Scene Status
 
 The "Scene Status" panel along the top holds the play controls and some view choices. On a narrow window the
-controls wrap onto a second row and the panel grows to fit.
+controls wrap onto more rows and the panel grows to fit.
 
 - The play, pause and stop icon buttons. Play also resumes a paused scene. Buttons that do not apply are
   grayed out.

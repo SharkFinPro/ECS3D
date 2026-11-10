@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <iterator>
+
 #include "SceneStatusLayout.h"
 
 TEST(SceneStatusLayoutTest, EverythingFitsOnOneRow)
@@ -84,23 +86,44 @@ TEST(SceneStatusLayoutTest, ZeroWidthsStayOnOneRow)
   EXPECT_EQ(flow.rows(), 1);
 }
 
-TEST(SceneStatusLayoutTest, TheRealToolbarWrapsAtNarrowWidthsOnly)
+namespace {
+  constexpr float toolbarWidths[] = {90.0f, 130.0f, 270.0f, 230.0f, 200.0f, 130.0f};
+  constexpr float toolbarGap = 18.0f;
+
+  float oneRowTotal()
+  {
+    float total = 0.0f;
+    for (const float width : toolbarWidths)
+    {
+      total += width;
+    }
+    return total + toolbarGap * static_cast<float>(std::size(toolbarWidths) - 1);
+  }
+
+  int rowsAt(const float available)
+  {
+    ToolbarFlow flow(available);
+    for (const float width : toolbarWidths)
+    {
+      [[maybe_unused]] const bool continued = flow.place(width, toolbarGap);
+    }
+    return flow.rows();
+  }
+}
+
+TEST(SceneStatusLayoutTest, TheToolbarFitsOneRowAtExactlyItsTotalWidth)
 {
-  const float widths[] = {90.0f, 130.0f, 270.0f, 230.0f, 200.0f, 130.0f, 220.0f};
+  EXPECT_EQ(rowsAt(oneRowTotal()), 1);
+}
 
-  ToolbarFlow narrow(1000.0f);
-  for (const float width : widths)
-  {
-    [[maybe_unused]] const bool continued = narrow.place(width, 18.0f);
-  }
-  EXPECT_GT(narrow.rows(), 1);
+TEST(SceneStatusLayoutTest, TheToolbarWrapsItsLastGroupOnePixelBelowItsTotalWidth)
+{
+  EXPECT_EQ(rowsAt(oneRowTotal() - 1.0f), 2);
+}
 
-  ToolbarFlow wide(2200.0f);
-  for (const float width : widths)
-  {
-    [[maybe_unused]] const bool continued = wide.place(width, 18.0f);
-  }
-  EXPECT_EQ(wide.rows(), 1);
+TEST(SceneStatusLayoutTest, ZeroAvailableWidthPutsEveryGroupOnItsOwnRow)
+{
+  EXPECT_EQ(rowsAt(0.0f), static_cast<int>(std::size(toolbarWidths)));
 }
 
 TEST(SceneStatusLayoutTest, PanelHeightGrowsByOneRowPerRow)

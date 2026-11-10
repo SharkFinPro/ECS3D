@@ -24,6 +24,8 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -185,12 +187,20 @@ void EditorApp::displayMessageLog()
 
 void EditorApp::displaySceneStatus()
 {
-  ImGui::Begin("Scene Status");
+  if (!ImGui::Begin("Scene Status"))
+  {
+    ImGui::End();
+    return;
+  }
 
   ToolbarFlow flow(ImGui::GetContentRegionAvail().x);
 
   // A group's width is measured as drawn and used for the next frame's placement.
-  const auto drawGroup = [&](const size_t index, const float gap, const auto& draw) {
+  std::size_t groupIndex = 0;
+  const auto drawGroup = [&](const float gap, const auto& draw) {
+    const std::size_t index = groupIndex++;
+    assert(index < sceneStatusGroupCount);
+
     if (flow.place(m_sceneStatusGroupWidths[index], gap))
     {
       ImGui::SameLine(0.0f, gap);
@@ -206,12 +216,14 @@ void EditorApp::displaySceneStatus()
   constexpr float groupGap = 18.0f;
   constexpr float optionsGap = 14.0f;
 
-  drawGroup(0, groupGap, [&] { displayPlayControls(); });
-  drawGroup(1, groupGap, [&] { displayRayTracingToggle(); });
-  drawGroup(2, groupGap, [&] { displayCameraSelector(); });
-  drawGroup(3, groupGap, [&] { displayPlayerSelector(); });
-  drawGroup(4, groupGap, [&] { displayGizmoModeControls(); });
-  drawGroup(5, optionsGap, [&] { displayGizmoOptions(); });
+  drawGroup(groupGap, [&] { displayPlayControls(); });
+  drawGroup(groupGap, [&] { displayRayTracingToggle(); });
+  drawGroup(groupGap, [&] { displayCameraSelector(); });
+  drawGroup(groupGap, [&] { displayPlayerSelector(); });
+  drawGroup(groupGap, [&] { displayGizmoModeControls(); });
+  drawGroup(optionsGap, [&] { displayGizmoOptions(); });
+
+  assert(groupIndex == sceneStatusGroupCount);
 
   const float readoutWidth = sceneReadoutWidth();
   const bool readoutContinuesRow = flow.place(readoutWidth, groupGap);
@@ -224,13 +236,6 @@ void EditorApp::displaySceneStatus()
 
 void EditorApp::updateSceneStatusMinimumSize(const int rows)
 {
-  if (rows == m_sceneStatusRows)
-  {
-    return;
-  }
-
-  m_sceneStatusRows = rows;
-
   float height = sceneStatusBaseMinimumHeight;
   if (rows > 1)
   {
