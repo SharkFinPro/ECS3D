@@ -22,6 +22,8 @@ public sealed class FileLauncherLog : ILauncherLog
         _now = now;
     }
 
+    public string FilePath => _path;
+
     public void Warn(string message) => Append("warn", message);
 
     public void Error(string message) => Append("error", message);

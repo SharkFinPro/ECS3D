@@ -12,7 +12,7 @@ namespace ECS3DLauncher;
 public class App : Application
 {
     private readonly UnhandledErrorPolicy _errors =
-        new(MainWindowViewModel.SharedLog, new UserDataDirectory().LauncherLogFile());
+        new(MainWindowViewModel.SharedLog, MainWindowViewModel.SharedLog.FilePath);
 
     public override void Initialize()
     {

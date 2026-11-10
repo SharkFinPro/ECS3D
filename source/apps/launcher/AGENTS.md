@@ -54,8 +54,9 @@
   A server that exits on its own closes the panel and toasts the code and `server.log`.
   The toast is one slot. One without a log link dismisses itself after 15 seconds (`ToastDelay` is the injectable
   pause; a newer notice restarts it, a manual dismiss cancels it); one with an Open logs link stays until dismissed.
-  An unhandled exception on the UI thread is written to `logs/launcher.log` and shown as a toast with the Open logs
-  link instead of ending the launcher.
+  Once the window exists, an unhandled exception on the UI thread is written to `logs/launcher.log` and shown as a
+  toast with the Open logs link instead of ending the launcher. More than five within ten seconds, or an
+  out-of-memory error, still ends it. AppDomain and unobserved-task exceptions are only logged.
   A `LaunchNotice` may carry a `NoticeTopic`: a Hosting failure toast clears when a later host starts listening, and
   the no-templates toast clears when a catalog reload finds templates. A toast of another topic stays. The toast
   is an assertive live region for screen readers. The engine banner hides its Open Settings button while

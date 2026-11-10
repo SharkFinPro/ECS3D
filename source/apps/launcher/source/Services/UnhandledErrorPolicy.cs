@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ECS3DLauncher.Services;
 
@@ -7,14 +8,26 @@ public sealed class UnhandledErrorPolicy
 {
     public const string ToastMessage = "Something went wrong - see launcher.log";
 
+    public const int StormLimit = 5;
+
+    public static readonly TimeSpan StormWindow = TimeSpan.FromSeconds(10);
+
     private readonly ILauncherLog _log;
     private readonly string _logPath;
+    private readonly Func<DateTimeOffset> _now;
+    private readonly Queue<DateTimeOffset> _recent = new();
     private bool _notifying;
 
     public UnhandledErrorPolicy(ILauncherLog log, string logPath)
+        : this(log, logPath, () => DateTimeOffset.UtcNow)
+    {
+    }
+
+    public UnhandledErrorPolicy(ILauncherLog log, string logPath, Func<DateTimeOffset> now)
     {
         _log = log;
         _logPath = logPath;
+        _now = now;
     }
 
     // Null until the window exists; an error with no one to tell is left to end the process.
@@ -23,9 +36,9 @@ public sealed class UnhandledErrorPolicy
     // Returns whether the exception was handled, i.e. whether the launcher keeps running.
     public bool HandleUiException(Exception exception)
     {
-        _log.Error($"Unhandled exception on the UI thread: {exception}");
+        LogError($"Unhandled exception on the UI thread: {exception}");
         var show = ShowNotice;
-        if (show is null)
+        if (exception is OutOfMemoryException || show is null)
         {
             return false;
         }
@@ -36,6 +49,12 @@ public sealed class UnhandledErrorPolicy
             return true;
         }
 
+        if (IsStorm())
+        {
+            LogError("Too many unhandled exceptions in a row; the launcher is closing.");
+            return false;
+        }
+
         _notifying = true;
         try
         {
@@ -44,7 +63,7 @@ public sealed class UnhandledErrorPolicy
         catch (Exception failure)
         {
             // Surviving matters more than the toast.
-            _log.Error($"Could not show the error notice: {failure}");
+            LogError($"Could not show the error notice: {failure}");
         }
         finally
         {
@@ -56,6 +75,36 @@ public sealed class UnhandledErrorPolicy
 
     public void LogBackgroundException(string source, object? error)
     {
-        _log.Error($"Unhandled exception ({source}): {error ?? "no exception object"}");
+        LogError($"Unhandled exception ({source}): {error ?? "no exception object"}");
+    }
+
+    // A fault that throws on every dispatcher job would otherwise spin and flood the log.
+    private bool IsStorm()
+    {
+        var now = _now();
+        while (_recent.Count > 0 && now - _recent.Peek() > StormWindow)
+        {
+            _recent.Dequeue();
+        }
+
+        if (_recent.Count >= StormLimit)
+        {
+            return true;
+        }
+
+        _recent.Enqueue(now);
+        return false;
+    }
+
+    private void LogError(string message)
+    {
+        try
+        {
+            _log.Error(message);
+        }
+        catch (Exception)
+        {
+            // Nowhere left to report a failing log; the handler must not raise a second exception.
+        }
     }
 }
