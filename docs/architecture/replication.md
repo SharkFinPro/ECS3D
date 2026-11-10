@@ -120,7 +120,8 @@ body that does not parse or load adds nothing, and so does a scene add for a uui
 already holds. A scene add whose name another scene or any registry path key (a prefab, say) already holds is
 renamed with a " (N)" suffix, and so is a scene loaded from a snapshot or file. Any other add (prefab, model,
 texture, script) whose key belongs to a record of a different type is refused instead, with a warning
-(`applyAddAsset` returns false and the server logs the refusal); a same-type prefab updates its body. The history is cleared when the
+(`applyAddAsset` returns false and the server logs the refusal); a same-type prefab updates its body.
+The history is cleared when the
 active scene changes, and a new scene becomes active, so the `targetActive` refusal on undoing a scene add is a
 defensive guard, not a common path.
 The Assets panel also creates scenes, scripts and empty prefabs.
