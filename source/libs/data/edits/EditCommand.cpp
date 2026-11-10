@@ -173,27 +173,30 @@ namespace {
     }
   }
 
-  // A live object's current name for a menu label, or fallback when it no longer exists (the same
+  // A live object's current name for a menu label, or fallback when it no longer exists or is unnamed (the same
   // divergence undo's own validation would catch - a label just needs something to show).
   std::string objectNameOr(const ObjectManager& objectManager, const uuids::uuid& uuid,
                            const std::string& fallback)
   {
     const auto object = objectManager.getObjectByUUID(uuid);
-    return object ? object->getName() : fallback;
+    return object && !object->getName().empty() ? object->getName() : fallback;
   }
 
   // Same display-name derivation as editor/AssetDisplay.h's assetDisplay::name, minus the displayName
   // override (a command's own recorded fields never carry one) - kept local rather than shared because
   // that header pulls in ImGui/theme types this data-library file cannot depend on.
-  std::string assetFieldName(const AssetType type, const std::string& path, const std::string& className)
+  std::string assetFieldName(const AssetType type, const std::string& path, const std::string& className,
+                             const std::string& fallback)
   {
+    std::string name;
     switch (type)
     {
       case AssetType::Scene:
-      case AssetType::Prefab: return path;
-      case AssetType::Script: return className;
-      default: return std::filesystem::path(path).filename().string();
+      case AssetType::Prefab: name = path; break;
+      case AssetType::Script: name = className; break;
+      default: name = std::filesystem::path(path).filename().string(); break;
     }
+    return name.empty() ? fallback : name;
   }
 
   // "Transform", "Script MyScript" - the same (registryKey, className) descriptor findComponent matches
@@ -667,17 +670,17 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
       const auto& data = std::get<InstantiatePrefabData>(m_data);
       const auto* record = assetRegistry ? assetRegistry->getByUUID(data.prefabUUID) : nullptr;
       return "Instantiate "
-        + (record ? assetFieldName(record->type, record->path, record->className) : std::string("Prefab"));
+        + (record ? assetFieldName(record->type, record->path, record->className, "Prefab") : std::string("Prefab"));
     }
     case CommandKind::addAsset:
     {
       const auto& data = std::get<AddAssetData>(m_data);
-      return "Add Asset " + assetFieldName(data.type, data.path, data.className);
+      return "Add Asset " + assetFieldName(data.type, data.path, data.className, "Asset");
     }
     case CommandKind::replaceAsset:
     {
       const auto& data = std::get<ReplaceAssetData>(m_data);
-      return "Replace Asset " + assetFieldName(data.type, data.afterPath, data.afterClassName);
+      return "Replace Asset " + assetFieldName(data.type, data.afterPath, data.afterClassName, "Asset");
     }
     case CommandKind::renameAsset:
     {
@@ -687,7 +690,7 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
     case CommandKind::removeAsset:
     {
       const auto& data = std::get<RemoveAssetData>(m_data);
-      return "Delete Asset " + assetFieldName(data.type, data.path, data.className);
+      return "Delete Asset " + assetFieldName(data.type, data.path, data.className, "Asset");
     }
     case CommandKind::addSceneScript:
       return "Add " + sceneScriptLabel(std::get<AddSceneScriptData>(m_data).className);
