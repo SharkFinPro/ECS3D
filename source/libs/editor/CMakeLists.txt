@@ -33,6 +33,7 @@ add_library(${PROJECT_NAME}
   UndoRequestGate.h
   PlayControls.h
   SceneStatusLayout.h
+  DockLayoutFit.h
   AssetReferences.cpp
   AssetReferences.h
   SettingsPanel.cpp

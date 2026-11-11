@@ -130,3 +130,13 @@ only the per-panel minimum sizes; with no saved layout the defaults apply as on 
 `saveLayout` never replaces a stored dock tree with text that has none (`shouldReplaceLayout`). A panel missing from a
 restored layout, such as one added in a later build, opens floating rather than in its default dock; the per-panel
 minimum sizes still apply.
+
+ImGui keeps a docked side node at its absolute `SizeRef` when the window shrinks and gives the central node what is
+left, so a narrow window squeezed the scene view. `EditorApp::fitDockToViewport` (the headless `DockLayoutFit.h`)
+remembers the fraction of the dock space each non-central node takes and, when the dock space size changes, writes
+`SizeRef` from those fractions again, shrunk together on an axis so the central node keeps at least 40%. The
+fractions are the memory, so shrinking and growing back restores the layout, and a hand-resized layout keeps its own
+proportions. They are remembered from the rebuilt default tree, from a restored one, when a splitter or tab drag in
+the dockspace ends, and when the set of side nodes changes; a zero-size (minimized) frame changes nothing. The
+side and bottom panel floors are lowered to at most 25% (width) and 30% (height) of the window, so two side floors
+leave the central node at least half of it; where a floor is larger than the fit, the floor wins. A saved layout restores its absolute sizes, and the change takes effect one frame after the resize.

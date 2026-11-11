@@ -15,6 +15,7 @@
 #include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
 #include <PlayControls.h>
+#include <DockLayoutFit.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
@@ -149,6 +150,9 @@ private:
   // tokens before the first applyStyle().
   std::unique_ptr<SettingsStore> m_settings;
   bool m_layoutRestored = false;
+  DockProportions m_dockProportions;
+  DockResizeGate m_dockResizeGate;
+  int m_dockSettleFrames = 0;
   std::unique_ptr<SettingsPanel> m_settingsPanel;
 
   // Feeds the Console panel: registered with Log so the panel can show script errors and server output
@@ -434,10 +438,14 @@ private:
   void saveLayoutIfRequested();
   void saveLayout();
 
-  void updateDockSpace() const;
+  void updateDockSpace();
+
+  // Keeps the side and bottom dock nodes at the same share of the dock space when the window is resized.
+  void fitDockToViewport();
 
   void applyDockLocations() const;
   void applyDockMinimumSizes() const;
+  void applyDockPanelMinimumSizes() const;
 
   // False while the viewport has no usable size yet, so the caller retries on a later frame.
   [[nodiscard]] bool applyDockPercents() const;

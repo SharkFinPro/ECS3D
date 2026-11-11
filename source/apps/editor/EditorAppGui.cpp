@@ -15,12 +15,15 @@
 #include <SceneScriptsPanel.h>
 #include <SettingsStore.h>
 #include <SceneStatusLayout.h>
+#include <DockLayoutFit.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <optional>
+#include <vector>
+#include <imgui_internal.h>
 
 void EditorApp::updateGui()
 {
@@ -188,7 +191,36 @@ void EditorApp::displayWindowMenu() const
   }
 }
 
-void EditorApp::updateDockSpace() const
+namespace
+{
+// A side node is a child whose sibling holds the central node: ImGui sizes it from its own SizeRef and gives
+// the sibling the remainder, which is why it keeps its pixels when the window shrinks.
+void collectDockSides(ImGuiDockNode* node, std::vector<ImGuiDockNode*>& nodes, std::vector<DockSideSize>& sides)
+{
+  if (node->IsLeafNode() || !node->ChildNodes[0]->IsVisible || !node->ChildNodes[1]->IsVisible)
+  {
+    return;
+  }
+
+  const int axis = node->SplitAxis;
+
+  for (int child = 0; child < 2; ++child)
+  {
+    ImGuiDockNode* side = node->ChildNodes[child];
+    const ImGuiDockNode* sibling = node->ChildNodes[1 - child];
+
+    if (sibling->HasCentralNodeChild && !side->HasCentralNodeChild)
+    {
+      nodes.push_back(side);
+      sides.push_back(DockSideSize{side->ID, axis, side->SizeRef[axis]});
+    }
+
+    collectDockSides(side, nodes, sides);
+  }
+}
+}
+
+void EditorApp::updateDockSpace()
 {
   static bool dockPercentsSetup = false;
   static bool dockLocationsSetup = false;
@@ -205,6 +237,8 @@ void EditorApp::updateDockSpace() const
       minimumSizesSetup = true;
     }
 
+    fitDockToViewport();
+
     return;
   }
 
@@ -218,6 +252,61 @@ void EditorApp::updateDockSpace() const
   if (!dockPercentsSetup)
   {
     dockPercentsSetup = applyDockPercents();
+
+    // The engine rebuilds the default tree on the frame after the percents change, so the proportions are
+    // taken from the rebuilt tree.
+    m_dockSettleFrames = dockPercentsSetup ? 3 : 0;
+  }
+
+  fitDockToViewport();
+}
+
+void EditorApp::fitDockToViewport()
+{
+  ImGuiDockNode* root = ImGui::DockBuilderGetNode(ImGui::GetID("WindowDockSpace"));
+
+  if (root == nullptr)
+  {
+    return;
+  }
+
+  std::vector<ImGuiDockNode*> nodes;
+  std::vector<DockSideSize> sides;
+  collectDockSides(root, nodes, sides);
+
+  // A splitter drag or a tab drag in the dockspace owns the layout until it ends.
+  const ImGuiContext& context = *ImGui::GetCurrentContext();
+  const bool userDragging = context.ActiveId != 0 && root->HostWindow != nullptr &&
+                            context.ActiveIdWindow == root->HostWindow;
+  const bool layoutChanged = m_dockSettleFrames > 0 || !m_dockProportions.tracks(sides);
+
+  if (m_dockSettleFrames > 0)
+  {
+    --m_dockSettleFrames;
+  }
+
+  switch (m_dockResizeGate.update(root->Size.x, root->Size.y, userDragging, layoutChanged))
+  {
+  case DockLayoutStep::remember:
+    m_dockProportions.remember(sides, root->Size.x, root->Size.y);
+    break;
+
+  case DockLayoutStep::rescale:
+    for (const auto& [id, axis, size] : m_dockProportions.fit(root->Size.x, root->Size.y))
+    {
+      const auto node = std::ranges::find(nodes, id, &ImGuiDockNode::ID);
+
+      if (node != nodes.end())
+      {
+        (*node)->SizeRef[axis] = size;
+      }
+    }
+
+    applyDockPanelMinimumSizes();
+    break;
+
+  case DockLayoutStep::none:
+    break;
   }
 }
 
@@ -246,26 +335,43 @@ void EditorApp::applyDockMinimumSizes() const
 {
   const auto gui = m_renderer->getImGuiInstance();
 
-  // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
-  // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small
-  // enough that the default sizes fall below these, the floors win over the default layout.
-  const ImVec2 objectsMinimumSize{260.0f, 0.0f};
-  const ImVec2 inspectorMinimumSize{310.0f, 0.0f};
-  const ImVec2 sceneScriptsMinimumSize{310.0f, 0.0f};
-  const ImVec2 sceneStatusMinimumSize{0.0f, sceneStatusBaseMinimumHeight};
-  const ImVec2 assetsMinimumSize{0.0f, 200.0f};
-  const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
-  const ImVec2 consoleMinimumSize{0.0f, 120.0f};
-  const ImVec2 profilerMinimumSize{0.0f, 120.0f};
+  gui->setDockedWindowMinimumSize("Scene Status", ImVec2{0.0f, sceneStatusBaseMinimumHeight});
 
-  gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
-  gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
-  gui->setDockedWindowMinimumSize("Scene Scripts", sceneScriptsMinimumSize);
-  gui->setDockedWindowMinimumSize("Scene Status", sceneStatusMinimumSize);
-  gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
-  gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
-  gui->setDockedWindowMinimumSize("Console", consoleMinimumSize);
-  gui->setDockedWindowMinimumSize("Profiler", profilerMinimumSize);
+  applyDockPanelMinimumSizes();
+}
+
+void EditorApp::applyDockPanelMinimumSizes() const
+{
+  const auto gui = m_renderer->getImGuiInstance();
+
+  // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
+  // shrink the other, and tabs sharing a dock node take the largest floor among them. A window too small for
+  // the full floors lowers them, so the scene view keeps a share of it.
+  constexpr float maxSideFloorFraction = 0.25f;
+  constexpr float maxBottomFloorFraction = 0.3f;
+
+  const float contentScale = std::max(m_renderer->getWindow()->getContentScale(), 0.01f);
+  const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
+  const float width = viewportSize.x / contentScale;
+  const float height = viewportSize.y / contentScale;
+
+  const auto sideFloor = [&](const float base)
+  {
+    return ImVec2{dockFloorForExtent(base, width, maxSideFloorFraction), 0.0f};
+  };
+
+  const auto bottomFloor = [&](const float base)
+  {
+    return ImVec2{0.0f, dockFloorForExtent(base, height, maxBottomFloorFraction)};
+  };
+
+  gui->setDockedWindowMinimumSize("Objects", sideFloor(260.0f));
+  gui->setDockedWindowMinimumSize("Inspector", sideFloor(310.0f));
+  gui->setDockedWindowMinimumSize("Scene Scripts", sideFloor(310.0f));
+  gui->setDockedWindowMinimumSize("Assets", bottomFloor(200.0f));
+  gui->setDockedWindowMinimumSize("Project Errors", bottomFloor(90.0f));
+  gui->setDockedWindowMinimumSize("Console", bottomFloor(120.0f));
+  gui->setDockedWindowMinimumSize("Profiler", bottomFloor(120.0f));
 }
 
 bool EditorApp::applyDockPercents() const
