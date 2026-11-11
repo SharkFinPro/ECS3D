@@ -204,8 +204,10 @@ namespace {
     return transform.getPosition() + glm::vec3(orientation * glm::vec4(local, 0));
   }
 
-  // The same box as above, tipping over the ledge, after six ticks. Returns where the point of its underside
-  // that started on the ledge's edge is then, and how far the box has turned.
+  // The same box as above, tipping over the ledge, after the 0.27 seconds that bring it to the tilt six ticks of 0.1
+  // gave when gravity was a fifth as strong (a fall takes the square root of that ratio less time). That is run at the
+  // server's tick, since a tick of 0.1 takes the box a long way in the three it needs to land. Returns where the
+  // point of its underside that started on the ledge's edge is then, and how far the box has turned.
   std::pair<glm::vec3, float> ledgePivotAfterTipping(const float friction)
   {
     const auto scene = makeScene();
@@ -219,10 +221,11 @@ namespace {
 
     CollisionSystem collisionSystem;
 
-    for (int tick = 0; tick < 6; ++tick)
+    constexpr float serverTick = 1.0f / 50.0f;
+    for (int tick = 0; tick < 13; ++tick)
     {
-      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+      collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
     }
 
     const auto& transform = *transformOf(box);
@@ -250,7 +253,8 @@ TEST(PhysicsIntegration, ABoxTippingOffALedgeTurnsAboutTheEdgeRatherThanSlidingO
 }
 
 namespace {
-  // A unit box dropped a unit onto a wide static ground while moving sideways at three units per second.
+  // A unit box dropped a unit onto a wide static ground while moving sideways at three units per second, scaled by
+  // the square root of the world scale since it falls that much faster than the speed was chosen for.
   struct Landed {
     glm::vec3 position;
     glm::vec3 velocity;
@@ -268,7 +272,7 @@ namespace {
     fixtures::addBoxCollider(box);
     const auto body = addBody(box, true);
     body->setFriction(friction);
-    body->setVelocity({ 3.0f * dt, 0, 0 });
+    body->setVelocity({ 3.0f * std::sqrt(PhysicsSystem::unitsPerMeter) * dt, 0, 0 });
 
     CollisionSystem collisionSystem;
 
@@ -284,8 +288,8 @@ namespace {
 
 TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDistance)
 {
-  // It reaches the ground at x = 1.5 (five ticks at three units a second) and slides only about 0.06 further
-  // before friction stops it. That is too short to tell from sticking on landing, so the window catches a box that
+  // It reaches the ground at x = 1.5 (a fall of 1.5 units takes 0.25 seconds, at the sideways speed that is
+  // 6.7 units a second) and slides only about 0.06 further before friction stops it. That is too short to tell from sticking on landing, so the window catches a box that
   // loses its slide before landing (x near 1.2) or keeps it (past 8), not a stick at the landing point.
   const auto landed = landSliding(0.5f);
 

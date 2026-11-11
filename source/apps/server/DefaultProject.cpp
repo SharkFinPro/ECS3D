@@ -291,7 +291,7 @@ const json& playerBody()
       { "className", "PlayerScript" },
       { "fields", json::array({
         { { "name", "m_topSpeed" }, { "type", "float" }, { "value", 9.0 } },
-        { { "name", "m_jumpSpeed" }, { "type", "float" }, { "value", 6.7 } }
+        { { "name", "m_jumpSpeed" }, { "type", "float" }, { "value", 15.0 } }
       })}
     }
   }));

@@ -241,7 +241,7 @@
                 {
                   "name": "m_jumpSpeed",
                   "type": "float",
-                  "value": 6.7
+                  "value": 15.0
                 }
               ]
             }
@@ -2966,7 +2966,7 @@
                     "type": "RigidBody",
                     "velocity": [0, 0, 0],
                     "angularVelocity": [0, 0, 0],
-                    "friction": 0.25,
+                    "friction": 0.5,
                     "doGravity": true,
                     "gravity": -9.81,
                     "mass": 0.523599
@@ -5322,7 +5322,7 @@
                       {
                         "name": "m_strength",
                         "type": "float",
-                        "value": 3.6
+                        "value": 8.0
                       }
                     ]
                   },
@@ -5561,7 +5561,7 @@
                       {
                         "name": "m_strength",
                         "type": "float",
-                        "value": 6.3
+                        "value": 14.0
                       }
                     ]
                   },
@@ -5800,7 +5800,7 @@
                       {
                         "name": "m_strength",
                         "type": "float",
-                        "value": 8.9
+                        "value": 20.0
                       }
                     ]
                   },
@@ -6479,7 +6479,7 @@
                       {
                         "name": "m_initialVelocity",
                         "type": "vector3",
-                        "value": [0.0, -0.567, 1.216]
+                        "value": [0.0, -1.267855, 2.718923]
                       }
                     ]
                   }
@@ -7934,7 +7934,7 @@
                       {
                         "name": "m_strength",
                         "type": "float",
-                        "value": 8.0
+                        "value": 18.0
                       },
                       {
                         "name": "m_upwardBias",
@@ -8579,7 +8579,7 @@
                   {
                     "name": "m_jumpSpeed",
                     "type": "float",
-                    "value": 6.7
+                    "value": 15.0
                   }
                 ]
               },

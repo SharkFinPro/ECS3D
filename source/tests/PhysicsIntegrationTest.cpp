@@ -73,18 +73,49 @@ namespace {
 
 TEST(PhysicsIntegration, AFallCoversTheSameDistanceWhateverTheTickLength)
 {
-  // Closed form for a drop from rest: g t^2 / 2. Moving by the new velocity each tick overshoots it by the
-  // share dt of that distance, so the tolerance is that overshoot and not a loose guess.
-  constexpr float expected = 0.5f * 9.81f;
+  // Closed form for a drop from rest: g t^2 / 2, in world units. Moving by the new velocity each tick overshoots it
+  // by the share dt of that distance, so the tolerance is that overshoot and not a loose guess.
+  constexpr float expected = 0.5f * 9.81f * PhysicsSystem::unitsPerMeter;
   constexpr float coarse = 0.1f;
   constexpr float fine = 1.0f / 50.0f;
 
   const float coarseFall = fallInOneSecond(coarse);
   const float fineFall = fallInOneSecond(fine);
 
-  EXPECT_NEAR(coarseFall, expected * (1.0f + coarse), 1e-3f);
-  EXPECT_NEAR(fineFall, expected * (1.0f + fine), 1e-3f);
-  EXPECT_NEAR(fineFall, coarseFall, expected * (coarse - fine) + 1e-3f);
+  EXPECT_NEAR(coarseFall, expected * (1.0f + coarse), 1e-2f);
+  EXPECT_NEAR(fineFall, expected * (1.0f + fine), 1e-2f);
+  EXPECT_NEAR(fineFall, coarseFall, expected * (coarse - fine) + 1e-2f);
+}
+
+TEST(PhysicsIntegration, AFallAtTheServerTickMatchesTheGravityTheContentWasAuthoredAgainst)
+{
+  // The pre-fix server fell at 49.05 units a second squared; the world is five units to the meter.
+  constexpr float serverTick = 1.0f / 50.0f;
+  constexpr float authoredAcceleration = 49.05f;
+
+  const float fall = fallInOneSecond(serverTick);
+
+  EXPECT_NEAR(fall, 0.5f * authoredAcceleration * (1.0f + serverTick), 1e-2f);
+}
+
+TEST(PhysicsIntegration, GravityInMetersPerSecondSquaredAcceleratesAtUnitsPerMeterWorldUnitsAtAnyTick)
+{
+  for (const float tickLength : { 0.1f, 1.0f / 50.0f })
+  {
+    const auto scene = makeScene();
+    const auto object = addObject(scene, "Dropped", { 0, 0, 0 });
+    const auto body = addBody(object, true);
+    body->setGravity(-9.81f);
+
+    constexpr int ticks = 5;
+    for (int tick = 0; tick < ticks; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, tickLength);
+    }
+
+    const float acceleration = -body->getVelocity().y / (static_cast<float>(ticks) * tickLength * tickLength);
+    EXPECT_NEAR(acceleration, 9.81f * PhysicsSystem::unitsPerMeter, 1e-2f) << "tick " << tickLength;
+  }
 }
 
 TEST(PhysicsIntegration, ABodyWithGravityOffDoesNotMoveOnItsOwn)

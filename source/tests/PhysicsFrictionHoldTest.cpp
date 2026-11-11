@@ -20,6 +20,10 @@ namespace {
 
   constexpr int ticks = 200;
 
+  // The world scale makes a tick at dt 0.1 take five times the gravity step these were tuned with, so the same speed
+  // and distance come from the square root of that fewer ticks and a launch the square root faster.
+  const float fasterBy = std::sqrt(PhysicsSystem::unitsPerMeter);
+
   // A body resting flush on a static box tilted about z, its center one half-extent of each box up the slope normal.
   struct Slope {
     fixtures::Scene scene = fixtures::makeScene();
@@ -91,20 +95,21 @@ INSTANTIATE_TEST_SUITE_P(PhysicsFriction, FrictionHoldOnSlope,
 
 TEST(PhysicsFriction, ABoxAboveTheFrictionAngleSlidesAndSpeedsUp)
 {
+  constexpr int window = 9;
   Slope slope(40.0f);
-  slope.run(20, 0.1f);
+  slope.run(window, 0.1f);
   const float early = slope.slidDistance();
   const auto earlySpeed = glm::length(slope.rigidBody->getVelocity());
-  slope.run(20, 0.1f);
+  slope.run(window, 0.1f);
 
   EXPECT_GT(slope.slidDistance(), early + 0.5f);
   EXPECT_GT(glm::length(slope.rigidBody->getVelocity()), earlySpeed);
 
-  // Kinetic friction takes mu cos from gravity's sin along the slope; the engine's gravity is g * 0.1 per tick.
+  // Kinetic friction takes mu cos from gravity's sin along the slope, a tick of gravity at a time.
   const float angle = glm::radians(40.0f);
   const float expected = -gravityPerTick * (std::sin(angle) - 0.5f * std::cos(angle));
   const float gained = glm::length(slope.rigidBody->getVelocity()) - earlySpeed;
-  EXPECT_NEAR(gained / 20.0f, expected, 0.25f * expected);
+  EXPECT_NEAR(gained / static_cast<float>(window), expected, 0.25f * expected);
 }
 
 TEST(PhysicsFriction, ASphereOnASlopeRollsDownhill)
@@ -130,7 +135,7 @@ TEST(PhysicsFriction, TheFrictionAngleSeparatesHoldingFromSliding)
 TEST(PhysicsFriction, ABoxSlidingUpTheSlopeStopsAndStaysPut)
 {
   Slope slope(15.0f);
-  slope.rigidBody->setVelocity(-slope.downhill * 0.3f);
+  slope.rigidBody->setVelocity(-slope.downhill * 0.3f * fasterBy);
   slope.run(60, 0.1f);
   const auto stopped = fixtures::transformOf(slope.body)->getPosition();
   slope.run(ticks, 0.1f);
@@ -140,13 +145,15 @@ TEST(PhysicsFriction, ABoxSlidingUpTheSlopeStopsAndStaysPut)
 }
 
 // A solid sphere speeds up at g sin / 1.4 (I = 2/5 m r^2) minus its rolling resistance, with its radius as the
-// lever arm. It starts touching, so 60 ticks cover several units with that resistance and about 12.3 without it,
+// lever arm. It starts touching, so the run (60 ticks of 0.1 at the gravity step these bounds were set with, which
+// the server's tick takes the square root of the ratio more of) covers several units with that resistance and about
+// 12.3 without it,
 // against the 3.4 the box of its scale gave. A hold that took the rolling slide back would lag the lower bound;
 // lost rolling resistance would pass the upper.
 TEST(PhysicsFriction, ASphereRollsTheSameDistanceOnASlope)
 {
   Slope slope(5.71059f, true);
-  slope.run(60, 0.1f);
+  slope.run(static_cast<int>(std::lround(60.0f * fasterBy)), 0.02f);
 
   EXPECT_GT(slope.slidDistance(), 6.0f);
   EXPECT_LT(slope.slidDistance(), 9.5f);

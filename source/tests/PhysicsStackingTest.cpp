@@ -28,11 +28,16 @@ namespace {
   using fixtures::addObject;
   using fixtures::makeScene;
   using fixtures::transformOf;
+
+  // Stacks run at the server's tick: a tick of 0.1 adds five times the gravity these were tuned with, enough to sink a
+  // box a half unit into the one it rests on, or to carry a drop from five units through the ground.
+  constexpr float serverTick = 1.0f / 50.0f;
+  constexpr int ticksPerOldTick = 5;
 }
 
 namespace {
   // A heavy box resting on a light one, which rests on a wide static ground, is set sliding. Returns where both
-  // boxes are and how fast the top one still moves forty ticks later.
+  // boxes are and how fast the top one still moves four seconds later.
   struct Slid {
     glm::vec3 lower;
     glm::vec3 upper;
@@ -57,15 +62,18 @@ namespace {
 
     CollisionSystem collisionSystem;
 
-    for (int tick = 0; tick < 50; ++tick)
+    // The push is the square root of the gravity ratio faster than the two units a second it had, so friction stops it
+    // in the same distance.
+    const float push = 2.0f * std::sqrt(PhysicsSystem::unitsPerMeter);
+    for (int tick = 0; tick < 50 * ticksPerOldTick; ++tick)
     {
-      if (tick == 10)
+      if (tick == 10 * ticksPerOldTick)
       {
-        upperBody->setVelocity({ 2.0f * dt, 0, 0 });
+        upperBody->setVelocity({ push * serverTick, 0, 0 });
       }
 
-      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+      collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
     }
 
     return { transformOf(lower)->getPosition(), transformOf(upper)->getPosition(),
@@ -233,12 +241,12 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
   // without spin, on top of the ground rather than sinking through it or rocking off the edge.
   float maxAngularSpeed = 0.0f;
 
-  for (int tick = 0; tick < 150; ++tick)
+  for (int tick = 0; tick < 150 * ticksPerOldTick; ++tick)
   {
-    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+    collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
 
-    if (tick >= 120)
+    if (tick >= 120 * ticksPerOldTick)
     {
       const float height = transformOf(falling)->getPosition().y;
       lowest = std::min(lowest, height);

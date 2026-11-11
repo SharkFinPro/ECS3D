@@ -75,8 +75,10 @@ TEST(PhysicsIntegration, ABodyLandingOnAnotherRestingOnASupportStopsAsOnStaticGe
   // In the air, the light body takes the push by its mass: an elastic collision barely slows the heavy one.
   const auto falling = landOnALightBody(false);
 
-  EXPECT_LT(falling.upperVelocity.y, -0.9f);
-  EXPECT_LT(falling.lowerVelocity.y, -1.5f);
+  // The elastic exchange of a 100 and a 1 mass, the lighter one moving at a tick of gravity beforehand.
+  EXPECT_NEAR(falling.upperVelocity.y, (-99.0f + 2.0f * gravityPerTick) / 101.0f, 1e-3f);
+  EXPECT_NEAR(falling.lowerVelocity.y, (-200.0f - 99.0f * gravityPerTick) / 101.0f, 1e-3f);
+  EXPECT_LT(falling.lowerVelocity.y, -1.4f);
 }
 
 namespace {

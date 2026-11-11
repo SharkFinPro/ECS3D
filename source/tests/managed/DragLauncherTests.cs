@@ -89,7 +89,6 @@ public unsafe class DragLauncherTests : IDisposable
   {
     var launcher = new DragLauncher { EntityId = "player" };
     launcher.initComponents();
-    SetField(launcher, "m_strength", 4f);
     Focus(true);
     Mouse(false);
     Cursor(0f);

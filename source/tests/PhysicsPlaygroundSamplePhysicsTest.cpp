@@ -23,9 +23,9 @@ using namespace playgroundtest;
 
 namespace
 {
-  // 70 seconds at the server tick. At real gravity the last domino falls and knocks the sphere off about 40 seconds
-  // in, and it can hang leaning for a while first, so the run is long enough to leave that a wide margin.
-  constexpr int simulatedTicks = 3500;
+  // Twelve seconds at the server tick. The last domino falls and knocks the sphere off its ledge a little after tick
+  // 300, so the run leaves that a wide margin.
+  constexpr int simulatedTicks = 600;
 
   std::vector<std::shared_ptr<Object>> pyramidCubes(const ObjectManager& objectManager)
   {
@@ -56,7 +56,7 @@ namespace
   }
 }
 
-// The four tests check the same run, and the run dominates the suite's time, so it happens once per suite.
+// The four tests check the same 600-tick run, and the run dominates the suite's time, so it happens once per suite.
 class PhysicsPlaygroundSamplePhysics : public ::testing::Test
 {
 protected:
@@ -190,7 +190,7 @@ protected:
   inline static float s_farthestTravel = 0.0f;
 };
 
-TEST_F(PhysicsPlaygroundSamplePhysics, TheRunStaysFiniteAndAboveTheVoid)
+TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
 {
   ASSERT_TRUE(isSimulated());
 

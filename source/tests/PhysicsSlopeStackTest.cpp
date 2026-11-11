@@ -20,9 +20,15 @@
 namespace {
   using namespace physicsFixtures;
 
+  // The stacks run at the server's tick. A tick of gravity at dt 0.1 is five times a tick at this one, and a stack
+  // that sinks that far into itself near its friction angle slides off, which the server never asks of it.
+  constexpr float serverTick = 1.0f / 50.0f;
+  constexpr int ticksPerSecond = 50;
+  constexpr float gravityStep = -gravityPerTick * (serverTick * serverTick) / (dt * dt);
+
   // Each box above the first sinks about one tick of gravity into the one below it, since the upper contact is
-  // resolved before the lower box is pushed back up. A box settles within this much of that per level.
-  constexpr float sinkPerLevel = 0.2f;
+  // resolved before the lower box is pushed back up. A box settles within twice that per level.
+  constexpr float sinkPerLevel = 2.0f * gravityStep;
 
   // Near the friction angle a settled stack creeps by float noise that differs between platforms, so the
   // distance from the start gets this much extra there. A slide still fails the settled and velocity checks.
@@ -70,8 +76,8 @@ namespace {
     {
       for (int tick = 0; tick < count; ++tick)
       {
-        PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-        collisions.fixedUpdate(*scene.objectManager, dt);
+        PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+        collisions.fixedUpdate(*scene.objectManager, serverTick);
       }
     }
 
@@ -112,9 +118,9 @@ TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
   const float slack = degrees > steepSlope ? steepSlack : 0.0f;
   SlopeStack stack(count, degrees);
 
-  stack.run(100);
+  stack.run(10 * ticksPerSecond);
   const auto settled = stack.positions();
-  stack.run(100);
+  stack.run(10 * ticksPerSecond);
 
   for (size_t level = 0; level < settled.size(); ++level)
   {
@@ -152,9 +158,9 @@ TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
     stack.bodies[0]->setMass(lowerMass);
     stack.bodies[1]->setMass(upperMass);
 
-    stack.run(100);
+    stack.run(10 * ticksPerSecond);
     const auto settled = stack.positions();
-    stack.run(100);
+    stack.run(10 * ticksPerSecond);
 
     EXPECT_LT(glm::distance(stack.positionOf(0), stack.start[0]), 0.02f);
     EXPECT_LT(glm::distance(stack.positionOf(1), stack.start[1]), sinkPerLevel + 0.02f);
@@ -168,13 +174,13 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
 {
   constexpr int count = 5;
   SlopeStack stack(count, 20.0f);
-  stack.run(100);
+  stack.run(10 * ticksPerSecond);
 
   // Each box presses its support with a tick of its own weight along the normal, and the support passes what rests
   // on it on whole, so every level holds one box's load more than the level above it. Projected onto world up,
   // what a level passes on would shrink by the cosine of the slope at every level below it.
   const auto& body = *stack.bodies[0];
-  const float perBox = body.getMass() * -body.getGravity() * dt * 0.1f * glm::dot(stack.normal, glm::vec3(0, 1, 0));
+  const float perBox = body.getMass() * gravityStep * glm::dot(stack.normal, glm::vec3(0, 1, 0));
 
   // A top box that slid off would leave the level under it nothing to pass on.
   // Measured along the slope, so sinking into the boxes below does not count. The top box falls three ticks onto
@@ -186,7 +192,7 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
 
   // Positive control: the bound is not vacuous, since the same stack on a steeper slope moves farther than it.
   SlopeStack sliding(count, 40.0f);
-  sliding.run(100);
+  sliding.run(10 * ticksPerSecond);
   EXPECT_GT(sliding.slidDownhill(count - 1), topBoxBound);
 
   for (const auto& box : stack.bodies)
@@ -216,11 +222,11 @@ TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)
 
     // Positive control: the same stack holds on a gentler slope, so the slide is the slope's doing.
     SlopeStack holds(count, 15.0f);
-    holds.run(40);
+    holds.run(4 * ticksPerSecond);
     SlopeStack slides(count, 40.0f);
-    slides.run(40);
+    slides.run(4 * ticksPerSecond);
     SlopeStack justAbove(count, 34.0f);
-    justAbove.run(40);
+    justAbove.run(4 * ticksPerSecond);
 
     for (size_t level = 0; level < static_cast<size_t>(count); ++level)
     {

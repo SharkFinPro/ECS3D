@@ -14,7 +14,6 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -116,8 +115,7 @@ TEST(PhysicsPlaygroundSampleSpawners, RaceLanesSpawnTheirPrefabsInOrderAndOnlyTh
   }
 
   const auto velocity = vec3Of(scriptField(only("Race Spawner Hex Log"), "Spawner", "m_initialVelocity"));
-  // The 3 units per second push of the old gravity, scaled by 1/sqrt(5) to keep its arc.
-  EXPECT_NEAR(glm::length(velocity), 3.0f / std::sqrt(5.0f), 1e-3f);
+  EXPECT_NEAR(glm::length(velocity), 3.0f, 1e-3f);
   EXPECT_LT(velocity.y, 0.0f);
   EXPECT_GT(velocity.z, 0.0f);
   EXPECT_FLOAT_EQ(velocity.x, 0.0f);

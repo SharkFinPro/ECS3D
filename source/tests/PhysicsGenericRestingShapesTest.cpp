@@ -21,10 +21,14 @@ namespace {
 
   constexpr float dt = 0.1f;
   constexpr int ticks = 400;
+  // The drops land at about 20 units a second, two units a tick at dt 0.1, which is through the ground's thickness, so
+  // they run at the server's tick instead.
+  constexpr float dropTick = 1.0f / 50.0f;
+  constexpr int dropTicks = 1000;
   constexpr int rollTicks = 100;
   // Long enough to land and settle; a body left on this slope much longer creeps down it and drops through.
   constexpr int slopeTicks = 30;
-  constexpr int settledWindow = 40;
+  constexpr int settledWindow = 200;
   constexpr float groundTop = 1.0f;
 
   // A regular octagonal prism of radius one, standing on its axis.
@@ -59,14 +63,14 @@ namespace {
 
     glm::vec3 position{ 0 };
     glm::vec3 rotation{ 0 };
-    for (int tick = 0; tick < ticks; ++tick)
+    for (int tick = 0; tick < dropTicks; ++tick)
     {
-      if (tick == ticks - settledWindow)
+      if (tick == dropTicks - settledWindow)
       {
         position = transform->getPosition();
         rotation = transform->getRotation();
       }
-      rig.step(dt);
+      rig.step(dropTick);
     }
 
     Rest rest;

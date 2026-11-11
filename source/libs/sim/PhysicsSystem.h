@@ -46,6 +46,10 @@ public:
   [[nodiscard]] static glm::vec3 supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
                                               std::span<const glm::vec3> collisionPoints);
 
+  // A body's gravity is in meters per second squared, and the engine's content is authored at this many world units
+  // per meter.
+  static constexpr float unitsPerMeter = 5.0f;
+
   // Degrees per second. Spin a resting body still carries relative to its support below this is dropped,
   // and any spin below it is too slow to turn a body at all.
   static constexpr float restAngularSpeed = 0.01f;
