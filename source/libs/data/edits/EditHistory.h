@@ -64,6 +64,13 @@ public:
   // realistically produces while still being a hard, named limit instead of unbounded growth.
   static constexpr std::size_t maxDepth = 100;
 
+  // Entry ids identify states (see position()), so a copy would duplicate them.
+  EditHistory() = default;
+  EditHistory(const EditHistory&) = delete;
+  EditHistory& operator=(const EditHistory&) = delete;
+  EditHistory(EditHistory&&) noexcept = default;
+  EditHistory& operator=(EditHistory&&) noexcept = default;
+
   // Pushes onto the undo stack and clears the redo stack - any new command invalidates whatever redo
   // path existed, since redoing it now would apply on top of a scene that has since moved on. Drops the
   // oldest entry (front) rather than refusing to record, once the stack exceeds maxDepth.

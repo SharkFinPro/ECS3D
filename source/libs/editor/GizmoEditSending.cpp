@@ -53,6 +53,11 @@ void GizmoEditSending::apply(const gizmo::Frame& frame, const uuids::uuid& targe
   }
 }
 
+void GizmoEditSending::setGestureEndedCallback(std::function<void()> callback)
+{
+  m_gestureEndedCallback = std::move(callback);
+}
+
 void GizmoEditSending::abandon(const std::shared_ptr<Transform>& transform)
 {
   finishDrag(transform);
@@ -71,14 +76,17 @@ void GizmoEditSending::finishDrag(const std::shared_ptr<Transform>& transform)
   m_dragTarget.reset();
   m_dragBefore = nlohmann::json();
 
-  if (!m_editCommittedCallback || !transform)
+  if (m_editCommittedCallback && transform)
   {
-    return;
+    const auto after = transform->serialize();
+    if (after != before)
+    {
+      m_editCommittedCallback(target, before, after);
+    }
   }
 
-  const auto after = transform->serialize();
-  if (after != before)
+  if (m_gestureEndedCallback)
   {
-    m_editCommittedCallback(target, before, after);
+    m_gestureEndedCallback();
   }
 }

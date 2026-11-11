@@ -75,7 +75,7 @@ the history does not hold happened since. So undoing back to the save point read
 reads dirty. A position is the id of the entry on top of the undo stack, or a token for the base state when it
 is empty. Ids come from one process-wide counter, never repeat and survive undo/redo, so undo followed by a
 different edit at the same depth is a different position. Trimming the oldest entry or dropping the undo stack
-(a clear, or an undo refused at validation) gives the base state a fresh token, so a save point that is lost
+(a clear of a non-empty history, or an undo refused at validation) gives the base state a fresh token, so a save point that is lost
 stays dirty until the next save instead of matching by accident; a save point still on the stack survives a
 trim. `SaveUI` reads the position through a provider the editor sets to `PlaySessionHistory::authoredPosition()`,
 at save time and at check time. Undo and redo move the position when the request is built, before the server
@@ -84,10 +84,12 @@ reflected.
 
 `SaveUI::markEdited` is only for an edit with no history entry (an asset op or scene edit nothing could be
 derived for, `forgetSaveTarget`, an edit made while a play session runs): it latches until the next save. A
-component value edit sends every frame, so `beginUncommittedEdit` holds the project dirty until its commit
-(`endUncommittedEdit`) records the entry; a gesture that ends at its starting value never commits and stays
-dirty. During play the project stays dirty for any edit, because the play-session history is discarded on Stop
-and the authored position does not move. Load and New take their save point after the load callback has cleared
+component value edit sends every frame, so `beginUncommittedEdit` holds the project dirty until the gesture
+ends (`endUncommittedEdit`, from the inspector's and the gizmo's gesture-ended callbacks, which fire even when
+the gesture committed nothing). During play the project stays dirty for any edit, because the play-session
+history is discarded on Stop and the authored position does not move; a recorded edit also latches while the
+client is disconnected, since the send was dropped. Opening a project during play drops the stash, and the
+stopped report that follows keeps the history that replaced it, so the new save point still matches. Load and New take their save point after the load callback has cleared
 the old history.
 
 ## Scene script panel edits

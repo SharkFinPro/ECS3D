@@ -24,6 +24,7 @@ namespace {
     std::vector<const Component*> frameComponents;
     std::vector<std::pair<nlohmann::json, nlohmann::json>> commits;
     std::vector<uuids::uuid> committedTargets;
+    std::vector<std::size_t> commitsAtGestureEnd;
 
     Rig(const Rig&) = delete;
     Rig& operator=(const Rig&) = delete;
@@ -44,6 +45,10 @@ namespace {
       {
         committedTargets.push_back(target);
         commits.emplace_back(before, after);
+      });
+      sending.setGestureEndedCallback([this]
+      {
+        commitsAtGestureEnd.push_back(commits.size());
       });
     }
 
@@ -248,4 +253,42 @@ TEST(GizmoEditSendingTest, FrameEditsCarryTheTargetAndTheTransformComponent)
     EXPECT_EQ(rig.frameTargets[i], rig.target());
     EXPECT_EQ(rig.frameComponents[i], rig.transform.get());
   }
+}
+
+TEST(GizmoEditSendingTest, EveryDragEndsItsGestureAfterAnyCommit)
+{
+  Rig rig;
+  const auto start = rig.transform->getLocalPosition();
+
+  rig.frame(start + glm::vec3(1.0f, 0.0f, 0.0f), true);
+  rig.frame(start + glm::vec3(1.0f, 0.0f, 0.0f), false, true);
+  ASSERT_EQ(rig.commitsAtGestureEnd.size(), 1u);
+  EXPECT_EQ(rig.commitsAtGestureEnd[0], 1u);
+
+  // Out and back commits nothing but still ends the gesture.
+  const auto resting = rig.transform->getLocalPosition();
+  rig.frame(resting + glm::vec3(1.0f, 0.0f, 0.0f), true);
+  rig.frame(resting);
+  rig.frame(resting, false, true);
+  EXPECT_EQ(rig.commits.size(), 1u);
+  EXPECT_EQ(rig.commitsAtGestureEnd.size(), 2u);
+
+  // A click that never moved ends one too.
+  rig.frame(resting, true);
+  rig.frame(resting, false, true);
+  EXPECT_EQ(rig.commitsAtGestureEnd.size(), 3u);
+}
+
+TEST(GizmoEditSendingTest, ADragWhoseTargetIsGoneStillEndsItsGesture)
+{
+  Rig rig;
+  const auto start = rig.transform->getLocalPosition();
+
+  rig.frame(start + glm::vec3(1.0f, 0.0f, 0.0f), true);
+  ASSERT_TRUE(rig.commitsAtGestureEnd.empty());
+
+  rig.sending.abandon(nullptr);
+
+  EXPECT_TRUE(rig.commits.empty());
+  EXPECT_EQ(rig.commitsAtGestureEnd.size(), 1u);
 }

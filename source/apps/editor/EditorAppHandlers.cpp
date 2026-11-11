@@ -7,6 +7,7 @@
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <SaveUI.h>
+#include <UnsavedChanges.h>
 #include <objects/components/Component.h>
 #include <NetClient.h>
 #include <Log.h>
@@ -164,7 +165,16 @@ void EditorApp::onSceneEdit(const nlohmann::json& edit)
 
   if (commands && !commands->empty())
   {
-    m_playHistory.current().recordBatch(std::move(*commands));
+    try
+    {
+      m_playHistory.current().recordBatch(std::move(*commands));
+    }
+    catch (...)
+    {
+      m_saveUI->markEdited();
+      throw;
+    }
+
     noteRecordedEdit();
     return;
   }
@@ -181,8 +191,6 @@ void EditorApp::onSceneEdit(const nlohmann::json& edit)
 // onEditComponent send above is what keeps the server current while it is still going.
 void EditorApp::onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::json& before, const nlohmann::json& after)
 {
-  m_saveUI->endUncommittedEdit();
-
   if (before == after)
   {
     return;
@@ -192,11 +200,12 @@ void EditorApp::onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::j
   noteRecordedEdit();
 }
 
-// While a play session runs, its edits go to a history that Stop discards, so the authored position the
-// unsaved-changes check reads does not move; they keep the project dirty the way an unrecorded edit does.
+// A recorded edit is covered by the history position, except while a play session runs (its history is
+// discarded on Stop) or the connection is down (the edit never reached the server, so undoing it proves
+// nothing); those keep the project dirty the way an unrecorded edit does.
 void EditorApp::noteRecordedEdit() const
 {
-  if (m_playHistory.hasStash())
+  if (editNeedsLatch(m_playHistory.hasStash(), m_netClient->isConnected()))
   {
     m_saveUI->markEdited();
   }

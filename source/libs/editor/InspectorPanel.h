@@ -54,6 +54,8 @@ public:
   // the value before it and the value it settled on, rather than per frame like setEditCallback.
   void setEditCommittedCallback(EditCommittedCallback callback);
 
+  void setGestureEndedCallback(std::function<void()> callback);
+
   void setSceneEditCallback(SceneEditCallback callback);
 
   // Forwarded to the asset inspector's scene view (same callback the asset browser uses).

@@ -27,6 +27,12 @@ enum class DiscardDecision {
   return DiscardDecision::prompt;
 }
 
+// Whether an edit that went into the undo history must also hold the project dirty until the next save.
+[[nodiscard]] inline bool editNeedsLatch(const bool playSessionRunning, const bool connected)
+{
+  return playSessionRunning || !connected;
+}
+
 // The project is clean exactly when it matches what was last saved, loaded or created. The undo history's
 // position (EditHistory::position) stands for the edits that can be undone, so undoing back to the save
 // point reads clean. Two things have no reverse and keep the project dirty until the next save: an edit

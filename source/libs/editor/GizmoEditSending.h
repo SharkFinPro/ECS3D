@@ -26,6 +26,10 @@ public:
 
   void setEditCommittedCallback(EditCommittedCallback callback);
 
+  // Fires whenever a drag ends, after any commit, including a drag that committed nothing (it ended where it
+  // started, or its target is gone).
+  void setGestureEndedCallback(std::function<void()> callback);
+
   // Applies the frame's local pose to transform, which belongs to target, and sends what the frame calls for.
   void apply(const gizmo::Frame& frame, const uuids::uuid& target, const std::shared_ptr<Transform>& transform);
 
@@ -38,6 +42,7 @@ public:
 private:
   EditCallback m_editCallback;
   EditCommittedCallback m_editCommittedCallback;
+  std::function<void()> m_gestureEndedCallback;
 
   // The in-flight drag's target and its Transform::serialize() when the drag started.
   std::optional<uuids::uuid> m_dragTarget;

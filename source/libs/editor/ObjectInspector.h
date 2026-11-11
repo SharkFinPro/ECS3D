@@ -35,11 +35,17 @@ public:
                                                    const nlohmann::json& before,
                                                    const nlohmann::json& after)>;
 
+  // Fires once a gesture has ended, after any EditCommittedCallback for it, including one that ended where it
+  // started and so committed nothing.
+  using GestureEndedCallback = std::function<void()>;
+
   explicit ObjectInspector(std::shared_ptr<ComponentEditor> componentEditor);
 
   void setEditCallback(EditCallback callback);
 
   void setEditCommittedCallback(EditCommittedCallback callback);
+
+  void setGestureEndedCallback(GestureEndedCallback callback);
 
   void setSceneEditCallback(SceneEditCallback callback);
 
@@ -83,6 +89,7 @@ private:
 
   EditCallback m_editCallback;
   EditCommittedCallback m_editCommittedCallback;
+  GestureEndedCallback m_gestureEndedCallback;
   SceneEditCallback m_sceneEditCallback;
 
   // The edit being gathered: which component is moving and what it looked like before the gesture

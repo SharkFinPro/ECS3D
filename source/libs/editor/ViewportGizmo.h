@@ -3,6 +3,7 @@
 
 #include "Gizmo.h"
 #include "GizmoEditSending.h"
+#include <functional>
 #include <memory>
 #include <optional>
 #include <uuid.h>
@@ -26,6 +27,8 @@ public:
   void setEditCallback(EditCallback callback);
 
   void setEditCommittedCallback(EditCommittedCallback callback);
+
+  void setGestureEndedCallback(std::function<void()> callback);
 
   // objectManager/target/drawList may be null/nullopt (no scene loaded yet, nothing selected, an asset
   // selected). editable false or an unusable target (missing object, no Transform) ends any in-flight

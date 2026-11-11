@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace {
   using namespace editHistoryFixtures;
@@ -318,4 +319,38 @@ TEST(UnsavedChanges, APlaySessionHistoryNeverMovesTheAuthoredPosition)
   ASSERT_TRUE(sessions.requestStop());
   EXPECT_EQ(sessions.authoredPosition(), saved);
   EXPECT_EQ(sessions.current().position(), saved);
+}
+
+TEST(UnsavedChanges, ARecordedEditNeedsALatchOnlyWhilePlayingOrDisconnected)
+{
+  EXPECT_FALSE(editNeedsLatch(false, true));
+  EXPECT_TRUE(editNeedsLatch(true, true));
+  EXPECT_TRUE(editNeedsLatch(false, false));
+}
+
+TEST(UnsavedChanges, AProjectLoadedDuringPlayStaysCleanWhenTheStopArrives)
+{
+  edits::PlaySessionHistory sessions;
+  sessions.observeStatus(SceneStatus::stopped);
+  ASSERT_TRUE(sessions.requestStart());
+  sessions.observeStatus(SceneStatus::running);
+
+  // Open/New: the history is cleared, then the new project's save point is taken.
+  sessions.clear();
+  UnsavedChanges changes;
+  changes.markSaved(sessions.authoredPosition());
+  ASSERT_FALSE(changes.isDirty(sessions.authoredPosition()));
+
+  // The server reports the loaded project stopped.
+  sessions.observeStatus(SceneStatus::stopped);
+
+  EXPECT_FALSE(changes.isDirty(sessions.authoredPosition()));
+}
+
+TEST(UnsavedChanges, AnEditHistoryCannotBeCopied)
+{
+  static_assert(!std::is_copy_constructible_v<edits::EditHistory>);
+  static_assert(!std::is_copy_assignable_v<edits::EditHistory>);
+  static_assert(std::is_move_constructible_v<edits::EditHistory>);
+  SUCCEED();
 }
