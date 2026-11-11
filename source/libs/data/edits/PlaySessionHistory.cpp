@@ -13,6 +13,11 @@ const EditHistory& PlaySessionHistory::current() const
   return m_current;
 }
 
+std::uint64_t PlaySessionHistory::authoredPosition() const
+{
+  return m_authored.has_value() ? m_authored->position() : m_current.position();
+}
+
 bool PlaySessionHistory::requestStart()
 {
   const bool stopped = m_expected.empty()

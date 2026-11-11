@@ -16,6 +16,7 @@
 #include <random>
 #include <system_error>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -180,7 +181,7 @@ bool SaveUI::writeProject(const std::filesystem::path& file)
     return false;
   }
 
-  m_unsavedChanges.markSaved();
+  m_unsavedChanges.markSaved(historyPosition());
 
   Log::info(LogCategory::editor, "Saved project to " + pathToUtf8(file));
   return true;
@@ -271,14 +272,37 @@ void SaveUI::requestOpen()
   guardDiscard(PendingDiscard::open);
 }
 
+void SaveUI::setHistoryPositionProvider(std::function<std::uint64_t()> provider)
+{
+  m_historyPosition = std::move(provider);
+
+  // Nothing is loaded yet, so the history as it stands is the save point.
+  m_unsavedChanges.markSaved(historyPosition());
+}
+
+std::uint64_t SaveUI::historyPosition() const
+{
+  return m_historyPosition ? m_historyPosition() : 0;
+}
+
 void SaveUI::markEdited()
 {
   m_unsavedChanges.markEdited();
 }
 
+void SaveUI::beginUncommittedEdit()
+{
+  m_unsavedChanges.beginUncommittedEdit();
+}
+
+void SaveUI::endUncommittedEdit()
+{
+  m_unsavedChanges.endUncommittedEdit();
+}
+
 bool SaveUI::isDirty() const
 {
-  return m_unsavedChanges.isDirty();
+  return m_unsavedChanges.isDirty(historyPosition());
 }
 
 void SaveUI::forgetSaveTarget(const std::string& reason)
@@ -356,15 +380,15 @@ bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesyst
   // callback, so the asset cache resolves against the new folder from the first frame.
   setProjectRoot(root, true);
 
-  // A freshly loaded project has nothing unsaved yet.
-  m_unsavedChanges.markSaved();
-
   recordRecent({ projectFile, root }, false);
 
   if (m_onLoadProject)
   {
     m_onLoadProject();
   }
+
+  // A freshly loaded project has nothing unsaved yet. After the callback, which drops the old history.
+  m_unsavedChanges.markSaved(historyPosition());
 
   return true;
 }

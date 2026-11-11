@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <optional>
 #include <string>
@@ -144,11 +145,29 @@ public:
   [[nodiscard]] std::size_t undoDepth() const;
   [[nodiscard]] std::size_t redoDepth() const;
 
+  // Identifies the state the undo stack leads to: the id of the entry on top, or a token for the history's
+  // base state when the stack is empty. Ids come from one process-wide counter and are never reused, and an
+  // entry keeps its id across undo and redo, so equal positions mean the same state (undo then a new edit
+  // never matches the position it left). Dropping or trimming entries gives the base state a fresh token, so
+  // a position that can no longer be reached never compares equal to a later one. Undo and redo move the
+  // position as soon as the request is built, before the server confirms it.
+  [[nodiscard]] std::uint64_t position() const;
+
 private:
+  [[nodiscard]] static std::uint64_t newToken();
+  void pushUndo(std::vector<EditCommand> entry);
+  void dropUndoStack();
+  void moveUndoToRedo();
+  void moveRedoToUndo();
+
   // Each entry is one undo/redo step: one command for an ordinary edit, several for a group recorded
   // through recordBatch (a multi-object delete or duplicate), reversed as one unit.
   std::deque<std::vector<EditCommand>> m_undoStack;
   std::deque<std::vector<EditCommand>> m_redoStack;
+  // Parallel to the stacks: the id of each entry.
+  std::deque<std::uint64_t> m_undoIds;
+  std::deque<std::uint64_t> m_redoIds;
+  std::uint64_t m_baseToken = newToken();
 };
 
 }

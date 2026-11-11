@@ -279,6 +279,7 @@ private:
 
   void onSceneEdit(const nlohmann::json& edit);
 
+  void noteRecordedEdit() const;
   void onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::json& before, const nlohmann::json& after);
 
   void onLoadScene(const uuids::uuid& sceneUUID);

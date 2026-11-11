@@ -4,6 +4,7 @@
 #include <VulkanEngine/components/window/Window.h>
 #include "UnsavedChanges.h"
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -82,11 +83,20 @@ public:
 
   void requestOpen();
 
-  // Every send-path callback in EditorApp (editComponent/sceneEdit/addAsset/renameAsset/removeAsset)
-  // calls this so the gate knows the loaded project no longer matches what's on disk. This only counts
-  // edits *this* editor sent - an edit from another editor connected to the same server arrives as an
-  // incoming message, not through these callbacks, so it isn't reflected here.
+  // Where the undo history stands (EditHistory::position), read whenever the project is saved or checked
+  // for unsaved changes. Unset, the position is always 0.
+  void setHistoryPositionProvider(std::function<std::uint64_t()> provider);
+
+  // The send-path callbacks in EditorApp call this for an edit the undo history does not hold, so the gate
+  // knows the loaded project no longer matches what's on disk until the next save. An edit the history
+  // does hold needs no call: undoing it back to the save point makes the project clean again. This only
+  // counts edits *this* editor sent - an edit from another editor connected to the same server arrives as
+  // an incoming message, not through these callbacks, so it isn't reflected here.
   void markEdited();
+
+  // A value edit is being sent every frame but is not in the history until it commits.
+  void beginUncommittedEdit();
+  void endUncommittedEdit();
 
   [[nodiscard]] bool isDirty() const;
 
@@ -142,6 +152,8 @@ private:
   vke::EventListener<vke::DropEvent> m_dropEventListener;
 
   UnsavedChanges m_unsavedChanges;
+  std::function<std::uint64_t()> m_historyPosition;
+  [[nodiscard]] std::uint64_t historyPosition() const;
 
   PendingDiscard m_pendingDiscard = PendingDiscard::none;
   std::filesystem::path m_pendingLoadPath;

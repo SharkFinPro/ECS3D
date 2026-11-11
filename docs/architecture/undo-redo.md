@@ -67,6 +67,29 @@ server applies edits in the order sent and an edit sent just after Start belongs
 matched to statuses in order, so a stale one cannot confirm a later request. The reported status is
 followed only for a start/stop made elsewhere. A pause/resume leaves the scene, and so the history, as it is.
 
+## Unsaved changes
+
+The editor's dirty flag is the headless `editor/UnsavedChanges.h`: the project is dirty when
+`EditHistory::position()` differs from the position recorded at the last save, load or New, or when an edit
+the history does not hold happened since. So undoing back to the save point reads clean, and redoing away from it
+reads dirty. A position is the id of the entry on top of the undo stack, or a token for the base state when it
+is empty. Ids come from one process-wide counter, never repeat and survive undo/redo, so undo followed by a
+different edit at the same depth is a different position. Trimming the oldest entry or dropping the undo stack
+(a clear, or an undo refused at validation) gives the base state a fresh token, so a save point that is lost
+stays dirty until the next save instead of matching by accident; a save point still on the stack survives a
+trim. `SaveUI` reads the position through a provider the editor sets to `PlaySessionHistory::authoredPosition()`,
+at save time and at check time. Undo and redo move the position when the request is built, before the server
+confirms it; `reportUndoRejected`/`reportRedoRejected` have no caller, so a server-side rejection is not
+reflected.
+
+`SaveUI::markEdited` is only for an edit with no history entry (an asset op or scene edit nothing could be
+derived for, `forgetSaveTarget`, an edit made while a play session runs): it latches until the next save. A
+component value edit sends every frame, so `beginUncommittedEdit` holds the project dirty until its commit
+(`endUncommittedEdit`) records the entry; a gesture that ends at its starting value never commits and stays
+dirty. During play the project stays dirty for any edit, because the play-session history is discarded on Stop
+and the authored position does not move. Load and New take their save point after the load callback has cleared
+the old history.
+
 ## Scene script panel edits
 
 The `SceneScriptsPanel` is what sends the scene-script ops. While a widget is held it edits a panel-owned
