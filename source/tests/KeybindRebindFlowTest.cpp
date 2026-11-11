@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <KeyCapture.h>
+#include <KeybindCaptureFrame.h>
 #include <KeybindRebindFlow.h>
 #include <Keybinds.h>
 #include <SettingsStore.h>
@@ -42,10 +44,56 @@ namespace {
       return *actionInfo(action).defaultChord;
     }
 
+    // What SettingsPanel does: arm the dispatcher's capture when the flow begins one, then reconcile after
+    // each action, as displayKeybinds does at the end of a frame.
+    void rebind(const EditorAction action)
+    {
+      m_flow->beginCapture(action);
+      m_capture.begin([this, action](const KeyChord& chord) { m_flow->captureChord(action, chord); });
+    }
+
+    void sync(const bool visible = true)
+    {
+      if (m_flow->reconcileCapture(m_capture.active(), visible))
+      {
+        m_capture.cancel();
+      }
+    }
+
+    // A non-modifier key press while capturing, as the dispatcher routes it.
+    void pressKey(const KeyChord& chord)
+    {
+      if (m_capture.active())
+      {
+        m_capture.complete(chord);
+      }
+    }
+
+    // One panel frame: the list is drawn (or not) and the frame ends reconciled, as displayGui does.
+    void frame(const bool listDrawn, const bool closeInFrame = false)
+    {
+      if (listDrawn)
+      {
+        m_frame.drawn();
+      }
+
+      if (closeInFrame)
+      {
+        m_frame.hidden();
+      }
+
+      if (m_frame.endFrame(*m_flow, m_capture.active()))
+      {
+        m_capture.cancel();
+      }
+    }
+
     std::filesystem::path m_directory;
     std::unique_ptr<SettingsStore> m_settings;
     KeybindTable m_table;
     std::unique_ptr<KeybindRebindFlow> m_flow;
+    KeyCapture m_capture;
+    KeybindCaptureFrame m_frame;
   };
 }
 
@@ -173,4 +221,140 @@ TEST_F(KeybindRebindFlowTest, CancelEndsTheCaptureWithoutAssigning)
   EXPECT_FALSE(m_flow->capturingAction().has_value());
   EXPECT_FALSE(m_flow->conflict().has_value());
   EXPECT_EQ(m_table.binding(EditorAction::saveProject), before);
+}
+
+TEST_F(KeybindRebindFlowTest, ACapturePressAssignsTheKeyWhenNothingCancelledIt)
+{
+  const KeyChord freeChord = *parseChord("Ctrl+Alt+F9");
+
+  rebind(EditorAction::focusSelection);
+  sync();
+  pressKey(freeChord);
+
+  EXPECT_EQ(m_table.binding(EditorAction::focusSelection), freeChord);
+}
+
+TEST_F(KeybindRebindFlowTest, CancelStopsTheDispatcherCaptureSoTheNextKeyAssignsNothing)
+{
+  const KeyChord freeChord = *parseChord("Ctrl+Alt+F9");
+  const auto before = m_table.binding(EditorAction::focusSelection);
+
+  rebind(EditorAction::focusSelection);
+  m_flow->cancelCapture();
+  sync();
+  pressKey(freeChord);
+
+  EXPECT_FALSE(m_capture.active());
+  EXPECT_EQ(m_table.binding(EditorAction::focusSelection), before);
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+}
+
+TEST_F(KeybindRebindFlowTest, UnbindResetAndResetAllStopTheDispatcherCapture)
+{
+  const KeyChord freeChord = *parseChord("Ctrl+Alt+F9");
+
+  rebind(EditorAction::focusSelection);
+  m_flow->unbind(EditorAction::saveProject);
+  sync();
+  pressKey(freeChord);
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+
+  rebind(EditorAction::focusSelection);
+  m_flow->reset(EditorAction::saveProject);
+  sync();
+  pressKey(freeChord);
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+
+  rebind(EditorAction::focusSelection);
+  m_flow->resetAll();
+  sync();
+  pressKey(freeChord);
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+}
+
+TEST_F(KeybindRebindFlowTest, HidingTheKeybindsListAbandonsTheCaptureOnBothSides)
+{
+  const KeyChord freeChord = *parseChord("Ctrl+Alt+F9");
+
+  rebind(EditorAction::focusSelection);
+  sync(false);
+  pressKey(freeChord);
+
+  EXPECT_FALSE(m_flow->capturingAction().has_value());
+  EXPECT_FALSE(m_capture.active());
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+}
+
+TEST_F(KeybindRebindFlowTest, TheDispatcherEndingItsCaptureStopsTheFlowShowingThePrompt)
+{
+  rebind(EditorAction::focusSelection);
+  sync();
+  ASSERT_EQ(m_flow->capturingAction(), EditorAction::focusSelection);
+
+  m_capture.cancel();
+  sync();
+
+  EXPECT_FALSE(m_flow->capturingAction().has_value());
+}
+
+TEST_F(KeybindRebindFlowTest, ChooseAnotherKeyKeepsTheRearmedCaptureThroughReconcile)
+{
+  m_flow->captureChord(EditorAction::focusSelection, defaultChord(EditorAction::saveProject));
+  const auto action = m_flow->chooseAnotherKey();
+  ASSERT_TRUE(action.has_value());
+  m_capture.begin([this, a = *action](const KeyChord& chord) { m_flow->captureChord(a, chord); });
+  sync();
+
+  EXPECT_TRUE(m_capture.active());
+  EXPECT_EQ(m_flow->capturingAction(), EditorAction::focusSelection);
+}
+
+TEST_F(KeybindRebindFlowTest, AFrameThatDrawsTheListKeepsTheCapture)
+{
+  rebind(EditorAction::focusSelection);
+
+  frame(true);
+  frame(true);
+
+  EXPECT_TRUE(m_capture.active());
+  EXPECT_EQ(m_flow->capturingAction(), EditorAction::focusSelection);
+}
+
+TEST_F(KeybindRebindFlowTest, ClosingTheWindowInTheFrameItIsDrawnEndsTheCaptureBeforeTheFrameEnds)
+{
+  const KeyChord freeChord = *parseChord("Ctrl+Alt+F9");
+
+  rebind(EditorAction::focusSelection);
+  frame(true);
+  ASSERT_TRUE(m_capture.active());
+
+  frame(true, true);
+  pressKey(freeChord);
+
+  EXPECT_FALSE(m_capture.active());
+  EXPECT_FALSE(m_flow->capturingAction().has_value());
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+}
+
+TEST_F(KeybindRebindFlowTest, SwitchingSectionEndsTheCaptureInThatFrame)
+{
+  const KeyChord freeChord = *parseChord("Ctrl+Alt+F9");
+
+  rebind(EditorAction::focusSelection);
+  frame(true);
+
+  frame(false);
+  pressKey(freeChord);
+
+  EXPECT_FALSE(m_capture.active());
+  EXPECT_FALSE(m_table.actionFor(freeChord).has_value());
+}
+
+TEST_F(KeybindRebindFlowTest, CompletingAnEmptyCaptureIsANoOp)
+{
+  KeyCapture empty;
+
+  empty.complete(*parseChord("Ctrl+Alt+F9"));
+
+  EXPECT_FALSE(empty.active());
 }

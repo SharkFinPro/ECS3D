@@ -251,6 +251,11 @@ void ObjectGUIManager::setEditable(const bool editable)
   m_editable = editable;
 }
 
+void ObjectGUIManager::setReadOnlyNotice(const char* notice)
+{
+  m_readOnlyNotice = notice ? notice : "Read-only - server is not in edit mode";
+}
+
 void ObjectGUIManager::setSettings(SettingsStore* settings)
 {
   m_settings = settings;
@@ -297,7 +302,7 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 
   if (!m_editable)
   {
-    ImGui::TextColored(theme::scriptAmber, "Read-only - server is not in edit mode");
+    ImGui::TextColored(theme::scriptAmber, "%s", m_readOnlyNotice.c_str());
     ImGui::Separator();
   }
 

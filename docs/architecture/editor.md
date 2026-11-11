@@ -50,8 +50,11 @@ frame rate limit (`editor.display.vsync`/`editor.display.maxFps`, applied at ren
 explanatory notes); Keybinds lists every
 `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode
 and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an
-already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against
-a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the
+already-held chord; `KeybindRebindFlow::reconcileCapture` keeps the flow and the dispatcher's capture in
+agreement, and both sides are reconciled before each frame ends (`KeybindCaptureFrame.h`; `abandonKeyCapture()` covers
+a hidden GUI), so Cancel, Unbind, Reset, Reset all, closing the window, switching sections or Escape end both),
+`KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and
+calls the registered handler, suppressed while ImGui wants the keyboard; also drives the
 Settings panel's rebind capture; actions registered with `KeyHold::repeatWhileHeld` (undo and redo) fire again
 while their chord stays held, after `keyHoldInitialDelay` and then every `keyHoldRepeatInterval`, driven by the
 headless `KeyHoldRepeat.h` and polled by `KeybindDispatcher::update()` once per frame; a handler with nothing
@@ -147,3 +150,20 @@ nothing, and a docking change adopts only new nodes. A zero-size (minimized) fra
 bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 25% (width) and 30%
 (height) of the window, so two side floors leave the central node at least half of it; where a floor is larger than
 the fit, the floor wins. The change takes effect one frame after the resize.
+
+## Connection state
+
+`EditorConnectionState.h` names why the editor cannot edit, apart from the `m_serverEditable` gate: `connected`,
+`readOnlyServer` (the server's `editStatus` said it is not in edit mode), `connectionLost` and `editTokenRejected`.
+It also holds the menu-bar badge, the Objects panel notice (`ObjectGUIManager::setReadOnlyNotice`) and the log line
+for each state. `EditorConnectionTracker` is the state machine `EditorApp` drives from its network loop.
+
+The transport carries no close reason, so rejection is inferred. A server that accepts the editor's join replies with
+an edit status and then a snapshot. A rejecting server closes the socket silently
+(`TransportBackend.TryAuthorizeHandshake`), with or without a token having been given. So a loss before any server
+message, on a server the editor did not spawn (`--host`), is `editTokenRejected`. A server the editor spawned uses a
+token the editor generated, so that drop is `connectionLost`, as is any drop after the first message. A server that
+refuses the editor for another reason reads as a rejection too, which the wording admits.
+
+On a loss the loop applies the messages still queued before it classifies, so a server that answered and then died
+reads as lost. After a loss the tracker ignores a later `editStatus`, and the editor stays read-only.

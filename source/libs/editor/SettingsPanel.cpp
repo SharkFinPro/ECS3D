@@ -153,9 +153,31 @@ void SettingsPanel::setOpen(const bool open)
 {
   m_open = open;
   m_settings->set(openKey, open);
+
+  if (!open)
+  {
+    abandonKeyCapture();
+  }
+}
+
+void SettingsPanel::abandonKeyCapture()
+{
+  m_captureFrame.hidden();
+  syncCapture(false);
 }
 
 void SettingsPanel::displayGui()
+{
+  drawWindow();
+
+  // Every frame ends reconciled, so a key polled before the next frame never reaches a stale capture.
+  if (m_captureFrame.endFrame(m_rebindFlow, m_keybindDispatcher->isCapturing()))
+  {
+    m_keybindDispatcher->cancelCapture();
+  }
+}
+
+void SettingsPanel::drawWindow()
 {
   // A frame that skipped the Display section abandons any edit, so the field reseeds when it returns.
   if (!m_framePacingDrawn)
@@ -510,6 +532,8 @@ void SettingsPanel::displayFramePacing()
 
 void SettingsPanel::displayKeybinds()
 {
+  m_captureFrame.drawn();
+
   gc::sectionLabel("Keybinds");
 
   ImGui::TextColored(theme::t2, "Click Rebind, then press the new key combination.");
@@ -598,6 +622,17 @@ void SettingsPanel::displayKeybinds()
   }
 
   displayKeybindConflictModal();
+
+  // Still this frame, before the next key event can reach a capture the buttons above just ended.
+  syncCapture(true);
+}
+
+void SettingsPanel::syncCapture(const bool visible)
+{
+  if (m_rebindFlow.reconcileCapture(m_keybindDispatcher->isCapturing(), visible))
+  {
+    m_keybindDispatcher->cancelCapture();
+  }
 }
 
 void SettingsPanel::armCaptureFor(const EditorAction action)

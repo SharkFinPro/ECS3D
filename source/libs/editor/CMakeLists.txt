@@ -31,6 +31,7 @@ add_library(${PROJECT_NAME}
   SaveUI.h
   UnsavedChanges.h
   UndoRequestGate.h
+  EditorConnectionState.h
   PlayControls.h
   SceneStatusLayout.h
   DockLayoutFit.h
@@ -60,7 +61,9 @@ add_library(${PROJECT_NAME}
   AssetCreateFlow.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
+  KeybindCaptureFrame.h
   KeybindRebindFlow.h
+  KeyCapture.h
   KeyHoldRepeat.h
   Gizmo.cpp
   Gizmo.h

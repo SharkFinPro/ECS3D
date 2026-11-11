@@ -89,6 +89,20 @@ public:
     m_capturingAction.reset();
   }
 
+  // Brings the flow and the dispatcher's key capture into agreement. `visible` is false when the Keybinds
+  // list is not on screen, which abandons any capture. Returns true when the dispatcher's capture must be
+  // cancelled: the flow no longer wants one (cancel, unbind, reset, close). The reverse also holds - a
+  // capture the dispatcher ended itself (Escape) stops the flow showing its prompt.
+  [[nodiscard]] bool reconcileCapture(const bool dispatcherCapturing, const bool visible)
+  {
+    if (!visible || !dispatcherCapturing)
+    {
+      m_capturingAction.reset();
+    }
+
+    return dispatcherCapturing && !m_capturingAction.has_value();
+  }
+
   void goToBinding()
   {
     if (m_conflict.has_value())

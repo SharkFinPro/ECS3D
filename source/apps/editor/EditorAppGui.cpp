@@ -35,12 +35,15 @@ void EditorApp::updateGui()
 
   if (!m_shouldDisplayGui)
   {
+    m_settingsPanel->abandonKeyCapture();
+
     return;
   }
 
   // Propagate the server's editability so the panels disable their mutating affordances (and show a
   // read-only cue) on a non-edit server.
   m_objectGUIManager->setEditable(m_serverEditable);
+  m_objectGUIManager->setReadOnlyNotice(editorConnectionPanelNotice(m_connectionTracker.state()));
   m_inspectorPanel->setEditable(m_serverEditable);
   m_assetBrowser->setEditable(m_serverEditable);
   m_sceneScriptsPanel->setEditable(m_serverEditable);
@@ -129,10 +132,9 @@ void EditorApp::displayMenuBar()
 
     displayWindowMenu();
 
-    // A persistent read-only badge, right-aligned, whenever the connected server isn't in edit mode.
-    if (!m_serverEditable)
+    // A persistent badge, right-aligned, whenever the editor cannot edit; the text names why.
+    if (const char* badge = editorConnectionBadge(m_connectionTracker.state()); badge && !m_serverEditable)
     {
-      const char* badge = "READ-ONLY (server not in edit mode)";
       const float badgeWidth = ImGui::CalcTextSize(badge).x;
       ImGui::SameLine(ImGui::GetWindowWidth() - badgeWidth - ImGui::GetStyle().WindowPadding.x * 2.0f);
       ImGui::TextColored(theme::scriptAmber, "%s", badge);
