@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace collisions {
   using detail::Candidate;
@@ -142,6 +143,69 @@ namespace collisions {
 
       return inside ? point : nearest;
     }
+
+    // Twice the area of the triangle a, b, c as seen along normal, signed by its turn.
+    [[nodiscard]] float turnArea(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& normal)
+    {
+      return glm::dot(glm::cross(b - a, c - a), normal);
+    }
+
+    // At most four of the candidates: the deepest, which the push out of the overlap leans on, and the three that
+    // make its polygon cover the most area. The candidates are the corners of a convex loop in order, so the polygon
+    // through chosen ones is a fan of triangles from the deepest. Any other number of points is spread by depth and
+    // distance.
+    [[nodiscard]] std::vector<glm::vec3> largestSpread(const std::vector<Candidate>& candidates,
+                                                       const glm::vec3& normal, const size_t maxPoints)
+    {
+      constexpr size_t keptPoints = 4;
+      if (candidates.size() <= maxPoints || maxPoints != keptPoints)
+      {
+        return spreadOut(candidates, maxPoints);
+      }
+
+      const size_t count = candidates.size();
+      size_t deepest = 0;
+      for (size_t i = 1; i < count; ++i)
+      {
+        if (candidates[i].depth > candidates[deepest].depth)
+        {
+          deepest = i;
+        }
+      }
+
+      // The loop from the deepest corner on, so the others are indices 1 to count - 1 in order.
+      std::vector<glm::vec3> loop;
+      loop.reserve(count);
+      for (size_t i = 0; i < count; ++i)
+      {
+        loop.push_back(candidates[(deepest + i) % count].point);
+      }
+
+      size_t bestFirst = 1;
+      size_t bestSecond = 2;
+      size_t bestThird = 3;
+      float bestArea = -1.0f;
+      for (size_t first = 1; first + 2 < count; ++first)
+      {
+        for (size_t second = first + 1; second + 1 < count; ++second)
+        {
+          const float firstTurn = turnArea(loop[0], loop[first], loop[second], normal);
+          for (size_t third = second + 1; third < count; ++third)
+          {
+            const float area = std::fabs(firstTurn + turnArea(loop[0], loop[second], loop[third], normal));
+            if (area > bestArea)
+            {
+              bestArea = area;
+              bestFirst = first;
+              bestSecond = second;
+              bestThird = third;
+            }
+          }
+        }
+      }
+
+      return { loop[0], loop[bestFirst], loop[bestSecond], loop[bestThird] };
+    }
   }
 
   std::vector<glm::vec3> hullFaceNormals(const std::span<const glm::vec3> vertices,
@@ -199,44 +263,50 @@ namespace collisions {
     const glm::vec3 planePoint = centroidOf(polygon);
     const glm::vec3 towardReference = firstIsReference ? -normal : normal;
 
+    const auto incidentFeature = touchingFeature(incident.vertices, towardReference, incident.featureEpsilon);
+
     std::vector<Candidate> candidates;
     std::vector<glm::vec3> placed;
-    std::vector<glm::vec3> incidentOnPlane;
-    float incidentOffset = 0.0f;
-    for (const auto& vertex : touchingFeature(incident.vertices, towardReference, incident.featureEpsilon))
+    const auto place = [&](const glm::vec3& point, const float offset)
     {
-      const float offset = glm::dot(vertex - planePoint, faceNormal);
-      incidentOnPlane.push_back(vertex - faceNormal * offset);
-      incidentOffset += offset;
-      const glm::vec3 point = clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset;
-
       if (!containsNear(placed, point))
       {
         placed.push_back(point);
         candidates.push_back({ point, -offset });
       }
-    }
+    };
 
-    // Clamping alone finds the overlap only while the incident face lies inside the reference one. A face larger
-    // than the reference, or turned against it, clamps its corners onto as few as two of the reference's, so the
-    // reference corners that lie over the incident face belong to the overlap too, taken at the incident face's depth
-    // like the clamped corners.
-    const auto incidentPolygon = convexPolygon(incidentOnPlane, faceNormal);
-    if (incidentPolygon.size() >= 3)
+    // Two faces overlap in the incident face clipped to the reference one's side planes, and an edge of the incident
+    // side the same way. What is left is cut at the reference plane too, so a face tilted a little off it keeps the
+    // part that touches. The points stay on the incident side.
+    auto incidentLoop = convexPolygon(incidentFeature, faceNormal);
+    if (polygon.size() >= 3 && incidentLoop.size() >= 2)
     {
-      incidentOffset /= static_cast<float>(incidentOnPlane.size());
-      for (const auto& corner : polygon)
+      auto overlap = detail::clipToPolygon(std::move(incidentLoop), polygon, faceNormal);
+      overlap = detail::clipAgainstPlane(overlap, planePoint, -faceNormal, reference.featureEpsilon);
+      for (const auto& point : overlap)
       {
-        const glm::vec3 point = corner + faceNormal * incidentOffset;
-        if (glm::distance(clampToPolygon(corner, incidentPolygon, faceNormal), corner) < detail::dedupeDistance &&
-            !containsNear(placed, point))
-        {
-          placed.push_back(point);
-          candidates.push_back({ point, -incidentOffset });
-        }
+        place(point, glm::dot(point - planePoint, faceNormal));
       }
     }
 
-    return spreadOut(candidates, std::max<size_t>(maxPoints, 1));
+    // A corner, or an edge or face wholly outside the reference polygon along the plane, still touches somewhere: its
+    // vertices are pulled onto the reference polygon, keeping their depth, and put in loop order.
+    if (candidates.empty())
+    {
+      std::vector<glm::vec3> clamped;
+      for (const auto& vertex : incidentFeature)
+      {
+        const float offset = glm::dot(vertex - planePoint, faceNormal);
+        clamped.push_back(clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset);
+      }
+
+      for (const auto& point : convexPolygon(clamped, faceNormal))
+      {
+        place(point, glm::dot(point - planePoint, faceNormal));
+      }
+    }
+
+    return largestSpread(candidates, faceNormal, std::max<size_t>(maxPoints, 1));
   }
 }

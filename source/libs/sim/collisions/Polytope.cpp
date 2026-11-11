@@ -97,33 +97,6 @@ int dominantAxisIndex(const BoxGeometry& box, const glm::vec3& normal)
   return best;
 }
 
-// The box's own vertices nearest the other box along the contact normal - one for a corner contact, two
-// for an edge, or a whole face's four when the box rests flush against a flat surface.
-std::vector<glm::vec3> touchingVertices(const BoxGeometry& box, const glm::vec3& towardOther)
-{
-  const auto vertices = boxVerticesOf(box);
-
-  float extreme = std::numeric_limits<float>::lowest();
-  for (const auto& vertex : vertices)
-  {
-    extreme = std::max(extreme, glm::dot(vertex, towardOther));
-  }
-
-  const float epsilon = 1e-3f * std::max({ box.halfExtents[0], box.halfExtents[1], box.halfExtents[2], 1.0f });
-
-  std::vector<glm::vec3> selected;
-  selected.reserve(vertices.size());
-  for (const auto& vertex : vertices)
-  {
-    if (glm::dot(vertex, towardOther) >= extreme - epsilon)
-    {
-      selected.push_back(vertex);
-    }
-  }
-
-  return selected;
-}
-
 // Projects a point onto the other box's own extent along its two axes other than the one most aligned
 // with the contact normal, leaving its normal-axis position untouched - pulling an overhanging vertex
 // back onto the nearest edge instead of discarding it outright.
@@ -155,7 +128,7 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
   const std::array<glm::vec3, 2> candidates = { start + towardOther * radius, end + towardOther * radius };
   const float extreme = std::max(glm::dot(candidates[0], towardOther), glm::dot(candidates[1], towardOther));
   // Scaled by the segment so a capsule within about a degree of lying flat still counts as flush, the way
-  // touchingVertices treats a box face.
+  // touchingFeature treats a box face.
   const float epsilon = 1e-3f * std::max(radius, 1.0f) + 0.02f * glm::distance(start, end);
 
   std::vector<glm::vec3> points;
@@ -485,69 +458,11 @@ std::vector<glm::vec3> Polytope::distinctPoints(const std::vector<glm::vec3>& po
 
 std::vector<glm::vec3> Polytope::boxContactPoints() const
 {
-  const auto closestPoint = m_closestFaceData.closestPoint;
+  const auto normal = glm::normalize(m_closestFaceData.closestPoint);
+  const auto first = facesOf(*m_collider);
+  const auto second = facesOf(*m_otherCollider);
 
-  // Both colliders are boxes here. Build the contact manifold from the incident box's touching feature clipped onto the reference box's footprint - the
-  // flatter side (its axis more nearly parallel to the normal) is the reference, so a real edge/corner
-  // contact is not diluted by also folding in the flat side's own footprint corners.
-  const auto boxA = boxGeometryOf(*m_collider);
-  const auto boxB = boxGeometryOf(*m_otherCollider);
-
-  const auto normal = glm::normalize(closestPoint);
-
-  const auto axisIndexA = dominantAxisIndex(boxA, normal);
-  const auto axisIndexB = dominantAxisIndex(boxB, normal);
-
-  const bool aIsReference = std::fabs(glm::dot(boxA.axes[axisIndexA], normal)) >=
-    std::fabs(glm::dot(boxB.axes[axisIndexB], normal)) - collisions::faceAlignmentTie;
-
-  const auto& referenceBox = aIsReference ? boxA : boxB;
-  const auto& incidentBox = aIsReference ? boxB : boxA;
-  const auto referenceAxisIndex = aIsReference ? axisIndexA : axisIndexB;
-
-  // The side nearer the reference box's centre, regardless of the minimum translation vector's sign.
-  const auto towardReference = glm::dot(referenceBox.center - incidentBox.center, normal) >= 0.0f ? normal : -normal;
-
-  const auto incidentVertices = touchingVertices(incidentBox, towardReference);
-
-  // Four incident corners plus the reference corners that lie over them.
-  constexpr size_t typicalCandidates = 8;
-  std::vector<collisions::detail::Candidate> candidates;
-  std::vector<glm::vec3> placed;
-  candidates.reserve(typicalCandidates);
-  placed.reserve(typicalCandidates);
-  const auto add = [&candidates, &placed](const glm::vec3& point)
-  {
-    if (!collisions::detail::containsNear(placed, point))
-    {
-      placed.push_back(point);
-      candidates.push_back({ point, 0.0f });
-    }
-  };
-
-  for (const auto& vertex : incidentVertices)
-  {
-    add(clampToFootprint(vertex, referenceBox, referenceAxisIndex));
-  }
-
-  // Clamping alone finds the overlap only while the incident face lies inside the reference one. A face larger
-  // than the reference, or turned against it, clamps its corners onto as few as two of the reference's, so the
-  // reference corners that lie over the incident face belong to the overlap too, taken at the incident face's depth
-  // like the clamped corners. An edge or corner has no face to lie over.
-  constexpr size_t faceCorners = 4;
-  const auto incidentAxisIndex = aIsReference ? axisIndexB : axisIndexA;
-  const auto referenceVertices = incidentVertices.size() == faceCorners
-                                   ? touchingVertices(referenceBox, -towardReference)
-                                   : std::vector<glm::vec3>{};
-  for (const auto& vertex : referenceVertices)
-  {
-    if (glm::distance(clampToFootprint(vertex, incidentBox, incidentAxisIndex), vertex) < collisions::detail::dedupeDistance)
-    {
-      add(vertex + glm::dot(incidentVertices.front() - vertex, normal) * normal);
-    }
-  }
-
-  return collisions::detail::spreadOut(candidates, maxManifoldPoints);
+  return collisions::referenceFaceManifold(first.view(), second.view(), normal, maxManifoldPoints);
 }
 
 namespace {

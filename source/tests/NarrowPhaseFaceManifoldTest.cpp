@@ -10,9 +10,15 @@
 #include "objects/components/collisions/ConvexMeshCollider.h"
 
 #include <glm/geometric.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
 #include <memory>
+#include <span>
+#include <vector>
 
 namespace {
   using fixtures::addObject;
@@ -157,4 +163,500 @@ TEST(NarrowPhaseFaceManifold, AYawedBoxOnALargerHullTouchesAtItsFourBaseCorners)
 TEST(NarrowPhaseFaceManifold, AnUnturnedHullOnALargerHullTouchesAtItsFourBaseCorners)
 {
   expectFourBasePointsBothWays(Shape::hull, Shape::hull, 0.0f);
+}
+
+namespace {
+  using Polygon = std::vector<glm::vec2>;
+
+  constexpr float boxPenetration = 0.01f;
+  constexpr float boxHalfHeight = 0.25f;
+
+  // A face-on-face pair: a box at the origin and a yawed one sitting on it. Footprints are the rectangles the boxes
+  // cover in the xz plane.
+  struct FacePair {
+    fixtures::Scene scene;
+    std::shared_ptr<Object> lower;
+    std::shared_ptr<Object> upper;
+    std::shared_ptr<Collider> lowerCollider;
+    std::shared_ptr<Collider> upperCollider;
+
+    // offset is in the lower box's frame, which is turned by lowerYawDegrees.
+    FacePair(const glm::vec2& lowerHalf, const glm::vec2& upperHalf, const glm::vec2& offset, const float yawDegrees,
+             const float lowerYawDegrees = 0.0f)
+    {
+      lower = addObject(scene, "Lower", { 0, 0, 0 }, { lowerHalf.x, boxHalfHeight, lowerHalf.y });
+      transformOf(lower)->setRotation({ 0, lowerYawDegrees, 0 });
+      const glm::vec3 placed = transformOf(lower)->getOrientation() * glm::vec3(offset.x, 0.0f, offset.y);
+      upper = addObject(scene, "Upper", { placed.x, 2.0f * boxHalfHeight - boxPenetration, placed.z },
+                        { upperHalf.x, boxHalfHeight, upperHalf.y });
+      transformOf(upper)->setRotation({ 0, yawDegrees, 0 });
+      lowerCollider = fixtures::addBoxCollider(lower);
+      upperCollider = fixtures::addBoxCollider(upper);
+    }
+  };
+
+  [[nodiscard]] Polygon footprintOf(const std::shared_ptr<Object>& object)
+  {
+    const auto transform = transformOf(object);
+    const auto half = transform->getScale();
+
+    Polygon corners;
+    for (const auto& [x, z] : std::array<std::array<float, 2>, 4>{ { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } } })
+    {
+      const glm::vec3 world = transform->getPosition() + transform->getOrientation() * glm::vec3(x * half.x, 0, z * half.z);
+      corners.emplace_back(world.x, world.z);
+    }
+
+    return corners;
+  }
+
+  [[nodiscard]] double crossOf(const glm::dvec2& a, const glm::dvec2& b)
+  {
+    return a.x * b.y - a.y * b.x;
+  }
+
+  [[nodiscard]] double areaOf(const Polygon& polygon)
+  {
+    double twice = 0.0;
+    for (size_t i = 0; i < polygon.size(); ++i)
+    {
+      twice += crossOf(polygon[i], polygon[(i + 1) % polygon.size()]);
+    }
+
+    return std::fabs(twice) * 0.5;
+  }
+
+  // The overlap of two rectangles: the first clipped by each edge of the second.
+  [[nodiscard]] Polygon overlapOf(Polygon subject, Polygon clip)
+  {
+    if (crossOf(glm::dvec2(clip[1]) - glm::dvec2(clip[0]), glm::dvec2(clip[2]) - glm::dvec2(clip[1])) < 0.0)
+    {
+      std::ranges::reverse(clip);
+    }
+
+    for (size_t i = 0; i < clip.size() && !subject.empty(); ++i)
+    {
+      const glm::dvec2 origin = clip[i];
+      const glm::dvec2 edge = glm::dvec2(clip[(i + 1) % clip.size()]) - origin;
+      const auto side = [&](const glm::dvec2& point) { return crossOf(edge, point - origin); };
+
+      Polygon output;
+      for (size_t j = 0; j < subject.size(); ++j)
+      {
+        const glm::dvec2 current = subject[j];
+        const glm::dvec2 previous = subject[(j + subject.size() - 1) % subject.size()];
+        const double currentSide = side(current);
+        const double previousSide = side(previous);
+
+        if ((currentSide >= 0.0) != (previousSide >= 0.0))
+        {
+          output.emplace_back(previous + (current - previous) * (previousSide / (previousSide - currentSide)));
+        }
+
+        if (currentSide >= 0.0)
+        {
+          output.emplace_back(current);
+        }
+      }
+
+      subject = output;
+    }
+
+    return subject;
+  }
+
+  [[nodiscard]] Polygon hullOf(std::vector<glm::vec2> points)
+  {
+    if (points.size() < 3)
+    {
+      return points;
+    }
+
+    std::ranges::sort(points, [](const glm::vec2& a, const glm::vec2& b) {
+      return a.x < b.x || (a.x == b.x && a.y < b.y);
+    });
+
+    const auto turn = [](const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c) {
+      return crossOf(b - a, c - a);
+    };
+
+    Polygon hull(2 * points.size());
+    size_t size = 0;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+      while (size >= 2 && turn(hull[size - 2], hull[size - 1], points[i]) <= 0.0)
+      {
+        --size;
+      }
+      hull[size++] = points[i];
+    }
+
+    for (size_t i = points.size() - 1, lowest = size + 1; i-- > 0;)
+    {
+      while (size >= lowest && turn(hull[size - 2], hull[size - 1], points[i]) <= 0.0)
+      {
+        --size;
+      }
+      hull[size++] = points[i];
+    }
+
+    hull.resize(size - 1);
+
+    return hull;
+  }
+
+  // The most area four of the polygon's corners can cover, which is all a manifold holds.
+  [[nodiscard]] double bestFourCornerArea(const Polygon& polygon)
+  {
+    const size_t count = polygon.size();
+    if (count <= 4)
+    {
+      return areaOf(polygon);
+    }
+
+    double best = 0.0;
+    for (size_t a = 0; a < count; ++a)
+    {
+      for (size_t b = a + 1; b < count; ++b)
+      {
+        for (size_t c = b + 1; c < count; ++c)
+        {
+          for (size_t d = c + 1; d < count; ++d)
+          {
+            best = std::max(best, areaOf(hullOf({ polygon[a], polygon[b], polygon[c], polygon[d] })));
+          }
+        }
+      }
+    }
+
+    return best;
+  }
+
+  [[nodiscard]] bool insideBox(const glm::vec3& point, const std::shared_ptr<Object>& object, const float slack)
+  {
+    const auto transform = transformOf(object);
+    const glm::vec3 local = glm::inverse(transform->getOrientation()) * (point - transform->getPosition());
+    const glm::vec3 half = transform->getScale();
+
+    return std::fabs(local.x) <= half.x + slack && std::fabs(local.y) <= half.y + slack &&
+           std::fabs(local.z) <= half.z + slack;
+  }
+
+  struct ManifoldCheck {
+    bool found = false;
+    size_t pointCount = 0;
+    bool allInsideBoth = true;
+    bool allFinite = true;
+    bool allDistinct = true;
+    double overlapArea = 0.0;
+    double bestFourArea = 0.0;
+    double coveredArea = 0.0;
+  };
+
+  // Whether the points are finite, distinct and inside both boxes, and the area their hull covers.
+  void inspectPoints(const FacePair& pair, const std::span<const glm::vec3> points, ManifoldCheck& check)
+  {
+    constexpr float slack = 2e-3f;
+
+    std::vector<glm::vec2> planar;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+      const auto& point = points[i];
+      check.allFinite = check.allFinite && std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
+      check.allInsideBoth = check.allInsideBoth && insideBox(point, pair.lower, slack) &&
+                            insideBox(point, pair.upper, slack);
+      planar.emplace_back(point.x, point.z);
+
+      for (size_t j = 0; j < i; ++j)
+      {
+        check.allDistinct = check.allDistinct && glm::distance(point, points[j]) > 1e-5f;
+      }
+    }
+
+    check.coveredArea = areaOf(hullOf(planar));
+  }
+
+  [[nodiscard]] ManifoldCheck checkManifold(const FacePair& pair, const bool lowerFirst)
+  {
+    ManifoldCheck check;
+    const auto overlapPolygon = overlapOf(footprintOf(pair.upper), footprintOf(pair.lower));
+    check.overlapArea = areaOf(overlapPolygon);
+    check.bestFourArea = bestFourCornerArea(overlapPolygon);
+
+    const auto contact = lowerFirst ? collisions::findContact(*pair.lowerCollider, *pair.upperCollider)
+                                    : collisions::findContact(*pair.upperCollider, *pair.lowerCollider);
+    if (contact)
+    {
+      check.found = true;
+      check.pointCount = contact->contactPoints().size();
+      inspectPoints(pair, contact->contactPoints(), check);
+    }
+
+    return check;
+  }
+
+  // A linear congruential generator, so every toolchain runs the same trials; the standard distributions differ
+  // between library implementations.
+  class TrialRandom {
+  public:
+    explicit TrialRandom(const std::uint32_t seed) : m_state(seed) {}
+
+    [[nodiscard]] float between(const float low, const float high)
+    {
+      m_state = m_state * 1664525u + 1013904223u;
+      return low + (high - low) * static_cast<float>(static_cast<double>(m_state) / 4294967296.0);
+    }
+
+  private:
+    std::uint32_t m_state;
+  };
+}
+
+TEST(NarrowPhaseFaceManifold, TwoThinBoxesCrossingAtAnAngleKeepTheirWholeOverlap)
+{
+  // Two 4 by 0.4 planks crossing at 60 degrees: the overlap is a rhombus whose corners are all edge crossings.
+  const FacePair pair({ 2.0f, 0.2f }, { 2.0f, 0.2f }, { 0.0f, 0.0f }, 60.0f);
+
+  for (const bool lowerFirst : { true, false })
+  {
+    SCOPED_TRACE(lowerFirst ? "lower first" : "upper first");
+    const auto check = checkManifold(pair, lowerFirst);
+
+    ASSERT_TRUE(check.found);
+    EXPECT_GT(check.overlapArea, 0.18);
+    EXPECT_TRUE(check.allInsideBoth);
+    EXPECT_TRUE(check.allFinite);
+    EXPECT_TRUE(check.allDistinct);
+    EXPECT_EQ(check.pointCount, 4u);
+    EXPECT_GE(check.coveredArea, 0.99 * check.overlapArea);
+  }
+}
+
+TEST(NarrowPhaseFaceManifold, PartlyOverlappingYawedBoxesKeepTheirOverlapInsideBothBoxes)
+{
+  TrialRandom random(20240611);
+
+  int checked = 0;
+  int exact = 0;
+  for (int trial = 0; trial < 400; ++trial)
+  {
+    const float lowerHalfX = random.between(0.1f, 5.0f);
+    const float lowerHalfZ = random.between(0.1f, 5.0f);
+    const float upperHalfX = random.between(0.1f, 5.0f);
+    const float upperHalfZ = random.between(0.1f, 5.0f);
+    const float offsetShareX = random.between(-0.5f, 0.5f);
+    const float offsetShareZ = random.between(-0.5f, 0.5f);
+    const float yaw = random.between(5.0f, 175.0f);
+
+    const glm::vec2 lowerHalf(lowerHalfX, lowerHalfZ);
+    const glm::vec2 upperHalf(upperHalfX, upperHalfZ);
+    const float reach = glm::length(lowerHalf) + glm::length(upperHalf);
+    const FacePair pair(lowerHalf, upperHalf, { offsetShareX * reach, offsetShareZ * reach }, yaw);
+
+    for (const bool lowerFirst : { true, false })
+    {
+      const auto check = checkManifold(pair, lowerFirst);
+
+      // A pair whose footprints barely meet has nothing to cover.
+      if (check.overlapArea < 0.05)
+      {
+        continue;
+      }
+
+      SCOPED_TRACE(testing::Message() << "trial " << trial << (lowerFirst ? " lower first" : " upper first"));
+      ASSERT_TRUE(check.found);
+      ++checked;
+      EXPECT_TRUE(check.allInsideBoth);
+
+      // The four points are the deepest corner and the three covering the most area with it: the whole of a
+      // quadrilateral overlap, and for a larger one at least 70% of what the best four corners hold.
+      const bool fitsInFour = check.bestFourArea >= 0.999 * check.overlapArea;
+      EXPECT_GE(check.coveredArea, 0.7 * check.bestFourArea);
+      EXPECT_GE(check.coveredArea, (fitsInFour ? 0.97 : 0.65) * check.overlapArea);
+      EXPECT_TRUE(check.allFinite);
+      EXPECT_TRUE(check.allDistinct);
+      exact += fitsInFour ? 1 : 0;
+    }
+  }
+
+  EXPECT_GT(checked, 200);
+  EXPECT_GT(exact, 100);
+}
+
+namespace {
+  struct PlacedBox {
+    std::shared_ptr<Object> object;
+    std::shared_ptr<Collider> collider;
+  };
+
+  PlacedBox placeBox(const fixtures::Scene& scene, const glm::vec3& half, const glm::vec3& eulerDegrees,
+                     const glm::vec3& position)
+  {
+    PlacedBox box;
+    box.object = addObject(scene, "Box", position, half);
+    transformOf(box.object)->setRotation(eulerDegrees);
+    box.collider = fixtures::addBoxCollider(box.object);
+
+    return box;
+  }
+
+  // Sets the box's height so its lowest corner is depth below y = top.
+  void sinkLowestCornerTo(const PlacedBox& box, const glm::vec3& half, const float top, const float depth)
+  {
+    const auto transform = transformOf(box.object);
+
+    float lowest = 1e9f;
+    for (const float x : { -1.0f, 1.0f })
+    {
+      for (const float y : { -1.0f, 1.0f })
+      {
+        for (const float z : { -1.0f, 1.0f })
+        {
+          lowest = std::min(lowest, (transform->getOrientation() * (glm::vec3(x, y, z) * half)).y);
+        }
+      }
+    }
+
+    transform->setPosition({ 0.0f, top - depth - lowest, 0.0f });
+  }
+
+  [[nodiscard]] float distanceToNearest(const glm::vec3& corner, const std::span<const glm::vec3> points)
+  {
+    float nearest = 1e9f;
+    for (const auto& point : points)
+    {
+      nearest = std::min(nearest, glm::distance(point, corner));
+    }
+
+    return nearest;
+  }
+}
+
+TEST(NarrowPhaseFaceManifold, IdenticalBoxesStackedAtRandomRotationsKeepAllFourCorners)
+{
+  TrialRandom random(7);
+
+  int checked = 0;
+  for (int trial = 0; trial < 60; ++trial)
+  {
+    const float halfX = random.between(0.3f, 2.0f);
+    const float halfY = random.between(0.3f, 1.0f);
+    const float halfZ = random.between(0.3f, 2.0f);
+    const float eulerX = random.between(0.0f, 360.0f);
+    const float eulerY = random.between(0.0f, 360.0f);
+    const float eulerZ = random.between(0.0f, 360.0f);
+
+    const glm::vec3 half(halfX, halfY, halfZ);
+    const glm::vec3 euler(eulerX, eulerY, eulerZ);
+
+    const fixtures::Scene scene;
+    const auto lower = placeBox(scene, half, euler, { 0, 0, 0 });
+    const glm::vec3 up = transformOf(lower.object)->getOrientation() * glm::vec3(0, 1, 0);
+    const auto upper = placeBox(scene, half, euler, up * (2.0f * half.y - boxPenetration));
+
+    for (const bool lowerFirst : { true, false })
+    {
+      SCOPED_TRACE(testing::Message() << "trial " << trial << (lowerFirst ? " lower first" : " upper first"));
+      const auto contact = lowerFirst ? collisions::findContact(*lower.collider, *upper.collider)
+                                      : collisions::findContact(*upper.collider, *lower.collider);
+      ASSERT_TRUE(contact.has_value());
+
+      const auto points = contact->contactPoints();
+      EXPECT_EQ(points.size(), 4u);
+
+      const auto transform = transformOf(lower.object);
+      for (const float x : { -1.0f, 1.0f })
+      {
+        for (const float z : { -1.0f, 1.0f })
+        {
+          const glm::vec3 corner = transform->getPosition() +
+                                   transform->getOrientation() * glm::vec3(x * half.x, half.y, z * half.z);
+          EXPECT_LT(distanceToNearest(corner, points), 2.0f * boxPenetration)
+            << "no point at corner (" << x << ", " << z << ")";
+        }
+      }
+
+      ++checked;
+    }
+  }
+
+  EXPECT_EQ(checked, 120);
+}
+
+TEST(NarrowPhaseFaceManifold, BoxesSharingAnEdgeLineOverlapInTheirWholeSharedHalf)
+{
+  // The upper box is shifted one half-width, so its long edges lie on the lower box's side planes, turned off the axes.
+  for (const float yaw : { 3.5f, 8.0f, 10.5f, 14.5f, 33.0f, 61.0f })
+  {
+    const FacePair pair({ 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }, yaw, yaw);
+
+    for (const bool lowerFirst : { true, false })
+    {
+      SCOPED_TRACE(testing::Message() << "yaw " << yaw << (lowerFirst ? " lower first" : " upper first"));
+      const auto check = checkManifold(pair, lowerFirst);
+
+      ASSERT_TRUE(check.found);
+      EXPECT_NEAR(check.overlapArea, 2.0, 1e-3);
+      EXPECT_EQ(check.pointCount, 4u);
+      EXPECT_TRUE(check.allInsideBoth);
+      EXPECT_TRUE(check.allDistinct);
+      EXPECT_GE(check.coveredArea, 0.99 * check.overlapArea);
+    }
+  }
+}
+
+TEST(NarrowPhaseFaceManifold, ABoxTiltedUnderADegreeOffAFaceKeepsTheTouchingPartOfIt)
+{
+  // A tall box (so its touching tolerance admits the whole face) turned 0.046 degrees about z: one base edge is 0.0001
+  // deep and the face climbs 0.0008 per unit of width, so it leaves the pad's 0.001 tolerance 1.4 units along. The
+  // part within it is a polygon of four points, two of them where the face crosses that limit.
+  const fixtures::Scene scene;
+  const glm::vec3 boxHalf(1.0f, 2.0f, 1.0f);
+  const auto pad = placeBox(scene, { 0.9f, 0.25f, 0.9f }, { 0, 0, 0 }, { 0, 0, 0 });
+  const auto box = placeBox(scene, boxHalf, { 0, 0, 0.0458f }, { 0, 0, 0 });
+  sinkLowestCornerTo(box, boxHalf, 0.25f, 1e-4f);
+
+  // Faces within the tie band make the first collider the reference, so the pad's own tolerance applies.
+  const auto contact = collisions::findContact(*pad.collider, *box.collider);
+  ASSERT_TRUE(contact.has_value());
+
+  const auto points = contact->contactPoints();
+  EXPECT_EQ(points.size(), 4u);
+
+  float low = 1e9f;
+  float high = -1e9f;
+  for (const auto& point : points)
+  {
+    low = std::min(low, point.x);
+    high = std::max(high, point.x);
+  }
+  EXPECT_NEAR(low, -0.9f, 0.01f);
+  EXPECT_GT(high - low, 1.0f);
+}
+
+TEST(NarrowPhaseFaceManifold, AnEdgeRestingOverhangingAFaceKeepsEveryPointInsideBothBoxes)
+{
+  // A long box turned 20 degrees about its own x axis, so it rests on a bottom edge, and then yawed 35 degrees; the
+  // edge is far longer than the pad it crosses.
+  const fixtures::Scene scene;
+  const glm::vec3 boxHalf(3.0f, 0.5f, 1.0f);
+  const auto pad = placeBox(scene, { 1.0f, 0.25f, 1.0f }, { 0, 0, 0 }, { 0, 0, 0 });
+  const auto box = placeBox(scene, boxHalf, { 20.0f, 35.0f, 0 }, { 0, 0, 0 });
+  sinkLowestCornerTo(box, boxHalf, 0.25f, boxPenetration);
+
+  for (const bool padFirst : { true, false })
+  {
+    SCOPED_TRACE(padFirst ? "pad first" : "box first");
+    const auto contact = padFirst ? collisions::findContact(*pad.collider, *box.collider)
+                                  : collisions::findContact(*box.collider, *pad.collider);
+    ASSERT_TRUE(contact.has_value());
+
+    const auto points = contact->contactPoints();
+    EXPECT_GE(points.size(), 2u);
+    for (const auto& point : points)
+    {
+      EXPECT_TRUE(insideBox(point, pad.object, 2e-3f)) << "outside the pad";
+      EXPECT_TRUE(insideBox(point, box.object, 2e-3f)) << "outside the box";
+    }
+  }
 }

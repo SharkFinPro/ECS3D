@@ -92,6 +92,7 @@ namespace collisions {
   using detail::Candidate;
   using detail::centroidOf;
   using detail::closestPointOnSegment;
+  using detail::clipToPolygon;
   using detail::containsNear;
   using detail::dedupeDistance;
   using detail::segmentEpsilon;
@@ -185,57 +186,6 @@ namespace collisions {
       return doubleArea * 0.5f > minPolygonAreaRatio * radiusSquared;
     }
 
-    // One Sutherland-Hodgman pass against the half-space dot(inward, x - origin) >= 0.
-    [[nodiscard]] std::vector<glm::vec3> clipAgainstPlane(const std::vector<glm::vec3>& input,
-                                                          const glm::vec3& origin, const glm::vec3& inward)
-    {
-      std::vector<glm::vec3> output;
-
-      for (size_t i = 0; i < input.size(); ++i)
-      {
-        const glm::vec3& current = input[i];
-        const glm::vec3& previous = input[(i + input.size() - 1) % input.size()];
-
-        const float currentDistance = glm::dot(inward, current - origin);
-        const float previousDistance = glm::dot(inward, previous - origin);
-        const bool currentInside = currentDistance >= 0.0f;
-        const bool previousInside = previousDistance >= 0.0f;
-
-        if (currentInside != previousInside)
-        {
-          const float t = previousDistance / (previousDistance - currentDistance);
-          output.push_back(previous + (current - previous) * t);
-        }
-
-        if (currentInside)
-        {
-          output.push_back(current);
-        }
-      }
-
-      return output;
-    }
-
-    [[nodiscard]] std::vector<glm::vec3> clipToPolygon(std::vector<glm::vec3> subject,
-                                                       const std::vector<glm::vec3>& polygon,
-                                                       const glm::vec3& normal)
-    {
-      for (size_t i = 0; i < polygon.size() && !subject.empty(); ++i)
-      {
-        const glm::vec3 edge = polygon[(i + 1) % polygon.size()] - polygon[i];
-        const float length = glm::length(edge);
-
-        if (length < dedupeDistance)
-        {
-          continue;
-        }
-
-        subject = clipAgainstPlane(subject, polygon[i], glm::cross(normal, edge / length));
-      }
-
-      return subject;
-    }
-
     // Both segments longer than a point.
     [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestOfProperSegments(const glm::vec3& p1, const glm::vec3& q1,
                                                                           const glm::vec3& p2, const glm::vec3& q2)
@@ -320,6 +270,66 @@ namespace collisions {
       return (closestA + closestB) * 0.5f;
     }
 
+  }
+
+  namespace detail {
+    std::vector<glm::vec3> clipAgainstPlane(const std::vector<glm::vec3>& input, const glm::vec3& origin,
+                                            const glm::vec3& inward, const float tolerance)
+    {
+      std::vector<glm::vec3> output;
+
+      for (size_t i = 0; i < input.size(); ++i)
+      {
+        const glm::vec3& current = input[i];
+        const glm::vec3& previous = input[(i + input.size() - 1) % input.size()];
+
+        const float currentDistance = glm::dot(inward, current - origin) + tolerance;
+        const float previousDistance = glm::dot(inward, previous - origin) + tolerance;
+        const bool currentInside = currentDistance >= 0.0f;
+        const bool previousInside = previousDistance >= 0.0f;
+
+        if (currentInside != previousInside)
+        {
+          const float t = previousDistance / (previousDistance - currentDistance);
+          output.push_back(previous + (current - previous) * t);
+        }
+
+        if (currentInside)
+        {
+          output.push_back(current);
+        }
+      }
+
+      return output;
+    }
+
+    std::vector<glm::vec3> clipToPolygon(std::vector<glm::vec3> subject, const std::vector<glm::vec3>& polygon,
+                                         const glm::vec3& normal)
+    {
+      // An edge lying on a side plane is that plane's to within the float rounding of the coordinates, so a point
+      // this close counts as inside rather than splitting the edge at a crossing that is only noise.
+      float magnitude = 1.0f;
+      for (const auto& corner : polygon)
+      {
+        magnitude = std::max({ magnitude, std::fabs(corner.x), std::fabs(corner.y), std::fabs(corner.z) });
+      }
+      const float tolerance = coincidentUlps * std::numeric_limits<float>::epsilon() * magnitude;
+
+      for (size_t i = 0; i < polygon.size() && !subject.empty(); ++i)
+      {
+        const glm::vec3 edge = polygon[(i + 1) % polygon.size()] - polygon[i];
+        const float length = glm::length(edge);
+
+        if (length < dedupeDistance)
+        {
+          continue;
+        }
+
+        subject = clipAgainstPlane(subject, polygon[i], glm::cross(normal, edge / length), tolerance);
+      }
+
+      return subject;
+    }
   }
 
   std::vector<glm::vec3> touchingFeature(const std::span<const glm::vec3> vertices, const glm::vec3& direction)

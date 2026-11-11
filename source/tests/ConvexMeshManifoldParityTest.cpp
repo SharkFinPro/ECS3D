@@ -194,10 +194,12 @@ TEST(ConvexMeshManifoldParity, AGeneralHullKeepsItsOwnDepthAndStaysInsideTheBoxF
 
   const auto contact = collisions::findContact(*ground, *tetrahedron);
   ASSERT_TRUE(contact.has_value());
-  ASSERT_EQ(contact->pointCount, 3);
+  ASSERT_EQ(contact->pointCount, 4);
 
-  // The base corner at x 1.8 hangs past the cube's edge at x = 1 and is pulled back onto it, still at y 0.95.
+  // The base corner at x 1.8 hangs past the cube's edge at x = 1, so the base's overlap with the face is its triangle
+  // cut along that edge, still at y 0.95.
   EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 1.0f, 0.95f, -1.0f }, 1e-3f));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 1.0f, 0.95f, 0.6f }, 1e-3f));
   EXPECT_TRUE(hasPointNear(contact->contactPoints(), { -0.2f, 0.95f, -1.0f }, 1e-3f));
   EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0.8f, 0.95f, 1.0f }, 1e-3f));
 

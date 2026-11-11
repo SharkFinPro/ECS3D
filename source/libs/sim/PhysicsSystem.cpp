@@ -328,7 +328,8 @@ namespace {
     return resting;
   }
 
-  // The corners of the body's face, clamped onto the support's footprint the way the narrow phase clamps a manifold.
+  // The corners of the body's face, clamped onto the support's footprint, standing in for the overlap the narrow
+  // phase's manifold holds.
   std::vector<glm::vec3> clampedCorners(const RestingFaces& faces)
   {
     auto corners = faces.own.corners;
