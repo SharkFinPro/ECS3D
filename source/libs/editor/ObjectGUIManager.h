@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 #include <uuid.h>
 
@@ -57,6 +58,9 @@ public:
   // viewed/inspected, but the add/remove/reparent affordances are disabled.
   void setEditable(bool editable);
 
+  // The line shown while not editable; the app says why. Null restores the default wording.
+  void setReadOnlyNotice(const char* notice);
+
   // Deletes the current selection (the Delete keybind's handler - the context menu and row minus button
   // funnel into the same private performDelete()). No-op unless the selection is of
   // Object kind, non-empty, and m_editable.
@@ -79,6 +83,7 @@ private:
 
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
+  std::string m_readOnlyNotice = "Read-only - server is not in edit mode";
 
   // Owned by EditorApp and valid for as long as this panel is being drawn. Null until setSettings() is
   // called. Not safe to touch during EditorApp teardown: EditorApp destroys its SettingsStore member

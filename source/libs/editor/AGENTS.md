@@ -19,7 +19,8 @@ Related design notes: [undo-redo.md](../../../docs/architecture/undo-redo.md),
   `Gizmo.h`, `AssetFilter.h`, `ObjectNameField.h`, `SettingsPanelLayout.h`, `DashedBoxLayout.h`,
   `ConsolePanelLayout.h`, `ConsoleView.h`, `FramePacingNotes.h`, `GizmoEditSending.h`, `SceneStatusLayout.h`,
   `PrefabBodyEdits.h`, `KeybindRebindFlow.h`, `AssetCreateFlow.h`, `ProfilerPanelState.h`, `ProfilerServerLane.h`,
-  `ProfilerReadout.h`, `ProfilerCapture.h`) so the test suite compiles them without ImGui. The ImGui code draws.
+  `ProfilerReadout.h`, `ProfilerCapture.h`, `EditorConnectionState.h`) so the test suite compiles them without
+  ImGui. The ImGui code draws.
 - Numeric widgets come from `GuiComponents`, which refuse a non-finite entry.
 - Preferences read and write `ECS3DSettings` directly; they are local, not replicated.
 - A file that uses ImGui internals such as `ImGui::GetActiveID` includes `<imgui_internal.h>` itself. MSVC compiles

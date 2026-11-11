@@ -31,6 +31,7 @@ add_library(${PROJECT_NAME}
   SaveUI.h
   UnsavedChanges.h
   UndoRequestGate.h
+  EditorConnectionState.h
   PlayControls.h
   SceneStatusLayout.h
   AssetReferences.cpp
