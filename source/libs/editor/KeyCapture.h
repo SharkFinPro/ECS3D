@@ -30,7 +30,10 @@ public:
   void complete(const KeyChord& chord)
   {
     const auto callback = std::exchange(m_callback, nullptr);
-    callback(chord);
+    if (callback)
+    {
+      callback(chord);
+    }
   }
 
 private:

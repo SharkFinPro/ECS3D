@@ -59,6 +59,7 @@ add_library(${PROJECT_NAME}
   AssetCreateFlow.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
+  KeybindCaptureFrame.h
   KeybindRebindFlow.h
   KeyCapture.h
   KeyHoldRepeat.h

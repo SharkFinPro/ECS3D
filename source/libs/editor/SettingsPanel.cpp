@@ -153,9 +153,31 @@ void SettingsPanel::setOpen(const bool open)
 {
   m_open = open;
   m_settings->set(openKey, open);
+
+  if (!open)
+  {
+    abandonKeyCapture();
+  }
+}
+
+void SettingsPanel::abandonKeyCapture()
+{
+  m_captureFrame.hidden();
+  syncCapture(false);
 }
 
 void SettingsPanel::displayGui()
+{
+  drawWindow();
+
+  // Every frame ends reconciled, so a key polled before the next frame never reaches a stale capture.
+  if (m_captureFrame.endFrame(m_rebindFlow, m_keybindDispatcher->isCapturing()))
+  {
+    m_keybindDispatcher->cancelCapture();
+  }
+}
+
+void SettingsPanel::drawWindow()
 {
   // A frame that skipped the Display section abandons any edit, so the field reseeds when it returns.
   if (!m_framePacingDrawn)
@@ -163,10 +185,6 @@ void SettingsPanel::displayGui()
     m_maxFpsEditing = false;
   }
   m_framePacingDrawn = false;
-
-  // A frame that skipped the Keybinds list (window closed, tab switched, collapsed) abandons a capture.
-  syncCapture(m_keybindsDrawn);
-  m_keybindsDrawn = false;
 
   if (!m_open)
   {
@@ -514,7 +532,7 @@ void SettingsPanel::displayFramePacing()
 
 void SettingsPanel::displayKeybinds()
 {
-  m_keybindsDrawn = true;
+  m_captureFrame.drawn();
 
   gc::sectionLabel("Keybinds");
 
