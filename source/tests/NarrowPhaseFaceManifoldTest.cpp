@@ -15,8 +15,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <memory>
-#include <random>
 #include <span>
 #include <vector>
 
@@ -353,6 +353,29 @@ namespace {
     double coveredArea = 0.0;
   };
 
+  // Whether the points are finite, distinct and inside both boxes, and the area their hull covers.
+  void inspectPoints(const FacePair& pair, const std::span<const glm::vec3> points, ManifoldCheck& check)
+  {
+    constexpr float slack = 2e-3f;
+
+    std::vector<glm::vec2> planar;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+      const auto& point = points[i];
+      check.allFinite = check.allFinite && std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
+      check.allInsideBoth = check.allInsideBoth && insideBox(point, pair.lower, slack) &&
+                            insideBox(point, pair.upper, slack);
+      planar.emplace_back(point.x, point.z);
+
+      for (size_t j = 0; j < i; ++j)
+      {
+        check.allDistinct = check.allDistinct && glm::distance(point, points[j]) > 1e-5f;
+      }
+    }
+
+    check.coveredArea = areaOf(hullOf(planar));
+  }
+
   [[nodiscard]] ManifoldCheck checkManifold(const FacePair& pair, const bool lowerFirst)
   {
     ManifoldCheck check;
@@ -362,40 +385,31 @@ namespace {
 
     const auto contact = lowerFirst ? collisions::findContact(*pair.lowerCollider, *pair.upperCollider)
                                     : collisions::findContact(*pair.upperCollider, *pair.lowerCollider);
-    if (!contact)
+    if (contact)
     {
-      return check;
+      check.found = true;
+      check.pointCount = contact->contactPoints().size();
+      inspectPoints(pair, contact->contactPoints(), check);
     }
-
-    check.found = true;
-    const auto points = contact->contactPoints();
-    check.pointCount = points.size();
-
-    constexpr float slack = 2e-3f;
-    std::vector<glm::vec2> planar;
-    for (size_t i = 0; i < points.size(); ++i)
-    {
-      const auto& point = points[i];
-      check.allFinite = check.allFinite && std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
-      for (size_t j = 0; j < i; ++j)
-      {
-        check.allDistinct = check.allDistinct && glm::distance(point, points[j]) > 1e-5f;
-      }
-
-      check.allInsideBoth = check.allInsideBoth && insideBox(point, pair.lower, slack) &&
-                            insideBox(point, pair.upper, slack);
-      planar.emplace_back(point.x, point.z);
-    }
-
-    check.coveredArea = areaOf(hullOf(planar));
 
     return check;
   }
 
-  [[nodiscard]] float randomIn(std::mt19937& generator, const float low, const float high)
-  {
-    return std::uniform_real_distribution<float>(low, high)(generator);
-  }
+  // A linear congruential generator, so every toolchain runs the same trials; the standard distributions differ
+  // between library implementations.
+  class TrialRandom {
+  public:
+    explicit TrialRandom(const std::uint32_t seed) : m_state(seed) {}
+
+    [[nodiscard]] float between(const float low, const float high)
+    {
+      m_state = m_state * 1664525u + 1013904223u;
+      return low + (high - low) * static_cast<float>(static_cast<double>(m_state) / 4294967296.0);
+    }
+
+  private:
+    std::uint32_t m_state;
+  };
 }
 
 TEST(NarrowPhaseFaceManifold, TwoThinBoxesCrossingAtAnAngleKeepTheirWholeOverlap)
@@ -420,17 +434,24 @@ TEST(NarrowPhaseFaceManifold, TwoThinBoxesCrossingAtAnAngleKeepTheirWholeOverlap
 
 TEST(NarrowPhaseFaceManifold, PartlyOverlappingYawedBoxesKeepTheirOverlapInsideBothBoxes)
 {
-  std::mt19937 generator(20240611);
+  TrialRandom random(20240611);
 
   int checked = 0;
   int exact = 0;
   for (int trial = 0; trial < 400; ++trial)
   {
-    const glm::vec2 lowerHalf(randomIn(generator, 0.1f, 5.0f), randomIn(generator, 0.1f, 5.0f));
-    const glm::vec2 upperHalf(randomIn(generator, 0.1f, 5.0f), randomIn(generator, 0.1f, 5.0f));
+    const float lowerHalfX = random.between(0.1f, 5.0f);
+    const float lowerHalfZ = random.between(0.1f, 5.0f);
+    const float upperHalfX = random.between(0.1f, 5.0f);
+    const float upperHalfZ = random.between(0.1f, 5.0f);
+    const float offsetShareX = random.between(-0.5f, 0.5f);
+    const float offsetShareZ = random.between(-0.5f, 0.5f);
+    const float yaw = random.between(5.0f, 175.0f);
+
+    const glm::vec2 lowerHalf(lowerHalfX, lowerHalfZ);
+    const glm::vec2 upperHalf(upperHalfX, upperHalfZ);
     const float reach = glm::length(lowerHalf) + glm::length(upperHalf);
-    const glm::vec2 offset(randomIn(generator, -0.5f, 0.5f) * reach, randomIn(generator, -0.5f, 0.5f) * reach);
-    const FacePair pair(lowerHalf, upperHalf, offset, randomIn(generator, 5.0f, 175.0f));
+    const FacePair pair(lowerHalf, upperHalf, { offsetShareX * reach, offsetShareZ * reach }, yaw);
 
     for (const bool lowerFirst : { true, false })
     {
@@ -447,10 +468,10 @@ TEST(NarrowPhaseFaceManifold, PartlyOverlappingYawedBoxesKeepTheirOverlapInsideB
       ++checked;
       EXPECT_TRUE(check.allInsideBoth);
 
-      // The four points are the corners covering the most area, which is the whole of a quadrilateral overlap. Four
-      // corners of a pentagon or larger hold at least about 70% of it (a regular octagon is the worst).
+      // The four points are the deepest corner and the three covering the most area with it: the whole of a
+      // quadrilateral overlap, and for a larger one at least 70% of what the best four corners hold.
       const bool fitsInFour = check.bestFourArea >= 0.999 * check.overlapArea;
-      EXPECT_GE(check.coveredArea, 0.97 * check.bestFourArea);
+      EXPECT_GE(check.coveredArea, 0.7 * check.bestFourArea);
       EXPECT_GE(check.coveredArea, (fitsInFour ? 0.97 : 0.65) * check.overlapArea);
       EXPECT_TRUE(check.allFinite);
       EXPECT_TRUE(check.allDistinct);
@@ -513,15 +534,20 @@ namespace {
 
 TEST(NarrowPhaseFaceManifold, IdenticalBoxesStackedAtRandomRotationsKeepAllFourCorners)
 {
-  std::mt19937 generator(7);
+  TrialRandom random(7);
 
   int checked = 0;
   for (int trial = 0; trial < 60; ++trial)
   {
-    const glm::vec3 half(randomIn(generator, 0.3f, 2.0f), randomIn(generator, 0.3f, 1.0f),
-                         randomIn(generator, 0.3f, 2.0f));
-    const glm::vec3 euler(randomIn(generator, 0.0f, 360.0f), randomIn(generator, 0.0f, 360.0f),
-                          randomIn(generator, 0.0f, 360.0f));
+    const float halfX = random.between(0.3f, 2.0f);
+    const float halfY = random.between(0.3f, 1.0f);
+    const float halfZ = random.between(0.3f, 2.0f);
+    const float eulerX = random.between(0.0f, 360.0f);
+    const float eulerY = random.between(0.0f, 360.0f);
+    const float eulerZ = random.between(0.0f, 360.0f);
+
+    const glm::vec3 half(halfX, halfY, halfZ);
+    const glm::vec3 euler(eulerX, eulerY, eulerZ);
 
     const fixtures::Scene scene;
     const auto lower = placeBox(scene, half, euler, { 0, 0, 0 });
@@ -560,19 +586,22 @@ TEST(NarrowPhaseFaceManifold, IdenticalBoxesStackedAtRandomRotationsKeepAllFourC
 TEST(NarrowPhaseFaceManifold, BoxesSharingAnEdgeLineOverlapInTheirWholeSharedHalf)
 {
   // The upper box is shifted one half-width, so its long edges lie on the lower box's side planes, turned off the axes.
-  const FacePair pair({ 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }, 33.0f, 33.0f);
-
-  for (const bool lowerFirst : { true, false })
+  for (const float yaw : { 3.5f, 8.0f, 10.5f, 14.5f, 33.0f, 61.0f })
   {
-    SCOPED_TRACE(lowerFirst ? "lower first" : "upper first");
-    const auto check = checkManifold(pair, lowerFirst);
+    const FacePair pair({ 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }, yaw, yaw);
 
-    ASSERT_TRUE(check.found);
-    EXPECT_NEAR(check.overlapArea, 2.0, 1e-3);
-    EXPECT_EQ(check.pointCount, 4u);
-    EXPECT_TRUE(check.allInsideBoth);
-    EXPECT_TRUE(check.allDistinct);
-    EXPECT_GE(check.coveredArea, 0.99 * check.overlapArea);
+    for (const bool lowerFirst : { true, false })
+    {
+      SCOPED_TRACE(testing::Message() << "yaw " << yaw << (lowerFirst ? " lower first" : " upper first"));
+      const auto check = checkManifold(pair, lowerFirst);
+
+      ASSERT_TRUE(check.found);
+      EXPECT_NEAR(check.overlapArea, 2.0, 1e-3);
+      EXPECT_EQ(check.pointCount, 4u);
+      EXPECT_TRUE(check.allInsideBoth);
+      EXPECT_TRUE(check.allDistinct);
+      EXPECT_GE(check.coveredArea, 0.99 * check.overlapArea);
+    }
   }
 }
 

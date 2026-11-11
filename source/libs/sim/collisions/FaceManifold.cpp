@@ -5,9 +5,7 @@
 #include <glm/geometric.hpp>
 #include <glm/vec2.hpp>
 #include <algorithm>
-#include <bit>
 #include <cmath>
-#include <cstdint>
 #include <limits>
 #include <utility>
 
@@ -146,86 +144,67 @@ namespace collisions {
       return inside ? point : nearest;
     }
 
-    // Corner sets this small are searched exhaustively for the choice covering the most area.
-    constexpr size_t maxSearchedCandidates = 12;
-
-    // The area of the points' convex hull along normal; the points of a convex loop taken in order are their own hull.
-    [[nodiscard]] float loopArea(const std::vector<glm::vec3>& points, const std::vector<size_t>& chosen,
-                                 const glm::vec3& normal)
+    // Twice the area of the triangle a, b, c as seen along normal, signed by its turn.
+    [[nodiscard]] float turnArea(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& normal)
     {
-      const glm::vec3 origin = points[chosen.front()];
-      glm::vec3 sum{ 0 };
-      for (size_t i = 0; i < chosen.size(); ++i)
-      {
-        sum += glm::cross(points[chosen[i]] - origin, points[chosen[(i + 1) % chosen.size()]] - origin);
-      }
-
-      return std::fabs(glm::dot(sum, normal)) * 0.5f;
+      return glm::dot(glm::cross(b - a, c - a), normal);
     }
 
-    // At most maxPoints of the candidates, the ones whose polygon covers the most area, so the manifold spans as much
-    // of the overlap as that many points can. Candidates arrive in loop order around the face. Among equal areas the
-    // choice holding the deepest point wins.
+    // At most four of the candidates: the deepest, which the push out of the overlap leans on, and the three that
+    // make its polygon cover the most area. The candidates are the corners of a convex loop in order, so the polygon
+    // through chosen ones is a fan of triangles from the deepest. Any other number of points is spread by depth and
+    // distance.
     [[nodiscard]] std::vector<glm::vec3> largestSpread(const std::vector<Candidate>& candidates,
                                                        const glm::vec3& normal, const size_t maxPoints)
     {
-      if (candidates.size() <= maxPoints || candidates.size() > maxSearchedCandidates || maxPoints < 3)
+      constexpr size_t keptPoints = 4;
+      if (candidates.size() <= maxPoints || maxPoints != keptPoints)
       {
         return spreadOut(candidates, maxPoints);
       }
 
-      std::vector<glm::vec3> points;
+      const size_t count = candidates.size();
       size_t deepest = 0;
-      for (size_t i = 0; i < candidates.size(); ++i)
+      for (size_t i = 1; i < count; ++i)
       {
-        points.push_back(candidates[i].point);
         if (candidates[i].depth > candidates[deepest].depth)
         {
           deepest = i;
         }
       }
 
-      // Every way to pick maxPoints of the loop, in order, as the bits of a mask.
-      std::vector<size_t> best;
-      float bestArea = -1.0f;
-      for (uint32_t mask = 0; mask < (1u << candidates.size()); ++mask)
+      // The loop from the deepest corner on, so the others are indices 1 to count - 1 in order.
+      std::vector<glm::vec3> loop;
+      loop.reserve(count);
+      for (size_t i = 0; i < count; ++i)
       {
-        if (static_cast<size_t>(std::popcount(mask)) != maxPoints)
-        {
-          continue;
-        }
+        loop.push_back(candidates[(deepest + i) % count].point);
+      }
 
-        std::vector<size_t> chosen;
-        for (size_t i = 0; i < candidates.size(); ++i)
+      size_t bestFirst = 1;
+      size_t bestSecond = 2;
+      size_t bestThird = 3;
+      float bestArea = -1.0f;
+      for (size_t first = 1; first + 2 < count; ++first)
+      {
+        for (size_t second = first + 1; second + 1 < count; ++second)
         {
-          if ((mask >> i) & 1u)
+          const float firstTurn = turnArea(loop[0], loop[first], loop[second], normal);
+          for (size_t third = second + 1; third < count; ++third)
           {
-            chosen.push_back(i);
+            const float area = std::fabs(firstTurn + turnArea(loop[0], loop[second], loop[third], normal));
+            if (area > bestArea)
+            {
+              bestArea = area;
+              bestFirst = first;
+              bestSecond = second;
+              bestThird = third;
+            }
           }
         }
-
-        const float area = loopArea(points, chosen, normal);
-        const bool holdsDeepest = std::ranges::find(chosen, deepest) != chosen.end();
-        const bool tied = std::fabs(area - bestArea) <= 1e-5f * std::max(bestArea, 1e-6f);
-        const bool bestHoldsDeepest = !best.empty() && std::ranges::find(best, deepest) != best.end();
-        if (area > bestArea && !tied)
-        {
-          best = chosen;
-          bestArea = area;
-        }
-        else if (tied && holdsDeepest && !bestHoldsDeepest)
-        {
-          best = chosen;
-        }
       }
 
-      std::vector<glm::vec3> result;
-      for (const size_t index : best)
-      {
-        result.push_back(points[index]);
-      }
-
-      return result;
+      return { loop[0], loop[bestFirst], loop[bestSecond], loop[bestThird] };
     }
   }
 
@@ -312,13 +291,19 @@ namespace collisions {
     }
 
     // A corner, or an edge or face wholly outside the reference polygon along the plane, still touches somewhere: its
-    // vertices are pulled onto the reference polygon, keeping their depth.
+    // vertices are pulled onto the reference polygon, keeping their depth, and put in loop order.
     if (candidates.empty())
     {
+      std::vector<glm::vec3> clamped;
       for (const auto& vertex : incidentFeature)
       {
         const float offset = glm::dot(vertex - planePoint, faceNormal);
-        place(clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset, offset);
+        clamped.push_back(clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset);
+      }
+
+      for (const auto& point : convexPolygon(clamped, faceNormal))
+      {
+        place(point, glm::dot(point - planePoint, faceNormal));
       }
     }
 

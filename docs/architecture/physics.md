@@ -94,10 +94,11 @@ faces (outward normal, counter-clockwise corners, center; coplanar hull triangle
 single face a box needs. A pair whose colliders resolve to the same rigid body, or where one object is an ancestor of
 the other, is skipped before the narrow phase. A box or hull face manifold is the overlap polygon of the two faces:
 the incident face clipped to the reference face's side planes and cut at the reference plane, on the incident face (so
-at its depth, which differs from the reference face's only by a tilt), reduced to the at most four corners that cover
-the most area. A small face on a larger or turned one so keeps its whole footprint, and two faces crossing at an angle
-keep the corners where their edges cross. A contact holds a resting body like a stacked load (`pressesIntoSupport`)
-only within 45 degrees of that body's support normal. A flatter push, such as a leaning domino, can tip it.
+at its depth, which differs from the reference face's only by a tilt), reduced to at most four corners, the deepest
+and the three that cover the most area. A small face on a larger or turned one so keeps its whole footprint, and two
+faces crossing at an angle keep the corners where their edges cross. A contact holds a resting body like a stacked
+load (`pressesIntoSupport`) only within 45 degrees of that body's support normal. A flatter push, such as a leaning
+domino, can tip it.
 `findSupport` decides whether the center of mass is over the support by dropping it straight down along world y,
 not along the contact normal. On a slope a body past its downhill edge then tips or rolls. Operates on
 `ECS3DData` via accessors. OpenMP if available: the narrow phase runs per sweep edge, and the response runs per
@@ -120,11 +121,12 @@ A pair holding a convex mesh collider and a box or another hull takes its manifo
 normal is the reference, and alignments within `faceAlignmentTie` tie, going to the first collider. The box pair
 uses the same band. The reference polygon is the convex hull of the touching vertices projected along the face. The
 other side's touching face, or an edge of it, is clipped to the reference polygon's side planes
-(`detail::clipToPolygon`, shared with the clipping above) and cut at the reference face's plane. A point within a few
-float ulps of a side plane counts as on it, so an edge lying on one is not split by rounding. A corner, or an edge or
-face that clips to nothing, is clamped into the polygon instead. The overlap polygon has up to eight corners, and the
-four covering the most area are kept. The box pair goes through the same function. So a box-shaped hull makes the same
-`Contact` a box does. A side with no faces falls back to the clipping above.
+(`detail::clipToPolygon`, shared with the clipping above) and cut at the reference face's plane. A point within a
+tolerance scaled to the coordinates' magnitude of a side plane counts as on it, so an edge lying on one is not split
+by rounding. A corner, or an edge or face that clips to nothing, is clamped into the polygon instead. The overlap
+polygon can have more than four corners, and then the deepest is kept with the three that cover the most area. The box
+pair goes through the same function. So a box-shaped hull makes the same `Contact` a box does. A side with no faces
+falls back to the clipping above.
 A pair holding a capsule and a hull takes its manifold from that clipping in `Polytope`, at most
 `Contact::points` wide, with the capsule's cap points as its feature. `PhysicsSystem` skips the box-axis flush
 snap when a hull is in the pair, since a hull has no box faces to lie flush against.

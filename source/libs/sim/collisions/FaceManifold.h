@@ -24,13 +24,13 @@ namespace collisions {
   [[nodiscard]] std::vector<glm::vec3> hullFaceNormals(std::span<const glm::vec3> vertices,
                                                        std::span<const uint32_t> indices);
 
-  // The contact points of two convex shapes from the face of each that most nearly faces the other, the way a
-  // box pair is built. normal points from first toward second. The side whose face is more nearly parallel to
-  // the normal is the reference, ties going to first. The other side's touching face, or an edge of it, is
-  // clipped to the reference face's side planes and cut at its plane, so the points are the overlap polygon of the two
-  // faces and stay on the other side's feature; a corner, or an edge or face that clips to nothing, is clamped into the
-  // reference polygon instead. At most maxPoints, the corners covering the most area (more
-  // than that are spread out by depth and distance). Empty when either shape has no faces.
+  // The contact points of two convex shapes from the face of each that most nearly faces the other, the way a box
+  // pair is built. normal points from first toward second. The side whose face is more nearly parallel to the normal
+  // is the reference, ties going to first. The other side's touching face, or an edge of it, is clipped to the
+  // reference face's side planes and cut at its plane, so the points are the overlap polygon of the two faces and
+  // stay on the other side's feature; a corner, or an edge or face that clips to nothing, is clamped into the
+  // reference polygon instead. At most maxPoints: with four, the deepest corner and the three that cover the most
+  // area, otherwise spread by depth and distance. Empty when either shape has no faces.
   [[nodiscard]] std::vector<glm::vec3> referenceFaceManifold(const FaceShape& first, const FaceShape& second,
                                                              const glm::vec3& normal, size_t maxPoints);
 }
