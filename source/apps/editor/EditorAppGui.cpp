@@ -30,6 +30,8 @@ void EditorApp::updateGui()
 
   if (!m_shouldDisplayGui)
   {
+    m_settingsPanel->abandonKeyCapture();
+
     return;
   }
 

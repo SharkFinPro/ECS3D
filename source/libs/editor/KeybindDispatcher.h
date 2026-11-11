@@ -1,6 +1,7 @@
 #ifndef KEYBINDDISPATCHER_H
 #define KEYBINDDISPATCHER_H
 
+#include <KeyCapture.h>
 #include <KeyHoldRepeat.h>
 #include <Keybinds.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -26,7 +27,7 @@ enum class KeyHold { once, repeatWhileHeld };
 class KeybindDispatcher {
 public:
   using ActionHandler = std::function<void()>;
-  using CaptureCallback = std::function<void(const KeyChord&)>;
+  using CaptureCallback = KeyCapture::Callback;
 
   KeybindDispatcher(std::shared_ptr<vke::VulkanEngine> renderer, std::shared_ptr<KeybindTable> table);
 
@@ -41,6 +42,9 @@ public:
   // Enters capture mode: the next non-modifier key press is handed to callback (which is then cleared)
   // instead of being dispatched as an action. Escape cancels capture without invoking it.
   void beginCapture(CaptureCallback callback);
+
+  // Ends a capture without invoking its callback. A no-op when none is pending.
+  void cancelCapture();
 
   [[nodiscard]] bool isCapturing() const;
 
@@ -58,7 +62,7 @@ private:
   std::unordered_set<EditorAction> m_repeatingActions;
   KeyHoldRepeat m_hold;
 
-  CaptureCallback m_captureCallback;
+  KeyCapture m_capture;
 
   vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 

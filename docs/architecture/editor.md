@@ -50,8 +50,11 @@ frame rate limit (`editor.display.vsync`/`editor.display.maxFps`, applied at ren
 explanatory notes); Keybinds lists every
 `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode
 and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an
-already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against
-a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the
+already-held chord; `KeybindRebindFlow::reconcileCapture` keeps the flow and the dispatcher's capture in
+agreement, and both sides are reconciled before each frame ends (`KeybindCaptureFrame.h`; `abandonKeyCapture()` covers
+a hidden GUI), so Cancel, Unbind, Reset, Reset all, closing the window, switching sections or Escape end both),
+`KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and
+calls the registered handler, suppressed while ImGui wants the keyboard; also drives the
 Settings panel's rebind capture; actions registered with `KeyHold::repeatWhileHeld` (undo and redo) fire again
 while their chord stays held, after `keyHoldInitialDelay` and then every `keyHoldRepeatInterval`, driven by the
 headless `KeyHoldRepeat.h` and polled by `KeybindDispatcher::update()` once per frame; a handler with nothing

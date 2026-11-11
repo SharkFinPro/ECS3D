@@ -1,6 +1,7 @@
 #ifndef SETTINGSPANEL_H
 #define SETTINGSPANEL_H
 
+#include "KeybindCaptureFrame.h"
 #include "KeybindRebindFlow.h"
 #include <Keybinds.h>
 #include <memory>
@@ -43,6 +44,9 @@ public:
   // Persists the new state alongside it, so the editor comes back up as it was left.
   void setOpen(bool open);
 
+  // Ends an in-progress key capture, for a frame that will not draw the Keybinds list at all.
+  void abandonKeyCapture();
+
 private:
   enum class Section {
     appearance,
@@ -68,6 +72,7 @@ private:
   int m_maxFpsDraft = 0;
   bool m_maxFpsEditing = false;
   bool m_framePacingDrawn = false;
+  KeybindCaptureFrame m_captureFrame;
 
   // The last limited cap, restored when "Unlimited frame rate" is unchecked.
   int m_lastLimitedFps = 0;
@@ -86,6 +91,12 @@ private:
 
   // Arms the dispatcher key capture; the chord it produces goes to m_rebindFlow.
   void armCaptureFor(EditorAction action);
+
+  // Cancels the dispatcher's capture when the flow no longer has one, and the flow's when the dispatcher
+  // lost its own (Escape).
+  void syncCapture(bool visible);
+
+  void drawWindow();
 };
 
 #endif  // SETTINGSPANEL_H
