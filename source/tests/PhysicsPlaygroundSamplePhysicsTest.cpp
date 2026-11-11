@@ -27,6 +27,12 @@ namespace
   // 300, so the run leaves that a wide margin.
   constexpr int simulatedTicks = 600;
 
+  // A domino passes its tipping point at 8.5 degrees. The last one can rest on the ledge's near top corner at about 44
+  // degrees and creep along it for most of the run before it drops flat, and when it drops varies with each platform's
+  // rounding. So it is held to a bar well past its tipping point and below that lean.
+  constexpr float fallenDegrees = 45.0f;
+  constexpr float lastFallenDegrees = 30.0f;
+
   std::vector<std::shared_ptr<Object>> pyramidCubes(const ObjectManager& objectManager)
   {
     std::vector<std::shared_ptr<Object>> cubes;
@@ -211,7 +217,7 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond
 
   EXPECT_NEAR(s_firstTiltBefore, 15.0f, 0.1f);
 
-  EXPECT_GT(tiltDegrees(s_first), 45.0f);
+  EXPECT_GT(tiltDegrees(s_first), fallenDegrees);
   // Fallen toward the second rather than away from it, its center moved toward where the second stood.
   const auto moved = fixtures::positionOf(s_first) - s_firstStart;
   EXPECT_GT(glm::dot(glm::vec2(moved.x, moved.z), s_towardSecond), 0.3f);
@@ -225,12 +231,13 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedO
 
   EXPECT_LT(s_lastTiltBefore, 1.0f);
 
-  for (int index = 1; index <= 30; ++index)
+  for (int index = 1; index < 30; ++index)
   {
     const auto domino = objectNamedExactly(objectManager(), "Domino " + std::to_string(index));
     ASSERT_NE(domino, nullptr);
-    EXPECT_GT(tiltDegrees(domino), 45.0f) << "Domino " << index << " is still standing";
+    EXPECT_GT(tiltDegrees(domino), fallenDegrees) << "Domino " << index << " is still standing";
   }
+  EXPECT_GT(tiltDegrees(s_last), lastFallenDegrees) << "Domino 30 is still standing";
   EXPECT_GT(planeTravel(s_sphere, s_sphereStart), 1.0f);
   // Off the ledge, not just nudged along it: the sphere came down at least half a unit from where it rested.
   EXPECT_LT(fixtures::positionOf(s_sphere).y, s_sphereStart.y - 0.5f);
