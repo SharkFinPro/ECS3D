@@ -72,12 +72,15 @@ namespace net {
   class Message;
 }
 
-// The dock side nodes found in one frame: the nodes to write, their sizes, and the content-sized nodes.
+// The dock nodes found in one frame: the visible side nodes and their sizes, the content-sized toolbar nodes, and
+// every node of the tree (a closed panel's node is in it, one that is gone is not).
 struct DockTreeSides
 {
   std::vector<ImGuiDockNode*> nodes;
   std::vector<DockSideSize> sides;
   std::vector<ImGuiDockNode*> contentSized;
+  std::vector<ImGuiDockNode*> all;
+  std::vector<std::uint32_t> existing;
 };
 
 // The editor is a client + tooling: it renders the replicated scene (Snapshot/StateDelta, same as the

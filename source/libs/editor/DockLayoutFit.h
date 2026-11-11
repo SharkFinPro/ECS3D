@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <vector>
 
 // ImGui keeps a docked side node at its absolute size when the host shrinks and hands what is left to the
@@ -42,10 +43,57 @@ inline constexpr float dockEditTolerance = 1.0f;
   return std::min(baseFloor, extent * maxFraction);
 }
 
-// Collects the side nodes of a dock tree: a visible child whose visible sibling holds the central node. ImGui
-// sizes such a node from its own SizeRef and gives the sibling the remainder. A split with one visible child
-// (its sibling closed) passes the walk on to that child. Node is ImGuiDockNode, or any type with the same
-// members; excluded(node) keeps a content-sized node, such as the Scene Status toolbar, out of the proportions.
+// The Scene Status toolbar is content-sized only as a leaf of its own in a vertical stack (a split along y).
+// Tabbed with other panels, or docked in a side column, it is an ordinary node. Node is ImGuiDockNode, or any
+// type with the same members.
+template <typename Node>
+[[nodiscard]] bool isContentSizedToolbarNode(const Node* node, const bool holdsOnlyTheToolbar)
+{
+  return holdsOnlyTheToolbar && node->IsLeafNode() && node->ParentNode != nullptr && node->ParentNode->SplitAxis == 1;
+}
+
+// The one visible child of a split whose sibling is closed; null when both or neither are visible.
+template <typename Node>
+[[nodiscard]] Node* visibleOnlyChild(const Node* node)
+{
+  Node* first = node->ChildNodes[0];
+  Node* second = node->ChildNodes[1];
+
+  if (first->IsVisible == second->IsVisible)
+  {
+    return nullptr;
+  }
+
+  return first->IsVisible ? first : second;
+}
+
+// A side node is a visible child whose sibling holds the central node. ImGui sizes it from its own SizeRef and
+// gives the sibling the remainder, which is why it keeps its pixels when the window shrinks.
+template <typename Node, typename Excluded>
+[[nodiscard]] bool isDockSideNode(Node* side, const Node* sibling, const Excluded& excluded)
+{
+  return sibling->HasCentralNodeChild && !side->HasCentralNodeChild && !excluded(side);
+}
+
+template <typename Node, typename Excluded>
+void collectDockSides(Node* node, std::vector<Node*>& nodes, std::vector<DockSideSize>& sides,
+                      const Excluded& excluded);
+
+template <typename Node, typename Excluded>
+void collectDockSide(Node* side, const Node* sibling, const int axis, std::vector<Node*>& nodes,
+                     std::vector<DockSideSize>& sides, const Excluded& excluded)
+{
+  if (isDockSideNode(side, sibling, excluded))
+  {
+    nodes.push_back(side);
+    sides.push_back(DockSideSize{static_cast<std::uint32_t>(side->ID), axis, side->SizeRef[axis]});
+  }
+
+  collectDockSides(side, nodes, sides, excluded);
+}
+
+// Collects the visible side nodes of a dock tree. A split with one visible child (its sibling closed) passes the
+// walk on to that child. excluded(node) keeps a content-sized node out of the proportions.
 template <typename Node, typename Excluded>
 void collectDockSides(Node* node, std::vector<Node*>& nodes, std::vector<DockSideSize>& sides,
                       const Excluded& excluded)
@@ -58,11 +106,11 @@ void collectDockSides(Node* node, std::vector<Node*>& nodes, std::vector<DockSid
   Node* first = node->ChildNodes[0];
   Node* second = node->ChildNodes[1];
 
-  if (!first->IsVisible || !second->IsVisible)
+  if (!(first->IsVisible && second->IsVisible))
   {
-    if (first->IsVisible || second->IsVisible)
+    if (Node* only = visibleOnlyChild(node))
     {
-      collectDockSides(first->IsVisible ? first : second, nodes, sides, excluded);
+      collectDockSides(only, nodes, sides, excluded);
     }
 
     return;
@@ -70,37 +118,41 @@ void collectDockSides(Node* node, std::vector<Node*>& nodes, std::vector<DockSid
 
   const int axis = static_cast<int>(node->SplitAxis);
 
-  for (Node* side : {first, second})
+  collectDockSide(first, second, axis, nodes, sides, excluded);
+  collectDockSide(second, first, axis, nodes, sides, excluded);
+}
+
+// Every node of the tree, hidden or not, so a closed panel's node can be told from one that is gone.
+template <typename Node>
+void collectAllDockNodes(Node* node, std::vector<Node*>& all)
+{
+  all.push_back(node);
+
+  if (!node->IsLeafNode())
   {
-    const Node* sibling = side == first ? second : first;
-
-    if (sibling->HasCentralNodeChild && !side->HasCentralNodeChild && !excluded(side))
-    {
-      nodes.push_back(side);
-      sides.push_back(DockSideSize{static_cast<std::uint32_t>(side->ID), axis, side->SizeRef[axis]});
-    }
-
-    collectDockSides(side, nodes, sides, excluded);
+    collectAllDockNodes(node->ChildNodes[0], all);
+    collectAllDockNodes(node->ChildNodes[1], all);
   }
 }
 
 // The fraction of the dock space each side node occupies along its split axis. The fractions, not the node
 // sizes, are what a resize preserves: a size the engine clamped for a small window must not become the
-// remembered size.
+// remembered size. A closed panel keeps its fraction while its node exists, so it reopens at the right size.
 class DockProportions
 {
 public:
   // Replaces everything remembered with these nodes.
   void remember(const std::vector<DockSideSize>& nodes, const float extentX, const float extentY)
   {
-    rememberChanges(nodes, {}, extentX, extentY);
+    rememberChanges(nodes, {}, {}, extentX, extentY);
   }
 
   // Keeps the fraction of every node that is remembered and did not move since `before` (by more than
-  // dockEditTolerance), takes the rest from `nodes`, and forgets nodes that are gone. A click that changes
-  // nothing therefore keeps the proportions, however far the engine has clamped the sizes meanwhile.
+  // dockEditTolerance), takes the rest from `nodes`, keeps closed nodes whose id is in `existing`, and forgets
+  // the others. A click that changes nothing therefore keeps the proportions, however far the engine has
+  // clamped the sizes meanwhile.
   void rememberChanges(const std::vector<DockSideSize>& nodes, const std::vector<DockSideSize>& before,
-                       const float extentX, const float extentY)
+                       const std::vector<std::uint32_t>& existing, const float extentX, const float extentY)
   {
     if (extentX <= 0.0f || extentY <= 0.0f)
     {
@@ -111,17 +163,14 @@ public:
 
     for (const auto& node : nodes)
     {
-      const auto remembered = m_entries.find(node.id);
-      const auto earlier = std::ranges::find(before, node.id, &DockSideSize::id);
-      const bool unchanged = earlier != before.end() && std::fabs(earlier->size - node.size) <= dockEditTolerance;
+      addEntry(entries, node, before, node.axis == 0 ? extentX : extentY);
+    }
 
-      if (remembered != m_entries.end() && remembered->second.axis == node.axis && unchanged)
+    for (const auto& [id, entry] : m_entries)
+    {
+      if (std::ranges::find(existing, id) != existing.end())
       {
-        entries[node.id] = remembered->second;
-      }
-      else if (node.size > 0.0f)
-      {
-        entries[node.id] = Entry{node.axis, node.size / (node.axis == 0 ? extentX : extentY)};
+        entries.try_emplace(id, entry);
       }
     }
 
@@ -161,18 +210,14 @@ public:
     return sizes;
   }
 
-  // Whether the remembered nodes are exactly these, so a docking change that adds or removes one is noticed.
+  // Whether every visible node with a size is remembered, so a docking change that adds one is noticed. A node
+  // without a size cannot be remembered and does not count.
   [[nodiscard]] bool tracks(const std::vector<DockSideSize>& nodes) const
   {
-    if (nodes.size() != m_entries.size())
-    {
-      return false;
-    }
-
     return std::ranges::all_of(nodes, [this](const DockSideSize& node)
     {
       const auto entry = m_entries.find(node.id);
-      return entry != m_entries.end() && entry->second.axis == node.axis;
+      return node.size <= 0.0f || (entry != m_entries.end() && entry->second.axis == node.axis);
     });
   }
 
@@ -184,12 +229,30 @@ private:
   };
 
   std::map<std::uint32_t, Entry> m_entries;
+
+  void addEntry(std::map<std::uint32_t, Entry>& entries, const DockSideSize& node,
+                const std::vector<DockSideSize>& before, const float extent) const
+  {
+    const auto remembered = m_entries.find(node.id);
+    const auto earlier = std::ranges::find(before, node.id, &DockSideSize::id);
+    const bool unchanged = earlier != before.end() && std::fabs(earlier->size - node.size) <= dockEditTolerance;
+
+    if (remembered != m_entries.end() && remembered->second.axis == node.axis && unchanged)
+    {
+      entries[node.id] = remembered->second;
+    }
+    else if (node.size > 0.0f)
+    {
+      entries[node.id] = Entry{node.axis, node.size / extent};
+    }
+  }
 };
 
 enum class DockLayoutStep
 {
   none,
   remember,
+  rememberAndRescale,
   rescale,
   beginDrag,
   endDrag
@@ -210,9 +273,7 @@ public:
 
     if (userDraggingLayout)
     {
-      const bool began = !m_dragging;
-      m_dragging = true;
-      return began ? DockLayoutStep::beginDrag : DockLayoutStep::none;
+      return trackDrag();
     }
 
     const bool sizeChanged = width != m_width || height != m_height;
@@ -222,18 +283,7 @@ public:
     m_height = height;
     m_dragging = false;
 
-    if (ended)
-    {
-      return DockLayoutStep::endDrag;
-    }
-
-    if (layoutChanged || !m_hasSize)
-    {
-      m_hasSize = true;
-      return DockLayoutStep::remember;
-    }
-
-    return sizeChanged ? DockLayoutStep::rescale : DockLayoutStep::none;
+    return ended ? DockLayoutStep::endDrag : afterDrag(sizeChanged, layoutChanged);
   }
 
 private:
@@ -241,6 +291,30 @@ private:
   float m_height = 0.0f;
   bool m_hasSize = false;
   bool m_dragging = false;
+
+  [[nodiscard]] DockLayoutStep trackDrag() noexcept
+  {
+    const bool began = !m_dragging;
+    m_dragging = true;
+
+    return began ? DockLayoutStep::beginDrag : DockLayoutStep::none;
+  }
+
+  [[nodiscard]] DockLayoutStep afterDrag(const bool sizeChanged, const bool layoutChanged) noexcept
+  {
+    if (!m_hasSize)
+    {
+      m_hasSize = true;
+      return DockLayoutStep::remember;
+    }
+
+    if (layoutChanged)
+    {
+      return sizeChanged ? DockLayoutStep::rememberAndRescale : DockLayoutStep::remember;
+    }
+
+    return sizeChanged ? DockLayoutStep::rescale : DockLayoutStep::none;
+  }
 };
 
 #endif

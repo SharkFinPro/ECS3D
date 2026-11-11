@@ -196,12 +196,11 @@ void EditorApp::displayWindowMenu() const
 namespace
 {
 // The Scene Status toolbar is sized to its content by displaySceneStatus, not by a share of the window.
-bool holdsSceneStatus(const ImGuiDockNode* node)
+bool isSceneStatusToolbar(const ImGuiDockNode* node)
 {
-  return std::any_of(node->Windows.begin(), node->Windows.end(), [](const ImGuiWindow* window)
-  {
-    return std::strcmp(window->Name, "Scene Status") == 0;
-  });
+  const bool holdsOnlyTheToolbar = node->Windows.Size == 1 && std::strcmp(node->Windows[0]->Name, "Scene Status") == 0;
+
+  return isContentSizedToolbarNode(node, holdsOnlyTheToolbar);
 }
 
 // A splitter or tab drag in the dockspace owns the layout until it ends.
@@ -212,20 +211,24 @@ bool dockspaceHasActiveDrag(const ImGuiDockNode* root)
   return context.ActiveId != 0 && root->HostWindow != nullptr && context.ActiveIdWindow == root->HostWindow;
 }
 
-void applyDockSizes(const std::vector<ImGuiDockNode*>& nodes, const std::vector<DockSideSize>& sizes)
+void rescaleLayout(const DockProportions& proportions, const ImVec2 extent, const DockTreeSides& tree)
 {
-  for (const auto& [id, axis, size] : sizes)
+  for (const auto& [id, axis, size] : proportions.fit(extent.x, extent.y))
   {
-    const auto node = std::ranges::find(nodes, id, [](const ImGuiDockNode* candidate)
-    {
-      return static_cast<std::uint32_t>(candidate->ID);
-    });
+    const auto node = std::ranges::find(tree.existing, id);
 
-    if (node != nodes.end())
+    if (node != tree.existing.end())
     {
-      (*node)->SizeRef[axis] = size;
+      tree.all[node - tree.existing.begin()]->SizeRef[axis] = size;
     }
   }
+}
+
+void rememberLayout(DockProportions& proportions, const bool settling, const ImVec2 extent,
+                    const DockTreeSides& tree)
+{
+  proportions.rememberChanges(tree.sides, settling ? std::vector<DockSideSize>{} : tree.sides, tree.existing,
+                              extent.x, extent.y);
 }
 }
 
@@ -284,7 +287,7 @@ void EditorApp::fitDockToViewport()
   DockTreeSides tree;
   collectDockSides(root, tree.nodes, tree.sides, [&tree](ImGuiDockNode* node)
   {
-    const bool contentSized = holdsSceneStatus(node);
+    const bool contentSized = isSceneStatusToolbar(node);
 
     if (contentSized)
     {
@@ -294,17 +297,24 @@ void EditorApp::fitDockToViewport()
     return contentSized;
   });
 
+  collectAllDockNodes(root, tree.all);
+
+  for (const ImGuiDockNode* node : tree.all)
+  {
+    tree.existing.push_back(static_cast<std::uint32_t>(node->ID));
+  }
+
   const bool settling = m_dockSettleFrames > 0;
   const bool layoutChanged = settling || !m_dockProportions.tracks(tree.sides);
+  const bool dragging = dockspaceHasActiveDrag(root);
 
   m_dockSettleFrames = std::max(m_dockSettleFrames - 1, 0);
 
-  const DockLayoutStep step = m_dockResizeGate.update(root->Size.x, root->Size.y, dockspaceHasActiveDrag(root),
-                                                      layoutChanged);
+  const DockLayoutStep step = m_dockResizeGate.update(root->Size.x, root->Size.y, dragging, layoutChanged);
 
   runDockStep(step, settling, root->Size, tree);
 
-  if (step != DockLayoutStep::beginDrag)
+  if (!dragging)
   {
     sizeSceneStatusNodes(tree.contentSized);
   }
@@ -316,12 +326,20 @@ void EditorApp::runDockStep(const DockLayoutStep step, const bool settling, cons
   switch (step)
   {
   case DockLayoutStep::remember:
-    m_dockProportions.rememberChanges(tree.sides, settling ? std::vector<DockSideSize>{} : tree.sides, extent.x,
-                                      extent.y);
+    rememberLayout(m_dockProportions, settling, extent, tree);
+    break;
+
+  case DockLayoutStep::rememberAndRescale:
+    rememberLayout(m_dockProportions, settling, extent, tree);
+
+    if (!settling)
+    {
+      rescaleLayout(m_dockProportions, extent, tree);
+    }
     break;
 
   case DockLayoutStep::rescale:
-    applyDockSizes(tree.nodes, m_dockProportions.fit(extent.x, extent.y));
+    rescaleLayout(m_dockProportions, extent, tree);
     break;
 
   case DockLayoutStep::beginDrag:
@@ -329,7 +347,7 @@ void EditorApp::runDockStep(const DockLayoutStep step, const bool settling, cons
     break;
 
   case DockLayoutStep::endDrag:
-    m_dockProportions.rememberChanges(tree.sides, m_dockDragStart, extent.x, extent.y);
+    m_dockProportions.rememberChanges(tree.sides, m_dockDragStart, tree.existing, extent.x, extent.y);
     break;
 
   case DockLayoutStep::none:
@@ -339,23 +357,25 @@ void EditorApp::runDockStep(const DockLayoutStep step, const bool settling, cons
 
 void EditorApp::sizeSceneStatusNodes(const std::vector<ImGuiDockNode*>& nodes)
 {
-  const float previous = m_sceneStatusAppliedFloor;
+  const float scale = m_renderer->getWindow()->getContentScale();
+  const float previous = std::ceil(m_sceneStatusAppliedFloor * scale);
+  const float height = std::ceil(m_sceneStatusFloor * scale);
+
   m_sceneStatusAppliedFloor = m_sceneStatusFloor;
 
-  // A wider toolbar wraps into fewer rows, so the node drops to the new content height instead of keeping the
-  // larger one an earlier, narrower window left in its SizeRef. A taller floor is the engine's to enforce.
-  if (previous <= 0.0f || m_sceneStatusFloor >= previous)
+  // A wider toolbar wraps into fewer rows, so a node still sitting at the old floor drops to the new content
+  // height instead of keeping the larger one an earlier, narrower window left in its SizeRef. A node the user
+  // sized differently, and a taller floor (the engine enforces it), are left alone.
+  if (previous <= 0.0f || height >= previous)
   {
     return;
   }
 
-  const float height = std::ceil(m_sceneStatusFloor * m_renderer->getWindow()->getContentScale());
-
   for (ImGuiDockNode* node : nodes)
   {
-    if (node->ParentNode != nullptr)
+    if (std::fabs(node->SizeRef.y - previous) <= dockEditTolerance)
     {
-      node->SizeRef[node->ParentNode->SplitAxis] = height;
+      node->SizeRef.y = height;
     }
   }
 }
