@@ -394,7 +394,7 @@ public unsafe class StarterUtilsTests : IDisposable
     Press(Key.SPACE);
     Step(onSpace);
     Step(onSpace);
-    Assert.Equal(1.5f, LastSteer().Y, 1e-4f);
+    Assert.Equal(0.67f, LastSteer().Y, 1e-4f);
   }
 
   [Fact]

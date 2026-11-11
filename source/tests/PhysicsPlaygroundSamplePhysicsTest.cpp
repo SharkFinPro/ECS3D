@@ -23,6 +23,9 @@ using namespace playgroundtest;
 
 namespace
 {
+  // 40 seconds at the server tick: the domino chain takes this long to reach its last domino at real gravity.
+  constexpr int simulatedTicks = 2000;
+
   std::vector<std::shared_ptr<Object>> pyramidCubes(const ObjectManager& objectManager)
   {
     std::vector<std::shared_ptr<Object>> cubes;
@@ -52,7 +55,7 @@ namespace
   }
 }
 
-// The four tests check the same 600-tick run, and the run dominates the suite's time, so it happens once per suite.
+// The four tests check the same run, and the run dominates the suite's time, so it happens once per suite.
 class PhysicsPlaygroundSamplePhysics : public ::testing::Test
 {
 protected:
@@ -123,7 +126,7 @@ protected:
   static void simulate(const ObjectManager& objectManager)
   {
     CollisionSystem collisionSystem;
-    for (int step = 0; step < 600; ++step)
+    for (int step = 0; step < simulatedTicks; ++step)
     {
       PhysicsSystem::fixedUpdate(objectManager, dt);
       collisionSystem.fixedUpdate(objectManager, dt);
@@ -186,7 +189,7 @@ protected:
   inline static float s_farthestTravel = 0.0f;
 };
 
-TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
+TEST_F(PhysicsPlaygroundSamplePhysics, TheRunStaysFiniteAndAboveTheVoid)
 {
   ASSERT_TRUE(isSimulated());
 

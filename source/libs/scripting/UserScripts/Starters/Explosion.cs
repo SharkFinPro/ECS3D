@@ -13,7 +13,7 @@ public class Explosion : ScriptBase
 
     // Units per second at the center; it falls off linearly to zero at the edge.
     [ExposeToEditor("Strength")]
-    private float m_strength = 18.0f;
+    private float m_strength = 8.0f;
 
     [ExposeToEditor("Upward Bias")]
     private float m_upwardBias = 0.3f;

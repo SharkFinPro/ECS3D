@@ -156,8 +156,14 @@ TEST(CapsuleRolling, ACapsuleRollingAcrossItsAxisComesToExactRest)
 TEST(CapsuleRolling, ACapsuleRollingAtTheServerTickStopsNearWhereASphereDoes)
 {
   constexpr float serverTick = 0.02f;
-  Roller sphere(pushed(false, 60.0f));
-  Roller capsule(pushed(true, 60.0f));
+  // Friction holds back g * dt * dt a tick here, 1/5 of what dt 0.1 gives, so the push is scaled by 1/sqrt(5) to
+  // stop where it did.
+  auto sphereConfig = pushed(false, 60.0f);
+  auto capsuleConfig = pushed(true, 60.0f);
+  sphereConfig.velocity.x *= 1.0f / std::sqrt(5.0f);
+  capsuleConfig.velocity.x *= 1.0f / std::sqrt(5.0f);
+  Roller sphere(sphereConfig);
+  Roller capsule(capsuleConfig);
 
   sphere.run(1500, serverTick);
   capsule.run(1500, serverTick);

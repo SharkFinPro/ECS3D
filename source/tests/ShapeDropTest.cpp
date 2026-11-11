@@ -27,7 +27,7 @@
 namespace {
   // The server's tick.
   constexpr float dt = 1.0f / 50.0f;
-  constexpr int maxTicks = 600;
+  constexpr int maxTicks = 1500;
   constexpr float dropHeight = 3.0f;
   constexpr float restSpeed = 0.01f;
   constexpr float flushToleranceDegrees = 2.0f;

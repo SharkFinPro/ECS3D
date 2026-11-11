@@ -308,7 +308,7 @@ namespace {
 
     const auto pad = withScripts(retextured(named(rigidBlock({ -25.0f, 0.25f, 22.0f }, { 2.5f, 0.25f, 2.5f }),
                                                   "Bounce Pad"), paletteGreenTexture), {
-      script("BouncePad", json::array({ floatField("m_strength", 12.0f) })),
+      script("BouncePad", json::array({ floatField("m_strength", 5.4f) })),
       script("ColorOnHit", json::array({ stringField("m_hitTexture", paletteRedTexture) }))
     });
 

@@ -5,7 +5,8 @@ and update it in the same change when that behavior moves.
 
 ## ECS3DSim
 
-`ECS3DSim` — `PhysicsSystem` (integration, forces, response; linear velocity is displacement per tick while
+`ECS3DSim` — `PhysicsSystem` (integration, forces, response; gravity adds g * dt * dt to the velocity each tick, so a fall covers the same distance at any tick
+rate; linear velocity is displacement per tick while
 angular velocity is a world-space axis in degrees per second, so convert angular velocity to radians per tick
 before combining the two - `applyVelocityChange`, `applyImpulse`, `handleCollision` and
 `CollisionSystem::fixedUpdate` take `dt` for that; the inertia tensor is per unit mass and comes from the body's
