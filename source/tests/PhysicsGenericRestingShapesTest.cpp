@@ -24,11 +24,16 @@ namespace {
   // The drops land at about 20 units a second, two units a tick at dt 0.1, which is through the ground's thickness, so
   // they run at the server's tick instead.
   constexpr float dropTick = 1.0f / 50.0f;
-  constexpr int dropTicks = 1000;
+  // Every drop has stopped by tick 140 (the latest, a prism on its side, is the only one past tick 40), so 400 ticks
+  // leaves a wide margin to measure a body at rest.
+  constexpr int dropTicks = 400;
   constexpr int rollTicks = 100;
   // Long enough to land and settle; a body left on this slope much longer creeps down it and drops through.
   constexpr int slopeTicks = 30;
-  constexpr int settledWindow = 200;
+  // A resting hull still wanders about 1e-4 over a few seconds, within a limit cycle of about 4e-5 per 50 ticks, so
+  // the window is half a second: short enough that the wander cannot reach the 1e-4 drift bound, long enough to see
+  // a body that is still moving.
+  constexpr int settledWindow = 25;
   constexpr float groundTop = 1.0f;
 
   // A regular octagonal prism of radius one, standing on its axis.

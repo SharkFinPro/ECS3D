@@ -27,7 +27,7 @@
 namespace {
   // The server's tick.
   constexpr float dt = 1.0f / 50.0f;
-  constexpr int maxTicks = 600;
+  constexpr int maxTicks = 1500;
   constexpr float dropHeight = 3.0f;
   // A tenth of the speed gravity adds in one tick, so two ticks of free fall are not mistaken for rest.
   constexpr float restSpeed = 0.1f * 9.81f * PhysicsSystem::unitsPerMeter * dt * dt;

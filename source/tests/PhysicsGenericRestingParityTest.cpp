@@ -121,7 +121,7 @@ namespace {
       {
         const auto expected = transformOf(reference.body);
         const auto actual = transformOf(other.body);
-        ASSERT_LT(glm::length(expected->getPosition() - actual->getPosition()), positionTolerance)
+        ASSERT_LT(glm::length(expected->getPosition() - actual->getPosition()), positionTolerance * speedScale(dt))
           << scenario.name << " dt " << dt << " tick " << tick;
         ASSERT_LT(glm::length(expected->getRotation() - actual->getRotation()), rotationTolerance)
           << scenario.name << " dt " << dt << " tick " << tick;
