@@ -109,6 +109,8 @@ private:
   [[nodiscard]] static Pair mirrored(const Pair& pair);
   // The pair as it would be with neither body resting: no support takes any part of a push.
   [[nodiscard]] static Pair unsupported(Pair pair);
+  // A resting side whose push points into its support, so it takes only the part along it.
+  [[nodiscard]] static bool isCutBySupport(const Side& side, const glm::vec3& pushDirection);
 
   // The lever arm of the friction against turning about the normal: a face under the center of mass, or a
   // capsule's line contact under it, which also marks the pair as a line contact. Zero otherwise.

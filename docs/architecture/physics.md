@@ -25,11 +25,13 @@ tick hands the part of any push from another body that points into that support 
 its masses and what lands on it stops as on static geometry, without a bounce - and its support's friction holds
 the part along the support too, inside the friction cone and up to what that friction can take
 (`PhysicsSystem::squeeze`), so a light body is squeezed out from under a heavy one only by the excess, pushed
-through its center; a resting body a push leans on past 45 degrees of its support normal is not held that way, but
-still takes only the part of the push along its support, which can leave it no resistance, or less than none since
-that part acts at a point off its center, so the impulse sizes each side's share of the resistance at no less than
-zero, and the resting side takes no more of the impulse than it would if neither body were supported, rather than
-the wall-sized impulse the support is left to take; "into" and "along" are taken against the support's contact normal
+through its center; a resting body a push leans on past 45 degrees of its support normal is not held that way,
+but where that push points into its support it still takes only the part along the support, which can leave it no
+resistance, or less than none since that part acts at a point off its center, so each side's share of the resistance
+counts for no less than zero there. The impulse is then sized as against a wall, so only that resting side takes no
+more of it than it would if neither body were supported, while the other side keeps the full impulse and the support
+absorbs the difference, which otherwise flung a light body off a heavy one at hundreds of units a second;
+"into" and "along" are taken against the support's contact normal
 (`RigidBody::getSupportNormal`, the flattest upward contact normal of the previous tick, world up when none), so
 a stack on a slope holds as on flat ground, and the load a body passes to its support is taken along that normal
 too, and a vertical speed under `minRiseSpeed` does not count as a body rising; a contact between two resting
