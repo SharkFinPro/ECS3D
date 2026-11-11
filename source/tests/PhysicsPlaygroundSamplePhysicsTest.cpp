@@ -23,8 +23,9 @@ using namespace playgroundtest;
 
 namespace
 {
-  // 40 seconds at the server tick: the domino chain takes this long to reach its last domino at real gravity.
-  constexpr int simulatedTicks = 2000;
+  // 70 seconds at the server tick. At real gravity the last domino falls and knocks the sphere off about 40 seconds
+  // in, and it can hang leaning for a while first, so the run is long enough to leave that a wide margin.
+  constexpr int simulatedTicks = 3500;
 
   std::vector<std::shared_ptr<Object>> pyramidCubes(const ObjectManager& objectManager)
   {
@@ -231,6 +232,8 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedO
     EXPECT_GT(tiltDegrees(domino), 45.0f) << "Domino " << index << " is still standing";
   }
   EXPECT_GT(planeTravel(s_sphere, s_sphereStart), 1.0f);
+  // Off the ledge, not just nudged along it: the sphere came down at least half a unit from where it rested.
+  EXPECT_LT(fixtures::positionOf(s_sphere).y, s_sphereStart.y - 0.5f);
 }
 
 TEST_F(PhysicsPlaygroundSamplePhysics, ThePyramidStandsWhileTheCradleSpheresMove)
