@@ -60,6 +60,7 @@ add_library(${PROJECT_NAME}
   KeybindDispatcher.cpp
   KeybindDispatcher.h
   KeybindRebindFlow.h
+  KeyCapture.h
   KeyHoldRepeat.h
   Gizmo.cpp
   Gizmo.h

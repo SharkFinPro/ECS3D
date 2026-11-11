@@ -164,6 +164,10 @@ void SettingsPanel::displayGui()
   }
   m_framePacingDrawn = false;
 
+  // A frame that skipped the Keybinds list (window closed, tab switched, collapsed) abandons a capture.
+  syncCapture(m_keybindsDrawn);
+  m_keybindsDrawn = false;
+
   if (!m_open)
   {
     return;
@@ -510,6 +514,8 @@ void SettingsPanel::displayFramePacing()
 
 void SettingsPanel::displayKeybinds()
 {
+  m_keybindsDrawn = true;
+
   gc::sectionLabel("Keybinds");
 
   ImGui::TextColored(theme::t2, "Click Rebind, then press the new key combination.");
@@ -598,6 +604,17 @@ void SettingsPanel::displayKeybinds()
   }
 
   displayKeybindConflictModal();
+
+  // Still this frame, before the next key event can reach a capture the buttons above just ended.
+  syncCapture(true);
+}
+
+void SettingsPanel::syncCapture(const bool visible)
+{
+  if (m_rebindFlow.reconcileCapture(m_keybindDispatcher->isCapturing(), visible))
+  {
+    m_keybindDispatcher->cancelCapture();
+  }
 }
 
 void SettingsPanel::armCaptureFor(const EditorAction action)

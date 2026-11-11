@@ -68,6 +68,7 @@ private:
   int m_maxFpsDraft = 0;
   bool m_maxFpsEditing = false;
   bool m_framePacingDrawn = false;
+  bool m_keybindsDrawn = false;
 
   // The last limited cap, restored when "Unlimited frame rate" is unchecked.
   int m_lastLimitedFps = 0;
@@ -86,6 +87,10 @@ private:
 
   // Arms the dispatcher key capture; the chord it produces goes to m_rebindFlow.
   void armCaptureFor(EditorAction action);
+
+  // Cancels the dispatcher's capture when the flow no longer has one, and the flow's when the dispatcher
+  // lost its own (Escape).
+  void syncCapture(bool visible);
 };
 
 #endif  // SETTINGSPANEL_H

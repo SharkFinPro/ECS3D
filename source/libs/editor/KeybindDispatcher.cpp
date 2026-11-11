@@ -94,12 +94,17 @@ void KeybindDispatcher::stopRepeat()
 void KeybindDispatcher::beginCapture(CaptureCallback callback)
 {
   m_hold.stop();
-  m_captureCallback = std::move(callback);
+  m_capture.begin(std::move(callback));
+}
+
+void KeybindDispatcher::cancelCapture()
+{
+  m_capture.cancel();
 }
 
 bool KeybindDispatcher::isCapturing() const
 {
-  return static_cast<bool>(m_captureCallback);
+  return m_capture.active();
 }
 
 void KeybindDispatcher::registerWindowEvents()
@@ -129,16 +134,15 @@ void KeybindDispatcher::registerWindowEvents()
 
       m_hold.stop();
 
-      if (m_captureCallback)
+      if (m_capture.active())
       {
         if (e.key == GLFW_KEY_ESCAPE)
         {
-          m_captureCallback = nullptr;
+          m_capture.cancel();
         }
         else if (e.key >= 0 && !isModifierKey(e.key))
         {
-          const auto callback = std::exchange(m_captureCallback, nullptr);
-          callback(KeyChord{ e.key, e.mods & keybindModMask });
+          m_capture.complete(KeyChord{ e.key, e.mods & keybindModMask });
         }
 
         return;
