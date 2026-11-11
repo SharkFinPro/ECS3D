@@ -245,6 +245,7 @@ void EditorApp::updateSceneStatusMinimumSize(const int rows)
     height = std::max(height, panelHeight / contentScale);
   }
 
+  m_sceneStatusFloor = height;
   m_renderer->getImGuiInstance()->setDockedWindowMinimumSize("Scene Status", { 0.0f, height });
 }
 

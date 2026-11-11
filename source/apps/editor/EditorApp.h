@@ -15,6 +15,7 @@
 #include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
 #include <PlayControls.h>
+#include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
@@ -34,6 +35,8 @@ namespace vke {
 
 class ManagedHost;
 struct ImDrawList;
+struct ImGuiDockNode;
+struct ImVec2;
 class Component;
 class ComponentRegistry;
 class AssetRegistry;
@@ -69,6 +72,17 @@ namespace net {
   class ServerProcess;
   class Message;
 }
+
+// The dock nodes found in one frame: the visible side nodes and their sizes, the content-sized toolbar nodes, and
+// every node of the tree (a closed panel's node is in it, one that is gone is not).
+struct DockTreeSides
+{
+  std::vector<ImGuiDockNode*> nodes;
+  std::vector<DockSideSize> sides;
+  std::vector<ImGuiDockNode*> contentSized;
+  std::vector<ImGuiDockNode*> all;
+  std::vector<std::uint32_t> existing;
+};
 
 // The editor is a client + tooling: it renders the replicated scene (Snapshot/StateDelta, same as the
 // client) and adds the ImGui editing panels. The authoritative scene lives on the spawned --edit
@@ -150,6 +164,13 @@ private:
   // tokens before the first applyStyle().
   std::unique_ptr<SettingsStore> m_settings;
   bool m_layoutRestored = false;
+  DockProportions m_dockProportions;
+  DockResizeGate m_dockResizeGate;
+  int m_dockSettleFrames = 0;
+  std::vector<DockSideSize> m_dockDragStart;
+  std::array<float, 3> m_dockFloorKey{};
+  float m_sceneStatusFloor = 0.0f;
+  float m_sceneStatusAppliedFloor = 0.0f;
   std::unique_ptr<SettingsPanel> m_settingsPanel;
 
   // Feeds the Console panel: registered with Log so the panel can show script errors and server output
@@ -438,10 +459,20 @@ private:
   void saveLayoutIfRequested();
   void saveLayout();
 
-  void updateDockSpace() const;
+  void updateDockSpace();
+
+  // Keeps the side and bottom dock nodes at the same share of the dock space when the window is resized.
+  void fitDockToViewport();
+
+  // Re-applies the panel floors when the viewport size or the content scale changed since the last time.
+  void updateDockMinimumSizesForViewport();
+
+  void runDockStep(DockLayoutStep step, bool settling, ImVec2 extent, const DockTreeSides& tree);
+  void sizeSceneStatusNodes(const std::vector<ImGuiDockNode*>& nodes);
 
   void applyDockLocations() const;
   void applyDockMinimumSizes() const;
+  void applyDockPanelMinimumSizes() const;
 
   // False while the viewport has no usable size yet, so the caller retries on a later frame.
   [[nodiscard]] bool applyDockPercents() const;

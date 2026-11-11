@@ -21,6 +21,11 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <optional>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+#include <cmath>
+#include <imgui_internal.h>
 
 void EditorApp::updateGui()
 {
@@ -190,7 +195,46 @@ void EditorApp::displayWindowMenu() const
   }
 }
 
-void EditorApp::updateDockSpace() const
+namespace
+{
+// The Scene Status toolbar is sized to its content by displaySceneStatus, not by a share of the window.
+bool isSceneStatusToolbar(const ImGuiDockNode* node)
+{
+  const bool holdsOnlyTheToolbar = node->Windows.Size == 1 && std::strcmp(node->Windows[0]->Name, "Scene Status") == 0;
+
+  return isContentSizedToolbarNode(node, holdsOnlyTheToolbar);
+}
+
+// A splitter or tab drag in the dockspace owns the layout until it ends.
+bool dockspaceHasActiveDrag(const ImGuiDockNode* root)
+{
+  const ImGuiContext& context = *ImGui::GetCurrentContext();
+
+  return context.ActiveId != 0 && root->HostWindow != nullptr && context.ActiveIdWindow == root->HostWindow;
+}
+
+void rescaleLayout(const DockProportions& proportions, const ImVec2 extent, const DockTreeSides& tree)
+{
+  for (const auto& [id, axis, size] : proportions.fit(extent.x, extent.y))
+  {
+    const auto node = std::ranges::find(tree.existing, id);
+
+    if (node != tree.existing.end())
+    {
+      tree.all[node - tree.existing.begin()]->SizeRef[axis] = size;
+    }
+  }
+}
+
+void rememberLayout(DockProportions& proportions, const bool settling, const ImVec2 extent,
+                    const DockTreeSides& tree)
+{
+  proportions.rememberChanges(tree.sides, settling ? std::vector<DockSideSize>{} : tree.sides, tree.existing,
+                              extent.x, extent.y);
+}
+}
+
+void EditorApp::updateDockSpace()
 {
   static bool dockPercentsSetup = false;
   static bool dockLocationsSetup = false;
@@ -207,6 +251,8 @@ void EditorApp::updateDockSpace() const
       minimumSizesSetup = true;
     }
 
+    fitDockToViewport();
+
     return;
   }
 
@@ -220,6 +266,138 @@ void EditorApp::updateDockSpace() const
   if (!dockPercentsSetup)
   {
     dockPercentsSetup = applyDockPercents();
+
+    // The engine rebuilds the default tree on the frame after the percents change and keeps the node ids, so
+    // the proportions are taken again from the rebuilt tree.
+    m_dockSettleFrames = dockPercentsSetup ? 3 : 0;
+  }
+
+  fitDockToViewport();
+}
+
+void EditorApp::fitDockToViewport()
+{
+  ImGuiDockNode* root = ImGui::DockBuilderGetNode(ImGui::GetID("WindowDockSpace"));
+
+  if (root == nullptr)
+  {
+    return;
+  }
+
+  updateDockMinimumSizesForViewport();
+
+  DockTreeSides tree;
+  collectDockSides(root, tree.nodes, tree.sides, [&tree](ImGuiDockNode* node)
+  {
+    const bool contentSized = isSceneStatusToolbar(node);
+
+    if (contentSized)
+    {
+      tree.contentSized.push_back(node);
+    }
+
+    return contentSized;
+  });
+
+  collectAllDockNodes(root, tree.all);
+
+  for (const ImGuiDockNode* node : tree.all)
+  {
+    tree.existing.push_back(static_cast<std::uint32_t>(node->ID));
+  }
+
+  const bool settling = m_dockSettleFrames > 0;
+  const bool layoutChanged = settling || !m_dockProportions.tracks(tree.sides);
+  const bool dragging = dockspaceHasActiveDrag(root);
+
+  m_dockSettleFrames = std::max(m_dockSettleFrames - 1, 0);
+
+  const DockLayoutStep step = m_dockResizeGate.update(root->Size.x, root->Size.y, dragging, layoutChanged);
+
+  runDockStep(step, settling, root->Size, tree);
+
+  if (!dragging)
+  {
+    sizeSceneStatusNodes(tree.contentSized);
+  }
+}
+
+void EditorApp::runDockStep(const DockLayoutStep step, const bool settling, const ImVec2 extent,
+                            const DockTreeSides& tree)
+{
+  switch (step)
+  {
+  case DockLayoutStep::remember:
+    rememberLayout(m_dockProportions, settling, extent, tree);
+    break;
+
+  case DockLayoutStep::rememberAndRescale:
+    rememberLayout(m_dockProportions, settling, extent, tree);
+
+    if (!settling)
+    {
+      rescaleLayout(m_dockProportions, extent, tree);
+    }
+    break;
+
+  case DockLayoutStep::rescale:
+    rescaleLayout(m_dockProportions, extent, tree);
+    break;
+
+  case DockLayoutStep::beginDrag:
+    m_dockDragStart = tree.sides;
+    break;
+
+  case DockLayoutStep::endDrag:
+    m_dockProportions.rememberChanges(tree.sides, m_dockDragStart, tree.existing, extent.x, extent.y);
+    break;
+
+  case DockLayoutStep::none:
+    break;
+  }
+}
+
+void EditorApp::sizeSceneStatusNodes(const std::vector<ImGuiDockNode*>& nodes)
+{
+  const float scale = m_renderer->getWindow()->getContentScale();
+  const float previous = std::ceil(m_sceneStatusAppliedFloor * scale);
+  const float height = std::ceil(m_sceneStatusFloor * scale);
+
+  m_sceneStatusAppliedFloor = m_sceneStatusFloor;
+
+  // A wider toolbar wraps into fewer rows, so a node still sitting at the old floor drops to the new content
+  // height instead of keeping the larger one an earlier, narrower window left in its SizeRef. A node the user
+  // sized differently, and a taller floor (the engine enforces it), are left alone.
+  if (previous <= 0.0f || height >= previous)
+  {
+    return;
+  }
+
+  for (ImGuiDockNode* node : nodes)
+  {
+    if (std::fabs(node->SizeRef.y - previous) <= dockEditTolerance)
+    {
+      node->SizeRef.y = height;
+    }
+  }
+}
+
+void EditorApp::updateDockMinimumSizesForViewport()
+{
+  const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
+  const float contentScale = m_renderer->getWindow()->getContentScale();
+
+  if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
+  {
+    return;
+  }
+
+  const std::array<float, 3> key{viewportSize.x, viewportSize.y, contentScale};
+
+  if (key != m_dockFloorKey)
+  {
+    m_dockFloorKey = key;
+    applyDockPanelMinimumSizes();
   }
 }
 
@@ -248,26 +426,40 @@ void EditorApp::applyDockMinimumSizes() const
 {
   const auto gui = m_renderer->getImGuiInstance();
 
-  // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
-  // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small
-  // enough that the default sizes fall below these, the floors win over the default layout.
-  const ImVec2 objectsMinimumSize{260.0f, 0.0f};
-  const ImVec2 inspectorMinimumSize{310.0f, 0.0f};
-  const ImVec2 sceneScriptsMinimumSize{310.0f, 0.0f};
-  const ImVec2 sceneStatusMinimumSize{0.0f, sceneStatusBaseMinimumHeight};
-  const ImVec2 assetsMinimumSize{0.0f, 200.0f};
-  const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
-  const ImVec2 consoleMinimumSize{0.0f, 120.0f};
-  const ImVec2 profilerMinimumSize{0.0f, 120.0f};
+  gui->setDockedWindowMinimumSize("Scene Status", ImVec2{0.0f, sceneStatusBaseMinimumHeight});
 
-  gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
-  gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
-  gui->setDockedWindowMinimumSize("Scene Scripts", sceneScriptsMinimumSize);
-  gui->setDockedWindowMinimumSize("Scene Status", sceneStatusMinimumSize);
-  gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
-  gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
-  gui->setDockedWindowMinimumSize("Console", consoleMinimumSize);
-  gui->setDockedWindowMinimumSize("Profiler", profilerMinimumSize);
+  applyDockPanelMinimumSizes();
+}
+
+void EditorApp::applyDockPanelMinimumSizes() const
+{
+  const auto gui = m_renderer->getImGuiInstance();
+
+  // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
+  // shrink the other, and tabs sharing a dock node take the largest floor among them. A window too small for
+  // the full floors lowers them, so the scene view keeps a share of it.
+  const float contentScale = std::max(m_renderer->getWindow()->getContentScale(), 0.01f);
+  const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
+  const float width = viewportSize.x / contentScale;
+  const float height = viewportSize.y / contentScale;
+
+  const auto sideFloor = [&](const float base)
+  {
+    return ImVec2{dockFloorForExtent(base, width, dockSideFloorFraction), 0.0f};
+  };
+
+  const auto bottomFloor = [&](const float base)
+  {
+    return ImVec2{0.0f, dockFloorForExtent(base, height, dockBottomFloorFraction)};
+  };
+
+  gui->setDockedWindowMinimumSize("Objects", sideFloor(260.0f));
+  gui->setDockedWindowMinimumSize("Inspector", sideFloor(310.0f));
+  gui->setDockedWindowMinimumSize("Scene Scripts", sideFloor(310.0f));
+  gui->setDockedWindowMinimumSize("Assets", bottomFloor(200.0f));
+  gui->setDockedWindowMinimumSize("Project Errors", bottomFloor(90.0f));
+  gui->setDockedWindowMinimumSize("Console", bottomFloor(120.0f));
+  gui->setDockedWindowMinimumSize("Profiler", bottomFloor(120.0f));
 }
 
 bool EditorApp::applyDockPercents() const

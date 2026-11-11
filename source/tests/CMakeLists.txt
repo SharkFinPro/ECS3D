@@ -154,6 +154,7 @@ add_executable(${PROJECT_NAME}
   EditorConnectionStateTest.cpp
   PlayControlsTest.cpp
   SceneStatusLayoutTest.cpp
+  DockLayoutFitTest.cpp
   GridVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
   ClientDisplaySettingsTest.cpp
