@@ -205,7 +205,7 @@ TEST(NarrowPhaseRotated, ReportsFourManifoldPointsForFaceOnFace)
   auto flat = makeBox({ 0, 0, 0 });
 
   // The upper box's bottom face (y = 0.8) overlaps the flat box's top over x in [-0.5, 1] and z in
-  // [-0.5, 1]; its four corners are clamped onto that footprint. Identical axes tie on the reference
+  // [-0.5, 1]; the manifold's four corners are that overlap. Identical axes tie on the reference
   // choice and the flat box wins it (the >= in the manifold code), so the points keep the upper box's
   // y = 0.8 rather than the flat box's y = 1.
   auto upper = makeBox({ 0.5f, 1.8f, 0.5f });

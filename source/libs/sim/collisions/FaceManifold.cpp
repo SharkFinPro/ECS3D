@@ -5,8 +5,11 @@
 #include <glm/geometric.hpp>
 #include <glm/vec2.hpp>
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <utility>
 
 namespace collisions {
   using detail::Candidate;
@@ -142,6 +145,88 @@ namespace collisions {
 
       return inside ? point : nearest;
     }
+
+    // Corner sets this small are searched exhaustively for the choice covering the most area.
+    constexpr size_t maxSearchedCandidates = 12;
+
+    // The area of the points' convex hull along normal; the points of a convex loop taken in order are their own hull.
+    [[nodiscard]] float loopArea(const std::vector<glm::vec3>& points, const std::vector<size_t>& chosen,
+                                 const glm::vec3& normal)
+    {
+      const glm::vec3 origin = points[chosen.front()];
+      glm::vec3 sum{ 0 };
+      for (size_t i = 0; i < chosen.size(); ++i)
+      {
+        sum += glm::cross(points[chosen[i]] - origin, points[chosen[(i + 1) % chosen.size()]] - origin);
+      }
+
+      return std::fabs(glm::dot(sum, normal)) * 0.5f;
+    }
+
+    // At most maxPoints of the candidates, the ones whose polygon covers the most area, so the manifold spans as much
+    // of the overlap as that many points can. Candidates arrive in loop order around the face. Among equal areas the
+    // choice holding the deepest point wins.
+    [[nodiscard]] std::vector<glm::vec3> largestSpread(const std::vector<Candidate>& candidates,
+                                                       const glm::vec3& normal, const size_t maxPoints)
+    {
+      if (candidates.size() <= maxPoints || candidates.size() > maxSearchedCandidates || maxPoints < 3)
+      {
+        return spreadOut(candidates, maxPoints);
+      }
+
+      std::vector<glm::vec3> points;
+      size_t deepest = 0;
+      for (size_t i = 0; i < candidates.size(); ++i)
+      {
+        points.push_back(candidates[i].point);
+        if (candidates[i].depth > candidates[deepest].depth)
+        {
+          deepest = i;
+        }
+      }
+
+      // Every way to pick maxPoints of the loop, in order, as the bits of a mask.
+      std::vector<size_t> best;
+      float bestArea = -1.0f;
+      for (uint32_t mask = 0; mask < (1u << candidates.size()); ++mask)
+      {
+        if (static_cast<size_t>(std::popcount(mask)) != maxPoints)
+        {
+          continue;
+        }
+
+        std::vector<size_t> chosen;
+        for (size_t i = 0; i < candidates.size(); ++i)
+        {
+          if ((mask >> i) & 1u)
+          {
+            chosen.push_back(i);
+          }
+        }
+
+        const float area = loopArea(points, chosen, normal);
+        const bool holdsDeepest = std::ranges::find(chosen, deepest) != chosen.end();
+        const bool tied = std::fabs(area - bestArea) <= 1e-5f * std::max(bestArea, 1e-6f);
+        const bool bestHoldsDeepest = !best.empty() && std::ranges::find(best, deepest) != best.end();
+        if (area > bestArea && !tied)
+        {
+          best = chosen;
+          bestArea = area;
+        }
+        else if (tied && holdsDeepest && !bestHoldsDeepest)
+        {
+          best = chosen;
+        }
+      }
+
+      std::vector<glm::vec3> result;
+      for (const size_t index : best)
+      {
+        result.push_back(points[index]);
+      }
+
+      return result;
+    }
   }
 
   std::vector<glm::vec3> hullFaceNormals(const std::span<const glm::vec3> vertices,
@@ -212,22 +297,22 @@ namespace collisions {
       }
     };
 
-    // Two faces overlap in the incident face clipped to the reference one's side planes. The clipped points stay on
-    // the incident face, and those above the reference plane are not touching.
-    const auto incidentPolygon = convexPolygon(incidentFeature, faceNormal);
-    if (polygon.size() >= 3 && incidentPolygon.size() >= 3)
+    // Two faces overlap in the incident face clipped to the reference one's side planes, and an edge of the incident
+    // side the same way. What is left is cut at the reference plane too, so a face tilted a little off it keeps the
+    // part that touches. The points stay on the incident side.
+    auto incidentLoop = convexPolygon(incidentFeature, faceNormal);
+    if (polygon.size() >= 3 && incidentLoop.size() >= 2)
     {
-      for (const auto& point : detail::clipToPolygon(incidentPolygon, polygon, faceNormal))
+      auto overlap = detail::clipToPolygon(std::move(incidentLoop), polygon, faceNormal);
+      overlap = detail::clipAgainstPlane(overlap, planePoint, -faceNormal, reference.featureEpsilon);
+      for (const auto& point : overlap)
       {
-        if (const float offset = glm::dot(point - planePoint, faceNormal); offset <= reference.featureEpsilon)
-        {
-          place(point, offset);
-        }
+        place(point, glm::dot(point - planePoint, faceNormal));
       }
     }
 
-    // An edge or corner has no face to clip, and a face with no overlap along the plane still touches somewhere:
-    // its vertices are pulled onto the reference polygon, keeping their depth.
+    // A corner, or an edge or face wholly outside the reference polygon along the plane, still touches somewhere: its
+    // vertices are pulled onto the reference polygon, keeping their depth.
     if (candidates.empty())
     {
       for (const auto& vertex : incidentFeature)
@@ -237,6 +322,6 @@ namespace collisions {
       }
     }
 
-    return spreadOut(candidates, std::max<size_t>(maxPoints, 1));
+    return largestSpread(candidates, faceNormal, std::max<size_t>(maxPoints, 1));
   }
 }

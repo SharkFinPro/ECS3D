@@ -23,6 +23,14 @@ namespace collisions::detail {
 
   [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b);
 
+  // How many float ulps of the coordinates two features may differ by and still be the same plane.
+  inline constexpr float coincidentUlps = 64.0f;
+
+  // One Sutherland-Hodgman pass against the half-space dot(inward, x - origin) >= -tolerance. Only a clear sign change
+  // makes a new point.
+  [[nodiscard]] std::vector<glm::vec3> clipAgainstPlane(const std::vector<glm::vec3>& input, const glm::vec3& origin,
+                                                        const glm::vec3& inward, float tolerance);
+
   // The subject loop clipped by the side planes of the prism over polygon along normal (Sutherland-Hodgman). polygon
   // is counter-clockwise about normal; the subject keeps its position along normal.
   [[nodiscard]] std::vector<glm::vec3> clipToPolygon(std::vector<glm::vec3> subject,
