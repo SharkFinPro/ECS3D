@@ -16,21 +16,14 @@ enum class EditorConnectionState
   return serverEditable ? EditorConnectionState::connected : EditorConnectionState::readOnlyServer;
 }
 
-// Only a token the user gave for a server the editor did not spawn can be wrong.
-[[nodiscard]] constexpr bool editorHasExternalServerToken(const bool launchedLocalServer,
-                                                          const bool tokenSupplied) noexcept
-{
-  return !launchedLocalServer && tokenSupplied;
-}
-
-// A server that accepted the handshake sends a snapshot and an edit status straight away, so an editor that was
-// given a token for an external server and was dropped before receiving anything was refused at the handshake.
-// The transport reports no distinct close reason, so a server that refused the editor for another reason lands
-// here too. The token of a server the editor spawned is its own, so a drop from that one is never a rejection.
+// A server that accepts the editor's join replies with an edit status and a snapshot, so an external server that
+// drops the editor before sending anything refused it at the handshake. The transport reports no distinct close
+// reason, so a server that refused the editor for another reason lands here too. A server the editor spawned
+// uses a token the editor generated, so a drop from that one is never a rejection.
 [[nodiscard]] constexpr EditorConnectionState editorConnectionAfterLoss(const bool receivedFromServer,
-                                                                        const bool externalServerToken) noexcept
+                                                                        const bool externalServer) noexcept
 {
-  if (!receivedFromServer && externalServerToken)
+  if (!receivedFromServer && externalServer)
   {
     return EditorConnectionState::editTokenRejected;
   }
@@ -77,11 +70,52 @@ enum class EditorConnectionState
   switch (state)
   {
     case EditorConnectionState::editTokenRejected:
-      return "The server closed the connection before sending anything: the edit token was rejected, or the server "
-             "refused the editor. Check the --token value.";
+      return "The server closed the connection before replying to the editor: the edit token was wrong or missing, or the "
+             "server refused the editor. Check the --token value.";
     default:
       return "Connection to the server was lost. Save your work and restart the editor.";
   }
 }
+
+// The editor's connection state as the app's network loop drives it. A loss is final until the next connect: a
+// late edit status must not turn a dead connection back into an editable one.
+class EditorConnectionTracker
+{
+public:
+  void onConnect()
+  {
+    m_receivedFromServer = false;
+    m_state = EditorConnectionState::connected;
+  }
+
+  void onServerMessage() { m_receivedFromServer = true; }
+
+  void onEditStatus(const bool serverEditable)
+  {
+    if (!isLost())
+    {
+      m_state = editorConnectionForEditStatus(serverEditable);
+    }
+  }
+
+  void onLoss(const bool externalServer)
+  {
+    if (!isLost())
+    {
+      m_state = editorConnectionAfterLoss(m_receivedFromServer, externalServer);
+    }
+  }
+
+  [[nodiscard]] EditorConnectionState state() const noexcept { return m_state; }
+
+  [[nodiscard]] bool isLost() const noexcept
+  {
+    return m_state == EditorConnectionState::connectionLost || m_state == EditorConnectionState::editTokenRejected;
+  }
+
+private:
+  EditorConnectionState m_state = EditorConnectionState::connected;
+  bool m_receivedFromServer = false;
+};
 
 #endif

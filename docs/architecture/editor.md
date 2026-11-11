@@ -136,8 +136,14 @@ minimum sizes still apply.
 `EditorConnectionState.h` names why the editor cannot edit, apart from the `m_serverEditable` gate: `connected`,
 `readOnlyServer` (the server's `editStatus` said it is not in edit mode), `connectionLost` and `editTokenRejected`.
 It also holds the menu-bar badge, the Objects panel notice (`ObjectGUIManager::setReadOnlyNotice`) and the log line
-for each state. The transport carries no close reason, so `EditorApp` infers rejection when `NetClient` reports a
-lost connection before any message arrived from the server and the user gave an edit token for an external server (`--host`; the token of a server the editor spawned is its own, so that drop is `connectionLost`): an accepting server
-sends a snapshot and an edit status at once, while a rejecting one closes the socket silently
-(`TransportBackend.TryAuthorizeHandshake`). A drop after the first message is `connectionLost`. A server that
-refuses the editor for another reason is reported the same way as a bad token, which the wording admits.
+for each state. `EditorConnectionTracker` is the state machine `EditorApp` drives from its network loop.
+
+The transport carries no close reason, so rejection is inferred. A server that accepts the editor's join replies with
+an edit status and then a snapshot. A rejecting server closes the socket silently
+(`TransportBackend.TryAuthorizeHandshake`), with or without a token having been given. So a loss before any server
+message, on a server the editor did not spawn (`--host`), is `editTokenRejected`. A server the editor spawned uses a
+token the editor generated, so that drop is `connectionLost`, as is any drop after the first message. A server that
+refuses the editor for another reason reads as a rejection too, which the wording admits.
+
+On a loss the loop applies the messages still queued before it classifies, so a server that answered and then died
+reads as lost. After a loss the tracker ignores a later `editStatus`, and the editor stays read-only.

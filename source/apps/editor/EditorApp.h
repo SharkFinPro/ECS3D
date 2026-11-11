@@ -192,10 +192,8 @@ private:
   // true so the common case (the editor's own spawned --edit server) is unaffected if the message lags.
   bool m_serverEditable = true;
 
-  // Why the editor is or is not editable; m_serverEditable stays the gate. Rejection is inferred from a drop
-  // before the server sent anything, which m_receivedFromServer tracks.
-  EditorConnectionState m_connectionState = EditorConnectionState::connected;
-  bool m_receivedFromServer = false;
+  // Why the editor is or is not editable; m_serverEditable stays the gate.
+  EditorConnectionTracker m_connectionTracker;
 
   SceneStatus m_sceneStatus = initialEditorSceneStatus;
 

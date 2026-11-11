@@ -326,8 +326,7 @@ void EditorApp::connectToServer()
   // A slot belongs to one connection, so nothing from the session being left carries over.
   m_playerSlot = -1;
   m_requestedPlayerSlot.reset();
-  m_receivedFromServer = false;
-  m_connectionState = EditorConnectionState::connected;
+  m_connectionTracker.onConnect();
 
   // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
   // every object it named.
@@ -403,28 +402,34 @@ void EditorApp::run()
     {
       ECS3D_PROFILE_SCOPE("Network in");
 
-      net::Message message;
-      while (m_netClient->poll(message))
-      {
-        // A malformed message costs the message, not the session. Without this the exception escapes run()
-        // and main exits, losing whatever was being edited.
-        m_receivedFromServer = true;
+      const auto applyPendingMessages = [this] {
+        net::Message message;
+        while (m_netClient->poll(message))
+        {
+          m_connectionTracker.onServerMessage();
 
-        try
-        {
-          applyMessage(message);
+          // A malformed message costs the message, not the session. Without this the exception escapes run()
+          // and main exits, losing whatever was being edited.
+          try
+          {
+            applyMessage(message);
+          }
+          catch (const std::exception& e)
+          {
+            logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
+          }
         }
-        catch (const std::exception& e)
-        {
-          logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
-        }
-      }
+      };
+
+      applyPendingMessages();
 
       if (m_netClient->takeConnectionLost())
       {
-        m_connectionState = editorConnectionAfterLoss(
-          m_receivedFromServer, editorHasExternalServerToken(m_options.launchLocalServer, !m_authToken.empty()));
-        logMessage("Error", editorConnectionLogMessage(m_connectionState));
+        // Messages queued before the drop can land after the last poll above.
+        applyPendingMessages();
+
+        m_connectionTracker.onLoss(!m_options.launchLocalServer);
+        logMessage("Error", editorConnectionLogMessage(m_connectionTracker.state()));
         m_serverEditable = false;
         m_remoteStats.disconnected();
       }

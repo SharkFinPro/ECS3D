@@ -31,7 +31,7 @@ TEST(EditorConnectionStateTest, DropAfterASessionReadsAsDisconnected)
   EXPECT_EQ(std::strstr(editorConnectionBadge(state), "not in edit mode"), nullptr);
 }
 
-TEST(EditorConnectionStateTest, DropBeforeAnyServerMessageWithATokenReadsAsRejected)
+TEST(EditorConnectionStateTest, ExternalServerDropBeforeAnyMessageReadsAsRejected)
 {
   const auto state = editorConnectionAfterLoss(false, true);
 
@@ -41,22 +41,97 @@ TEST(EditorConnectionStateTest, DropBeforeAnyServerMessageWithATokenReadsAsRejec
   EXPECT_EQ(std::strstr(editorConnectionBadge(state), "not in edit mode"), nullptr);
 }
 
-TEST(EditorConnectionStateTest, DropBeforeAnyServerMessageWithoutAnExternalTokenIsNotARejection)
+TEST(EditorConnectionStateTest, SpawnedServerDropBeforeAnyMessageIsALostConnection)
 {
   EXPECT_EQ(editorConnectionAfterLoss(false, false), EditorConnectionState::connectionLost);
 }
 
-TEST(EditorConnectionStateTest, SpawnedServerTokenIsNeverExternal)
+TEST(EditorConnectionStateTest, TrackerStartsConnected)
 {
-  EXPECT_FALSE(editorHasExternalServerToken(true, true));
-  EXPECT_TRUE(editorHasExternalServerToken(false, true));
-  EXPECT_FALSE(editorHasExternalServerToken(false, false));
+  const EditorConnectionTracker tracker;
 
-  const auto spawnedServerDies = editorConnectionAfterLoss(false, editorHasExternalServerToken(true, true));
-  EXPECT_EQ(spawnedServerDies, EditorConnectionState::connectionLost);
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connected);
+  EXPECT_FALSE(tracker.isLost());
+}
 
-  const auto externalRejects = editorConnectionAfterLoss(false, editorHasExternalServerToken(false, true));
-  EXPECT_EQ(externalRejects, EditorConnectionState::editTokenRejected);
+TEST(EditorConnectionStateTest, TrackerMessageThenLossIsALostConnection)
+{
+  EditorConnectionTracker tracker;
+  tracker.onConnect();
+  tracker.onServerMessage();
+  tracker.onEditStatus(true);
+  tracker.onLoss(true);
+
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connectionLost);
+  EXPECT_TRUE(tracker.isLost());
+}
+
+TEST(EditorConnectionStateTest, TrackerExternalLossWithNoMessageIsRejected)
+{
+  EditorConnectionTracker tracker;
+  tracker.onConnect();
+  tracker.onLoss(true);
+
+  EXPECT_EQ(tracker.state(), EditorConnectionState::editTokenRejected);
+}
+
+TEST(EditorConnectionStateTest, TrackerSpawnedLossWithNoMessageIsALostConnection)
+{
+  EditorConnectionTracker tracker;
+  tracker.onConnect();
+  tracker.onLoss(false);
+
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connectionLost);
+}
+
+TEST(EditorConnectionStateTest, TrackerConnectResetsALostSession)
+{
+  EditorConnectionTracker tracker;
+  tracker.onServerMessage();
+  tracker.onLoss(true);
+  ASSERT_EQ(tracker.state(), EditorConnectionState::connectionLost);
+
+  tracker.onConnect();
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connected);
+
+  tracker.onLoss(true);
+  EXPECT_EQ(tracker.state(), EditorConnectionState::editTokenRejected);
+}
+
+TEST(EditorConnectionStateTest, TrackerEditStatusAfterLossStaysLost)
+{
+  EditorConnectionTracker tracker;
+  tracker.onServerMessage();
+  tracker.onLoss(true);
+
+  tracker.onEditStatus(true);
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connectionLost);
+
+  tracker.onEditStatus(false);
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connectionLost);
+}
+
+TEST(EditorConnectionStateTest, TrackerReadOnlyServerThenEditableTracksTheStatus)
+{
+  EditorConnectionTracker tracker;
+  tracker.onServerMessage();
+  tracker.onEditStatus(false);
+
+  EXPECT_EQ(tracker.state(), EditorConnectionState::readOnlyServer);
+  EXPECT_FALSE(tracker.isLost());
+
+  tracker.onEditStatus(true);
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connected);
+}
+
+TEST(EditorConnectionStateTest, TrackerReadOnlyServerThenLossIsALostConnection)
+{
+  EditorConnectionTracker tracker;
+  tracker.onServerMessage();
+  tracker.onEditStatus(false);
+  tracker.onLoss(true);
+
+  EXPECT_EQ(tracker.state(), EditorConnectionState::connectionLost);
 }
 
 TEST(EditorConnectionStateTest, EveryNonConnectedStateHasAUniqueBadgeAndNotice)
