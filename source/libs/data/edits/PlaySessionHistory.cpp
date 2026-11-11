@@ -13,6 +13,11 @@ const EditHistory& PlaySessionHistory::current() const
   return m_current;
 }
 
+std::uint64_t PlaySessionHistory::authoredPosition() const
+{
+  return m_authored.has_value() ? m_authored->position() : m_current.position();
+}
+
 bool PlaySessionHistory::requestStart()
 {
   const bool stopped = m_expected.empty()
@@ -70,7 +75,16 @@ bool PlaySessionHistory::observeStatus(const SceneStatus status)
     }
     else if (reportedStopped)
     {
-      m_current = m_authored.has_value() ? std::move(*m_authored) : EditHistory();
+      if (m_authored.has_value())
+      {
+        m_current = std::move(*m_authored);
+      }
+      else
+      {
+        // The authored history was dropped mid-run (a project load); keep the history that replaced it, so a
+        // save point taken after that load still matches.
+        m_current.clear();
+      }
       m_authored.reset();
       swapped = true;
     }

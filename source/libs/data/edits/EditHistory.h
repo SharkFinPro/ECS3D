@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <optional>
 #include <string>
@@ -62,6 +63,13 @@ public:
   // Bounds memory for a long editing session. 100 is generous for the back-and-forth a single session
   // realistically produces while still being a hard, named limit instead of unbounded growth.
   static constexpr std::size_t maxDepth = 100;
+
+  // Entry ids identify states (see position()), so a copy would duplicate them.
+  EditHistory() = default;
+  EditHistory(const EditHistory&) = delete;
+  EditHistory& operator=(const EditHistory&) = delete;
+  EditHistory(EditHistory&&) noexcept = default;
+  EditHistory& operator=(EditHistory&&) noexcept = default;
 
   // Pushes onto the undo stack and clears the redo stack - any new command invalidates whatever redo
   // path existed, since redoing it now would apply on top of a scene that has since moved on. Drops the
@@ -144,11 +152,29 @@ public:
   [[nodiscard]] std::size_t undoDepth() const;
   [[nodiscard]] std::size_t redoDepth() const;
 
+  // Identifies the state the undo stack leads to: the id of the entry on top, or a token for the history's
+  // base state when the stack is empty. Ids come from one process-wide counter and are never reused, and an
+  // entry keeps its id across undo and redo, so equal positions mean the same state (undo then a new edit
+  // never matches the position it left). Dropping or trimming entries gives the base state a fresh token, so
+  // a position that can no longer be reached never compares equal to a later one. Undo and redo move the
+  // position as soon as the request is built, before the server confirms it.
+  [[nodiscard]] std::uint64_t position() const;
+
 private:
+  [[nodiscard]] static std::uint64_t newToken();
+  void pushUndo(std::vector<EditCommand> entry);
+  void dropUndoStack();
+  void moveUndoToRedo();
+  void moveRedoToUndo();
+
   // Each entry is one undo/redo step: one command for an ordinary edit, several for a group recorded
   // through recordBatch (a multi-object delete or duplicate), reversed as one unit.
   std::deque<std::vector<EditCommand>> m_undoStack;
   std::deque<std::vector<EditCommand>> m_redoStack;
+  // Parallel to the stacks: the id of each entry.
+  std::deque<std::uint64_t> m_undoIds;
+  std::deque<std::uint64_t> m_redoIds;
+  std::uint64_t m_baseToken = newToken();
 };
 
 }

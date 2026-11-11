@@ -2,20 +2,72 @@
 #include "Replication.h"
 #include "objects/ObjectManager.h"
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
 #include <utility>
 
 namespace edits {
 
-void EditHistory::record(EditCommand command)
+std::uint64_t EditHistory::newToken()
+{
+  // Shared by every history, so a play-session history can never collide with the authored one.
+  static std::atomic<std::uint64_t> counter{ 0 };
+  return ++counter;
+}
+
+void EditHistory::pushUndo(std::vector<EditCommand> entry)
 {
   m_redoStack.clear();
-  m_undoStack.push_back({ std::move(command) });
+  m_redoIds.clear();
+
+  m_undoStack.push_back(std::move(entry));
+  m_undoIds.push_back(newToken());
 
   if (m_undoStack.size() > maxDepth)
   {
+    // The oldest state still reachable by undo is no longer the one the history started from.
     m_undoStack.pop_front();
+    m_undoIds.pop_front();
+    m_baseToken = newToken();
   }
+}
+
+void EditHistory::dropUndoStack()
+{
+  if (m_undoStack.empty())
+  {
+    return;
+  }
+
+  m_undoStack.clear();
+  m_undoIds.clear();
+  m_baseToken = newToken();
+}
+
+void EditHistory::moveUndoToRedo()
+{
+  m_redoStack.push_back(std::move(m_undoStack.back()));
+  m_redoIds.push_back(m_undoIds.back());
+  m_undoStack.pop_back();
+  m_undoIds.pop_back();
+}
+
+void EditHistory::moveRedoToUndo()
+{
+  m_undoStack.push_back(std::move(m_redoStack.back()));
+  m_undoIds.push_back(m_redoIds.back());
+  m_redoStack.pop_back();
+  m_redoIds.pop_back();
+}
+
+std::uint64_t EditHistory::position() const
+{
+  return m_undoIds.empty() ? m_baseToken : m_undoIds.back();
+}
+
+void EditHistory::record(EditCommand command)
+{
+  pushUndo({ std::move(command) });
 }
 
 void EditHistory::recordBatch(std::vector<EditCommand> commands)
@@ -40,13 +92,7 @@ void EditHistory::recordBatch(std::vector<EditCommand> commands)
     throw std::invalid_argument("EditHistory::recordBatch: every command must be an object sceneEdit");
   }
 
-  m_redoStack.clear();
-  m_undoStack.push_back(std::move(commands));
-
-  if (m_undoStack.size() > maxDepth)
-  {
-    m_undoStack.pop_front();
-  }
+  pushUndo(std::move(commands));
 }
 
 bool EditHistory::canUndo() const
@@ -129,14 +175,14 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
       const auto conflict = command.primaryUUID();
       // This entry is the newest one still on the undo stack; everything remaining beneath it is older,
       // and skipping past a refusal to reach it would apply reverts out of order.
-      m_undoStack.clear();
+      dropUndoStack();
       return { HistoryResult::notUndoable, conflict };
     }
 
     const auto validation = command.validateForUndo(objectManager, assetRegistry, scene);
     if (!validation.ok())
     {
-      m_undoStack.clear();
+      dropUndoStack();
       return { toHistoryResult(validation.failure), validation.conflict };
     }
 
@@ -150,8 +196,7 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
       outcome.messagePayload = command.buildUndoMessage(objectManager);
     }
 
-    m_undoStack.pop_back();
-    m_redoStack.push_back(entry);
+    moveUndoToRedo();
 
     return outcome;
   }
@@ -171,21 +216,21 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
     if (!command.isReversible() || command.targetsSceneScripts())
     {
       const auto conflict = command.primaryUUID();
-      m_undoStack.clear();
+      dropUndoStack();
       return { HistoryResult::notUndoable, conflict };
     }
 
     const auto validation = command.validateForUndo(*scratch, assetRegistry);
     if (!validation.ok())
     {
-      m_undoStack.clear();
+      dropUndoStack();
       return { toHistoryResult(validation.failure), validation.conflict };
     }
 
     const auto undoJSON = command.buildUndoJSON(*scratch);
     if (replication::applySceneEdit(*scratch, undoJSON, assetRegistry) != replication::SceneEditResult::applied)
     {
-      m_undoStack.clear();
+      dropUndoStack();
       return { HistoryResult::targetChanged, command.primaryUUID() };
     }
 
@@ -195,8 +240,7 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
   HistoryOutcome outcome{ HistoryResult::applied };
   outcome.jsonPayload = replication::buildBatch(ops);
 
-  m_undoStack.pop_back();
-  m_redoStack.push_back(entry);
+  moveUndoToRedo();
 
   return outcome;
 }
@@ -221,6 +265,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
     if (!validation.ok())
     {
       m_redoStack.clear();
+      m_redoIds.clear();
       return { toHistoryResult(validation.failure), validation.conflict };
     }
 
@@ -234,8 +279,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
       outcome.messagePayload = command.buildRedoMessage(objectManager);
     }
 
-    m_redoStack.pop_back();
-    m_undoStack.push_back(entry);
+    moveRedoToUndo();
 
     return outcome;
   }
@@ -249,6 +293,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
     if (command.targetsSceneScripts())
     {
       m_redoStack.clear();
+      m_redoIds.clear();
       return { HistoryResult::notUndoable, command.primaryUUID() };
     }
 
@@ -256,6 +301,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
     if (!validation.ok())
     {
       m_redoStack.clear();
+      m_redoIds.clear();
       return { toHistoryResult(validation.failure), validation.conflict };
     }
 
@@ -263,6 +309,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
     if (replication::applySceneEdit(*scratch, redoJSON, assetRegistry) != replication::SceneEditResult::applied)
     {
       m_redoStack.clear();
+      m_redoIds.clear();
       return { HistoryResult::targetChanged, command.primaryUUID() };
     }
 
@@ -272,8 +319,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
   HistoryOutcome outcome{ HistoryResult::applied };
   outcome.jsonPayload = replication::buildBatch(ops);
 
-  m_redoStack.pop_back();
-  m_undoStack.push_back(entry);
+  moveRedoToUndo();
 
   return outcome;
 }
@@ -283,6 +329,7 @@ void EditHistory::reportUndoRejected()
   if (!m_redoStack.empty())
   {
     m_redoStack.pop_back();
+    m_redoIds.pop_back();
   }
 }
 
@@ -291,13 +338,15 @@ void EditHistory::reportRedoRejected()
   if (!m_undoStack.empty())
   {
     m_undoStack.pop_back();
+    m_undoIds.pop_back();
   }
 }
 
 void EditHistory::clear()
 {
-  m_undoStack.clear();
+  dropUndoStack();
   m_redoStack.clear();
+  m_redoIds.clear();
 }
 
 namespace {

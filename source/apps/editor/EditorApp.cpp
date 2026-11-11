@@ -213,6 +213,7 @@ void EditorApp::setupViewportGizmo()
                                                    const nlohmann::json& after) {
     onEditCommitted(objectUUID, before, after);
   });
+  m_viewportGizmo->setGestureEndedCallback([this] { m_saveUI->endUncommittedEdit(); });
 }
 
 void EditorApp::setupObjectGUIManager()
@@ -238,6 +239,7 @@ void EditorApp::setupInspectorPanel()
                                                     const nlohmann::json& after) {
     onEditCommitted(objectUUID, before, after);
   });
+  m_inspectorPanel->setGestureEndedCallback([this] { m_saveUI->endUncommittedEdit(); });
   m_inspectorPanel->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
   m_inspectorPanel->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) { onLoadScene(sceneUUID); });
   m_inspectorPanel->setRenameAssetCallback([this](const uuids::uuid& assetUUID, const std::string& displayName) {
@@ -275,6 +277,7 @@ void EditorApp::setupSaveUI()
 {
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
+  m_saveUI->setHistoryPositionProvider([this] { return m_playHistory.authoredPosition(); });
   m_saveUI->setProjectRootCallback([this](const std::filesystem::path& root, const bool reopened) {
     m_assetCache->setProjectRoot(root);
     if (reopened)

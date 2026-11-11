@@ -7,6 +7,7 @@
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <SaveUI.h>
+#include <UnsavedChanges.h>
 #include <objects/components/Component.h>
 #include <NetClient.h>
 #include <Log.h>
@@ -50,14 +51,15 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
   replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
   m_netClient->send(replication::packAddAsset(asset));
-  m_saveUI->markEdited();
 
   if (command)
   {
     m_playHistory.current().record(std::move(*command));
+    noteRecordedEdit();
   }
   else
   {
+    m_saveUI->markEdited();
     logUnrecordedEdit("an addAsset");
   }
 }
@@ -76,14 +78,15 @@ void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& d
   }
 
   m_netClient->send(replication::packRenameAsset(op));
-  m_saveUI->markEdited();
 
   if (command)
   {
     m_playHistory.current().record(std::move(*command));
+    noteRecordedEdit();
   }
   else
   {
+    m_saveUI->markEdited();
     logUnrecordedEdit("a renameAsset");
   }
 }
@@ -112,14 +115,15 @@ void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
   }
 
   m_netClient->send(replication::packRemoveAsset(op));
-  m_saveUI->markEdited();
 
   if (command)
   {
     m_playHistory.current().record(std::move(*command));
+    noteRecordedEdit();
   }
   else
   {
+    m_saveUI->markEdited();
     logUnrecordedEdit("a removeAsset");
   }
 }
@@ -129,7 +133,16 @@ void EditorApp::onEditComponent(const uuids::uuid& objectUUID, const std::shared
 {
   const auto message = replication::buildComponentEdit(objectUUID, component);
   m_netClient->send(message);
-  m_saveUI->markEdited();
+
+  // A value edit joins the history when it commits, so until then the project is only held dirty.
+  if (m_playHistory.hasStash())
+  {
+    m_saveUI->markEdited();
+  }
+  else
+  {
+    m_saveUI->beginUncommittedEdit();
+  }
 }
 
 // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
@@ -149,13 +162,26 @@ void EditorApp::onSceneEdit(const nlohmann::json& edit)
     message.write(chunk);
   }
   m_netClient->send(message);
+
+  if (commands && !commands->empty())
+  {
+    try
+    {
+      m_playHistory.current().recordBatch(std::move(*commands));
+    }
+    catch (...)
+    {
+      m_saveUI->markEdited();
+      throw;
+    }
+
+    noteRecordedEdit();
+    return;
+  }
+
   m_saveUI->markEdited();
 
-  if (commands)
-  {
-    m_playHistory.current().recordBatch(std::move(*commands));
-  }
-  else if (scene)
+  if (!commands && scene)
   {
     logUnrecordedEdit("the scene edit " + payload);
   }
@@ -171,6 +197,18 @@ void EditorApp::onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::j
   }
 
   m_playHistory.current().record(edits::EditCommand::componentEdit(objectUUID, before, after));
+  noteRecordedEdit();
+}
+
+// A recorded edit is covered by the history position, except while a play session runs (its history is
+// discarded on Stop) or the connection is down (the edit never reached the server, so undoing it proves
+// nothing); those keep the project dirty the way an unrecorded edit does.
+void EditorApp::noteRecordedEdit() const
+{
+  if (editNeedsLatch(m_playHistory.hasStash(), m_netClient->isConnected()))
+  {
+    m_saveUI->markEdited();
+  }
 }
 
 // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).

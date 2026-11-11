@@ -99,13 +99,13 @@ place until Save As; a template (see Build System's project root) is titled "Unt
 the window title and its Save acts as Save As into a free or empty folder, prefilled under `Documents/ECS3D
 Projects`, refusing the template's own folder or one inside it (`ProjectOrigin.h`); the Assets panel's import
 and new-script actions ask `SaveUI::blockAssetWrites` first; every load and a root change reach
-`GpuAssetCache::setProjectRoot` through a callback; also owns the unsaved-changes gate - the edit counter and
-the perform/ignore/prompt decision are the headless `UnsavedChanges.h`: New/Open/a dropped file/closing the
-window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the
-project dirty since the last save/load - the window-close intercept sets its own raw
-`glfwSetWindowCloseCallback`, since `vke::Window` sets none; each successful open and save is added to the
-shared recent-projects list through `RecentProjectRecording.h`, except an untitled template, which waits for its
-first save to a folder; `forgetSaveTarget` drops the save file and folder when `ProjectLoadTracker.h` sees
+`GpuAssetCache::setProjectRoot` through a callback; also owns the unsaved-changes gate - the save-point
+comparison and the perform/ignore/prompt decision are the headless `UnsavedChanges.h` (see
+[undo-redo.md](undo-redo.md)): New/Open/a dropped file/closing the window all route through a guard that
+prompts Save/Don't Save/Cancel when the project differs from the last save/load - the window-close intercept
+sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none; each successful open and save is
+added to the shared recent-projects list through `RecentProjectRecording.h`, except an untitled template, which
+waits for its first save to a folder; `forgetSaveTarget` drops the save file and folder when `ProjectLoadTracker.h` sees
 another editor's load), `GuiComponents` (whose numeric widgets refuse a non-finite ctrl-click entry, restoring
 the previous value and logging a warning, since a non-finite float serializes as json null), `Gizmo` (the
 headless translate/rotate/scale manipulator core - hit-testing and drag math over world-space line/triangle

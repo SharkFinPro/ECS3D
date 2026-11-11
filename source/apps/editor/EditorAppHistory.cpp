@@ -164,7 +164,7 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
         }
         m_netClient->send(message);
       }
-      m_saveUI->markEdited();
+      noteRecordedEdit();
       break;
 
     case edits::HistoryResult::historyEmpty:

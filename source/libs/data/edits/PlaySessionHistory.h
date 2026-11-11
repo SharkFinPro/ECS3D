@@ -3,6 +3,7 @@
 
 #include "EditHistory.h"
 #include "scenes/SceneManager.h"
+#include <cstdint>
 #include <deque>
 #include <optional>
 
@@ -19,6 +20,9 @@ public:
   // What undo/redo act on: the authored history, or the play session's while one runs.
   [[nodiscard]] EditHistory& current();
   [[nodiscard]] const EditHistory& current() const;
+
+  // The position of the authored history, which a play session leaves untouched while its own history runs.
+  [[nodiscard]] std::uint64_t authoredPosition() const;
 
   // Call where a start/stop is sent. Return whether the histories were swapped.
   bool requestStart();

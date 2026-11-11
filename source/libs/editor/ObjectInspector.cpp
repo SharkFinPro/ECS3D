@@ -159,6 +159,11 @@ void ObjectInspector::setEditCommittedCallback(EditCommittedCallback callback)
   m_editCommittedCallback = std::move(callback);
 }
 
+void ObjectInspector::setGestureEndedCallback(GestureEndedCallback callback)
+{
+  m_gestureEndedCallback = std::move(callback);
+}
+
 void ObjectInspector::setSceneEditCallback(SceneEditCallback callback)
 {
   m_sceneEditCallback = std::move(callback);
@@ -335,13 +340,16 @@ void ObjectInspector::commitGestures()
 
   // A gesture that ended where it started is not an edit at all - a click that dragged nowhere, or a
   // value typed back to what it was.
-  if (!m_editCommittedCallback || pending.before == pending.after)
+  if (m_editCommittedCallback && pending.before != pending.after)
   {
-    return;
+    m_editCommittedCallback(pending.objectUUID, nlohmann::json::parse(pending.before),
+                            nlohmann::json::parse(pending.after));
   }
 
-  m_editCommittedCallback(pending.objectUUID, nlohmann::json::parse(pending.before),
-                          nlohmann::json::parse(pending.after));
+  if (m_gestureEndedCallback)
+  {
+    m_gestureEndedCallback();
+  }
 }
 
 void ObjectInspector::commitPendingMultiEdit()
@@ -355,21 +363,21 @@ void ObjectInspector::commitPendingMultiEdit()
   m_multiPendingEdits.clear();
   m_multiPendingSignature.reset();
 
-  if (!m_editCommittedCallback)
-  {
-    return;
-  }
-
   // One EditCommittedCallback per object, same as a single-selection edit would send for its one object -
   // so undo records one entry per object rather than one entry for the whole multi-edit.
   for (const auto& edit : pending)
   {
-    if (edit.before == edit.after)
+    if (!m_editCommittedCallback || edit.before == edit.after)
     {
       continue;
     }
 
     m_editCommittedCallback(edit.objectUUID, nlohmann::json::parse(edit.before), nlohmann::json::parse(edit.after));
+  }
+
+  if (m_gestureEndedCallback)
+  {
+    m_gestureEndedCallback();
   }
 }
 

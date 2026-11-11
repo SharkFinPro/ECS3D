@@ -69,6 +69,11 @@ void ViewportGizmo::setEditCommittedCallback(EditCommittedCallback callback)
   m_editSending.setEditCommittedCallback(std::move(callback));
 }
 
+void ViewportGizmo::setGestureEndedCallback(std::function<void()> callback)
+{
+  m_editSending.setGestureEndedCallback(std::move(callback));
+}
+
 bool ViewportGizmo::capturesMouseAt(const glm::vec2 mouse) const
 {
   if (m_state.dragging)
