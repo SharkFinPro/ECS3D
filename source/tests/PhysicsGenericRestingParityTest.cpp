@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "PhysicsGenericRestingFixtures.h"
+#include "PhysicsSystem.h"
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -48,9 +49,8 @@ namespace {
   };
 
   // Friction is a share of the gravity added each tick, and a slide goes as speed squared over that share. The slides
-  // here were calibrated when a tick added g * dt * 0.1, and it now adds g * unitsPerMeter * dt * dt, 50 * dt times as
-  // much, so scaling the speed by the square root of that ratio restores them: at the server tick the two steps are
-  // equal and the scale is 1.
+  // are sized for a tick adding 9.81 * 0.1 * dt, and a tick adds g * unitsPerMeter * dt * dt, 50 * dt times as much,
+  // so the speed is scaled by the square root of that ratio: it is 1 at the server tick.
   float speedScale(const float dt)
   {
     return std::sqrt(10.0f * PhysicsSystem::unitsPerMeter * dt);

@@ -213,8 +213,8 @@ TEST(CapsuleRolling, ALyingCapsuleSpinningAboutTheNormalGrindsToExactRest)
 
 TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
 {
-  // The push that slid it as far as it did when a tick of gravity was a fifth of this one: friction takes a share of
-  // that tick, so the same distance takes a speed the square root of the ratio higher and a shorter time.
+  // Friction takes a share of each tick's gravity, so the push is sqrt(unitsPerMeter) faster than 0.3 for friction to
+  // stop it in the same distance, in a shorter time.
   Config Config;
   Config.rotation = { 0, 0, 90 };
   Config.velocity = { 0.3f * std::sqrt(PhysicsSystem::unitsPerMeter), 0, 0 };

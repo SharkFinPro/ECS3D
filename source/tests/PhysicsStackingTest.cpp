@@ -29,10 +29,10 @@ namespace {
   using fixtures::makeScene;
   using fixtures::transformOf;
 
-  // Stacks run at the server's tick: a tick of 0.1 adds five times the gravity these were tuned with, enough to sink a
-  // box a half unit into the one it rests on, or to carry a drop from five units through the ground.
+  // Stacks run at the server's tick: a tick of 0.1 adds 0.49 of gravity, enough to sink a box a half unit into the
+  // one it rests on, or to carry a drop from five units through the ground.
   constexpr float serverTick = 1.0f / 50.0f;
-  constexpr int ticksPerOldTick = 5;
+  constexpr int ticksPerTenthSecond = 5;
 }
 
 namespace {
@@ -62,12 +62,11 @@ namespace {
 
     CollisionSystem collisionSystem;
 
-    // The push is the square root of the gravity ratio faster than the two units a second it had, so friction stops it
-    // in the same distance.
+    // The push is sqrt(unitsPerMeter) faster than two units a second, so friction stops it in 0.4 units.
     const float push = 2.0f * std::sqrt(PhysicsSystem::unitsPerMeter);
-    for (int tick = 0; tick < 50 * ticksPerOldTick; ++tick)
+    for (int tick = 0; tick < 50 * ticksPerTenthSecond; ++tick)
     {
-      if (tick == 10 * ticksPerOldTick)
+      if (tick == 10 * ticksPerTenthSecond)
       {
         upperBody->setVelocity({ push * serverTick, 0, 0 });
       }
@@ -241,12 +240,12 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
   // without spin, on top of the ground rather than sinking through it or rocking off the edge.
   float maxAngularSpeed = 0.0f;
 
-  for (int tick = 0; tick < 150 * ticksPerOldTick; ++tick)
+  for (int tick = 0; tick < 150 * ticksPerTenthSecond; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
     collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
 
-    if (tick >= 120 * ticksPerOldTick)
+    if (tick >= 120 * ticksPerTenthSecond)
     {
       const float height = transformOf(falling)->getPosition().y;
       lowest = std::min(lowest, height);

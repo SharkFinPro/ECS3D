@@ -20,20 +20,26 @@
 namespace {
   using namespace physicsFixtures;
 
-  // The stacks run at the server's tick. A tick of gravity at dt 0.1 is five times a tick at this one, and a stack
-  // that sinks that far into itself near its friction angle slides off, which the server never asks of it.
+  // The stacks run at the server's tick: at dt 0.1 a tick of gravity is five times as much, and a stack sunk that far
+  // into itself near its friction angle slides off.
   constexpr float serverTick = 1.0f / 50.0f;
   constexpr int ticksPerSecond = 50;
   constexpr float gravityStep = -gravityPerTick * (serverTick * serverTick) / (dt * dt);
 
   // Each box above the first sinks about one tick of gravity into the one below it, since the upper contact is
-  // resolved before the lower box is pushed back up. A box settles within twice that per level.
+  // resolved before the lower box is pushed back up. A box settles within twice that per level (measured, about one
+  // to 1.4 ticks per level).
   constexpr float sinkPerLevel = 2.0f * gravityStep;
+
+  // What a box that settles in place may still move from its start, or be moving by, per tick: a tenth and a hundredth
+  // of a tick of gravity, against measured values of at most 0.03 and 3e-7 of one.
+  constexpr float restSlack = 0.1f * gravityStep;
+  constexpr float restSpeed = 0.01f * gravityStep;
 
   // Near the friction angle a settled stack creeps by float noise that differs between platforms, so the
   // distance from the start gets this much extra there. A slide still fails the settled and velocity checks.
   constexpr float steepSlope = 20.0f;
-  constexpr float steepSlack = 0.3f;
+  constexpr float steepSlack = 0.25f * gravityStep;
 
   // Boxes stacked on a static box tilted about z, each turned like it and resting flush on the one below.
   struct SlopeStack {
@@ -128,8 +134,8 @@ TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
 
     EXPECT_LT(glm::distance(stack.positionOf(level), settled[level]), 1e-3f);
     EXPECT_LT(glm::distance(stack.positionOf(level), stack.start[level]),
-              sinkPerLevel * static_cast<float>(level) + 0.02f + slack);
-    EXPECT_LT(glm::length(stack.bodies[level]->getVelocity()), 1e-3f);
+              sinkPerLevel * static_cast<float>(level) + restSlack + slack);
+    EXPECT_LT(glm::length(stack.bodies[level]->getVelocity()), restSpeed);
 
     if (level > 0)
     {
@@ -162,8 +168,8 @@ TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
     const auto settled = stack.positions();
     stack.run(10 * ticksPerSecond);
 
-    EXPECT_LT(glm::distance(stack.positionOf(0), stack.start[0]), 0.02f);
-    EXPECT_LT(glm::distance(stack.positionOf(1), stack.start[1]), sinkPerLevel + 0.02f);
+    EXPECT_LT(glm::distance(stack.positionOf(0), stack.start[0]), restSlack);
+    EXPECT_LT(glm::distance(stack.positionOf(1), stack.start[1]), sinkPerLevel + restSlack);
     EXPECT_LT(glm::distance(stack.positionOf(0), settled[0]), 1e-3f);
     EXPECT_LT(glm::distance(stack.positionOf(1), settled[1]), 1e-3f);
     EXPECT_LT(stack.overlapWithBelow(1), sinkPerLevel);
@@ -183,12 +189,14 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
   const float perBox = body.getMass() * gravityStep * glm::dot(stack.normal, glm::vec3(0, 1, 0));
 
   // A top box that slid off would leave the level under it nothing to pass on.
-  // Measured along the slope, so sinking into the boxes below does not count. The top box falls three ticks onto
-  // a stack still settling and slips about 0.47 before friction holds it; a slide off the stack is over 1. The slip
-  // follows from EPA's contact depths, the same whichever equally furthest corner a box's support returns.
-  constexpr float topBoxBound = 0.6f;
+  // Measured along the slope, so sinking into the boxes below does not count. The top box slips about 0.09 from its
+  // start, and 0.03 along the box under it, before friction holds it. The slip follows from EPA's contact depths, the
+  // same whichever equally furthest corner a box's support returns.
+  constexpr float topBoxBound = 0.25f;
+  constexpr float topBoxRelativeBound = 0.1f;
   EXPECT_LT(std::fabs(stack.slidDownhill(count - 1)), topBoxBound);
-  EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)), 1.0f);
+  EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)),
+            topBoxRelativeBound);
 
   // Positive control: the bound is not vacuous, since the same stack on a steeper slope moves farther than it.
   SlopeStack sliding(count, 40.0f);

@@ -29,8 +29,8 @@ hook the camera uses to pick "whose view" (see [camera-and-input.md](camera-and-
 requested from a script are buffered on the `RigidBody` data (pending-force queue) and drained by
 `PhysicsSystem`, keeping `scripting` independent of `sim`. Each carries a `ForceMode` (`RigidBody.h`,
 mirrored by ScriptBridge's `ForceMode`) that says its units: a force or an impulse is divided by the mass,
-a force or an acceleration acts for the tick's `dt` the way gravity does, and a velocity change is added
-as it is. `PlayerScript` steers with velocity changes, so its movement does not depend on its mass. Five conventions worth inheriting: (1) reaching
+a force or an acceleration is scaled by the tick's `dt` in world units (a body's gravity is a separate field, in
+meters per second squared, scaled by `PhysicsSystem::unitsPerMeter`), and a velocity change is added as it is. `PlayerScript` steers with velocity changes, so its movement does not depend on its mass. Five conventions worth inheriting: (1) reaching
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
 absent/destroyed; it does not throw in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**

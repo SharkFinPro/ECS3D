@@ -87,9 +87,9 @@ TEST(PhysicsIntegration, AFallCoversTheSameDistanceWhateverTheTickLength)
   EXPECT_NEAR(fineFall, coarseFall, expected * (coarse - fine) + 1e-2f);
 }
 
-TEST(PhysicsIntegration, AFallAtTheServerTickMatchesTheGravityTheContentWasAuthoredAgainst)
+TEST(PhysicsIntegration, AFallAtTheServerTickMatchesTheGravityOfFiveUnitsToTheMeter)
 {
-  // The pre-fix server fell at 49.05 units a second squared; the world is five units to the meter.
+  // The world is five units to the meter, so the default gravity is 49.05 units a second squared.
   constexpr float serverTick = 1.0f / 50.0f;
   constexpr float authoredAcceleration = 49.05f;
 

@@ -20,8 +20,9 @@ namespace {
 
   constexpr int ticks = 200;
 
-  // The world scale makes a tick at dt 0.1 take five times the gravity step these were tuned with, so the same speed
-  // and distance come from the square root of that fewer ticks and a launch the square root faster.
+  // A launch of v per tick stops within v^2 / (2 * friction * a tick of gravity), and a tick of gravity at dt 0.1 is
+  // 0.49. The speeds and tick counts below are sized for 0.098, so a launch is scaled by sqrt(unitsPerMeter) and a
+  // run by its inverse.
   const float fasterBy = std::sqrt(PhysicsSystem::unitsPerMeter);
 
   // A body resting flush on a static box tilted about z, its center one half-extent of each box up the slope normal.
@@ -145,11 +146,9 @@ TEST(PhysicsFriction, ABoxSlidingUpTheSlopeStopsAndStaysPut)
 }
 
 // A solid sphere speeds up at g sin / 1.4 (I = 2/5 m r^2) minus its rolling resistance, with its radius as the
-// lever arm. It starts touching, so the run (60 ticks of 0.1 at the gravity step these bounds were set with, which
-// the server's tick takes the square root of the ratio more of) covers several units with that resistance and about
-// 12.3 without it,
-// against the 3.4 the box of its scale gave. A hold that took the rolling slide back would lag the lower bound;
-// lost rolling resistance would pass the upper.
+// lever arm. It starts touching, so the run (60 * sqrt(unitsPerMeter) ticks at the server's tick) covers several
+// units with that resistance and about 12.3 without it, against the 3.4 the box of its scale gives. A hold that took
+// the rolling slide back would lag the lower bound; lost rolling resistance would pass the upper.
 TEST(PhysicsFriction, ASphereRollsTheSameDistanceOnASlope)
 {
   Slope slope(5.71059f, true);
