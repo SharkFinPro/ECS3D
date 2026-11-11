@@ -154,7 +154,7 @@
                 {
                   "name": "m_jumpSpeed",
                   "type": "float",
-                  "value": 15
+                  "value": 6.7
                 }
               ]
             }
@@ -1477,7 +1477,7 @@
                   {
                     "name": "m_initialVelocity",
                     "type": "vector3",
-                    "value": [10, 0, 3]
+                    "value": [4.47, 0, 1.34]
                   }
                 ]
               }

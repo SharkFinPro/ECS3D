@@ -23,6 +23,10 @@ using namespace playgroundtest;
 
 namespace
 {
+  // 70 seconds at the server tick. At real gravity the last domino falls and knocks the sphere off about 40 seconds
+  // in, and it can hang leaning for a while first, so the run is long enough to leave that a wide margin.
+  constexpr int simulatedTicks = 3500;
+
   std::vector<std::shared_ptr<Object>> pyramidCubes(const ObjectManager& objectManager)
   {
     std::vector<std::shared_ptr<Object>> cubes;
@@ -52,7 +56,7 @@ namespace
   }
 }
 
-// The four tests check the same 600-tick run, and the run dominates the suite's time, so it happens once per suite.
+// The four tests check the same run, and the run dominates the suite's time, so it happens once per suite.
 class PhysicsPlaygroundSamplePhysics : public ::testing::Test
 {
 protected:
@@ -123,7 +127,7 @@ protected:
   static void simulate(const ObjectManager& objectManager)
   {
     CollisionSystem collisionSystem;
-    for (int step = 0; step < 600; ++step)
+    for (int step = 0; step < simulatedTicks; ++step)
     {
       PhysicsSystem::fixedUpdate(objectManager, dt);
       collisionSystem.fixedUpdate(objectManager, dt);
@@ -186,7 +190,7 @@ protected:
   inline static float s_farthestTravel = 0.0f;
 };
 
-TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
+TEST_F(PhysicsPlaygroundSamplePhysics, TheRunStaysFiniteAndAboveTheVoid)
 {
   ASSERT_TRUE(isSimulated());
 
@@ -228,6 +232,8 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedO
     EXPECT_GT(tiltDegrees(domino), 45.0f) << "Domino " << index << " is still standing";
   }
   EXPECT_GT(planeTravel(s_sphere, s_sphereStart), 1.0f);
+  // Off the ledge, not just nudged along it: the sphere came down at least half a unit from where it rested.
+  EXPECT_LT(fixtures::positionOf(s_sphere).y, s_sphereStart.y - 0.5f);
 }
 
 TEST_F(PhysicsPlaygroundSamplePhysics, ThePyramidStandsWhileTheCradleSpheresMove)

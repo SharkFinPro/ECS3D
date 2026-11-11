@@ -45,6 +45,10 @@ namespace {
   // this a body resting on the face is laid flush with it.
   constexpr float flushTiltSine = 0.0175f;
 
+  // The tick the turn windows below are sized for. A spin turns a body through its rate * dt in a tick, so a fixed
+  // window would ask for a faster spin the shorter the tick; sizing it by dt asks for the same spin at any tick.
+  constexpr float windowTick = 0.1f;
+
   // A contact whose normal leans this little from level is a side contact. Rounding in the narrow phase gives a
   // wall a normal.y of either sign, which must not decide whether a body counts as pressed on or held.
   constexpr float sideContactNormalY = flushTiltSine;
@@ -178,10 +182,11 @@ namespace {
     return (toStart * toStart + toEnd * toEnd) / (2.0f * length);
   }
 
-  // What integrate adds to the velocity each tick.
+  // What integrate adds to the velocity each tick. Velocity is a displacement per tick, so an acceleration adds
+  // a * dt * dt: that makes the fall distance after any time the same at every tick rate.
   glm::vec3 gravityStep(const RigidBody& body, const float dt)
   {
-    return { 0.0f, body.getGravity() * dt * 0.1f, 0.0f };
+    return { 0.0f, body.getGravity() * dt * dt, 0.0f };
   }
 
   // The normal of the surface a resting body's support holds it up with: world up until a contact says otherwise.
@@ -341,6 +346,12 @@ namespace {
     return corners;
   }
 
+  // How little tilt, or turn in a tick, still counts as lying flat at this tick length.
+  float flushWindow(const float dt)
+  {
+    return flushTiltSine * std::min(1.0f, dt / windowTick);
+  }
+
   // Whether a body resting flat on its support is turning over its edge. Its spin turns it faster than the flush
   // window closes in a tick, so the corners it drives into the support are the edge it pivots about; shedding that
   // spin would leave a push only its linear part. A body counts as resting when it rested on this plane last tick,
@@ -356,7 +367,8 @@ namespace {
     }
 
     const auto tipping = alongSupport(spinPerTick(body.getAngularVelocity() - spinOf(other), dt), normal);
-    if (glm::dot(tipping, tipping) <= flushTiltSine * flushTiltSine)
+    const float window = flushWindow(dt);
+    if (glm::dot(tipping, tipping) <= window * window)
     {
       return false;
     }
@@ -373,7 +385,7 @@ namespace {
     const auto bodyFace = -faces.own.normal;
     const auto axis = glm::cross(bodyFace, faces.support.normal);
     const float sine = glm::length(axis);
-    if (sine <= flushTiltSine)
+    if (sine <= flushWindow(dt))
     {
       return true;
     }
@@ -629,8 +641,8 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
     return;
   }
 
-  // One tick of support at an edge turns a body a degree or more, so it would go past flat onto its other
-  // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
+  // One tick of support at an edge turns a body about the flush window or more (a degree at dt 0.1, less below
+  // it), so it would go past flat onto its other edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
   if (faces->neighborCosine > facetedCosine || faces->support.corners.empty() || faces->own.corners.empty() ||
       !findSupport(transform.getPosition(), pair.normal, clampedCorners(*faces)).underCenterOfMass ||
       !turnsFlatThisTick(body, other, *faces, dt))

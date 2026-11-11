@@ -47,10 +47,18 @@ namespace {
     { "push", { { 0, 2.0f, 0 } }, Track::everyTick, 100 }
   };
 
-  void push(Rig& rig)
+  // Friction is a share of the gravity added each tick, so a launch speed per tick slides a body 1 / (10 * dt) times as
+  // far as it did when that gravity was g * dt * 0.1. Scaling the speed by this restores the slide of that step: at dt
+  // 0.1 the two steps are equal, so the scale is 1.
+  float speedScale(const float dt)
+  {
+    return std::sqrt(10.0f * dt);
+  }
+
+  void push(Rig& rig, const float dt)
   {
     const auto position = transformOf(rig.body)->getPosition();
-    rig.rigidBody->addPendingForce({ 2, 0, 0 }, position + glm::vec3(0, 0.8f, 0), ForceMode::impulse);
+    rig.rigidBody->addPendingForce({ 2.0f * speedScale(dt), 0, 0 }, position + glm::vec3(0, 0.8f, 0), ForceMode::impulse);
   }
 
   // Some local axis points straight up, so the body lies on a face whatever way it faces about the vertical.
@@ -92,15 +100,17 @@ namespace {
 
   void expectSameTrajectory(const Case& scenario, const Shape bodyShape, const Shape groundShape, const float dt)
   {
-    Rig reference(Shape::box, Shape::box, scenario.launch);
-    Rig other(bodyShape, groundShape, scenario.launch);
+    auto launch = scenario.launch;
+    launch.velocity *= speedScale(dt);
+    Rig reference(Shape::box, Shape::box, launch);
+    Rig other(bodyShape, groundShape, launch);
 
     for (int tick = 0; tick < ticks; ++tick)
     {
       if (tick == scenario.pushTick)
       {
-        push(reference);
-        push(other);
+        push(reference, dt);
+        push(other, dt);
       }
 
       reference.step(dt);

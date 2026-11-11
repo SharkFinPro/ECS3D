@@ -79,6 +79,7 @@ public unsafe class StarterInteractionTests : IDisposable
     var explosion = new Explosion { EntityId = "boom" };
     explosion.initComponents();
     SetField(explosion, "m_radius", 8.0f);
+    SetField(explosion, "m_strength", 18.0f);
     SetField(explosion, "m_cooldown", cooldown);
     SetField(explosion, "m_fireEvery", fireEvery);
     FakeNatives.Set("Transform.getPosition:boom", new Vector3(10f, 0f, 0f));

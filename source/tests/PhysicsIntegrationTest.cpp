@@ -53,6 +53,40 @@ TEST(PhysicsIntegration, GravityAccumulatesInVelocityAndAddsUpInDistance)
   EXPECT_NEAR(transformOf(object)->getPosition().y, 6.0f * gravityPerTick, 1e-5f);
 }
 
+namespace {
+  // How far a body dropped from rest falls in one simulated second of ticks of the given length.
+  float fallInOneSecond(const float tickLength)
+  {
+    const auto scene = makeScene();
+    const auto object = addObject(scene, "Dropped", { 0, 0, 0 });
+    addBody(object, true);
+
+    const int ticks = static_cast<int>(std::lround(1.0f / tickLength));
+    for (int tick = 0; tick < ticks; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, tickLength);
+    }
+
+    return -transformOf(object)->getPosition().y;
+  }
+}
+
+TEST(PhysicsIntegration, AFallCoversTheSameDistanceWhateverTheTickLength)
+{
+  // Closed form for a drop from rest: g t^2 / 2. Moving by the new velocity each tick overshoots it by the
+  // share dt of that distance, so the tolerance is that overshoot and not a loose guess.
+  constexpr float expected = 0.5f * 9.81f;
+  constexpr float coarse = 0.1f;
+  constexpr float fine = 1.0f / 50.0f;
+
+  const float coarseFall = fallInOneSecond(coarse);
+  const float fineFall = fallInOneSecond(fine);
+
+  EXPECT_NEAR(coarseFall, expected * (1.0f + coarse), 1e-3f);
+  EXPECT_NEAR(fineFall, expected * (1.0f + fine), 1e-3f);
+  EXPECT_NEAR(fineFall, coarseFall, expected * (coarse - fine) + 1e-3f);
+}
+
 TEST(PhysicsIntegration, ABodyWithGravityOffDoesNotMoveOnItsOwn)
 {
   const auto scene = makeScene();
