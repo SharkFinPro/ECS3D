@@ -107,6 +107,8 @@ private:
                                    const glm::vec3& normal);
 
   [[nodiscard]] static Pair mirrored(const Pair& pair);
+  // The pair as it would be with neither body resting: no support takes any part of a push.
+  [[nodiscard]] static Pair unsupported(Pair pair);
 
   // The lever arm of the friction against turning about the normal: a face under the center of mass, or a
   // capsule's line contact under it, which also marks the pair as a line contact. Zero otherwise.

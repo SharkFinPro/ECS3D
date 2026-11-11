@@ -37,6 +37,8 @@ namespace {
   // distributions are free to differ between library implementations.
   class PileRandom {
   public:
+    explicit PileRandom(const std::uint32_t seed) : m_state(seed) {}
+
     float between(const float low, const float high)
     {
       m_state = m_state * 1664525u + 1013904223u;
@@ -44,105 +46,130 @@ namespace {
     }
 
   private:
-    std::uint32_t m_state = 1;
+    std::uint32_t m_state;
   };
 }
 
-TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
-{
-  const auto scene = makeScene();
+namespace {
+  struct PileOutcome {
+    float fastestSideways;
+    float shallowestClearance;
+    size_t overGround;
+    size_t bodyCount;
+  };
 
-  const auto ground = addObject(scene, "Ground", { 0, -9, 0 }, { 100, 10, 100 });
-  fixtures::addBoxCollider(ground);
-
-  // Tower Collapse of the default project in miniature: a grid of spheres and turned boxes of random sizes, each as
-  // heavy as its volume, so the pile they fall into mixes masses a hundred times apart.
-  PileRandom random;
-  std::vector<std::shared_ptr<RigidBody>> bodies;
-  // The radius of the largest sphere inside each body: its center cannot rest closer than this to the ground.
-  std::vector<float> insideRadii;
-  for (int level = 0; level < 4; ++level)
+  PileOutcome settlePile(const std::uint32_t seed)
   {
-    for (int row = 0; row < 4; ++row)
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, -9, 0 }, { 100, 10, 100 });
+    fixtures::addBoxCollider(ground);
+
+    // Tower Collapse of the default project in miniature: a grid of spheres and turned boxes of random sizes, each as
+    // heavy as its volume, so the pile they fall into mixes masses a hundred times apart.
+    PileRandom random(seed);
+    std::vector<std::shared_ptr<RigidBody>> bodies;
+    // The radius of the largest sphere inside each body: its center cannot rest closer than this to the ground.
+    std::vector<float> insideRadii;
+    for (int level = 0; level < 4; ++level)
     {
-      for (int column = 0; column < 4; ++column)
+      for (int row = 0; row < 4; ++row)
       {
-        const float x = static_cast<float>(row) * 5.0f + random.between(-0.75f, 0.75f) - 7.5f;
-        const float y = static_cast<float>(level) * 5.0f + 6.0f;
-        const float z = static_cast<float>(column) * 5.0f + random.between(-0.75f, 0.75f) - 7.5f;
-
-        if (random.between(0.0f, 1.0f) < 0.5f)
+        for (int column = 0; column < 4; ++column)
         {
-          const float radius = random.between(0.25f, 1.5f);
-          const auto sphere = addObject(scene, "Sphere", { x, y, z }, glm::vec3(radius));
-          fixtures::addSphereCollider(sphere, 1.0f);
-          bodies.push_back(addBody(sphere, true));
-          bodies.back()->setMass(4.0f / 3.0f * glm::pi<float>() * radius * radius * radius);
-          insideRadii.push_back(radius);
-          continue;
-        }
+          const float x = static_cast<float>(row) * 5.0f + random.between(-0.75f, 0.75f) - 7.5f;
+          const float y = static_cast<float>(level) * 5.0f + 6.0f;
+          const float z = static_cast<float>(column) * 5.0f + random.between(-0.75f, 0.75f) - 7.5f;
 
-        const glm::vec3 scale{ random.between(0.25f, 1.5f), random.between(0.25f, 1.5f), random.between(0.25f, 1.5f) };
-        const glm::vec3 rotation{ random.between(0, 360), random.between(0, 360), random.between(0, 360) };
-        const auto box = addObject(scene, "Box", { x, y, z }, scale);
-        transformOf(box)->setRotation(rotation);
-        fixtures::addBoxCollider(box);
-        bodies.push_back(addBody(box, true));
-        bodies.back()->setMass(8.0f * scale.x * scale.y * scale.z);
-        insideRadii.push_back(std::min({ scale.x, scale.y, scale.z }));
+          if (random.between(0.0f, 1.0f) < 0.5f)
+          {
+            const float radius = random.between(0.25f, 1.5f);
+            const auto sphere = addObject(scene, "Sphere", { x, y, z }, glm::vec3(radius));
+            fixtures::addSphereCollider(sphere, 1.0f);
+            bodies.push_back(addBody(sphere, true));
+            bodies.back()->setMass(4.0f / 3.0f * glm::pi<float>() * radius * radius * radius);
+            insideRadii.push_back(radius);
+            continue;
+          }
+
+          const glm::vec3 scale{ random.between(0.25f, 1.5f), random.between(0.25f, 1.5f), random.between(0.25f, 1.5f) };
+          const glm::vec3 rotation{ random.between(0, 360), random.between(0, 360), random.between(0, 360) };
+          const auto box = addObject(scene, "Box", { x, y, z }, scale);
+          transformOf(box)->setRotation(rotation);
+          fixtures::addBoxCollider(box);
+          bodies.push_back(addBody(box, true));
+          bodies.back()->setMass(8.0f * scale.x * scale.y * scale.z);
+          insideRadii.push_back(std::min({ scale.x, scale.y, scale.z }));
+        }
       }
     }
-  }
 
-  // The server's tick, for six seconds: long enough for the whole grid to land and the pile to settle.
-  constexpr float serverDt = 1.0f / 50.0f;
-  CollisionSystem collisionSystem;
+    // The server's tick, for six seconds: long enough for the whole grid to land and the pile to settle.
+    constexpr float serverDt = 1.0f / 50.0f;
+    CollisionSystem collisionSystem;
 
-  float fastestSideways = 0.0f;
-  float shallowestClearance = std::numeric_limits<float>::max();
-  for (int tick = 0; tick < 300; ++tick)
-  {
-    PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
-    collisionSystem.fixedUpdate(*scene.objectManager, serverDt);
-
-    for (const auto& body : bodies)
+    float fastestSideways = 0.0f;
+    float shallowestClearance = std::numeric_limits<float>::max();
+    for (int tick = 0; tick < 300; ++tick)
     {
-      const auto velocity = body->getVelocity();
-      fastestSideways = std::max(fastestSideways, glm::length(glm::vec2(velocity.x, velocity.z)) / serverDt);
-    }
-  }
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
+      collisionSystem.fixedUpdate(*scene.objectManager, serverDt);
 
-  // How far each center is above the ground top (at 1) beyond its inside radius: negative means sunk into it. A
-  // sphere has no rolling resistance, so one knocked hard enough rolls off the ground's edge (at 100) within the run
-  // and falls; that is not sinking, and which spheres roll that far differs between platforms' rounding.
-  size_t overGround = 0;
-  for (size_t index = 0; index < bodies.size(); ++index)
-  {
-    const auto position = bodies[index]->getOwner()->getComponent<Transform>(ComponentType::transform)->getPosition();
-    if (std::fabs(position.x) > 100.0f || std::fabs(position.z) > 100.0f)
-    {
-      continue;
+      for (const auto& body : bodies)
+      {
+        const auto velocity = body->getVelocity();
+        fastestSideways = std::max(fastestSideways, glm::length(glm::vec2(velocity.x, velocity.z)) / serverDt);
+      }
     }
 
-    ++overGround;
-    shallowestClearance = std::min(shallowestClearance, position.y - 1.0f - insideRadii[index]);
+    // How far each center is above the ground top (at 1) beyond its inside radius: negative means sunk into it. A
+    // sphere has no rolling resistance, so one knocked hard enough rolls off the ground's edge (at 100) within the run
+    // and falls; that is not sinking, and which spheres roll that far differs between platforms' rounding.
+    size_t overGround = 0;
+    for (size_t index = 0; index < bodies.size(); ++index)
+    {
+      const auto position = bodies[index]->getOwner()->getComponent<Transform>(ComponentType::transform)->getPosition();
+      if (std::fabs(position.x) > 100.0f || std::fabs(position.z) > 100.0f)
+      {
+        continue;
+      }
+
+      ++overGround;
+      shallowestClearance = std::min(shallowestClearance, position.y - 1.0f - insideRadii[index]);
+    }
+
+    return { fastestSideways, shallowestClearance, overGround, bodies.size() };
   }
+
+  class PileOfUnevenBodies : public testing::TestWithParam<std::uint32_t> {};
+}
+
+TEST_P(PileOfUnevenBodies, SettlesWithoutFlingingAnyOfThemOut)
+{
+  const auto outcome = settlePile(GetParam());
 
   // Positive control: most of the pile is still over the ground, so the clearance below covers it.
-  EXPECT_GE(overGround, bodies.size() * 3 / 4);
+  EXPECT_GE(outcome.overGround, outcome.bodyCount * 3 / 4);
 
   // Units per second. The bodies land at up to 35 falling straight down, and knock each other sideways at up to
-  // about 30. A heavy body used to squeeze a light one out at hundreds, and spin it to thousands of degrees a
+  // about 45. A heavy body used to squeeze a light one out at hundreds, and spin it to thousands of degrees a
   // second, which flung it further still.
-  EXPECT_LT(fastestSideways, 60.0f);
+  EXPECT_LT(outcome.fastestSideways, 60.0f);
 
   // Positive control: the pile does knock bodies sideways, so the bound above is measuring something.
-  EXPECT_GT(fastestSideways, 1.0f);
+  EXPECT_GT(outcome.fastestSideways, 1.0f);
 
   // No body sank into the ground. There is no upper bound: how tall the pile ends up depends on how the
   // bodies happen to fall, which differs between compilers.
-  EXPECT_GT(shallowestClearance, -0.05f);
+  EXPECT_GT(outcome.shallowestClearance, -0.05f);
 }
+
+INSTANTIATE_TEST_SUITE_P(FirstThirty, PileOfUnevenBodies, testing::Range(1u, 31u));
+
+// Layouts that knocked a body sideways at over a thousand units a second, or several hundred, before a response was
+// sized against the part of a body that its support takes.
+INSTANTIATE_TEST_SUITE_P(Flung, PileOfUnevenBodies, testing::Values(36u, 52u, 57u, 58u, 61u, 64u, 66u, 87u, 133u, 137u,
+                                                                    237u, 331u, 333u, 358u));
 
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
 {
