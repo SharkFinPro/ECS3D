@@ -137,7 +137,7 @@ minimum sizes still apply.
 `readOnlyServer` (the server's `editStatus` said it is not in edit mode), `connectionLost` and `editTokenRejected`.
 It also holds the menu-bar badge, the Objects panel notice (`ObjectGUIManager::setReadOnlyNotice`) and the log line
 for each state. The transport carries no close reason, so `EditorApp` infers rejection when `NetClient` reports a
-lost connection before any message arrived from the server and an edit token was supplied: an accepting server
+lost connection before any message arrived from the server and the user gave an edit token for an external server (`--host`; the token of a server the editor spawned is its own, so that drop is `connectionLost`): an accepting server
 sends a snapshot and an edit status at once, while a rejecting one closes the socket silently
 (`TransportBackend.TryAuthorizeHandshake`). A drop after the first message is `connectionLost`. A server that
 refuses the editor for another reason is reported the same way as a bad token, which the wording admits.

@@ -422,7 +422,8 @@ void EditorApp::run()
 
       if (m_netClient->takeConnectionLost())
       {
-        m_connectionState = editorConnectionAfterLoss(m_receivedFromServer, !m_authToken.empty());
+        m_connectionState = editorConnectionAfterLoss(
+          m_receivedFromServer, editorHasExternalServerToken(m_options.launchLocalServer, !m_authToken.empty()));
         logMessage("Error", editorConnectionLogMessage(m_connectionState));
         m_serverEditable = false;
         m_remoteStats.disconnected();

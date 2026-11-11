@@ -41,9 +41,22 @@ TEST(EditorConnectionStateTest, DropBeforeAnyServerMessageWithATokenReadsAsRejec
   EXPECT_EQ(std::strstr(editorConnectionBadge(state), "not in edit mode"), nullptr);
 }
 
-TEST(EditorConnectionStateTest, DropBeforeAnyServerMessageWithoutATokenIsNotARejection)
+TEST(EditorConnectionStateTest, DropBeforeAnyServerMessageWithoutAnExternalTokenIsNotARejection)
 {
   EXPECT_EQ(editorConnectionAfterLoss(false, false), EditorConnectionState::connectionLost);
+}
+
+TEST(EditorConnectionStateTest, SpawnedServerTokenIsNeverExternal)
+{
+  EXPECT_FALSE(editorHasExternalServerToken(true, true));
+  EXPECT_TRUE(editorHasExternalServerToken(false, true));
+  EXPECT_FALSE(editorHasExternalServerToken(false, false));
+
+  const auto spawnedServerDies = editorConnectionAfterLoss(false, editorHasExternalServerToken(true, true));
+  EXPECT_EQ(spawnedServerDies, EditorConnectionState::connectionLost);
+
+  const auto externalRejects = editorConnectionAfterLoss(false, editorHasExternalServerToken(false, true));
+  EXPECT_EQ(externalRejects, EditorConnectionState::editTokenRejected);
 }
 
 TEST(EditorConnectionStateTest, EveryNonConnectedStateHasAUniqueBadgeAndNotice)
@@ -71,5 +84,6 @@ TEST(EditorConnectionStateTest, LogMessagesNameTheCause)
 {
   EXPECT_NE(std::strstr(editorConnectionLogMessage(EditorConnectionState::editTokenRejected), "token"), nullptr);
   EXPECT_NE(std::strstr(editorConnectionLogMessage(EditorConnectionState::connectionLost), "was lost"), nullptr);
-  EXPECT_EQ(editorConnectionLogMessage(EditorConnectionState::connected), nullptr);
+  EXPECT_NE(editorConnectionLogMessage(EditorConnectionState::connected), nullptr);
+  EXPECT_NE(editorConnectionLogMessage(EditorConnectionState::readOnlyServer), nullptr);
 }
