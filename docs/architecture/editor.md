@@ -130,3 +130,14 @@ only the per-panel minimum sizes; with no saved layout the defaults apply as on 
 `saveLayout` never replaces a stored dock tree with text that has none (`shouldReplaceLayout`). A panel missing from a
 restored layout, such as one added in a later build, opens floating rather than in its default dock; the per-panel
 minimum sizes still apply.
+
+## Connection state
+
+`EditorConnectionState.h` names why the editor cannot edit, apart from the `m_serverEditable` gate: `connected`,
+`readOnlyServer` (the server's `editStatus` said it is not in edit mode), `connectionLost` and `editTokenRejected`.
+It also holds the menu-bar badge, the Objects panel notice (`ObjectGUIManager::setReadOnlyNotice`) and the log line
+for each state. The transport carries no close reason, so `EditorApp` infers rejection when `NetClient` reports a
+lost connection before any message arrived from the server and an edit token was supplied: an accepting server
+sends a snapshot and an edit status at once, while a rejecting one closes the socket silently
+(`TransportBackend.TryAuthorizeHandshake`). A drop after the first message is `connectionLost`. A server that
+refuses the editor for another reason is reported the same way as a bad token, which the wording admits.

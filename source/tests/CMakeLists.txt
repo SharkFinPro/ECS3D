@@ -151,6 +151,7 @@ add_executable(${PROJECT_NAME}
   BillboardTest.cpp
   ThumbnailImageTest.cpp
   LightGizmoVisibilityTest.cpp
+  EditorConnectionStateTest.cpp
   PlayControlsTest.cpp
   SceneStatusLayoutTest.cpp
   GridVisibilityTest.cpp

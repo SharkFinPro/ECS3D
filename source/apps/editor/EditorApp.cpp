@@ -326,6 +326,8 @@ void EditorApp::connectToServer()
   // A slot belongs to one connection, so nothing from the session being left carries over.
   m_playerSlot = -1;
   m_requestedPlayerSlot.reset();
+  m_receivedFromServer = false;
+  m_connectionState = EditorConnectionState::connected;
 
   // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
   // every object it named.
@@ -406,6 +408,8 @@ void EditorApp::run()
       {
         // A malformed message costs the message, not the session. Without this the exception escapes run()
         // and main exits, losing whatever was being edited.
+        m_receivedFromServer = true;
+
         try
         {
           applyMessage(message);
@@ -418,7 +422,8 @@ void EditorApp::run()
 
       if (m_netClient->takeConnectionLost())
       {
-        logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
+        m_connectionState = editorConnectionAfterLoss(m_receivedFromServer, !m_authToken.empty());
+        logMessage("Error", editorConnectionLogMessage(m_connectionState));
         m_serverEditable = false;
         m_remoteStats.disconnected();
       }

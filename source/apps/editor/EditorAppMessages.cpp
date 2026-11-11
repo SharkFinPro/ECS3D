@@ -194,6 +194,7 @@ void EditorApp::handleEditStatus(const net::Message& message)
 
   // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
   m_serverEditable = *editable;
+  m_connectionState = editorConnectionForEditStatus(m_serverEditable);
 
   if (!m_serverEditable)
   {
