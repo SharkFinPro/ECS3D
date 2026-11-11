@@ -126,17 +126,22 @@ The panel layout (window placement, detached panels and the dock tree) is a user
 (`EditorLayoutSettings`). It restores the text in the style-setup hook, before the first frame, and saves it when
 ImGui sets `WantSaveIniSettings` and again on shutdown. When the saved text holds a dock tree
 (`editorLayoutSettings::hasDockLayout`), `updateDockSpace` skips the default dock percents and locations and applies
-only the per-panel minimum sizes; with no saved layout the defaults apply as on a first run.
+the per-panel minimum sizes and the resize fit; with no saved layout the defaults apply as on a first run.
 `saveLayout` never replaces a stored dock tree with text that has none (`shouldReplaceLayout`). A panel missing from a
 restored layout, such as one added in a later build, opens floating rather than in its default dock; the per-panel
 minimum sizes still apply.
 
 ImGui keeps a docked side node at its absolute `SizeRef` when the window shrinks and gives the central node what is
 left, so a narrow window squeezed the scene view. `EditorApp::fitDockToViewport` (the headless `DockLayoutFit.h`)
-remembers the fraction of the dock space each non-central node takes and, when the dock space size changes, writes
-`SizeRef` from those fractions again, shrunk together on an axis so the central node keeps at least 40%. The
-fractions are the memory, so shrinking and growing back restores the layout, and a hand-resized layout keeps its own
-proportions. They are remembered from the rebuilt default tree, from a restored one, when a splitter or tab drag in
-the dockspace ends, and when the set of side nodes changes; a zero-size (minimized) frame changes nothing. The
-side and bottom panel floors are lowered to at most 25% (width) and 30% (height) of the window, so two side floors
-leave the central node at least half of it; where a floor is larger than the fit, the floor wins. A saved layout restores its absolute sizes, and the change takes effect one frame after the resize.
+remembers the fraction of the dock space each side node takes and, when the dock space size changes, writes `SizeRef`
+from those fractions again, shrunk together on an axis so the central node keeps at least 40%. A side node is a
+visible child whose sibling holds the central node; a closed panel passes the walk on to the visible child, and the
+Scene Status node is left out because `displaySceneStatus` sizes it to its content. The fractions are the memory, so
+shrinking and growing back restores the layout, and a hand-resized layout keeps its own proportions. They are
+remembered from the rebuilt default tree (the engine rebuilds it with the same node ids, so three settle frames
+re-read it) and from a restored one. A drag in the dockspace updates only the nodes that moved more than a pixel
+since it began, so a click on a tab or splitter changes nothing, and a docking change adopts only new nodes. A
+zero-size (minimized) frame changes nothing. The side and bottom panel floors are re-applied whenever the viewport
+size or content scale changes, at most 25% (width) and 30% (height) of the window, so two side floors leave the
+central node at least half of it; where a floor is larger than the fit, the floor wins. The change takes effect
+one frame after the resize.

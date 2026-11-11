@@ -34,6 +34,8 @@ namespace vke {
 
 class ManagedHost;
 struct ImDrawList;
+struct ImGuiDockNode;
+struct ImVec2;
 class Component;
 class ComponentRegistry;
 class AssetRegistry;
@@ -69,6 +71,14 @@ namespace net {
   class ServerProcess;
   class Message;
 }
+
+// The dock side nodes found in one frame: the nodes to write, their sizes, and the content-sized nodes.
+struct DockTreeSides
+{
+  std::vector<ImGuiDockNode*> nodes;
+  std::vector<DockSideSize> sides;
+  std::vector<ImGuiDockNode*> contentSized;
+};
 
 // The editor is a client + tooling: it renders the replicated scene (Snapshot/StateDelta, same as the
 // client) and adds the ImGui editing panels. The authoritative scene lives on the spawned --edit
@@ -153,6 +163,10 @@ private:
   DockProportions m_dockProportions;
   DockResizeGate m_dockResizeGate;
   int m_dockSettleFrames = 0;
+  std::vector<DockSideSize> m_dockDragStart;
+  std::array<float, 3> m_dockFloorKey{};
+  float m_sceneStatusFloor = 0.0f;
+  float m_sceneStatusAppliedFloor = 0.0f;
   std::unique_ptr<SettingsPanel> m_settingsPanel;
 
   // Feeds the Console panel: registered with Log so the panel can show script errors and server output
@@ -442,6 +456,12 @@ private:
 
   // Keeps the side and bottom dock nodes at the same share of the dock space when the window is resized.
   void fitDockToViewport();
+
+  // Re-applies the panel floors when the viewport size or the content scale changed since the last time.
+  void updateDockMinimumSizesForViewport();
+
+  void runDockStep(DockLayoutStep step, bool settling, ImVec2 extent, const DockTreeSides& tree);
+  void sizeSceneStatusNodes(const std::vector<ImGuiDockNode*>& nodes);
 
   void applyDockLocations() const;
   void applyDockMinimumSizes() const;

@@ -2,6 +2,7 @@
 #define DOCKLAYOUTFIT_H
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <vector>
@@ -20,9 +21,18 @@ struct DockSideSize
 // Side panels may take at most this share of an axis together, so the central node keeps the rest.
 inline constexpr float dockMinimumCentralFraction = 0.4f;
 
+// A panel's own floor never takes more than this share of the window width (side panels) or height (bottom
+// panels). Two side floors therefore leave the central node at least half of the width.
+inline constexpr float dockSideFloorFraction = 0.25f;
+inline constexpr float dockBottomFloorFraction = 0.3f;
+
+// Moves smaller than this many pixels are a click, not an edit of the layout.
+inline constexpr float dockEditTolerance = 1.0f;
+
 // A panel's own height or width floor, lowered so it never takes more than maxFraction of the window. Unscaled
 // pixels in and out; a window without a usable extent keeps the base floor.
-[[nodiscard]] inline float dockFloorForExtent(const float baseFloor, const float extent, const float maxFraction) noexcept
+[[nodiscard]] inline float dockFloorForExtent(const float baseFloor, const float extent,
+                                              const float maxFraction) noexcept
 {
   if (extent <= 0.0f)
   {
@@ -32,29 +42,90 @@ inline constexpr float dockMinimumCentralFraction = 0.4f;
   return std::min(baseFloor, extent * maxFraction);
 }
 
-// The fraction of the dock space each non-central node occupies along its split axis. The fractions, not the
-// node sizes, are what a resize preserves: a size clamped for a small window must not become the remembered size.
+// Collects the side nodes of a dock tree: a visible child whose visible sibling holds the central node. ImGui
+// sizes such a node from its own SizeRef and gives the sibling the remainder. A split with one visible child
+// (its sibling closed) passes the walk on to that child. Node is ImGuiDockNode, or any type with the same
+// members; excluded(node) keeps a content-sized node, such as the Scene Status toolbar, out of the proportions.
+template <typename Node, typename Excluded>
+void collectDockSides(Node* node, std::vector<Node*>& nodes, std::vector<DockSideSize>& sides,
+                      const Excluded& excluded)
+{
+  if (node->IsLeafNode())
+  {
+    return;
+  }
+
+  Node* first = node->ChildNodes[0];
+  Node* second = node->ChildNodes[1];
+
+  if (!first->IsVisible || !second->IsVisible)
+  {
+    if (first->IsVisible || second->IsVisible)
+    {
+      collectDockSides(first->IsVisible ? first : second, nodes, sides, excluded);
+    }
+
+    return;
+  }
+
+  const int axis = static_cast<int>(node->SplitAxis);
+
+  for (Node* side : {first, second})
+  {
+    const Node* sibling = side == first ? second : first;
+
+    if (sibling->HasCentralNodeChild && !side->HasCentralNodeChild && !excluded(side))
+    {
+      nodes.push_back(side);
+      sides.push_back(DockSideSize{static_cast<std::uint32_t>(side->ID), axis, side->SizeRef[axis]});
+    }
+
+    collectDockSides(side, nodes, sides, excluded);
+  }
+}
+
+// The fraction of the dock space each side node occupies along its split axis. The fractions, not the node
+// sizes, are what a resize preserves: a size the engine clamped for a small window must not become the
+// remembered size.
 class DockProportions
 {
 public:
+  // Replaces everything remembered with these nodes.
   void remember(const std::vector<DockSideSize>& nodes, const float extentX, const float extentY)
+  {
+    rememberChanges(nodes, {}, extentX, extentY);
+  }
+
+  // Keeps the fraction of every node that is remembered and did not move since `before` (by more than
+  // dockEditTolerance), takes the rest from `nodes`, and forgets nodes that are gone. A click that changes
+  // nothing therefore keeps the proportions, however far the engine has clamped the sizes meanwhile.
+  void rememberChanges(const std::vector<DockSideSize>& nodes, const std::vector<DockSideSize>& before,
+                       const float extentX, const float extentY)
   {
     if (extentX <= 0.0f || extentY <= 0.0f)
     {
       return;
     }
 
-    m_entries.clear();
+    std::map<std::uint32_t, Entry> entries;
 
     for (const auto& node : nodes)
     {
-      const float extent = node.axis == 0 ? extentX : extentY;
+      const auto remembered = m_entries.find(node.id);
+      const auto earlier = std::ranges::find(before, node.id, &DockSideSize::id);
+      const bool unchanged = earlier != before.end() && std::fabs(earlier->size - node.size) <= dockEditTolerance;
 
-      if (node.size > 0.0f)
+      if (remembered != m_entries.end() && remembered->second.axis == node.axis && unchanged)
       {
-        m_entries[node.id] = Entry{node.axis, node.size / extent};
+        entries[node.id] = remembered->second;
+      }
+      else if (node.size > 0.0f)
+      {
+        entries[node.id] = Entry{node.axis, node.size / (node.axis == 0 ? extentX : extentY)};
       }
     }
+
+    m_entries = std::move(entries);
   }
 
   // The sizes that restore the remembered fractions in a dock space of this extent, shrunk together along an
@@ -119,11 +190,13 @@ enum class DockLayoutStep
 {
   none,
   remember,
-  rescale
+  rescale,
+  beginDrag,
+  endDrag
 };
 
-// Decides each frame whether to leave the dock layout alone, remember its proportions or rescale it to a new
-// window size. Only an actual size change rescales, and a splitter drag only ever ends in a remember.
+// Decides each frame whether to leave the dock layout alone, remember its proportions, rescale it to a new
+// window size, or bracket a drag of the layout by the user. Only an actual size change rescales.
 class DockResizeGate
 {
 public:
@@ -137,18 +210,25 @@ public:
 
     if (userDraggingLayout)
     {
-      m_wasDragging = true;
-      return DockLayoutStep::none;
+      const bool began = !m_dragging;
+      m_dragging = true;
+      return began ? DockLayoutStep::beginDrag : DockLayoutStep::none;
     }
 
     const bool sizeChanged = width != m_width || height != m_height;
+    const bool ended = m_dragging;
 
     m_width = width;
     m_height = height;
+    m_dragging = false;
 
-    if (m_wasDragging || layoutChanged || !m_hasSize)
+    if (ended)
     {
-      m_wasDragging = false;
+      return DockLayoutStep::endDrag;
+    }
+
+    if (layoutChanged || !m_hasSize)
+    {
       m_hasSize = true;
       return DockLayoutStep::remember;
     }
@@ -160,7 +240,7 @@ private:
   float m_width = 0.0f;
   float m_height = 0.0f;
   bool m_hasSize = false;
-  bool m_wasDragging = false;
+  bool m_dragging = false;
 };
 
 #endif
