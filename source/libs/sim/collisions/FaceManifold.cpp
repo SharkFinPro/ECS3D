@@ -199,41 +199,41 @@ namespace collisions {
     const glm::vec3 planePoint = centroidOf(polygon);
     const glm::vec3 towardReference = firstIsReference ? -normal : normal;
 
+    const auto incidentFeature = touchingFeature(incident.vertices, towardReference, incident.featureEpsilon);
+
     std::vector<Candidate> candidates;
     std::vector<glm::vec3> placed;
-    std::vector<glm::vec3> incidentOnPlane;
-    float incidentOffset = 0.0f;
-    for (const auto& vertex : touchingFeature(incident.vertices, towardReference, incident.featureEpsilon))
+    const auto place = [&](const glm::vec3& point, const float offset)
     {
-      const float offset = glm::dot(vertex - planePoint, faceNormal);
-      incidentOnPlane.push_back(vertex - faceNormal * offset);
-      incidentOffset += offset;
-      const glm::vec3 point = clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset;
-
       if (!containsNear(placed, point))
       {
         placed.push_back(point);
         candidates.push_back({ point, -offset });
       }
+    };
+
+    // Two faces overlap in the incident face clipped to the reference one's side planes. The clipped points stay on
+    // the incident face, and those above the reference plane are not touching.
+    const auto incidentPolygon = convexPolygon(incidentFeature, faceNormal);
+    if (polygon.size() >= 3 && incidentPolygon.size() >= 3)
+    {
+      for (const auto& point : detail::clipToPolygon(incidentPolygon, polygon, faceNormal))
+      {
+        if (const float offset = glm::dot(point - planePoint, faceNormal); offset <= reference.featureEpsilon)
+        {
+          place(point, offset);
+        }
+      }
     }
 
-    // Clamping alone finds the overlap only while the incident face lies inside the reference one. A face larger
-    // than the reference, or turned against it, clamps its corners onto as few as two of the reference's, so the
-    // reference corners that lie over the incident face belong to the overlap too, taken at the incident face's depth
-    // like the clamped corners.
-    const auto incidentPolygon = convexPolygon(incidentOnPlane, faceNormal);
-    if (incidentPolygon.size() >= 3)
+    // An edge or corner has no face to clip, and a face with no overlap along the plane still touches somewhere:
+    // its vertices are pulled onto the reference polygon, keeping their depth.
+    if (candidates.empty())
     {
-      incidentOffset /= static_cast<float>(incidentOnPlane.size());
-      for (const auto& corner : polygon)
+      for (const auto& vertex : incidentFeature)
       {
-        const glm::vec3 point = corner + faceNormal * incidentOffset;
-        if (glm::distance(clampToPolygon(corner, incidentPolygon, faceNormal), corner) < detail::dedupeDistance &&
-            !containsNear(placed, point))
-        {
-          placed.push_back(point);
-          candidates.push_back({ point, -incidentOffset });
-        }
+        const float offset = glm::dot(vertex - planePoint, faceNormal);
+        place(clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset, offset);
       }
     }
 

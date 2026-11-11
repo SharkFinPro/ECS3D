@@ -89,13 +89,13 @@ therefore never depends on which of several equally furthest corners a support f
 `EpaConvergenceTest` pins against an exact separating-axis depth. A flat GJK tetrahedron, which touching shapes
 give, starts from the triangle holding the origin plus the support above it, or reports no overlap when no triangle
 holds it; an overlap within the convergence band is reported as no contact, since the shapes only touch. `collisions/SupportFaces.h` returns a box's or convex mesh's world-space planar
-faces (outward normal, counter-clockwise corners, center; coplanar hull triangles merged in the hull's own
-space) with `faceToward` and `clampToFace` queries; PhysicsSystem's resting logic uses it, and
-`supportFaceToward` builds the single face a box needs. A pair whose colliders resolve to the same rigid body,
-or where one object is an ancestor of the other, is skipped before the narrow phase. A box or hull face manifold
-also adds the reference face's corners that lie over the incident face, at the incident face's depth, and
-spreads the result to at most four points. A small face on a larger or turned one so keeps its whole footprint
-instead of two diagonal corners. A contact holds a resting body like a stacked load (`pressesIntoSupport`) only
+faces (outward normal, counter-clockwise corners, center; coplanar hull triangles merged in the hull's own space) with
+`faceToward` and `clampToFace` queries; PhysicsSystem's resting logic uses it, and `supportFaceToward` builds the
+single face a box needs. A pair whose colliders resolve to the same rigid body, or where one object is an ancestor of
+the other, is skipped before the narrow phase. A box or hull face manifold is the overlap polygon of the two faces:
+the incident face clipped to the reference face's side planes, at the incident face's depth, spread to at most four
+points. A small face on a larger or turned one so keeps its whole footprint, and two faces crossing at an angle keep
+the corners where their edges cross. A contact holds a resting body like a stacked load (`pressesIntoSupport`) only
 within 45 degrees of that body's support normal. A flatter push, such as a leaning domino, can tip it.
 `findSupport` decides whether the center of mass is over the support by dropping it straight down along world y,
 not along the contact normal. On a slope a body past its downhill edge then tips or rolls. Operates on
@@ -117,9 +117,11 @@ A pair holding a convex mesh collider and a box or another hull takes its manifo
 `referenceFaceManifold` (`FaceManifold.h`), built the way the box pair is. Each shape offers its face normals
 (`hullFaceNormals` for a hull, skipping slivers). The side whose face is more nearly parallel to the contact
 normal is the reference, and alignments within `faceAlignmentTie` tie, going to the first collider. The box pair
-uses the same band. The reference polygon is the convex hull of the touching vertices projected along the face.
-The other side's touching vertices are clamped into it along the face plane, keeping their depth. So a
-box-shaped hull makes the same `Contact` a box does. A side with no faces falls back to the clipping above.
+uses the same band. The reference polygon is the convex hull of the touching vertices projected along the face. The
+other side's touching face is clipped to the reference polygon's side planes (`detail::clipToPolygon`, shared with the
+clipping above), keeping the points that are not above the reference face, and an edge or corner contact is clamped
+into the polygon instead. The box pair goes through the same function. So a box-shaped hull makes the same `Contact` a
+box does. A side with no faces falls back to the clipping above.
 A pair holding a capsule and a hull takes its manifold from that clipping in `Polytope`, at most
 `Contact::points` wide, with the capsule's cap points as its feature. `PhysicsSystem` skips the box-axis flush
 snap when a hull is in the pair, since a hull has no box faces to lie flush against.

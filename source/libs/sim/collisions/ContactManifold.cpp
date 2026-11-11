@@ -92,6 +92,7 @@ namespace collisions {
   using detail::Candidate;
   using detail::centroidOf;
   using detail::closestPointOnSegment;
+  using detail::clipToPolygon;
   using detail::containsNear;
   using detail::dedupeDistance;
   using detail::segmentEpsilon;
@@ -216,26 +217,6 @@ namespace collisions {
       return output;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> clipToPolygon(std::vector<glm::vec3> subject,
-                                                       const std::vector<glm::vec3>& polygon,
-                                                       const glm::vec3& normal)
-    {
-      for (size_t i = 0; i < polygon.size() && !subject.empty(); ++i)
-      {
-        const glm::vec3 edge = polygon[(i + 1) % polygon.size()] - polygon[i];
-        const float length = glm::length(edge);
-
-        if (length < dedupeDistance)
-        {
-          continue;
-        }
-
-        subject = clipAgainstPlane(subject, polygon[i], glm::cross(normal, edge / length));
-      }
-
-      return subject;
-    }
-
     // Both segments longer than a point.
     [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestOfProperSegments(const glm::vec3& p1, const glm::vec3& q1,
                                                                           const glm::vec3& p2, const glm::vec3& q2)
@@ -320,6 +301,27 @@ namespace collisions {
       return (closestA + closestB) * 0.5f;
     }
 
+  }
+
+  namespace detail {
+    std::vector<glm::vec3> clipToPolygon(std::vector<glm::vec3> subject, const std::vector<glm::vec3>& polygon,
+                                         const glm::vec3& normal)
+    {
+      for (size_t i = 0; i < polygon.size() && !subject.empty(); ++i)
+      {
+        const glm::vec3 edge = polygon[(i + 1) % polygon.size()] - polygon[i];
+        const float length = glm::length(edge);
+
+        if (length < dedupeDistance)
+        {
+          continue;
+        }
+
+        subject = clipAgainstPlane(subject, polygon[i], glm::cross(normal, edge / length));
+      }
+
+      return subject;
+    }
   }
 
   std::vector<glm::vec3> touchingFeature(const std::span<const glm::vec3> vertices, const glm::vec3& direction)

@@ -26,8 +26,9 @@ namespace collisions {
 
   // The contact points of two convex shapes from the face of each that most nearly faces the other, the way a
   // box pair is built. normal points from first toward second. The side whose face is more nearly parallel to
-  // the normal is the reference, ties going to first. The other side's touching vertices are clamped into the
-  // reference face's polygon along the face plane, keeping their depth along it. At most maxPoints, deepest
+  // the normal is the reference, ties going to first. The other side's touching face is clipped to
+  // the reference face's side planes, so the points are the overlap polygon of the two faces and stay on the other
+  // side's face; an edge or corner is clamped into the reference polygon instead. At most maxPoints, deepest
   // first and then spread out. Empty when either shape has no faces.
   [[nodiscard]] std::vector<glm::vec3> referenceFaceManifold(const FaceShape& first, const FaceShape& second,
                                                              const glm::vec3& normal, size_t maxPoints);

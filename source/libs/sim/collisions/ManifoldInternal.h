@@ -23,6 +23,11 @@ namespace collisions::detail {
 
   [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b);
 
+  // The subject loop clipped by the side planes of the prism over polygon along normal (Sutherland-Hodgman). polygon
+  // is counter-clockwise about normal; the subject keeps its position along normal.
+  [[nodiscard]] std::vector<glm::vec3> clipToPolygon(std::vector<glm::vec3> subject,
+                                                     const std::vector<glm::vec3>& polygon, const glm::vec3& normal);
+
   // The deepest candidate, then repeatedly the one furthest from everything chosen so far.
   [[nodiscard]] std::vector<glm::vec3> spreadOut(const std::vector<Candidate>& candidates, size_t maxPoints);
 }
