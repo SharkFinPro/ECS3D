@@ -23,9 +23,14 @@ using namespace playgroundtest;
 
 namespace
 {
-  // 70 seconds at the server tick. At real gravity the last domino falls and knocks the sphere off about 40 seconds
-  // in, and it can hang leaning for a while first, so the run is long enough to leave that a wide margin.
+  // 70 seconds at the server tick. The last domino reaches the ledge about 24 seconds in.
   constexpr int simulatedTicks = 3500;
+
+  // A domino passes its tipping point at 8.5 degrees. The last one falls onto the ledge's near top corner and rests
+  // there at about 44 degrees, which is what knocks the sphere off. It can creep along that corner for most of the run
+  // before it drops flat, and when it drops varies with each platform's rounding. The others lie well past 45.
+  constexpr float fallenDegrees = 45.0f;
+  constexpr float lastFallenDegrees = 30.0f;
 
   std::vector<std::shared_ptr<Object>> pyramidCubes(const ObjectManager& objectManager)
   {
@@ -229,7 +234,8 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedO
   {
     const auto domino = objectNamedExactly(objectManager(), "Domino " + std::to_string(index));
     ASSERT_NE(domino, nullptr);
-    EXPECT_GT(tiltDegrees(domino), 45.0f) << "Domino " << index << " is still standing";
+    EXPECT_GT(tiltDegrees(domino), index == 30 ? lastFallenDegrees : fallenDegrees)
+      << "Domino " << index << " is still standing";
   }
   EXPECT_GT(planeTravel(s_sphere, s_sphereStart), 1.0f);
   // Off the ledge, not just nudged along it: the sphere came down at least half a unit from where it rested.
