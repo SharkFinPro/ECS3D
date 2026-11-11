@@ -711,6 +711,14 @@ PhysicsSystem::Pair PhysicsSystem::mirrored(const Pair& pair)
   return { pair.other, pair.body, -pair.normal, pair.lineContact, pair.lineContact && !pair.lineOnOther };
 }
 
+PhysicsSystem::Pair PhysicsSystem::unsupported(Pair pair)
+{
+  pair.body.resting = false;
+  pair.other.resting = false;
+
+  return pair;
+}
+
 void PhysicsSystem::markRolling(Side& side, const std::shared_ptr<Collider>& collider)
 {
   if (isSphere(collider))
@@ -800,8 +808,24 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     }
 
     impulse = target / resistance;
-    push(pair.body, impulse * pair.normal, point, true, dt);
-    push(pair.other, -impulse * pair.normal, point, true, dt);
+
+    // A resting side whose push into its support is cut takes only the part along the support, so it adds little to
+    // the resistance and the impulse is sized as against a wall, which its support is left to take. That side takes
+    // no more than it would were neither body supported.
+    float bodyImpulse = impulse;
+    float otherImpulse = impulse;
+    const bool bodyCut = isCutBySupport(pair.body, pair.normal);
+    const bool otherCut = isCutBySupport(pair.other, -pair.normal);
+    if (bodyCut || otherCut)
+    {
+      const float freeResistance = inverseEffectiveMass(unsupported(pair), point, pair.normal);
+      const float cap = freeResistance > 0.0f ? target / freeResistance : impulse;
+      bodyImpulse = bodyCut ? std::min(impulse, cap) : impulse;
+      otherImpulse = otherCut ? std::min(impulse, cap) : impulse;
+    }
+
+    push(pair.body, bodyImpulse * pair.normal, point, true, dt);
+    push(pair.other, -otherImpulse * pair.normal, point, true, dt);
   }
   else
   {
@@ -1212,8 +1236,24 @@ glm::vec3 PhysicsSystem::responseAt(const Side& side, const glm::vec3& point, co
 
 float PhysicsSystem::inverseEffectiveMass(const Pair& pair, const glm::vec3& point, const glm::vec3& direction)
 {
-  return glm::dot(direction, responseAt(pair.body, point, direction, true) -
-                             responseAt(pair.other, point, -direction, true));
+  const float total = glm::dot(direction, responseAt(pair.body, point, direction, true) -
+                                          responseAt(pair.other, point, -direction, true));
+  if (!isCutBySupport(pair.body, direction) && !isCutBySupport(pair.other, -direction))
+  {
+    return total;
+  }
+
+  // A push cut down to the part along a support can move the point at which it acts against the push, and a side
+  // cannot make the pair softer than the other side alone.
+  const float bodyResponse = glm::dot(direction, responseAt(pair.body, point, direction, true));
+  const float otherResponse = -glm::dot(direction, responseAt(pair.other, point, -direction, true));
+
+  return std::max(bodyResponse, 0.0f) + std::max(otherResponse, 0.0f);
+}
+
+bool PhysicsSystem::isCutBySupport(const Side& side, const glm::vec3& pushDirection)
+{
+  return side.resting && side.body && glm::dot(pushDirection, supportNormalOf(*side.body)) < 0.0f;
 }
 
 void PhysicsSystem::push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, const bool turns,
