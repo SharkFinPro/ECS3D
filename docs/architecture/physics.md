@@ -5,11 +5,11 @@ and update it in the same change when that behavior moves.
 
 ## ECS3DSim
 
-`ECS3DSim` — `PhysicsSystem` (integration, forces, response; gravity adds `g * dt * dt` to the velocity each tick, so a fall
-covers the same distance at any tick rate; linear velocity is displacement per tick while
-angular velocity is a world-space axis in degrees per second, so convert angular velocity to radians per tick
-before combining the two - `applyVelocityChange`, `applyImpulse`, `handleCollision` and
-`CollisionSystem::fixedUpdate` take `dt` for that; the inertia tensor is per unit mass and comes from the body's
+`ECS3DSim` — `PhysicsSystem` (integration, forces, response; gravity adds `g * dt * dt` to the velocity each
+tick, so a fall covers the same distance at any tick rate; linear velocity is displacement per tick while angular
+velocity is a world-space axis in degrees per second, so convert angular velocity to radians per tick before
+combining the two - `applyVelocityChange`, `applyImpulse`, `handleCollision` and `CollisionSystem::fixedUpdate`
+take `dt` for that; the inertia tensor is per unit mass and comes from the body's
 collider shapes in world geometry (`InertiaTensor.h`: a solid sphere, box, capsule - a cylinder and two
 hemispheres - or a hull summed from tetrahedra to its triangles; a compound body weights each collider by its
 volume about the owner's position, a trigger adds nothing, and a body with no collider is a solid box whose
@@ -55,15 +55,16 @@ queued forces caused (`holdAgainstDrive`, not for spheres or capsules, which rol
 friction angle; nothing else damps linear velocity, so a body in flight keeps its horizontal speed; before the
 impulse, each contact point sheds, inertia-weighted, only the spin driving it into its support, repeated over
 the points until none sheds more, except that a body which rested on that plane last tick (its recorded support
-normal agrees), with its center of mass over the face, keeps spin that turns it past the flush window in one
-tick, so a push can tip it over its far edge instead of sliding it upright; a landing or finely faceted body
-still sheds it, and a contact whose normal is within a degree of level counts as a side contact, whichever way
-rounding tilts it, and a body resting on something below it has leftover spin under `restAngularSpeed` dropped,
-so it comes exactly to rest; a body whose center of mass is over a face it rests on, within the degree or so the
-manifold already counts as flush, is turned flush with the support's face, since nothing torques it the rest of
-the way down; a box on an edge or corner whose spin would carry its face flat against a box support within the
-tick, with its center of mass over that face, lands on the face that tick instead, since one tick of edge
-support turns a box a degree or more and it would otherwise rock from edge to edge). A sphere or capsule rolls
+normal agrees), with its center of mass over the face, keeps spin that turns it past the flush window in one tick
+(the window is a degree at dt 0.1 and scales with dt / 0.1 below it), so a push can tip it over its far edge
+instead of sliding it upright; a landing or finely faceted body still sheds it, and a contact whose normal is
+within a degree of level counts as a side contact, whichever way rounding tilts it, and a body resting on something
+below it has leftover spin under `restAngularSpeed` dropped, so it comes exactly to rest; a body whose center of
+mass is over a face it rests on, within the degree or so the manifold already counts as flush, is turned flush with
+the support's face, since nothing torques it the rest of the way down; a box on an edge or corner whose spin would
+carry its face flat against a box support within the tick, with its center of mass over that face, lands on the
+face that tick instead, since one tick of edge support turns a box about the flush window or more and it would
+otherwise rock from edge to edge). A sphere or capsule rolls
 with its own world radius as the rolling arm, whatever its offset from the body's owner. Lying along a line
 contact it rolls only about its own axis, and a body resting on a capsule is slowed by that rolling resistance
 too. A capsule lying on a flat support touches along a line, so its center of mass between the two contact

@@ -640,8 +640,8 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
     return;
   }
 
-  // One tick of support at an edge turns a body a degree or more, so it would go past flat onto its other
-  // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
+  // One tick of support at an edge turns a body about the flush window or more (a degree at dt 0.1, less below
+  // it), so it would go past flat onto its other edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
   if (faces->neighborCosine > facetedCosine || faces->support.corners.empty() || faces->own.corners.empty() ||
       !findSupport(transform.getPosition(), pair.normal, clampedCorners(*faces)).underCenterOfMass ||
       !turnsFlatThisTick(body, other, *faces, dt))

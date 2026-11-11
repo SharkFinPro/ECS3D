@@ -226,6 +226,91 @@ TEST(PhysicsTipping, APushTooSmallToTipABoxRocksItAndItComesBackFlushAtTheServer
   expectSmallPushRocksAndSettles(serverTick);
 }
 
+namespace {
+  struct SpunBox {
+    float mostTilted = 0.0f;
+    float drift = 0.0f;
+    float height = 0.0f;
+    float finalSpin = 0.0f;
+    int ticksToRest = -1;
+  };
+
+  // A cube resting on a ground tilted by groundTilt degrees about z, then given spin about its z axis. The cube
+  // starts on its face at the ground's surface, so it must settle where it is.
+  SpunBox spinOnGround(const float step, const float spin, const float groundTilt)
+  {
+    const auto scene = fixtures::makeScene();
+    CollisionSystem collisions;
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 }, { 40, 1, 40 });
+    fixtures::addBoxCollider(ground);
+    transformOf(ground)->setRotation({ 0, 0, groundTilt });
+
+    const auto box = addObject(scene, "Box", { 0, 1, 0 });
+    fixtures::addBoxCollider(box);
+    const auto body = addBody(box, true);
+    transformOf(box)->setRotation({ 0, 0, groundTilt });
+
+    for (int i = 0; i < 60; ++i)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, step);
+      collisions.fixedUpdate(*scene.objectManager, step);
+    }
+
+    const auto start = transformOf(box)->getPosition();
+    const auto startRotation = transformOf(box)->getRotation();
+    body->setAngularVelocity({ 0, 0, spin });
+
+    SpunBox result;
+    for (int i = 0; i < 400; ++i)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, step);
+      collisions.fixedUpdate(*scene.objectManager, step);
+
+      const auto rotation = transformOf(box)->getRotation();
+      result.mostTilted = std::max(result.mostTilted, std::fabs(rotation.z - startRotation.z));
+      if (result.ticksToRest < 0 && glm::length(body->getAngularVelocity()) < PhysicsSystem::restAngularSpeed)
+      {
+        result.ticksToRest = i;
+      }
+    }
+
+    result.drift = glm::length(transformOf(box)->getPosition() - start);
+    result.height = transformOf(box)->getPosition().y - start.y;
+    result.finalSpin = glm::length(body->getAngularVelocity());
+
+    return result;
+  }
+}
+
+TEST(PhysicsTipping, ASpinThatCannotTipARestingCubeIsShedWithinAFewTicksWhereItLies)
+{
+  // About a degree of tilt at most: the spin turns the cube for one tick, which is the window the manifold calls flush,
+  // and then the cube is laid flat and the spin shed. At 100 degrees per second a cube this size would tip.
+  for (const float step : { dt, serverTick })
+  {
+    for (const float groundTilt : { 0.0f, 0.5f })
+    {
+      for (const float spin : { 10.0f, 20.0f, 50.0f })
+      {
+        SCOPED_TRACE(testing::Message() << "step " << step << " spin " << spin << " ground tilt " << groundTilt);
+
+        const auto result = spinOnGround(step, spin, groundTilt);
+
+        EXPECT_LE(result.mostTilted, spin * step + 0.1f);
+        EXPECT_LT(result.drift, 0.1f);
+        EXPECT_NEAR(result.height, 0.0f, 1e-3f);
+        EXPECT_GE(result.ticksToRest, 0);
+        EXPECT_LE(result.ticksToRest, 10);
+        EXPECT_LT(result.finalSpin, PhysicsSystem::restAngularSpeed);
+      }
+    }
+  }
+
+  // Positive control: the spin does turn the cube before it is shed, so the checks above are not on a cube that
+  // never moved.
+  EXPECT_GT(spinOnGround(serverTick, 50.0f, 0.0f).mostTilted, 0.5f);
+}
+
 TEST(PhysicsTipping, AFallingDominoTipsTheNextOneOver)
 {
   Dominoes dominoes(serverTick);
