@@ -7,10 +7,10 @@ public class DragLauncher : ScriptBase
 {
     // Launch speed in units per second per unit of drag length.
     [ExposeToEditor("Strength")]
-    private float m_strength = 1.8f;
+    private float m_strength = 4.0f;
 
     [ExposeToEditor("Max Speed")]
-    private float m_maxSpeed = 13.4f;
+    private float m_maxSpeed = 30.0f;
 
     [ExposeToEditor("Max Distance")]
     private float m_maxDistance = 100.0f;

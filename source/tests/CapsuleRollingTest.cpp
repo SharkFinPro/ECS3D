@@ -156,14 +156,8 @@ TEST(CapsuleRolling, ACapsuleRollingAcrossItsAxisComesToExactRest)
 TEST(CapsuleRolling, ACapsuleRollingAtTheServerTickStopsNearWhereASphereDoes)
 {
   constexpr float serverTick = 0.02f;
-  // Friction holds back a share of g * dt * dt a tick, which is 1/5 of what the pre-fix step of g * dt * 0.1 gave at
-  // this tick, so the push is scaled by 1/sqrt(5) to stop where it did then.
-  auto sphereConfig = pushed(false, 60.0f);
-  auto capsuleConfig = pushed(true, 60.0f);
-  sphereConfig.velocity.x *= 1.0f / std::sqrt(5.0f);
-  capsuleConfig.velocity.x *= 1.0f / std::sqrt(5.0f);
-  Roller sphere(sphereConfig);
-  Roller capsule(capsuleConfig);
+  Roller sphere(pushed(false, 60.0f));
+  Roller capsule(pushed(true, 60.0f));
 
   sphere.run(1500, serverTick);
   capsule.run(1500, serverTick);
@@ -219,9 +213,11 @@ TEST(CapsuleRolling, ALyingCapsuleSpinningAboutTheNormalGrindsToExactRest)
 
 TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
 {
+  // Friction takes a share of each tick's gravity, so the push is sqrt(unitsPerMeter) faster than 0.3 for friction to
+  // stop it in the same distance, in a shorter time.
   Config Config;
   Config.rotation = { 0, 0, 90 };
-  Config.velocity = { 0.3f, 0, 0 };
+  Config.velocity = { 0.3f * std::sqrt(PhysicsSystem::unitsPerMeter), 0, 0 };
   Roller capsule(Config);
 
   capsule.run(60);
@@ -240,7 +236,7 @@ TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
 
   // Positive control: it is still sliding at the start, so the slab and the push are not what stopped it.
   Roller early(Config);
-  early.run(3);
+  early.run(2);
   EXPECT_LT(early.x(), stopped);
   EXPECT_GT(early.body->getVelocity().x, 0.0f);
 }

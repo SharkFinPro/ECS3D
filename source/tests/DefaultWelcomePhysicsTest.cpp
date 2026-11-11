@@ -33,7 +33,7 @@ namespace {
   constexpr float dt = 1.0f / 50.0f;
 
   // The distance PhysicsSystem's gravity step moves a body in one tick (gravityStep in PhysicsSystem.cpp).
-  constexpr float gravityStepPerTick = 9.81f * dt * 0.1f;
+  constexpr float gravityStepPerTick = 9.81f * PhysicsSystem::unitsPerMeter * dt * dt;
 
   bool isFinite(const glm::vec3& value)
   {

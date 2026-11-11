@@ -8,7 +8,7 @@ public class BouncePad : ScriptBase
 {
     // Units per second along Direction; replaces the body's own speed along it, so every bounce is as high.
     [ExposeToEditor("Strength")]
-    private float m_strength = 5.4f;
+    private float m_strength = 12.0f;
 
     [ExposeToEditor("Direction")]
     private Vector3 m_direction = new Vector3(0.0f, 1.0f, 0.0f);

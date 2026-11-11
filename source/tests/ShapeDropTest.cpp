@@ -30,7 +30,7 @@ namespace {
   constexpr int maxTicks = 1500;
   constexpr float dropHeight = 3.0f;
   // A tenth of the speed gravity adds in one tick, so two ticks of free fall are not mistaken for rest.
-  constexpr float restSpeed = 0.1f * 9.81f * dt * dt;
+  constexpr float restSpeed = 0.1f * 9.81f * PhysicsSystem::unitsPerMeter * dt * dt;
   constexpr float flushToleranceDegrees = 2.0f;
 
   const std::vector<std::string> shapeNames = {

@@ -147,7 +147,7 @@
                 {
                   "name": "m_jumpSpeed",
                   "type": "float",
-                  "value": 6.7
+                  "value": 15.0
                 }
               ]
             }

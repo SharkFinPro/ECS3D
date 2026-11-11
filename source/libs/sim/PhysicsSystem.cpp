@@ -183,10 +183,11 @@ namespace {
   }
 
   // What integrate adds to the velocity each tick. Velocity is a displacement per tick, so an acceleration adds
-  // a * dt * dt: that makes the fall distance after any time the same at every tick rate.
+  // a * dt * dt: that makes the fall distance after any time the same at every tick rate. The gravity is in meters
+  // per second squared, so it is scaled to world units.
   glm::vec3 gravityStep(const RigidBody& body, const float dt)
   {
-    return { 0.0f, body.getGravity() * dt * dt, 0.0f };
+    return { 0.0f, body.getGravity() * PhysicsSystem::unitsPerMeter * dt * dt, 0.0f };
   }
 
   // The normal of the surface a resting body's support holds it up with: world up until a contact says otherwise.

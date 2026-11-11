@@ -7,6 +7,8 @@ resting or the contact manifold: that behavior is tuned as a whole, and the suit
 - Linear velocity is displacement per tick. Angular velocity is a world-space axis in degrees per second. Convert
   angular velocity to radians per tick before combining the two; `applyVelocityChange`, `applyImpulse`,
   `handleCollision` and `CollisionSystem::fixedUpdate` take `dt` for that.
+- A body's gravity is in meters per second squared, applied as `PhysicsSystem::unitsPerMeter` world units per meter,
+  so launch speeds and heights in content are in world units.
 - The inertia tensor is per unit mass and comes from the body's collider shapes (`InertiaTensor.h`). A velocity change
   moves and turns a body alike whatever its mass, while an impulse is divided by the mass.
 - Orientation turns by composing a rotation onto it, not by adding to the Euler angles, and the result is written back

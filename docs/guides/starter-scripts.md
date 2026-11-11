@@ -141,12 +141,12 @@ object itself must carry the `RigidBody`; a child collider of a compound body is
 
 | Label | Type | Default |
 |-------|------|---------|
-| Strength | float (units per second) | 5.4 |
+| Strength | float (units per second) | 12 |
 | Direction | vector | (0, 1, 0) |
 | Cooldown | float (seconds) | 0.2 |
 
 Cooldown is per other body, in fixed time. Events: none. Showcase use: used by Welcome (the Bounce Pad) and
-Physics Playground (the bounce pads station, strengths 3.6, 6.3 and 8.9).
+Physics Playground (the bounce pads station, strengths 8, 14 and 20).
 
 ### Spawner
 
@@ -193,7 +193,7 @@ bodies it hit.
 |-------|------|---------|
 | Key | string | E |
 | Radius | float | 7 |
-| Strength | float (units per second at the center) | 8 |
+| Strength | float (units per second at the center) | 18 |
 | Upward Bias | float | 0.3 |
 | Cooldown | float (seconds) | 1.5 |
 | Fire Every | float (seconds) | 0 |
@@ -246,8 +246,8 @@ window loses focus. A button already held when the script starts is not a press.
 
 | Label | Type | Default |
 |-------|------|---------|
-| Strength | float (units per second per unit of pull) | 1.8 |
-| Max Speed | float (units per second) | 13.4 |
+| Strength | float (units per second per unit of pull) | 4 |
+| Max Speed | float (units per second) | 30 |
 | Max Distance | float | 100 |
 | Min Drag | float | 0.1 |
 | Log Launches | bool | true |

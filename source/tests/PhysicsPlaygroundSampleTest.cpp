@@ -263,7 +263,7 @@ TEST(PhysicsPlaygroundSample, FrictionBounceAndRaceSpawnersAreConfigured)
     EXPECT_FALSE(scriptField(*pad, "ColorOnHit", "m_hitTexture").get<std::string>().empty());
   }
 
-  EXPECT_EQ(strengths, (std::set<float>{ 3.6f, 6.3f, 8.9f }));
+  EXPECT_EQ(strengths, (std::set<float>{ 8.0f, 14.0f, 20.0f }));
   EXPECT_EQ(named("Ball Spawner ").size(), 3u);
   EXPECT_EQ(named("Race Spawner ").size(), 6u);
 }

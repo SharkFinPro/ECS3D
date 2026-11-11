@@ -23,8 +23,9 @@ using namespace playgroundtest;
 
 namespace
 {
-  // 70 seconds at the server tick. The last domino reaches the ledge about 24 seconds in.
-  constexpr int simulatedTicks = 3500;
+  // Twelve seconds at the server tick. The last domino falls and knocks the sphere off its ledge a little after tick
+  // 300, so the run leaves that a wide margin.
+  constexpr int simulatedTicks = 600;
 
   // A domino passes its tipping point at 8.5 degrees. The last one can rest on the ledge's near top corner at about 44
   // degrees and creep along it for most of the run before it drops flat, and when it drops varies with each platform's
@@ -61,7 +62,7 @@ namespace
   }
 }
 
-// The four tests check the same run, and the run dominates the suite's time, so it happens once per suite.
+// The four tests check the same 600-tick run, and the run dominates the suite's time, so it happens once per suite.
 class PhysicsPlaygroundSamplePhysics : public ::testing::Test
 {
 protected:
@@ -195,7 +196,7 @@ protected:
   inline static float s_farthestTravel = 0.0f;
 };
 
-TEST_F(PhysicsPlaygroundSamplePhysics, TheRunStaysFiniteAndAboveTheVoid)
+TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
 {
   ASSERT_TRUE(isSimulated());
 

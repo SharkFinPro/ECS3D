@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "PhysicsGenericRestingFixtures.h"
+#include "PhysicsSystem.h"
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -47,12 +48,12 @@ namespace {
     { "push", { { 0, 2.0f, 0 } }, Track::everyTick, 100 }
   };
 
-  // Friction is a share of the gravity added each tick, so a launch speed per tick slides a body 1 / (10 * dt) times as
-  // far as it did when that gravity was g * dt * 0.1. Scaling the speed by this restores the slide of that step: at dt
-  // 0.1 the two steps are equal, so the scale is 1.
+  // Friction is a share of the gravity added each tick, and a slide goes as speed squared over that share. The slides
+  // are sized for a tick adding 9.81 * 0.1 * dt, and a tick adds g * unitsPerMeter * dt * dt, 50 * dt times as much,
+  // so the speed is scaled by the square root of that ratio: it is 1 at the server tick.
   float speedScale(const float dt)
   {
-    return std::sqrt(10.0f * dt);
+    return std::sqrt(10.0f * PhysicsSystem::unitsPerMeter * dt);
   }
 
   void push(Rig& rig, const float dt)
@@ -120,7 +121,7 @@ namespace {
       {
         const auto expected = transformOf(reference.body);
         const auto actual = transformOf(other.body);
-        ASSERT_LT(glm::length(expected->getPosition() - actual->getPosition()), positionTolerance)
+        ASSERT_LT(glm::length(expected->getPosition() - actual->getPosition()), positionTolerance * speedScale(dt))
           << scenario.name << " dt " << dt << " tick " << tick;
         ASSERT_LT(glm::length(expected->getRotation() - actual->getRotation()), rotationTolerance)
           << scenario.name << " dt " << dt << " tick " << tick;

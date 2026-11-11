@@ -10,7 +10,7 @@ public class PlayerScript : ScriptBase
 
     // Units per second, straight up.
     [ExposeToEditor("Jump Speed")]
-    private float m_jumpSpeed = 6.7f;
+    private float m_jumpSpeed = 15.0f;
 
     [ExposeToEditor("Look Sensitivity")]
     private float m_lookSensitivity = 0.15f;

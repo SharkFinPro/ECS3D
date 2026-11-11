@@ -7,8 +7,9 @@
 #include <vector>
 
 // How a queued force becomes a change of velocity. Velocity is in units per tick; a force or an acceleration
-// acts for the tick's dt seconds, the way gravity does. The values cross the scripting ABI as ScriptBridge's
-// ForceMode, so they are fixed.
+// is scaled by the tick's dt seconds, in world units. A body's gravity is a separate field, in meters per second
+// squared, which PhysicsSystem scales to world units by PhysicsSystem::unitsPerMeter. The values cross the
+// scripting ABI as ScriptBridge's ForceMode, so they are fixed.
 enum class ForceMode : std::uint8_t {
   // Mass times units per tick, per second: the velocity changes by force * dt / mass.
   force = 0,

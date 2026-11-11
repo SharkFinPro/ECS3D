@@ -204,8 +204,8 @@ namespace {
     return transform.getPosition() + glm::vec3(orientation * glm::vec4(local, 0));
   }
 
-  // The same box as above, tipping over the ledge, after six ticks. Returns where the point of its underside
-  // that started on the ledge's edge is then, and how far the box has turned.
+  // The same box as above, tipping over the ledge, 13 ticks of the server's tick in. Returns where the point of its
+  // underside that started on the ledge's edge is then, and how far the box has turned.
   std::pair<glm::vec3, float> ledgePivotAfterTipping(const float friction)
   {
     const auto scene = makeScene();
@@ -219,10 +219,11 @@ namespace {
 
     CollisionSystem collisionSystem;
 
-    for (int tick = 0; tick < 6; ++tick)
+    constexpr float serverTick = 1.0f / 50.0f;
+    for (int tick = 0; tick < 13; ++tick)
     {
-      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+      collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
     }
 
     const auto& transform = *transformOf(box);
@@ -250,7 +251,10 @@ TEST(PhysicsIntegration, ABoxTippingOffALedgeTurnsAboutTheEdgeRatherThanSlidingO
 }
 
 namespace {
-  // A unit box dropped a unit onto a wide static ground while moving sideways at three units per second.
+  // A unit box dropped a unit onto a wide static ground while moving sideways at three units per second, run at the
+  // server's tick for three seconds.
+  constexpr float serverTick = 1.0f / 50.0f;
+  constexpr float sidewaysSpeed = 3.0f;
   struct Landed {
     glm::vec3 position;
     glm::vec3 velocity;
@@ -268,14 +272,14 @@ namespace {
     fixtures::addBoxCollider(box);
     const auto body = addBody(box, true);
     body->setFriction(friction);
-    body->setVelocity({ 3.0f * dt, 0, 0 });
+    body->setVelocity({ sidewaysSpeed * serverTick, 0, 0 });
 
     CollisionSystem collisionSystem;
 
-    for (int tick = 0; tick < 30; ++tick)
+    for (int tick = 0; tick < 150; ++tick)
     {
-      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+      collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
     }
 
     return { transformOf(box)->getPosition(), body->getVelocity(), localUpOf(transformOf(box)->getRotation()) };
@@ -284,19 +288,23 @@ namespace {
 
 TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDistance)
 {
-  // It reaches the ground at x = 1.5 (five ticks at three units a second) and slides only about 0.06 further
-  // before friction stops it. That is too short to tell from sticking on landing, so the window catches a box that
-  // loses its slide before landing (x near 1.2) or keeps it (past 8), not a stick at the landing point.
+  // The box falls one unit, which takes sqrt(2 / (g * unitsPerMeter)) seconds, so it reaches the ground that much of
+  // its sideways speed along. Friction then stops it within v^2 / (2 * friction * g * unitsPerMeter). The window is
+  // the landing point and that slide, so it catches a box that loses its slide before landing or keeps it, though
+  // not one that sticks at the landing point, which the slide is too short to tell apart.
+  const float acceleration = 9.81f * PhysicsSystem::unitsPerMeter;
+  const float landingX = sidewaysSpeed * std::sqrt(2.0f / acceleration);
+  const float slide = sidewaysSpeed * sidewaysSpeed / (2.0f * 0.5f * acceleration);
   const auto landed = landSliding(0.5f);
 
-  EXPECT_GT(landed.position.x, 1.45f);
-  EXPECT_LT(landed.position.x, 1.7f);
+  EXPECT_GT(landed.position.x, landingX - 0.05f);
+  EXPECT_LT(landed.position.x, landingX + slide + 0.1f);
   EXPECT_LT(glm::length(glm::vec2(landed.velocity.x, landed.velocity.z)), 1e-4f);
   fixtures::expectNear("up", landed.up, { 0, 1, 0 }, 1e-3f);
   EXPECT_NEAR(landed.position.y, 2.0f, 0.05f);
 
-  // Positive control: on a frictionless contact it keeps all thirty ticks of its slide.
-  EXPECT_GT(landSliding(0.0f).position.x, 8.0f);
+  // Positive control: on a frictionless contact it keeps all three seconds of its slide.
+  EXPECT_GT(landSliding(0.0f).position.x, 0.9f * sidewaysSpeed * 3.0f);
 }
 
 

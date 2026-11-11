@@ -2,6 +2,7 @@
 #define PHYSICSTESTHELPERS_H
 
 #include "TestScene.h"
+#include "PhysicsSystem.h"
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/collisions/Collider.h"
@@ -22,8 +23,8 @@ namespace physicsFixtures {
 
   // What integrate() adds to a body's velocity each tick under the default gravity. Note that integrate
   // moves by the velocity directly rather than by velocity * dt, so "velocity" is displacement per tick and
-  // an acceleration adds a * dt * dt - while the rotation it applies below it does use dt.
-  inline constexpr float gravityPerTick = -9.81f * dt * dt;
+  // an acceleration adds a * dt * dt in world units - while the rotation it applies below it does use dt.
+  inline constexpr float gravityPerTick = -9.81f * PhysicsSystem::unitsPerMeter * dt * dt;
 
   // The numbers below are also derived from RigidBody's defaults, not just from dt. Pinned here so that
   // changing one produces a failure that names the default rather than a page of unexplained arithmetic.

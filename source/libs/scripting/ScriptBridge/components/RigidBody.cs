@@ -26,8 +26,9 @@ public unsafe struct RigidBodyBindings
 }
 
 // How RigidBody.applyForce turns a force into a change of velocity. Velocity is in units per tick, as getVelocity
-// and setVelocity read and write it; a force or an acceleration acts for the tick's dt seconds, the way gravity
-// does. The values must match the native ForceMode in RigidBody.h.
+// and setVelocity read and write it; a force or an acceleration is scaled by the tick's dt seconds, in world
+// units. A body's gravity is in meters per second squared, scaled to world units by the engine. The values must
+// match the native ForceMode in RigidBody.h.
 public enum ForceMode
 {
     // Mass times units per tick, per second: the velocity changes by force * dt / mass.
