@@ -167,15 +167,15 @@ public class LauncherLearnTabTests
   }
 
   [Fact]
-  public void GoToSamplesSwitchesTheActiveTab()
+  public void GoToSamplesSwitchesToTheLibraryTab()
   {
     var model = NewMain();
     model.SelectNavCommand.Execute("learn");
 
     model.Learn.GoToSamplesCommand.Execute(null);
 
-    Assert.Equal("samples", model.ActiveNav);
-    Assert.Same(model.Samples, model.CurrentTab);
+    Assert.Equal("library", model.ActiveNav);
+    Assert.Same(model.Library, model.CurrentTab);
   }
 
   [Fact]

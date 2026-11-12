@@ -9,7 +9,7 @@ using ECS3DLauncher.Shared.Models;
 
 namespace ECS3DLauncher.Tabs.Samples;
 
-// State for the Samples tab: one card per shipped sample, narrowed by the header search.
+// The Library tab's samples: one row per shipped sample, narrowed by the header search.
 public class SamplesViewModel : ObservableObject
 {
     private readonly Func<string, Bitmap?> _loadThumbnail;

@@ -13,6 +13,7 @@ using CommunityToolkit.Mvvm.Input;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Tabs.Learn;
+using ECS3DLauncher.Tabs.Library;
 using ECS3DLauncher.Tabs.Projects;
 using ECS3DLauncher.Tabs.Samples;
 using ECS3DLauncher.Tabs.Settings;
@@ -55,8 +56,7 @@ public class MainWindowViewModel : ObservableObject
     public ObservableCollection<NavItemViewModel> NavItems { get; }
 
     public ProjectsViewModel Projects { get; }
-    public TemplatesViewModel Templates { get; }
-    public SamplesViewModel Samples { get; }
+    public LibraryViewModel Library { get; }
     public LearnViewModel Learn { get; }
     public SettingsViewModel Settings { get; }
     public HostingViewModel Hosting { get; }
@@ -89,8 +89,7 @@ public class MainWindowViewModel : ObservableObject
 
             CurrentTab = LauncherTabs.Parse(value) switch
             {
-                LauncherTab.Templates => Templates,
-                LauncherTab.Samples => Samples,
+                LauncherTab.Library => Library,
                 LauncherTab.Learn => Learn,
                 LauncherTab.Settings => Settings,
                 _ => (object)Projects,
@@ -122,8 +121,7 @@ public class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _searchText, value))
             {
                 Projects.SearchText = value;
-                Templates.SearchText = value;
-                Samples.SearchText = value;
+                Library.SearchText = value;
                 Learn.SearchText = value;
             }
         }
@@ -471,28 +469,30 @@ public class MainWindowViewModel : ObservableObject
             TogglePinCommand = TogglePinCommand,
             RemoveProjectCommand = RemoveProjectCommand,
             LocateProjectCommand = LocateProjectCommand,
-            BrowseSamplesCommand = new RelayCommand(() => ActiveNav = "samples"),
+            BrowseSamplesCommand = new RelayCommand(() => ActiveNav = "library"),
         };
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
         Projects.UpdateHostTooltip(_actions.Host.Tooltip);
         Refresh();
-        Templates = new TemplatesViewModel(version, loadThumbnail, OpenTemplateCommand);
-        Samples = new SamplesViewModel(
-            PlaySampleCommand, OpenSampleCopyCommand, _actions.Play.Tooltip, loadThumbnail,
-            HostSampleCommand, _actions.Host.Tooltip);
+        Library = new LibraryViewModel(
+            new TemplatesViewModel(version, loadThumbnail, OpenTemplateCommand),
+            new SamplesViewModel(
+                PlaySampleCommand, OpenSampleCopyCommand, _actions.Play.Tooltip, loadThumbnail,
+                HostSampleCommand, _actions.Host.Tooltip),
+            ExploreCommand,
+            _actions.Explore.Tooltip);
         ReloadCatalog(_engine);
 
         Learn = new LearnViewModel(
             url => _ = OpenUrlAsync(url),
-            () => ActiveNav = "samples",
+            () => ActiveNav = "library",
             ExploreCommand,
             _actions.Explore.Tooltip);
 
         NavItems =
         [
             new() { Key = "projects",  Label = "Projects",  Icon = "IconFolder", Count = ProjectCount() },
-            new() { Key = "templates", Label = "Templates", Icon = "IconLayers", Count = TemplateCount() },
-            new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle", Count = SampleCount() },
+            new() { Key = "library",   Label = "Library",   Icon = "IconLayers", Count = LibraryCount() },
             new() { Key = "learn",     Label = "Learn",     Icon = "IconBook" },
         ];
         Projects.Projects.CollectionChanged += (_, _) =>
@@ -592,11 +592,11 @@ public class MainWindowViewModel : ObservableObject
         ExploreCommand.NotifyCanExecuteChanged();
         OpenProjectCommand.NotifyCanExecuteChanged();
         PlayProjectCommand.NotifyCanExecuteChanged();
-        Samples.UpdatePlay(_actions.Play.Tooltip);
-        Samples.UpdateHost(_actions.Host.Tooltip);
+        Library.UpdateTooltip(_actions.Explore.Tooltip);
+        Library.Samples.UpdatePlay(_actions.Play.Tooltip);
+        Library.Samples.UpdateHost(_actions.Host.Tooltip);
         ReloadCatalog(engine);
-        TemplatesNavItem.Count = TemplateCount();
-        SamplesNavItem.Count = SampleCount();
+        LibraryNavItem.Count = LibraryCount();
         PlaySampleCommand.NotifyCanExecuteChanged();
         HostSampleCommand.NotifyCanExecuteChanged();
         OpenJoinCommand.NotifyCanExecuteChanged();
@@ -612,8 +612,7 @@ public class MainWindowViewModel : ObservableObject
         _templates = contents.Templates;
         _samples = contents.Samples;
         _templatesFolder = contents.TemplatesFolder;
-        Templates.Reload(contents);
-        Samples.Reload(contents);
+        Library.Reload(contents);
         if (contents.Templates.Count > 0)
         {
             ClearToast(NoticeTopic.Templates);
@@ -634,13 +633,10 @@ public class MainWindowViewModel : ObservableObject
 
     private string ProjectCount() => Projects.Projects.Count.ToString();
 
-    private NavItemViewModel TemplatesNavItem => NavItems.Single(item => item.Key == "templates");
+    private NavItemViewModel LibraryNavItem => NavItems.Single(item => item.Key == "library");
 
-    private string TemplateCount() => Templates.Templates.Count.ToString();
-
-    private NavItemViewModel SamplesNavItem => NavItems.Single(item => item.Key == "samples");
-
-    private string SampleCount() => Samples.Samples.Count.ToString();
+    // The Welcome scene is always there, so only the catalog's templates and samples are counted.
+    private string LibraryCount() => (Library.Templates.Templates.Count + Library.Samples.Samples.Count).ToString();
 
     // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
     private void Explore()
@@ -974,15 +970,15 @@ public class MainWindowViewModel : ObservableObject
     // The header button and the first-run card start from Empty 3D, or the first usable template without it.
     private void OpenDefaultNewProject()
     {
-        var usable = Templates.Templates.Where(card => card.IsAvailable).ToList();
+        var usable = Library.Templates.Templates.Where(card => card.IsAvailable).ToList();
         var card = usable.FirstOrDefault(item => item.Id == DefaultTemplateId) ?? usable.FirstOrDefault();
         if (card is null)
         {
             ApplyNotice(EarlyExitNotice.Failure(
-                Templates.IsEmpty
+                Library.Templates.IsEmpty
                     ? $"No project templates were found in {_templatesFolder}. Check the engine's templates folder."
                     : "Every template needs a newer engine than this launcher belongs to.",
-                Templates.IsEmpty ? NoticeTopic.Templates : NoticeTopic.None));
+                Library.Templates.IsEmpty ? NoticeTopic.Templates : NoticeTopic.None));
             return;
         }
 

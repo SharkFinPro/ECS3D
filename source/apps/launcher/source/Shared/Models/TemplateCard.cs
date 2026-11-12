@@ -3,7 +3,7 @@ using Avalonia.Media.Imaging;
 
 namespace ECS3DLauncher.Shared.Models;
 
-// A project template card: the manifest fields the Templates tab shows, plus the shipped folder a new project copies.
+// A project template card: the manifest fields the Library tab shows, plus the shipped folder a new project copies.
 public sealed class TemplateCard
 {
     public required string Id { get; init; }

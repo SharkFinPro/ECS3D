@@ -3,7 +3,7 @@ using Avalonia.Media.Imaging;
 
 namespace ECS3DLauncher.Shared.Models;
 
-// A sample project card: the manifest fields the Samples tab shows, plus the shipped folder Play opens.
+// A sample project card: the manifest fields the Library tab shows, plus the shipped folder Play opens.
 public sealed class SampleCard
 {
     public required string Id { get; init; }

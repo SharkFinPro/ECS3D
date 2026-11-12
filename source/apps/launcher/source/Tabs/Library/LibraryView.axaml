@@ -1,0 +1,218 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:ECS3DLauncher.Shared.Models"
+             xmlns:controls="using:ECS3DLauncher.Shared.Controls"
+             xmlns:local="using:ECS3DLauncher.Tabs.Library"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dd="using:ECS3DLauncher.Shared"
+             mc:Ignorable="d"
+             d:DesignWidth="960" d:DesignHeight="720"
+             d:DataContext="{x:Static dd:DesignData.Library}"
+             x:Class="ECS3DLauncher.Tabs.Library.LibraryView"
+             x:DataType="local:LibraryViewModel">
+
+    <StackPanel Spacing="30">
+
+        <controls:EmptyState IsVisible="{Binding ShowNoResults}"
+                             IconData="{StaticResource IconLayers}" Heading="No results for your search" />
+
+        <!-- START A PROJECT -->
+        <StackPanel IsVisible="{Binding ShowTemplatesSection}" Spacing="14">
+            <StackPanel Spacing="3">
+                <TextBlock Text="Start a project" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="A template is a starting point. Pick one and the launcher copies it into a project of your own."
+                           FontSize="12.5" LineHeight="18" TextWrapping="Wrap"
+                           Foreground="{StaticResource T3Brush}" />
+            </StackPanel>
+
+            <controls:EmptyState IsVisible="{Binding Templates.IsEmpty}"
+                                 IconData="{StaticResource IconLayers}" Heading="{Binding Templates.EmptyHeading}"
+                                 Detail="{Binding Templates.EmptyDetail}" />
+
+            <ItemsControl ItemsSource="{Binding Templates.VisibleTemplates}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Margin="-9" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="m:TemplateCard">
+                        <Button Theme="{StaticResource BareButton}" Margin="9"
+                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Templates.OpenCommand, FallbackValue={x:Null}}"
+                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                            <Border Classes="card" Width="236" CornerRadius="11" ClipToBounds="True">
+                                <StackPanel>
+                                    <Panel Height="133" Background="{StaticResource InsetBrush}">
+                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                               IsVisible="{Binding HasThumbnail}" />
+                                        <Panel IsVisible="{Binding !HasThumbnail}">
+                                            <Border Background="{StaticResource ThumbStripes}" />
+                                            <Border Background="{StaticResource AccDim}" />
+                                            <Path Classes="icon" Width="30" Height="30"
+                                                  Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Data="{StaticResource IconLayers}" />
+                                        </Panel>
+                                    </Panel>
+                                    <StackPanel Margin="16,14,16,16" Spacing="4">
+                                        <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Description}" FontSize="12" LineHeight="18" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource T2Brush}" />
+                                        <ItemsControl ItemsSource="{Binding Tags}" Margin="0,8,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
+                                                            Background="{StaticResource InsetBrush}"
+                                                            BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{Binding}" FontSize="11"
+                                                                   Foreground="{StaticResource T2Brush}" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Border IsVisible="{Binding HasPlayers}" Padding="9,3" CornerRadius="10"
+                                                HorizontalAlignment="Left" Background="{StaticResource AccDim}">
+                                            <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AccBrush}" />
+                                        </Border>
+                                        <TextBlock IsVisible="{Binding NeedsNewerEngine}" Text="Needs a newer engine"
+                                                   Margin="0,4,0,0" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource DangerBrush}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- EXAMPLES -->
+        <StackPanel IsVisible="{Binding ShowExamplesSection}" Spacing="14">
+            <StackPanel Spacing="3">
+                <TextBlock Text="Examples" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="Finished projects to run and study, and the engine's own tour."
+                           FontSize="12.5" LineHeight="18" TextWrapping="Wrap"
+                           Foreground="{StaticResource T3Brush}" />
+            </StackPanel>
+
+            <!-- The Welcome scene has no shipped thumbnail or folder, so it is a fixed row beside the sample rows. -->
+            <Border IsVisible="{Binding ShowWelcome}" Classes="card" Margin="0,0,0,14" CornerRadius="11" ClipToBounds="True">
+                <Grid ColumnDefinitions="260,*">
+                    <Panel Grid.Column="0" MinHeight="150" Background="{StaticResource InsetBrush}">
+                        <Border Background="{StaticResource ThumbStripes}" />
+                        <Border Background="{StaticResource AccDim}" />
+                        <Path Classes="icon" Width="30" Height="30"
+                              Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Data="{StaticResource IconSparkle}" />
+                    </Panel>
+                    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" Margin="20,16">
+                        <TextBlock Grid.Row="0" Text="Welcome scene" FontSize="16" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Row="1" Text="The engine's built-in tour. Open it in the editor and look around before making anything."
+                                   FontSize="12.5" Margin="0,6,0,0" LineHeight="18" TextWrapping="Wrap"
+                                   Foreground="{StaticResource T2Brush}" />
+                        <WrapPanel Grid.Row="2" Margin="0,12,0,0" VerticalAlignment="Top">
+                            <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
+                                    Background="{StaticResource InsetBrush}"
+                                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                <TextBlock Text="tour" FontSize="11" Foreground="{StaticResource T2Brush}" />
+                            </Border>
+                        </WrapPanel>
+                        <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                            <Button Grid.Column="1" Classes="cta" Theme="{StaticResource BareButton}"
+                                    Command="{Binding ExploreCommand}"
+                                    AutomationProperties.Name="Open Welcome scene"
+                                    ToolTip.Tip="{Binding ExploreTooltip}" ToolTip.ShowOnDisabled="True">
+                                <TextBlock Text="Open" FontSize="13" FontWeight="Bold"
+                                           Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding Samples.VisibleSamples}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="m:SampleCard">
+                        <Border Classes="card" Margin="0,0,0,14" CornerRadius="11" ClipToBounds="True">
+                            <Grid ColumnDefinitions="260,*">
+                                <Panel Grid.Column="0" MinHeight="150" Background="{StaticResource InsetBrush}">
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                           IsVisible="{Binding HasThumbnail}" />
+                                    <Panel IsVisible="{Binding !HasThumbnail}">
+                                        <Border Background="{StaticResource ThumbStripes}" />
+                                        <Border Background="{StaticResource AccDim}" />
+                                        <Path Classes="icon" Width="30" Height="30"
+                                              Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Data="{StaticResource IconSparkle}" />
+                                    </Panel>
+                                </Panel>
+                                <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" Margin="20,16">
+                                    <TextBlock Grid.Row="0" Text="{Binding Name}" FontSize="16" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Row="1" Text="{Binding Description}" FontSize="12.5" Margin="0,6,0,0"
+                                               LineHeight="18" TextWrapping="Wrap"
+                                               Foreground="{StaticResource T2Brush}" />
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,12,0,0"
+                                                  VerticalAlignment="Top">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
+                                                        Background="{StaticResource InsetBrush}"
+                                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                                    <TextBlock Text="{Binding}" FontSize="11"
+                                                               Foreground="{StaticResource T2Brush}" />
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,10,0,0">
+                                        <Border Grid.Column="0" IsVisible="{Binding HasPlayers}" Padding="9,3"
+                                                CornerRadius="10" VerticalAlignment="Center"
+                                                Background="{StaticResource AccDim}">
+                                            <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AccBrush}" />
+                                        </Border>
+                                        <Button Grid.Column="1" IsVisible="{Binding IsMultiplayer}"
+                                                Classes="secondary" Theme="{StaticResource BareButton}"
+                                                HorizontalAlignment="Right" Margin="0,0,8,0"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.HostCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.HostTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True">
+                                            <TextBlock Text="Host" FontSize="13" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" />
+                                        </Button>
+                                        <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
+                                                Margin="0,0,8,0"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.OpenCopyCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding}"
+                                                Content="Open a copy" />
+                                        <Button Grid.Column="3" Classes="cta" Theme="{StaticResource BareButton}"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.PlayCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.PlayTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True">
+                                            <TextBlock Text="Play" FontSize="13" FontWeight="Bold"
+                                                       Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+    </StackPanel>
+</UserControl>

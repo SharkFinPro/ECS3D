@@ -12,8 +12,7 @@ public class LauncherShellTests
 
   [Theory]
   [InlineData(LauncherTab.Projects, "Recent Projects", "Search projects", true, true)]
-  [InlineData(LauncherTab.Templates, "Templates", "Search templates", true, false)]
-  [InlineData(LauncherTab.Samples, "Samples", "Search samples", true, false)]
+  [InlineData(LauncherTab.Library, "Library", "Search the library", true, false)]
   [InlineData(LauncherTab.Learn, "Learn", "Search guides", true, false)]
   [InlineData(LauncherTab.Settings, "Settings", "", false, false)]
   public void HeaderTableMatchesTheSpec(

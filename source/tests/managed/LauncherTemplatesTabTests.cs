@@ -60,7 +60,7 @@ public class LauncherTemplatesTabTests
       () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static string[] Names(MainWindowViewModel model) =>
-    model.Templates.VisibleTemplates.Select(card => card.Name).ToArray();
+    model.Library.Templates.VisibleTemplates.Select(card => card.Name).ToArray();
 
   [Fact]
   public void OnlyTemplatesBecomeCardsInCatalogOrder()
@@ -70,10 +70,10 @@ public class LauncherTemplatesTabTests
 
     var model = NewMain();
 
-    Assert.Equal(new[] { "Arena", "Blank" }, model.Templates.Templates.Select(card => card.Name).ToArray());
-    Assert.DoesNotContain(model.Templates.Templates, card => card.Name == "Coin Rush");
-    Assert.Equal(new[] { "Coin Rush" }, model.Samples.Samples.Select(card => card.Name).ToArray());
-    Assert.False(model.Templates.IsEmpty);
+    Assert.Equal(new[] { "Arena", "Blank" }, model.Library.Templates.Templates.Select(card => card.Name).ToArray());
+    Assert.DoesNotContain(model.Library.Templates.Templates, card => card.Name == "Coin Rush");
+    Assert.Equal(new[] { "Coin Rush" }, model.Library.Samples.Samples.Select(card => card.Name).ToArray());
+    Assert.False(model.Library.Templates.IsEmpty);
   }
 
   [Fact]
@@ -82,7 +82,7 @@ public class LauncherTemplatesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
 
-    var cards = NewMain().Templates.Templates;
+    var cards = NewMain().Library.Templates.Templates;
     var arena = cards.Single(card => card.Name == "Arena");
     var blank = cards.Single(card => card.Name == "Blank");
 
@@ -111,7 +111,7 @@ public class LauncherTemplatesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddTemplate(LauncherRig.LauncherDir, "only", "Only", "d", "\"a\"", minEngine);
 
-    var card = Assert.Single(NewMain(version: launcher).Templates.Templates);
+    var card = Assert.Single(NewMain(version: launcher).Library.Templates.Templates);
 
     Assert.Equal(gated, card.NeedsNewerEngine);
     Assert.Equal(!gated, card.IsAvailable);
@@ -124,7 +124,7 @@ public class LauncherTemplatesTabTests
     AddTemplate(LauncherRig.LauncherDir, "old", "Old", "d", "\"a\"", "1.0");
     AddTemplate(LauncherRig.LauncherDir, "new", "New", "d", "\"a\"", "5.0");
 
-    var cards = NewMain().Templates.Templates;
+    var cards = NewMain().Library.Templates.Templates;
 
     Assert.True(cards.Single(card => card.Name == "Old").IsAvailable);
     Assert.True(cards.Single(card => card.Name == "New").NeedsNewerEngine);
@@ -153,21 +153,21 @@ public class LauncherTemplatesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
     var model = NewMain();
-    Assert.False(model.Templates.HasNoMatches);
+    Assert.False(model.Library.Templates.HasNoMatches);
 
     model.SearchText = "zzz-nothing";
 
     Assert.Empty(Names(model));
-    Assert.True(model.Templates.HasNoMatches);
-    Assert.True(model.Templates.ShowEmptyState);
-    Assert.Equal("No templates match your search", model.Templates.EmptyHeading);
-    Assert.Null(model.Templates.EmptyDetail);
+    Assert.True(model.Library.Templates.HasNoMatches);
+    Assert.True(model.Library.Templates.ShowEmptyState);
+    Assert.Equal("No templates match your search", model.Library.Templates.EmptyHeading);
+    Assert.Null(model.Library.Templates.EmptyDetail);
 
     model.SearchText = "";
 
     Assert.Equal(2, Names(model).Length);
-    Assert.False(model.Templates.ShowEmptyState);
-    Assert.Equal("Nothing to show here yet", model.Templates.EmptyDetail);
+    Assert.False(model.Library.Templates.ShowEmptyState);
+    Assert.Equal("Nothing to show here yet", model.Library.Templates.EmptyDetail);
   }
 
   [Fact]
@@ -175,7 +175,7 @@ public class LauncherTemplatesTabTests
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
 
-    var missing = NewMain().Templates;
+    var missing = NewMain().Library.Templates;
 
     Assert.True(missing.IsEmpty);
     Assert.True(missing.ShowEmptyState);
@@ -184,7 +184,7 @@ public class LauncherTemplatesTabTests
 
     AddSample(LauncherRig.LauncherDir, "rush", "Coin Rush");
 
-    var empty = NewMain().Templates;
+    var empty = NewMain().Library.Templates;
 
     Assert.True(empty.IsEmpty);
     Assert.Equal($"No templates found in {TemplatesOf(LauncherRig.LauncherDir)}", empty.EmptyHeading);
@@ -196,25 +196,24 @@ public class LauncherTemplatesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
     var readable = NewMain();
-    Assert.False(readable.Templates.IsEmpty);
+    Assert.False(readable.Library.Templates.IsEmpty);
     _rig.Files.FailEnumerate = true;
 
-    var templates = NewMain().Templates;
+    var templates = NewMain().Library.Templates;
 
     Assert.True(templates.IsEmpty);
     Assert.Equal($"Could not read {TemplatesOf(LauncherRig.LauncherDir)}", templates.EmptyHeading);
   }
 
   [Fact]
-  public void TheTemplatesNavCountIsTheNumberOfTemplates()
+  public void TheLibraryNavCountIsTheTemplatesPlusTheSamples()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
 
     var model = NewMain();
 
-    Assert.Equal("2", model.NavItems.Single(item => item.Key == "templates").Count);
-    Assert.Equal("1", model.NavItems.Single(item => item.Key == "samples").Count);
+    Assert.Equal("3", model.NavItems.Single(item => item.Key == "library").Count);
   }
 
   [Fact]
@@ -226,7 +225,7 @@ public class LauncherTemplatesTabTests
 
     model.SearchText = "arcade";
 
-    Assert.Equal("arcade", model.Templates.SearchText);
+    Assert.Equal("arcade", model.Library.Templates.SearchText);
     Assert.Equal(new[] { "Arena" }, Names(model));
   }
 
@@ -238,15 +237,15 @@ public class LauncherTemplatesTabTests
     _rig.AddEngine(LauncherRig.OtherDir);
     AddTemplate(LauncherRig.OtherDir, "only", "Only One", "The sole template", "\"x\"");
     var model = NewMain();
-    Assert.Equal(2, model.Templates.Templates.Count);
-    Assert.Equal("2", model.NavItems.Single(item => item.Key == "templates").Count);
+    Assert.Equal(2, model.Library.Templates.Templates.Count);
+    Assert.Equal("3", model.NavItems.Single(item => item.Key == "library").Count);
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    var card = Assert.Single(model.Templates.Templates);
+    var card = Assert.Single(model.Library.Templates.Templates);
     Assert.Equal("Only One", card.Name);
     Assert.Equal(FolderOf(LauncherRig.OtherDir, "only"), card.FolderPath);
-    Assert.Equal("1", model.NavItems.Single(item => item.Key == "templates").Count);
+    Assert.Equal("1", model.NavItems.Single(item => item.Key == "library").Count);
   }
 
   [Fact]
@@ -263,7 +262,7 @@ public class LauncherTemplatesTabTests
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
     Assert.Equal(new[] { "Arena" }, Names(model));
-    Assert.Equal(FolderOf(LauncherRig.OtherDir, "arena"), model.Templates.VisibleTemplates[0].FolderPath);
+    Assert.Equal(FolderOf(LauncherRig.OtherDir, "arena"), model.Library.Templates.VisibleTemplates[0].FolderPath);
   }
 
   [Fact]
@@ -277,13 +276,13 @@ public class LauncherTemplatesTabTests
     var model = NewMain(catalog: new TemplateCatalog(counting, _rig.Log));
 
     Assert.Equal(1, counting.Enumerations);
-    Assert.Equal(2, model.Templates.Templates.Count);
-    Assert.Single(model.Samples.Samples);
+    Assert.Equal(2, model.Library.Templates.Templates.Count);
+    Assert.Single(model.Library.Samples.Samples);
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
     Assert.Equal(2, counting.Enumerations);
-    Assert.Single(model.Templates.Templates);
+    Assert.Single(model.Library.Templates.Templates);
   }
 
   [Fact]
@@ -299,7 +298,7 @@ public class LauncherTemplatesTabTests
     {
       requested.Add(path);
       return null;
-    }).Templates.Templates;
+    }).Library.Templates.Templates;
 
     Assert.Equal(new[] { thumbnail }, requested.ToArray());
     Assert.False(cards.Single(card => card.Name == "Arena").HasThumbnail);

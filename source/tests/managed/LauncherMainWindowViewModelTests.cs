@@ -30,8 +30,7 @@ public class LauncherMainWindowViewModelTests
 
   private static object TabModel(MainWindowViewModel model, LauncherTab tab) => tab switch
   {
-    LauncherTab.Templates => model.Templates,
-    LauncherTab.Samples => model.Samples,
+    LauncherTab.Library => model.Library,
     LauncherTab.Learn => model.Learn,
     LauncherTab.Settings => model.Settings,
     _ => model.Projects,
@@ -65,8 +64,7 @@ public class LauncherMainWindowViewModelTests
   }
 
   [Theory]
-  [InlineData("templates", LauncherTab.Templates)]
-  [InlineData("samples", LauncherTab.Samples)]
+  [InlineData("library", LauncherTab.Library)]
   [InlineData("learn", LauncherTab.Learn)]
   [InlineData("settings", LauncherTab.Settings)]
   public void SelectingATabShowsItAndUpdatesTheHeaderAndNav(string key, LauncherTab tab)
@@ -100,7 +98,7 @@ public class LauncherMainWindowViewModelTests
   {
     var model = NewMain();
 
-    model.SelectNavCommand.Execute("templates");
+    model.SelectNavCommand.Execute("library");
     model.SelectNavCommand.Execute("bogus");
     Assert.Same(model.Projects, model.CurrentTab);
     Assert.Equal(LauncherTabs.Header(LauncherTab.Projects, true).Title, model.ViewTitle);

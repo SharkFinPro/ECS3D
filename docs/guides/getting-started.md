@@ -28,7 +28,8 @@ Settings page. There you can point the launcher at a different engine folder, ch
 projects and choose whether the editor and its server open a console window. The launcher saves automatically, and
 a text field saves when you leave it.
 
-The sidebar lists Projects, Templates, Samples and Learn. On first run the Projects page has no projects yet
+The sidebar lists Projects, Library and Learn. The Library page holds the templates, the shipped samples and the
+Welcome scene, so it is the place to start a project, run an example or take the tour once you have projects. On first run the Projects page has no projects yet
 and shows three cards instead: Explore the engine, Start a project and Try a sample. Explore the engine opens the
 editor on the built-in Welcome scene. That project is unsaved, so nothing is written until you choose to save it.
 
@@ -36,7 +37,7 @@ editor on the built-in Welcome scene. That project is unsaved, so nothing is wri
 
 The First-Person template is a lit ground with crates, ramps and four spawn points.
 
-1. Open the Templates page and click the First-Person card. (The header's New Project button and the Projects
+1. Open the Library page and click the First-Person card under Start a project. (The header's New Project button and the Projects
    page's New Project card open the same dialog with the Empty 3D template chosen instead.)
 2. In the New project dialog, type a Project name. The Location starts in `ECS3D Projects` under your Documents
    folder; use Browse... to pick another. "Will be created at" shows the folder the dialog will make, and the

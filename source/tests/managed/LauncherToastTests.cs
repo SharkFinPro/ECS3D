@@ -52,7 +52,7 @@ public class LauncherToastTests : NewProjectFixture
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    Assert.Single(model.Templates.Templates);
+    Assert.Single(model.Library.Templates.Templates);
     Assert.False(model.HasToast);
   }
 
@@ -70,7 +70,7 @@ public class LauncherToastTests : NewProjectFixture
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    Assert.Single(model.Templates.Templates);
+    Assert.Single(model.Library.Templates.Templates);
     Assert.Equal(message, model.ToastMessage);
   }
 
@@ -83,7 +83,7 @@ public class LauncherToastTests : NewProjectFixture
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    Assert.Empty(model.Templates.Templates);
+    Assert.Empty(model.Library.Templates.Templates);
     Assert.Contains("No project templates", model.ToastMessage);
   }
 
@@ -172,7 +172,7 @@ public class LauncherToastTests : NewProjectFixture
     Assert.False(model.ShowBannerSettingsButton);
     Assert.Contains(nameof(MainWindowViewModel.ShowBannerSettingsButton), log.Names);
 
-    model.ActiveNav = "samples";
+    model.ActiveNav = "library";
 
     Assert.True(model.ShowBannerSettingsButton);
   }
@@ -189,7 +189,7 @@ public class LauncherToastTests : NewProjectFixture
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    Assert.Single(model.Templates.Templates);
+    Assert.Single(model.Library.Templates.Templates);
     Assert.Contains("newer engine", model.ToastMessage);
   }
 

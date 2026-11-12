@@ -2,8 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="using:ECS3DLauncher.Shell"
         xmlns:projects="using:ECS3DLauncher.Tabs.Projects"
+        xmlns:library="using:ECS3DLauncher.Tabs.Library"
         xmlns:templates="using:ECS3DLauncher.Tabs.Templates"
-        xmlns:samples="using:ECS3DLauncher.Tabs.Samples"
         xmlns:learn="using:ECS3DLauncher.Tabs.Learn"
         xmlns:settings="using:ECS3DLauncher.Tabs.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -282,11 +282,8 @@
                             <DataTemplate DataType="projects:ProjectsViewModel">
                                 <projects:ProjectsView />
                             </DataTemplate>
-                            <DataTemplate DataType="templates:TemplatesViewModel">
-                                <templates:TemplatesView />
-                            </DataTemplate>
-                            <DataTemplate DataType="samples:SamplesViewModel">
-                                <samples:SamplesView />
+                            <DataTemplate DataType="library:LibraryViewModel">
+                                <library:LibraryView />
                             </DataTemplate>
                             <DataTemplate DataType="learn:LearnViewModel">
                                 <learn:LearnView />
