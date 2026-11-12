@@ -11,7 +11,7 @@
 ## Project Overview
 
 - **ECS3DLauncher** is the project-management front door for the ECS3D engine: a dark-themed desktop GUI
-  for browsing recent projects, templates, samples, and learning material — the "hub" you'd open before
+  for browsing recent projects, the template and sample library, and learning material — the "hub" you'd open before
   launching the editor.
 - Built with **Avalonia 12** (cross-platform XAML UI) on **.NET 10**, using the **MVVM** pattern via
   **CommunityToolkit.Mvvm** (`ObservableObject`, `SetProperty`, `RelayCommand`).
@@ -29,9 +29,14 @@
   "Folder not found" and offers Locate (pick the new folder) and Remove instead of Open. The check runs on every
   refresh. Open existing... in the Projects header records a project folder (via its `project.ecs3d`) or a legacy
   `.json` file and opens it. While an editor the launcher started is running, its card shows "In editor"
-  (`RunningEditors`, counted per project; the launcher never kills an editor). The Templates tab is real: each
-  `template` entry of `TemplateCatalog` is a card, gated by `minEngineVersion` and filtered by the header search;
-  clicking one opens the New Project dialog. The header New Project button and the Projects tab's New card open
+  (`RunningEditors`, counted per project; the launcher never kills an editor). The Library tab is real and one flat list (it replaced the
+  separate Templates and Samples tabs; the old `templates` and `samples` keys still open it): the Welcome scene first,
+  bound to the shell's Explore command and always present, then each `template` entry of `TemplateCatalog` (gated by
+  `minEngineVersion`; New project opens the New Project dialog), then one row per `sample`. Every row has a kind pill
+  (Tour, Template, Sample) and the actions of its kind. `LibraryViewModel` builds the rows as `LibraryItem`s from
+  `TemplatesViewModel` and `SamplesViewModel`, which hold the cards, and forwards one header search to both. An empty,
+  unreadable or missing catalog shows its explanation as a notice row where the templates would be, and a search that
+  matches nothing shows one empty state. The header New Project button and the Projects tab's New card open
   it too, with Empty 3D chosen, or the first usable template when that one is missing or needs a newer engine.
   The dialog is an in-window overlay (`NewProject` on the shell, null when closed) that disables everything behind
   it. It takes a name and a location. Name rules apply at once; the disk checks of the location (a missing Windows
@@ -40,8 +45,8 @@
   thread, records it with its template and, if asked, opens it in the editor. Enter in either box presses Create
   project (its `IsDefault`), and does nothing while Create is disabled. A failed copy keeps the dialog open with the
   reason in plain words. Closing the window mid-copy cancels the copy,
-  waits for it to remove its hidden `.<name>.creating` folder, then closes. The Samples tab is real: `TemplateCatalog`
-  reads `<engine>/templates`, each `sample` becomes a card, the header search filters them, and Play runs
+  waits for it to remove its hidden `.<name>.creating` folder, then closes. `TemplateCatalog`
+  reads `<engine>/templates`, and a sample's Play runs
   `ECS3DClient --project <shipped folder>`. Open a copy opens the New Project dialog for that sample
   (named after it, the same `ProjectCreator` copy a template gets, always available) and records the sample's id, so
   the shipped folder is never edited. A multiplayer sample (`players.max` above 1) also has a Host button that
@@ -86,7 +91,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/Program.cs` | Avalonia entry point (`BuildAvaloniaApp`). Minimal — no app logic. |
 | `source/App.axaml{,.cs}` | Application composition: merges `Theme.axaml` + `Icons.axaml` resources and `AppStyles.axaml`; sets the dark `FluentTheme`; creates the single `MainWindow` with its `MainWindowViewModel`. Subscribes the dispatcher, AppDomain and unobserved-task exception handlers and forwards them to `UnhandledErrorPolicy`. Attaches Avalonia DevTools (F12) in DEBUG only. |
 | `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (custom title bar over the native frame; caption button handlers in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands, the New Project dialog host, the Join dialog), `JoinDialogViewModel`, `JoinDialog.axaml{,.cs}` (the dialog view; its address box takes focus through `Dispatcher.Post` after the attach, because a UI Automation peer built mid-attach breaks sibling navigation for the window), `NavItemViewModel`, `HostingViewModel` (the hosted game's session, panel and pill), `HostPanelViewModel`, `ConfirmPromptViewModel`. |
-| `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch or to open the New Project dialog. `Templates/` also holds `NewProjectDialog.axaml{,.cs}` and `NewProjectViewModel` - the dialog's fields, validation and create flow. |
+| `source/Tabs/` | One folder per tab: `Projects`, `Library`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`; `Library` shows the `Templates` and `Samples` view models, which stay in their own folders as its children. The shell owns navigation; a tab only asks the shell to switch or to open the New Project dialog. `Templates/` holds `TemplatesViewModel`, `NewProjectDialog.axaml{,.cs}` and `NewProjectViewModel` - the dialog's fields, validation and create flow. |
 | `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `HostSession`, `IPortProbe`/`TcpPortProbe`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`, `INetworkInfo`/`SystemNetworkInfo`/`LanAddresses`, `JoinTarget`, `RecentProjectsStore` (the launcher side of `recent-projects.json`), `RecentProjectsView` (order, search, missing check and Edited text of that list), `ProjectPathKind` (classifies an Open existing... choice: folder, `project.ecs3d` or legacy `.json`), `RunningEditors` (editors started per project, for the In editor badge), `TemplateCatalog`/`TemplateManifest`, `ProjectCreator` (copies a template into a new project folder: hidden `.<name>.creating` copy, object-uuid rewrite, rename as the commit), `LearnCatalog` (the Learn tab's guides and shipped-content counts), `EngineVersion`, `ProjectNameRules`, `HostingServices` (network info and session factory for hosting), `KillOnCloseJob` (Windows job object that kills its processes when the launcher dies), `SettingsEditor` - the Settings tab's decisions: apply, validate, re-locate and save), `UnhandledErrorPolicy` (logs an unhandled UI-thread exception, asks for the toast and keeps the launcher running; background ones are only logged). No Avalonia types. |
 | `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `SampleCard`, `TemplateCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button, `InvokableMenuItem` - a `MenuItem` that assistive technology can invoke), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
 | `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono), `scene_render.png`, `launcher.ico` and `launcher-mark.png`. The icon is the exe icon (`ApplicationIcon` in the `.csproj`) and `MainWindow`'s `Icon`; the PNG is the custom title bar's top-left mark; the launcher has no other top-level window (its dialogs are overlays), and `LauncherIconTests` pins both. |
@@ -159,8 +164,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - **The New Project dialog's target preview** is one line that trims in the middle (`PathSegmentEllipsis`) with a
   tooltip. Avalonia draws no ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full
   instead.
-- **`EmptyState.Detail`** is the line under the heading; the Templates and Samples view models set it to null while a
-  search has no hits, which hides it.
+- **`EmptyState.Detail`** is the line under the heading. The Library's no-results `EmptyState` sets none; an empty
+  catalog is a notice row built from `TemplatesViewModel.EmptyHeading` and `EmptyDetail`.
 
 ## AI Agent Guidelines
 

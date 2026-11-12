@@ -149,8 +149,8 @@ public class LauncherProjectsTabTests
     Assert.Equal("Recent Projects", model.ViewTitle);
     Assert.Contains(nameof(MainWindowViewModel.ViewTitle), log.Names);
 
-    model.SelectNavCommand.Execute("templates");
-    Assert.Equal("Templates", model.ViewTitle);
+    model.SelectNavCommand.Execute("library");
+    Assert.Equal("Library", model.ViewTitle);
   }
 
   [Fact]
@@ -316,15 +316,15 @@ public class LauncherProjectsTabTests
   }
 
   [Fact]
-  public void BrowseSamplesSwitchesToTheSamplesTab()
+  public void BrowseSamplesSwitchesToTheLibraryTab()
   {
     var model = NewMain();
     Assert.Same(model.Projects, model.CurrentTab);
 
     model.Projects.BrowseSamplesCommand.Execute(null);
 
-    Assert.Same(model.Samples, model.CurrentTab);
-    Assert.Equal("samples", model.ActiveNav);
+    Assert.Same(model.Library, model.CurrentTab);
+    Assert.Equal("library", model.ActiveNav);
   }
 
   private MainWindowViewModel NewMain(List<string> requested)

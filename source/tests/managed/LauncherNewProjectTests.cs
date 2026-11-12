@@ -16,7 +16,7 @@ public class LauncherNewProjectTests : NewProjectFixture
     var model = NewMain();
     Assert.Null(model.NewProject);
 
-    model.Templates.OpenCommand.Execute(model.Templates.Templates.Single(card => card.Id == "first-person"));
+    model.Library.Templates.OpenCommand.Execute(model.Library.Templates.Templates.Single(card => card.Id == "first-person"));
 
     Assert.NotNull(model.NewProject);
     Assert.Equal("First-Person", model.NewProject.TemplateName);
@@ -30,15 +30,15 @@ public class LauncherNewProjectTests : NewProjectFixture
     AddTemplate("first-person", "First-Person");
     AddTemplate("future", "Future", minEngine: "9.0");
     var model = NewMain();
-    var future = model.Templates.Templates.Single(card => card.Id == "future");
-    var usable = model.Templates.Templates.Single(card => card.Id == "first-person");
+    var future = model.Library.Templates.Templates.Single(card => card.Id == "future");
+    var usable = model.Library.Templates.Templates.Single(card => card.Id == "first-person");
 
-    Assert.False(model.Templates.OpenCommand.CanExecute(future));
-    model.Templates.OpenCommand.Execute(future);
+    Assert.False(model.Library.Templates.OpenCommand.CanExecute(future));
+    model.Library.Templates.OpenCommand.Execute(future);
     Assert.Null(model.NewProject);
 
-    Assert.True(model.Templates.OpenCommand.CanExecute(usable));
-    model.Templates.OpenCommand.Execute(usable);
+    Assert.True(model.Library.Templates.OpenCommand.CanExecute(usable));
+    model.Library.Templates.OpenCommand.Execute(usable);
     Assert.NotNull(model.NewProject);
   }
 
@@ -61,12 +61,12 @@ public class LauncherNewProjectTests : NewProjectFixture
     AddTemplate("first-person", "First-Person");
     AddTemplate("empty-3d", "Empty 3D");
     var model = NewMain();
-    model.ActiveNav = "samples";
+    model.ActiveNav = "library";
 
     model.NewProjectCommand.Execute(null);
 
     Assert.Equal("Empty 3D", model.NewProject!.TemplateName);
-    Assert.Equal("samples", model.ActiveNav);
+    Assert.Equal("library", model.ActiveNav);
     Assert.Null(model.ToastMessage);
   }
 
@@ -227,8 +227,8 @@ public class LauncherNewProjectTests : NewProjectFixture
     model.RemoveProjectCommand.Execute(card);
     model.TogglePinCommand.Execute(card);
     model.ExploreCommand.Execute(null);
-    model.SelectNavCommand.Execute("samples");
-    model.Templates.OpenCommand.Execute(model.Templates.Templates.Single(item => item.Id == "first-person"));
+    model.SelectNavCommand.Execute("library");
+    model.Library.Templates.OpenCommand.Execute(model.Library.Templates.Templates.Single(item => item.Id == "first-person"));
 
     Assert.Empty(_runner.Launches);
     Assert.Equal(new[] { "/work/alpha" }, StoredPaths());

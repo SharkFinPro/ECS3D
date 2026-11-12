@@ -352,7 +352,7 @@ public class LauncherProjectsMissingTests
     var model = NewMain();
     Assert.True(model.ShowOpenExisting);
 
-    model.SelectNavCommand.Execute("templates");
+    model.SelectNavCommand.Execute("library");
     Assert.False(model.ShowOpenExisting);
 
     model.SelectNavCommand.Execute("projects");

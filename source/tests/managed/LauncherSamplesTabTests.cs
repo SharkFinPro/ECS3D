@@ -56,7 +56,7 @@ public class LauncherSamplesTabTests
       () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static string[] Names(MainWindowViewModel model) =>
-    model.Samples.VisibleSamples.Select(card => card.Name).ToArray();
+    model.Library.Samples.VisibleSamples.Select(card => card.Name).ToArray();
 
   private sealed class HostRig
   {
@@ -112,14 +112,14 @@ public class LauncherSamplesTabTests
     AddStandardEntries(LauncherRig.LauncherDir);
 
     var model = NewMain();
-    var rush = model.Samples.Samples.Single(card => card.Name == "Coin Rush");
-    var playground = model.Samples.Samples.Single(card => card.Name == "Physics Playground");
+    var rush = model.Library.Samples.Samples.Single(card => card.Name == "Coin Rush");
+    var playground = model.Library.Samples.Samples.Single(card => card.Name == "Physics Playground");
 
     Assert.True(rush.IsMultiplayer);
     Assert.True(model.HostSampleCommand.CanExecute(rush));
     Assert.False(playground.IsMultiplayer);
     Assert.False(model.HostSampleCommand.CanExecute(playground));
-    Assert.Null(model.Samples.HostTooltip);
+    Assert.Null(model.Library.Samples.HostTooltip);
   }
 
   [Fact]
@@ -128,7 +128,7 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
     var host = new HostRig(_rig);
-    var rush = host.Main.Samples.Samples.Single(card => card.Name == "Coin Rush");
+    var rush = host.Main.Library.Samples.Samples.Single(card => card.Name == "Coin Rush");
 
     host.Main.HostSampleCommand.Execute(rush);
 
@@ -146,7 +146,7 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
     var host = new HostRig(_rig);
-    var playground = host.Main.Samples.Samples.Single(card => card.Name == "Physics Playground");
+    var playground = host.Main.Library.Samples.Samples.Single(card => card.Name == "Physics Playground");
 
     host.Main.HostSampleCommand.Execute(playground);
 
@@ -160,10 +160,10 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Server);
     AddStandardEntries(LauncherRig.LauncherDir);
     var host = new HostRig(_rig);
-    var rush = host.Main.Samples.Samples.Single(card => card.Name == "Coin Rush");
+    var rush = host.Main.Library.Samples.Samples.Single(card => card.Name == "Coin Rush");
 
     Assert.False(host.Main.HostSampleCommand.CanExecute(rush));
-    Assert.Contains(EngineExecutableNames.FileName(EngineExecutable.Server, HostOs.Linux), host.Main.Samples.HostTooltip);
+    Assert.Contains(EngineExecutableNames.FileName(EngineExecutable.Server, HostOs.Linux), host.Main.Library.Samples.HostTooltip);
 
     host.Main.HostSampleCommand.Execute(rush);
 
@@ -178,9 +178,9 @@ public class LauncherSamplesTabTests
 
     var model = NewMain();
 
-    Assert.Equal(new[] { "Coin Rush", "Physics Playground" }, model.Samples.Samples.Select(card => card.Name).ToArray());
-    Assert.DoesNotContain(model.Samples.Samples, card => card.Name == "Blank Template");
-    Assert.False(model.Samples.IsEmpty);
+    Assert.Equal(new[] { "Coin Rush", "Physics Playground" }, model.Library.Samples.Samples.Select(card => card.Name).ToArray());
+    Assert.DoesNotContain(model.Library.Samples.Samples, card => card.Name == "Blank Template");
+    Assert.False(model.Library.Samples.IsEmpty);
   }
 
   [Fact]
@@ -189,7 +189,7 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
 
-    var cards = NewMain().Samples.Samples;
+    var cards = NewMain().Library.Samples.Samples;
     var rush = cards.Single(card => card.Name == "Coin Rush");
     var playground = cards.Single(card => card.Name == "Physics Playground");
 
@@ -210,7 +210,7 @@ public class LauncherSamplesTabTests
     AddSample(LauncherRig.LauncherDir, "solo", "Solo", "Alone", "\"a\"", ",\"players\":{\"min\":1,\"max\":1}");
     AddSample(LauncherRig.LauncherDir, "duo", "Duo", "Pair", "\"a\"", ",\"players\":{\"min\":2,\"max\":2}");
 
-    var cards = NewMain().Samples.Samples;
+    var cards = NewMain().Library.Samples.Samples;
 
     Assert.Null(cards.Single(card => card.Name == "Solo").PlayersLabel);
     Assert.Equal("2-2 players", cards.Single(card => card.Name == "Duo").PlayersLabel);
@@ -239,21 +239,21 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
     var model = NewMain();
-    Assert.False(model.Samples.HasNoMatches);
+    Assert.False(model.Library.Samples.HasNoMatches);
 
     model.SearchText = "zzz-nothing";
 
     Assert.Empty(Names(model));
-    Assert.True(model.Samples.HasNoMatches);
-    Assert.True(model.Samples.ShowEmptyState);
-    Assert.Equal("No samples match your search", model.Samples.EmptyHeading);
-    Assert.Null(model.Samples.EmptyDetail);
+    Assert.True(model.Library.Samples.HasNoMatches);
+    Assert.True(model.Library.Samples.ShowEmptyState);
+    Assert.Equal("No samples match your search", model.Library.Samples.EmptyHeading);
+    Assert.Null(model.Library.Samples.EmptyDetail);
 
     model.SearchText = "";
 
     Assert.Equal(2, Names(model).Length);
-    Assert.False(model.Samples.ShowEmptyState);
-    Assert.Equal("Nothing to show here yet", model.Samples.EmptyDetail);
+    Assert.False(model.Library.Samples.ShowEmptyState);
+    Assert.Equal("Nothing to show here yet", model.Library.Samples.EmptyDetail);
   }
 
   [Fact]
@@ -261,7 +261,7 @@ public class LauncherSamplesTabTests
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
 
-    var missing = NewMain().Samples;
+    var missing = NewMain().Library.Samples;
 
     Assert.True(missing.IsEmpty);
     Assert.True(missing.ShowEmptyState);
@@ -272,7 +272,7 @@ public class LauncherSamplesTabTests
 
     Assert.Equal(
       $"No samples found in {TemplatesOf(LauncherRig.LauncherDir)}",
-      NewMain().Samples.EmptyHeading);
+      NewMain().Library.Samples.EmptyHeading);
   }
 
   [Fact]
@@ -282,21 +282,21 @@ public class LauncherSamplesTabTests
     AddStandardEntries(LauncherRig.LauncherDir);
     _rig.Files.FailEnumerate = true;
 
-    var samples = NewMain().Samples;
+    var samples = NewMain().Library.Samples;
 
     Assert.True(samples.IsEmpty);
     Assert.Equal($"Could not read {TemplatesOf(LauncherRig.LauncherDir)}", samples.EmptyHeading);
   }
 
   [Fact]
-  public void TheSamplesNavCountIsTheNumberOfSamples()
+  public void TheLibraryNavCountIncludesTheSamples()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
 
     var model = NewMain();
 
-    Assert.Equal("2", model.NavItems.Single(item => item.Key == "samples").Count);
+    Assert.Equal("3", model.NavItems.Single(item => item.Key == "library").Count);
   }
 
   [Fact]
@@ -308,7 +308,7 @@ public class LauncherSamplesTabTests
 
     model.SearchText = "arcade";
 
-    Assert.Equal("arcade", model.Samples.SearchText);
+    Assert.Equal("arcade", model.Library.Samples.SearchText);
     Assert.Equal(new[] { "Coin Rush" }, Names(model));
   }
 
@@ -318,11 +318,11 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
     var model = NewMain();
-    var card = model.Samples.Samples.Single(item => item.Name == "Coin Rush");
+    var card = model.Library.Samples.Samples.Single(item => item.Name == "Coin Rush");
 
-    Assert.True(model.Samples.PlayCommand.CanExecute(card));
-    Assert.Null(model.Samples.PlayTooltip);
-    model.Samples.PlayCommand.Execute(card);
+    Assert.True(model.Library.Samples.PlayCommand.CanExecute(card));
+    Assert.Null(model.Library.Samples.PlayTooltip);
+    model.Library.Samples.PlayCommand.Execute(card);
 
     var launch = Assert.Single(_runner.Launches);
     Assert.Equal(Path.Combine(Path.GetFullPath(LauncherRig.LauncherDir), "ECS3DClient"), launch.FileName);
@@ -336,11 +336,11 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Client);
     AddStandardEntries(LauncherRig.LauncherDir);
     var model = NewMain();
-    var card = model.Samples.Samples[0];
+    var card = model.Library.Samples.Samples[0];
 
-    Assert.False(model.Samples.PlayCommand.CanExecute(card));
-    Assert.Contains("ECS3DClient", model.Samples.PlayTooltip);
-    model.Samples.PlayCommand.Execute(card);
+    Assert.False(model.Library.Samples.PlayCommand.CanExecute(card));
+    Assert.Contains("ECS3DClient", model.Library.Samples.PlayTooltip);
+    model.Library.Samples.PlayCommand.Execute(card);
 
     Assert.Empty(_runner.Launches);
   }
@@ -353,16 +353,16 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.OtherDir);
     AddSample(LauncherRig.OtherDir, "only", "Only One", "The sole sample", "\"x\"");
     var model = NewMain();
-    Assert.Equal(2, model.Samples.Samples.Count);
-    Assert.NotNull(model.Samples.PlayTooltip);
+    Assert.Equal(2, model.Library.Samples.Samples.Count);
+    Assert.NotNull(model.Library.Samples.PlayTooltip);
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    Assert.Equal(new[] { "Only One" }, model.Samples.Samples.Select(card => card.Name).ToArray());
-    Assert.Equal("1", model.NavItems.Single(item => item.Key == "samples").Count);
-    Assert.Null(model.Samples.PlayTooltip);
-    Assert.True(model.Samples.PlayCommand.CanExecute(model.Samples.Samples[0]));
-    model.Samples.PlayCommand.Execute(model.Samples.Samples[0]);
+    Assert.Equal(new[] { "Only One" }, model.Library.Samples.Samples.Select(card => card.Name).ToArray());
+    Assert.Equal("1", model.NavItems.Single(item => item.Key == "library").Count);
+    Assert.Null(model.Library.Samples.PlayTooltip);
+    Assert.True(model.Library.Samples.PlayCommand.CanExecute(model.Library.Samples.Samples[0]));
+    model.Library.Samples.PlayCommand.Execute(model.Library.Samples.Samples[0]);
     Assert.Equal(
       new[] { "--project", FolderOf(LauncherRig.OtherDir, "only") },
       Assert.Single(_runner.Launches).Arguments.ToArray());
@@ -381,7 +381,7 @@ public class LauncherSamplesTabTests
     {
       requested.Add(path);
       return null;
-    }).Samples.Samples;
+    }).Library.Samples.Samples;
 
     Assert.Equal(new[] { thumbnail }, requested.ToArray());
     Assert.False(cards.Single(card => card.Name == "Coin Rush").HasThumbnail);
@@ -396,18 +396,18 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.OtherDir);
     AddSample(LauncherRig.OtherDir, "rush", "Coin Rush", "Grab every coin", "\"Arcade\"", ",\"players\":{\"min\":1,\"max\":4}");
     var model = NewMain();
-    Assert.False(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single(card => card.IsMultiplayer)));
-    Assert.NotNull(model.Samples.HostTooltip);
+    Assert.False(model.HostSampleCommand.CanExecute(model.Library.Samples.Samples.Single(card => card.IsMultiplayer)));
+    Assert.NotNull(model.Library.Samples.HostTooltip);
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
-    Assert.True(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single()));
-    Assert.Null(model.Samples.HostTooltip);
+    Assert.True(model.HostSampleCommand.CanExecute(model.Library.Samples.Samples.Single()));
+    Assert.Null(model.Library.Samples.HostTooltip);
 
     model.Settings.EngineFolder = LauncherRig.LauncherDir;
 
-    Assert.False(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single(card => card.IsMultiplayer)));
-    Assert.NotNull(model.Samples.HostTooltip);
+    Assert.False(model.HostSampleCommand.CanExecute(model.Library.Samples.Samples.Single(card => card.IsMultiplayer)));
+    Assert.NotNull(model.Library.Samples.HostTooltip);
   }
 
   [Fact]
@@ -417,7 +417,7 @@ public class LauncherSamplesTabTests
     _rig.AddEngine(LauncherRig.OtherDir);
     var model = NewMain();
     var changes = 0;
-    model.Samples.PlayCommand.CanExecuteChanged += (_, _) => changes++;
+    model.Library.Samples.PlayCommand.CanExecuteChanged += (_, _) => changes++;
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
@@ -438,8 +438,8 @@ public class LauncherSamplesTabTests
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
     Assert.Equal(new[] { "Coin Rush" }, Names(model));
-    Assert.Equal(FolderOf(LauncherRig.OtherDir, "rush"), model.Samples.VisibleSamples[0].FolderPath);
-    Assert.Equal(2, model.Samples.Samples.Count);
+    Assert.Equal(FolderOf(LauncherRig.OtherDir, "rush"), model.Library.Samples.VisibleSamples[0].FolderPath);
+    Assert.Equal(2, model.Library.Samples.Samples.Count);
   }
 
   [Fact]
@@ -518,11 +518,11 @@ public class LauncherSamplesTabTests
   public void OpenACopyOpensNewProjectNamedAfterTheSample()
   {
     var model = NewCopyMain(new MemoryTreeFileSystem());
-    var card = model.Samples.Samples.Single(item => item.Name == "Coin Rush");
+    var card = model.Library.Samples.Samples.Single(item => item.Name == "Coin Rush");
 
     Assert.Equal("rush", card.Id);
-    Assert.True(model.Samples.OpenCopyCommand.CanExecute(card));
-    model.Samples.OpenCopyCommand.Execute(card);
+    Assert.True(model.Library.Samples.OpenCopyCommand.CanExecute(card));
+    model.Library.Samples.OpenCopyCommand.Execute(card);
 
     Assert.NotNull(model.NewProject);
     Assert.Equal("Coin Rush", model.NewProject.ProjectName);
@@ -533,14 +533,14 @@ public class LauncherSamplesTabTests
   public void OpenACopyDoesNothingForNoCardOrWhileTheDialogIsOpen()
   {
     var model = NewCopyMain(new MemoryTreeFileSystem());
-    model.Samples.OpenCopyCommand.Execute(null);
+    model.Library.Samples.OpenCopyCommand.Execute(null);
     Assert.Null(model.NewProject);
 
-    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    model.Library.Samples.OpenCopyCommand.Execute(model.Library.Samples.Samples.Single(item => item.Name == "Coin Rush"));
     var first = model.NewProject;
     Assert.NotNull(first);
 
-    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Physics Playground"));
+    model.Library.Samples.OpenCopyCommand.Execute(model.Library.Samples.Samples.Single(item => item.Name == "Physics Playground"));
 
     Assert.Same(first, model.NewProject);
     Assert.Equal("Coin Rush", model.NewProject!.ProjectName);
@@ -550,7 +550,7 @@ public class LauncherSamplesTabTests
   public void CreatingACopyWithTheEditorBoxCheckedLaunchesTheEditorAndRecordsTheSample()
   {
     var model = NewCopyMain(new MemoryTreeFileSystem());
-    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    model.Library.Samples.OpenCopyCommand.Execute(model.Library.Samples.Samples.Single(item => item.Name == "Coin Rush"));
     Assert.True(model.NewProject!.OpenInEditor);
 
     model.NewProject.CreateCommand.Execute(null);
@@ -572,7 +572,7 @@ public class LauncherSamplesTabTests
     var shipped = FolderOf(LauncherRig.LauncherDir, "rush");
     var before = files.EnumerateFiles(shipped).OrderBy(path => path).ToArray();
     Assert.NotEmpty(before);
-    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    model.Library.Samples.OpenCopyCommand.Execute(model.Library.Samples.Samples.Single(item => item.Name == "Coin Rush"));
     model.NewProject!.OpenInEditor = false;
 
     model.NewProject.CreateCommand.Execute(null);

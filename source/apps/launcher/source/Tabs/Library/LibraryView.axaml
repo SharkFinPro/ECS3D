@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:ECS3DLauncher.Shared.Models"
+             xmlns:controls="using:ECS3DLauncher.Shared.Controls"
+             xmlns:local="using:ECS3DLauncher.Tabs.Library"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dd="using:ECS3DLauncher.Shared"
+             mc:Ignorable="d"
+             d:DesignWidth="960" d:DesignHeight="720"
+             d:DataContext="{x:Static dd:DesignData.Library}"
+             x:Class="ECS3DLauncher.Tabs.Library.LibraryView"
+             x:DataType="local:LibraryViewModel">
+
+    <Panel>
+
+        <controls:EmptyState IsVisible="{Binding ShowNoResults}"
+                             IconData="{StaticResource IconLayers}" Heading="{Binding NoResultsHeading}" />
+
+        <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:LibraryItem">
+                    <Panel>
+
+                        <!-- The catalog's empty explanation, where the templates would be -->
+                        <Border IsVisible="{Binding IsNotice}" Classes="card" Margin="0,0,0,14" CornerRadius="11"
+                                Padding="20,16">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                           LineHeight="18" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Description}" FontSize="12.5" LineHeight="18"
+                                           TextWrapping="Wrap" Foreground="{StaticResource T3Brush}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- One row for every kind: thumbnail left, details, then the actions for its kind -->
+                        <Border IsVisible="{Binding IsRow}" Classes="card" Margin="0,0,0,14" CornerRadius="11"
+                                ClipToBounds="True" AutomationProperties.Name="{Binding Name}">
+                            <Grid ColumnDefinitions="260,*">
+                                <Panel Grid.Column="0" MinHeight="150" Background="{StaticResource InsetBrush}">
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                           IsVisible="{Binding HasThumbnail}" />
+                                    <Panel IsVisible="{Binding !HasThumbnail}">
+                                        <Border Background="{StaticResource ThumbStripes}" />
+                                        <Border Background="{StaticResource AccDim}" />
+                                        <Path Classes="icon" Width="30" Height="30"
+                                              Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              IsVisible="{Binding IsTemplate}"
+                                              Data="{StaticResource IconLayers}" />
+                                        <Path Classes="icon" Width="30" Height="30"
+                                              Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              IsVisible="{Binding !IsTemplate}"
+                                              Data="{StaticResource IconSparkle}" />
+                                    </Panel>
+                                </Panel>
+                                <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" Margin="20,16">
+                                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="16"
+                                                   FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <Border Grid.Column="1" Margin="10,0,0,0" Padding="9,3" CornerRadius="10"
+                                                VerticalAlignment="Center" Background="{StaticResource AccDim}">
+                                            <TextBlock Text="{Binding KindLabel}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AccBrush}" />
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Grid.Row="1" Text="{Binding Description}" FontSize="12.5"
+                                               Margin="0,6,0,0" LineHeight="18" TextWrapping="Wrap"
+                                               Foreground="{StaticResource T2Brush}" />
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,12,0,0"
+                                                  VerticalAlignment="Top">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
+                                                        Background="{StaticResource InsetBrush}"
+                                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                                    <TextBlock Text="{Binding}" FontSize="11"
+                                                               Foreground="{StaticResource T2Brush}" />
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,10,0,0">
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10"
+                                                    VerticalAlignment="Center">
+                                            <Border IsVisible="{Binding HasPlayers}" Padding="9,3" CornerRadius="10"
+                                                    Background="{StaticResource AccDim}">
+                                                <TextBlock Text="{Binding PlayersLabel}" FontSize="11"
+                                                           FontWeight="SemiBold" Foreground="{StaticResource AccBrush}" />
+                                            </Border>
+                                            <TextBlock IsVisible="{Binding NeedsNewerEngine}" Text="Needs a newer engine"
+                                                       FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource DangerBrush}" />
+                                        </StackPanel>
+
+                                        <!-- Sample actions -->
+                                        <Button Grid.Column="1" IsVisible="{Binding IsMultiplayerSample}"
+                                                Classes="secondary" Theme="{StaticResource BareButton}"
+                                                HorizontalAlignment="Right" Margin="0,0,8,0"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.HostCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding Sample}"
+                                                ToolTip.Tip="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.HostTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True">
+                                            <TextBlock Text="Host" FontSize="13" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" />
+                                        </Button>
+                                        <Button Grid.Column="2" IsVisible="{Binding IsSample}"
+                                                Classes="secondary" Theme="{StaticResource BareButton}"
+                                                Margin="0,0,8,0"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.OpenCopyCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding Sample}"
+                                                Content="Open a copy" />
+
+                                        <!-- The primary action of each kind shares the last column -->
+                                        <Button Grid.Column="3" IsVisible="{Binding IsSample}"
+                                                Classes="cta" Theme="{StaticResource BareButton}"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.PlayCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding Sample}"
+                                                ToolTip.Tip="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Samples.PlayTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True">
+                                            <TextBlock Text="Play" FontSize="13" FontWeight="Bold"
+                                                       Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                                        </Button>
+                                        <Button Grid.Column="3" IsVisible="{Binding IsTemplate}"
+                                                Classes="cta" Theme="{StaticResource BareButton}"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).Templates.OpenCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding Template}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='New project from {0}'}">
+                                            <TextBlock Text="New project" FontSize="13" FontWeight="Bold"
+                                                       Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                                        </Button>
+                                        <Button Grid.Column="3" IsVisible="{Binding IsTour}"
+                                                Classes="cta" Theme="{StaticResource BareButton}"
+                                                Command="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).ExploreCommand, FallbackValue={x:Null}}"
+                                                AutomationProperties.Name="Open Welcome scene"
+                                                ToolTip.Tip="{Binding $parent[local:LibraryView].((local:LibraryViewModel)DataContext).ExploreTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True">
+                                            <TextBlock Text="Open" FontSize="13" FontWeight="Bold"
+                                                       Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+    </Panel>
+</UserControl>

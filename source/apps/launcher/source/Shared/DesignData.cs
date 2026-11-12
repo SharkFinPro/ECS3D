@@ -4,6 +4,7 @@ using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
 using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Tabs.Learn;
+using ECS3DLauncher.Tabs.Library;
 using ECS3DLauncher.Tabs.Projects;
 using ECS3DLauncher.Tabs.Samples;
 using ECS3DLauncher.Tabs.Templates;
@@ -36,7 +37,10 @@ public static class DesignData
             },
         ]);
 
-    public static TemplatesViewModel Templates { get; } = NewTemplates();
+    public static LibraryViewModel Library { get; } = NewLibrary();
+
+    private static LibraryViewModel NewLibrary() =>
+        new(NewTemplates(), NewSamples(), new RelayCommand(() => { }), null);
 
     private static TemplatesViewModel NewTemplates()
     {
@@ -63,8 +67,6 @@ public static class DesignData
             []));
         return model;
     }
-
-    public static SamplesViewModel Samples { get; } = NewSamples();
 
     private static SamplesViewModel NewSamples()
     {

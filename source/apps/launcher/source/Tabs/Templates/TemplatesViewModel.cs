@@ -9,7 +9,7 @@ using ECS3DLauncher.Shared.Models;
 
 namespace ECS3DLauncher.Tabs.Templates;
 
-// State for the Templates tab: one card per shipped template, narrowed by the header search.
+// The Library tab's templates: one card per shipped template, narrowed by the header search.
 public sealed class TemplatesViewModel : ObservableObject
 {
     private readonly string _launcherVersion;
