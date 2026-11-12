@@ -162,8 +162,9 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - **The New Project dialog's target preview** is one line that trims in the middle (`PathSegmentEllipsis`) with a
   tooltip. Avalonia draws no ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full
   instead.
-- **`EmptyState.Detail`** is the line under the heading; the Templates and Samples view models set it to null while a
-  search has no hits, which hides it. The Library view shows its own `EmptyState` (no detail) when nothing matches anywhere.
+- **`EmptyState.Detail`** is the line under the heading; the Library view shows it only for an empty
+  catalog (`TemplatesViewModel.EmptyDetail`). A section with no search hits is hidden instead, and when nothing matches
+  anywhere the Library shows its own `EmptyState` with no detail.
 
 ## AI Agent Guidelines
 

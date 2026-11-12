@@ -15,7 +15,7 @@
     <StackPanel Spacing="30">
 
         <controls:EmptyState IsVisible="{Binding ShowNoResults}"
-                             IconData="{StaticResource IconLayers}" Heading="No results for your search" />
+                             IconData="{StaticResource IconLayers}" Heading="{Binding NoResultsHeading}" />
 
         <!-- START A PROJECT -->
         <StackPanel IsVisible="{Binding ShowTemplatesSection}" Spacing="14">
@@ -100,7 +100,7 @@
             </StackPanel>
 
             <!-- The Welcome scene has no shipped thumbnail or folder, so it is a fixed row beside the sample rows. -->
-            <Border IsVisible="{Binding ShowWelcome}" Classes="card" Margin="0,0,0,14" CornerRadius="11" ClipToBounds="True">
+            <Border IsVisible="{Binding ShowWelcome}" Classes="card" CornerRadius="11" ClipToBounds="True">
                 <Grid ColumnDefinitions="260,*">
                     <Panel Grid.Column="0" MinHeight="150" Background="{StaticResource InsetBrush}">
                         <Border Background="{StaticResource ThumbStripes}" />
@@ -111,16 +111,16 @@
                               Data="{StaticResource IconSparkle}" />
                     </Panel>
                     <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" Margin="20,16">
-                        <TextBlock Grid.Row="0" Text="Welcome scene" FontSize="16" FontWeight="SemiBold"
+                        <TextBlock Grid.Row="0" Text="{Binding WelcomeName}" FontSize="16" FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Row="1" Text="The engine's built-in tour. Open it in the editor and look around before making anything."
+                        <TextBlock Grid.Row="1" Text="{Binding WelcomeDescription}"
                                    FontSize="12.5" Margin="0,6,0,0" LineHeight="18" TextWrapping="Wrap"
                                    Foreground="{StaticResource T2Brush}" />
                         <WrapPanel Grid.Row="2" Margin="0,12,0,0" VerticalAlignment="Top">
                             <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
                                     Background="{StaticResource InsetBrush}"
                                     BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                                <TextBlock Text="tour" FontSize="11" Foreground="{StaticResource T2Brush}" />
+                                <TextBlock Text="{Binding WelcomeTag}" FontSize="11" Foreground="{StaticResource T2Brush}" />
                             </Border>
                         </WrapPanel>
                         <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,10,0,0">

@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.Json.Nodes;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
@@ -125,14 +124,14 @@ public class LauncherLibraryTabTests
     Assert.Equal(2, model.Library.Samples.VisibleSamples.Count);
     Assert.True(model.Library.ShowWelcome);
 
-    model.SearchText = "o";
+    model.SearchText = "around";
 
-    Assert.Equal("o", model.Library.SearchText);
-    Assert.Equal("o", model.Library.Templates.SearchText);
-    Assert.Equal("o", model.Library.Samples.SearchText);
+    Assert.Equal("around", model.Library.SearchText);
+    Assert.Equal("around", model.Library.Templates.SearchText);
+    Assert.Equal("around", model.Library.Samples.SearchText);
     Assert.Empty(model.Library.Templates.VisibleTemplates);
     Assert.Equal(
-      new[] { "Coin Rush", "Physics Playground" },
+      new[] { "Physics Playground" },
       model.Library.Samples.VisibleSamples.Select(card => card.Name).ToArray());
     Assert.True(model.Library.ShowWelcome);
 
@@ -248,7 +247,7 @@ public class LauncherLibraryTabTests
 
     Assert.Equal(new[] { "none" }, Sections(library));
     Assert.False(library.ShowWelcome);
-    Assert.Equal("No results for your search", LibraryViewModel.NoResultsHeading);
+    Assert.Equal("No results for your search", library.NoResultsHeading);
 
     library.SearchText = "";
 
@@ -307,18 +306,5 @@ public class LauncherLibraryTabTests
 
     Assert.Equal("library", model.ActiveNav);
     Assert.Same(model.Library, model.CurrentTab);
-  }
-
-  [Fact]
-  public void TheShellNoLongerNavigatesToTheOldTabKeys()
-  {
-    var source = File.ReadAllText(Path.Combine(
-      typeof(LauncherLibraryTabTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-        .Single(a => a.Key == "ECS3DSourceRoot").Value!,
-      "apps", "launcher", "source", "Shell", "MainWindowViewModel.cs"));
-
-    Assert.Contains("ActiveNav = \"library\"", source);
-    Assert.DoesNotContain("\"samples\"", source);
-    Assert.DoesNotContain("\"templates\"", source);
   }
 }

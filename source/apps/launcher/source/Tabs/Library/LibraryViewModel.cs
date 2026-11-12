@@ -10,17 +10,24 @@ namespace ECS3DLauncher.Tabs.Library;
 // State for the Library tab: template cards, then the Welcome scene and the sample rows, all narrowed by one search.
 public sealed class LibraryViewModel : ObservableObject
 {
-    public const string WelcomeName = "Welcome scene";
-    public const string WelcomeDescription =
+    private const string WelcomeNameText = "Welcome scene";
+    private const string WelcomeDescriptionText =
         "The engine's built-in tour. Open it in the editor and look around before making anything.";
-    public const string WelcomeTag = "tour";
+    private const string WelcomeTagText = "tour";
 
-    // Not shown on the row; it lets the search find the entry by the Explore wording used elsewhere.
+    // Not shown on the row: the Projects first-run card and Learn call this entry Explore, so a search for that finds it.
     private const string WelcomeKeyword = "explore";
-    public const string NoResultsHeading = "No results for your search";
 
     private string _searchText = "";
     private string? _exploreTooltip;
+
+    public string WelcomeName => WelcomeNameText;
+
+    public string WelcomeDescription => WelcomeDescriptionText;
+
+    public string WelcomeTag => WelcomeTagText;
+
+    public string NoResultsHeading => "No results for your search";
 
     public TemplatesViewModel Templates { get; }
 
@@ -50,7 +57,7 @@ public sealed class LibraryViewModel : ObservableObject
         }
     }
 
-    public bool ShowWelcome => SearchMatch.Matches(_searchText, WelcomeName, WelcomeDescription, WelcomeTag, WelcomeKeyword);
+    public bool ShowWelcome => SearchMatch.Matches(_searchText, WelcomeNameText, WelcomeDescriptionText, WelcomeTagText, WelcomeKeyword);
 
     // An empty catalog keeps the section for its explanation, unless a search is narrowing the page.
     public bool ShowTemplatesSection =>
