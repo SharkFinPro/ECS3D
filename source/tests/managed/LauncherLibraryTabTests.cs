@@ -3,13 +3,14 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using ECS3DLauncher.Services;
+using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Shell;
 using ECS3DLauncher.Tabs.Library;
 using Xunit;
 
 namespace ECS3DManagedTests;
 
-// The Library tab replaced the Templates and Samples tabs: one page, one search, and a Welcome scene entry.
+// The Library tab replaced the Templates and Samples tabs: one flat list, one search, and a Welcome scene entry.
 public class LauncherLibraryTabTests
 {
   private readonly LauncherRig _rig = new();
@@ -17,7 +18,7 @@ public class LauncherLibraryTabTests
 
   private static string TemplatesOf(string engineFolder) => Path.Combine(Path.GetFullPath(engineFolder), "templates");
 
-  private void AddEntry(string id, string name, string category, string description, string tags)
+  private void AddEntry(string id, string name, string category, string description, string tags, string extra = "")
   {
     var folder = Path.Combine(TemplatesOf(LauncherRig.LauncherDir), id);
     _rig.Files.AddDirectory(TemplatesOf(LauncherRig.LauncherDir));
@@ -26,7 +27,7 @@ public class LauncherLibraryTabTests
       Path.Combine(folder, "template.json"),
       "{\"id\":\"" + id + "\",\"name\":\"" + name + "\",\"description\":\"" + description + "\",\"category\":\""
       + category + "\",\"tags\":[" + tags + "],\"thumbnail\":\"thumbnail.png\",\"entryScene\":\"Main\","
-      + "\"minEngineVersion\":\"0.0.1\"}");
+      + "\"minEngineVersion\":\"0.0.1\"" + extra + "}");
   }
 
   // Two templates (Arena, Blank) and two samples (Coin Rush, Physics Playground), each searchable by its own word.
@@ -34,7 +35,7 @@ public class LauncherLibraryTabTests
   {
     AddEntry("arena", "Arena", "template", "A small battle field", "\"arcade\"");
     AddEntry("blank", "Blank", "template", "Start empty", "\"starter\"");
-    AddEntry("rush", "Coin Rush", "sample", "Grab every coin", "\"racing\"");
+    AddEntry("rush", "Coin Rush", "sample", "Grab every coin", "\"racing\"", ",\"players\":{\"min\":1,\"max\":4}");
     AddEntry("playground", "Physics Playground", "sample", "Push boxes around", "\"physics\"");
   }
 
@@ -57,13 +58,11 @@ public class LauncherLibraryTabTests
       action => action(),
       () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
-  private static string[] Sections(LibraryViewModel library) =>
-    new[]
-    {
-      library.ShowTemplatesSection ? "templates" : null,
-      library.ShowExamplesSection ? "examples" : null,
-      library.ShowNoResults ? "none" : null,
-    }.OfType<string>().ToArray();
+  private static LibraryItemKind[] Kinds(LibraryViewModel library) => library.Items.Select(item => item.Kind).ToArray();
+
+  private static string[] Names(LibraryViewModel library) => library.Items.Select(item => item.Name).ToArray();
+
+  private static bool HasWelcome(LibraryViewModel library) => Kinds(library).Contains(LibraryItemKind.Tour);
 
   [Theory]
   [InlineData("library")]
@@ -101,6 +100,7 @@ public class LauncherLibraryTabTests
     Assert.Equal(2, model.Library.Templates.Templates.Count);
     Assert.Equal(2, model.Library.Samples.Samples.Count);
     Assert.Equal("4", model.NavItems.Single(item => item.Key == "library").Count);
+    Assert.Equal(5, model.Library.Items.Count);
   }
 
   [Fact]
@@ -111,7 +111,105 @@ public class LauncherLibraryTabTests
     var model = NewMain();
 
     Assert.Equal("0", model.NavItems.Single(item => item.Key == "library").Count);
-    Assert.True(model.Library.ShowWelcome);
+    Assert.True(HasWelcome(model.Library));
+  }
+
+  [Fact]
+  public void TheListIsOneFlatSequenceOfWelcomeThenTemplatesThenSamples()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddCatalog();
+
+    var library = NewMain().Library;
+
+    Assert.Equal(
+      new[]
+      {
+        LibraryItemKind.Tour, LibraryItemKind.Template, LibraryItemKind.Template, LibraryItemKind.Sample,
+        LibraryItemKind.Sample,
+      },
+      Kinds(library));
+    Assert.Equal(
+      new[] { "Welcome scene", "Arena", "Blank", "Coin Rush", "Physics Playground" },
+      Names(library));
+  }
+
+  [Fact]
+  public void EveryRowCarriesAKindPill()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddCatalog();
+
+    var items = NewMain().Library.Items;
+
+    Assert.Equal(
+      new[] { "Tour", "Template", "Template", "Sample", "Sample" },
+      items.Select(item => item.KindLabel).ToArray());
+    Assert.All(items, item => Assert.False(string.IsNullOrEmpty(item.KindLabel)));
+  }
+
+  [Fact]
+  public void EachKindIsWiredToItsOwnCard()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddCatalog();
+    var library = NewMain().Library;
+
+    var tour = library.Items.Single(item => item.IsTour);
+    var template = library.Items.First(item => item.IsTemplate);
+    var sample = library.Items.Single(item => item.Name == "Coin Rush");
+    var solo = library.Items.Single(item => item.Name == "Physics Playground");
+
+    Assert.Null(tour.Template);
+    Assert.Null(tour.Sample);
+    Assert.Same(library.Templates.Templates.First(), template.Template);
+    Assert.Null(template.Sample);
+    Assert.Same(library.Samples.Samples.First(card => card.Name == "Coin Rush"), sample.Sample);
+    Assert.Null(sample.Template);
+    Assert.True(sample.IsMultiplayerSample);
+    Assert.False(solo.IsMultiplayerSample);
+    Assert.False(template.IsMultiplayerSample);
+    Assert.Equal("1-4 players", sample.PlayersLabel);
+    Assert.True(sample.HasPlayers);
+    Assert.False(template.HasPlayers);
+  }
+
+  [Fact]
+  public void ATemplateRowOpensTheNewProjectDialogForItsTemplate()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddCatalog();
+    var model = NewMain();
+    var template = model.Library.Items.Single(item => item.Name == "Blank");
+    Assert.Null(model.NewProject);
+
+    Assert.True(model.Library.Templates.OpenCommand.CanExecute(template.Template));
+    model.Library.Templates.OpenCommand.Execute(template.Template);
+
+    Assert.Equal("Blank", model.NewProject!.TemplateName);
+  }
+
+  [Fact]
+  public void ASampleRowPlaysAndOpensACopyOfItsSample()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddCatalog();
+    var model = NewMain();
+    var sample = model.Library.Items.Single(item => item.Name == "Coin Rush");
+
+    Assert.Null(model.NewProject);
+    Assert.Empty(_runner.Launches);
+
+    model.Library.Samples.PlayCommand.Execute(sample.Sample);
+
+    var launch = Assert.Single(_runner.Launches);
+    Assert.Equal(Path.Combine(LauncherRig.LauncherDir, "ECS3DClient"), launch.FileName);
+    Assert.Contains(sample.Sample!.FolderPath, launch.Arguments);
+    Assert.Null(model.NewProject);
+
+    model.Library.Samples.OpenCopyCommand.Execute(sample.Sample);
+
+    Assert.NotNull(model.NewProject);
   }
 
   [Fact]
@@ -120,26 +218,22 @@ public class LauncherLibraryTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddCatalog();
     var model = NewMain();
-    Assert.Equal(2, model.Library.Templates.VisibleTemplates.Count);
-    Assert.Equal(2, model.Library.Samples.VisibleSamples.Count);
-    Assert.True(model.Library.ShowWelcome);
+    Assert.Equal(5, model.Library.Items.Count);
 
     model.SearchText = "around";
 
     Assert.Equal("around", model.Library.SearchText);
     Assert.Equal("around", model.Library.Templates.SearchText);
     Assert.Equal("around", model.Library.Samples.SearchText);
-    Assert.Empty(model.Library.Templates.VisibleTemplates);
-    Assert.Equal(
-      new[] { "Physics Playground" },
-      model.Library.Samples.VisibleSamples.Select(card => card.Name).ToArray());
-    Assert.True(model.Library.ShowWelcome);
+    Assert.Equal(new[] { "Welcome scene", "Physics Playground" }, Names(model.Library));
 
     model.SearchText = "arcade";
 
-    Assert.Equal(new[] { "Arena" }, model.Library.Templates.VisibleTemplates.Select(card => card.Name).ToArray());
-    Assert.Empty(model.Library.Samples.VisibleSamples);
-    Assert.False(model.Library.ShowWelcome);
+    Assert.Equal(new[] { "Arena" }, Names(model.Library));
+
+    model.SearchText = "";
+
+    Assert.Equal(5, model.Library.Items.Count);
   }
 
   [Theory]
@@ -152,18 +246,17 @@ public class LauncherLibraryTabTests
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddCatalog();
     var model = NewMain();
-    Assert.Equal(2, model.Library.Templates.VisibleTemplates.Count);
+    Assert.Equal(5, model.Library.Items.Count);
 
     model.SearchText = query;
 
-    Assert.True(model.Library.ShowWelcome);
+    Assert.Equal(new[] { LibraryItemKind.Tour }, Kinds(model.Library));
     Assert.Empty(model.Library.Templates.VisibleTemplates);
     Assert.Empty(model.Library.Samples.VisibleSamples);
-    Assert.Equal(new[] { "examples" }, Sections(model.Library));
   }
 
   [Fact]
-  public void TheWelcomeEntryIsPresentWithAnEmptyCatalog()
+  public void TheWelcomeEntryIsPresentWithAnEmptyCatalogAndItsExplanationTakesTheTemplatesPlace()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
 
@@ -171,9 +264,25 @@ public class LauncherLibraryTabTests
 
     Assert.True(library.Templates.IsEmpty);
     Assert.True(library.Samples.IsEmpty);
-    Assert.True(library.ShowWelcome);
-    Assert.Equal(new[] { "templates", "examples" }, Sections(library));
-    Assert.Equal($"No templates folder found at {TemplatesOf(LauncherRig.LauncherDir)}", library.Templates.EmptyHeading);
+    Assert.Equal(new[] { LibraryItemKind.Tour, LibraryItemKind.Notice }, Kinds(library));
+    var notice = library.Items[1];
+    Assert.Equal($"No templates folder found at {TemplatesOf(LauncherRig.LauncherDir)}", notice.Name);
+    Assert.True(notice.IsNotice);
+    Assert.False(notice.IsRow);
+    Assert.True(library.Items[0].IsRow);
+  }
+
+  [Fact]
+  public void TheNoticeSitsBetweenTheWelcomeEntryAndTheSamplesWhenOnlyTemplatesAreMissing()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddEntry("rush", "Coin Rush", "sample", "Grab every coin", "\"racing\"");
+
+    var library = NewMain().Library;
+
+    Assert.Equal(
+      new[] { LibraryItemKind.Tour, LibraryItemKind.Notice, LibraryItemKind.Sample }, Kinds(library));
+    Assert.Equal($"No templates found in {TemplatesOf(LauncherRig.LauncherDir)}", library.Items[1].Name);
   }
 
   [Fact]
@@ -185,7 +294,7 @@ public class LauncherLibraryTabTests
     var model = NewMain();
 
     Assert.False(model.Projects.IsEmpty);
-    Assert.True(model.Library.ShowWelcome);
+    Assert.True(HasWelcome(model.Library));
     Assert.Same(model.ExploreCommand, model.Library.ExploreCommand);
     Assert.True(model.Library.ExploreCommand.CanExecute(null));
 
@@ -209,34 +318,31 @@ public class LauncherLibraryTabTests
 
     Assert.True(model.Library.ExploreCommand.CanExecute(null));
     Assert.Null(model.Library.ExploreTooltip);
-    Assert.True(model.Library.ShowWelcome);
+    Assert.True(HasWelcome(model.Library));
   }
 
   [Fact]
-  public void ASectionHidesWhenNoneOfItsItemsMatch()
+  public void ARowDisappearsWhenItDoesNotMatchAndReturnsWhenTheSearchClears()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddCatalog();
     var library = NewMain().Library;
-    Assert.Equal(new[] { "templates", "examples" }, Sections(library));
-
-    library.SearchText = "arcade";
-
-    Assert.Equal(new[] { "templates" }, Sections(library));
-    Assert.False(library.ShowWelcome);
+    Assert.Contains("Arena", Names(library));
 
     library.SearchText = "racing";
 
-    Assert.Equal(new[] { "examples" }, Sections(library));
-    Assert.False(library.ShowWelcome);
+    Assert.Equal(new[] { "Coin Rush" }, Names(library));
+    Assert.DoesNotContain("Arena", Names(library));
+    Assert.False(HasWelcome(library));
 
     library.SearchText = "";
 
-    Assert.Equal(new[] { "templates", "examples" }, Sections(library));
+    Assert.Equal(5, library.Items.Count);
+    Assert.Contains("Arena", Names(library));
   }
 
   [Fact]
-  public void NoMatchAnywhereShowsOneEmptyStateAndHidesEverySection()
+  public void NoMatchAnywhereShowsOneEmptyStateAndNoRows()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddCatalog();
@@ -245,8 +351,8 @@ public class LauncherLibraryTabTests
 
     library.SearchText = "zzz-nothing";
 
-    Assert.Equal(new[] { "none" }, Sections(library));
-    Assert.False(library.ShowWelcome);
+    Assert.Empty(library.Items);
+    Assert.True(library.ShowNoResults);
     Assert.Equal("No results for your search", library.NoResultsHeading);
 
     library.SearchText = "";
@@ -255,19 +361,20 @@ public class LauncherLibraryTabTests
   }
 
   [Fact]
-  public void AnEmptyCatalogKeepsItsExplanationUntilASearchNarrowsThePage()
+  public void AnEmptyCatalogKeepsItsExplanationUntilASearchNarrowsTheList()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     var library = NewMain().Library;
-    Assert.True(library.ShowTemplatesSection);
+    Assert.Equal(new[] { LibraryItemKind.Tour, LibraryItemKind.Notice }, Kinds(library));
 
     library.SearchText = "welcome";
 
-    Assert.Equal(new[] { "examples" }, Sections(library));
+    Assert.Equal(new[] { LibraryItemKind.Tour }, Kinds(library));
 
     library.SearchText = "zzz-nothing";
 
-    Assert.Equal(new[] { "none" }, Sections(library));
+    Assert.Empty(library.Items);
+    Assert.True(library.ShowNoResults);
   }
 
   [Fact]
@@ -278,14 +385,14 @@ public class LauncherLibraryTabTests
     _rig.AddEngine(LauncherRig.OtherDir);
     var model = NewMain();
     model.SearchText = "arcade";
-    Assert.Single(model.Library.Templates.VisibleTemplates);
+    Assert.Equal(new[] { "Arena" }, Names(model.Library));
 
     model.Settings.EngineFolder = LauncherRig.OtherDir;
 
     Assert.Empty(model.Library.Templates.Templates);
     Assert.Empty(model.Library.Samples.Samples);
     Assert.Equal("0", model.NavItems.Single(item => item.Key == "library").Count);
-    Assert.Equal(new[] { "none" }, Sections(model.Library));
+    Assert.Empty(model.Library.Items);
   }
 
   [Fact]

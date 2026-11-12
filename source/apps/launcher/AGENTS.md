@@ -29,12 +29,14 @@
   "Folder not found" and offers Locate (pick the new folder) and Remove instead of Open. The check runs on every
   refresh. Open existing... in the Projects header records a project folder (via its `project.ecs3d`) or a legacy
   `.json` file and opens it. While an editor the launcher started is running, its card shows "In editor"
-  (`RunningEditors`, counted per project; the launcher never kills an editor). The Library tab is real and one page (it replaced the
-  separate Templates and Samples tabs; the old `templates` and `samples` keys still open it). Its "Start a project" section
-  shows each `template` entry of `TemplateCatalog` as a card, gated by `minEngineVersion`; clicking one opens the New
-  Project dialog. Its "Examples" section opens with the Welcome scene row, always present and bound to the shell's
-  Explore command, then one row per `sample`. One header search filters all three (`LibraryViewModel` forwards it to
-  `TemplatesViewModel` and `SamplesViewModel`), a section with no hits hides, and no hits anywhere shows one empty state. The header New Project button and the Projects tab's New card open
+  (`RunningEditors`, counted per project; the launcher never kills an editor). The Library tab is real and one flat list (it replaced the
+  separate Templates and Samples tabs; the old `templates` and `samples` keys still open it): the Welcome scene first,
+  bound to the shell's Explore command and always present, then each `template` entry of `TemplateCatalog` (gated by
+  `minEngineVersion`; New project opens the New Project dialog), then one row per `sample`. Every row has a kind pill
+  (Tour, Template, Sample) and the actions of its kind. `LibraryViewModel` builds the rows as `LibraryItem`s from
+  `TemplatesViewModel` and `SamplesViewModel`, which hold the cards, and forwards one header search to both. An empty,
+  unreadable or missing catalog shows its explanation as a notice row where the templates would be, and a search that
+  matches nothing shows one empty state. The header New Project button and the Projects tab's New card open
   it too, with Empty 3D chosen, or the first usable template when that one is missing or needs a newer engine.
   The dialog is an in-window overlay (`NewProject` on the shell, null when closed) that disables everything behind
   it. It takes a name and a location. Name rules apply at once; the disk checks of the location (a missing Windows
@@ -162,9 +164,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - **The New Project dialog's target preview** is one line that trims in the middle (`PathSegmentEllipsis`) with a
   tooltip. Avalonia draws no ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full
   instead.
-- **`EmptyState.Detail`** is the line under the heading; the Library view shows it only for an empty
-  catalog (`TemplatesViewModel.EmptyDetail`). A section with no search hits is hidden instead, and when nothing matches
-  anywhere the Library shows its own `EmptyState` with no detail.
+- **`EmptyState.Detail`** is the line under the heading. The Library's no-results `EmptyState` sets none; an empty
+  catalog is a notice row built from `TemplatesViewModel.EmptyHeading` and `EmptyDetail`.
 
 ## AI Agent Guidelines
 

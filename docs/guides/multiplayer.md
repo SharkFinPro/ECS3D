@@ -18,7 +18,7 @@ seconds, the highest score wins, and the next round starts after a short break. 
 text, so each score is a pillar in the player's color beside their spawn point, and the scores are also written
 to the log.
 
-From the launcher, open the Library page and click Host on the Coin Rush row under Examples. The launcher starts
+From the launcher, open the Library page and click Host on the Coin Rush row. The launcher starts
 `ECS3DServer` on the sample's folder, opens a game window that joins it as your player, and opens the hosting
 panel. (Host appears only on samples for more than one player. Open a copy makes your own editable project from a
 sample, and a project's card menu has Host a game... for any project you have created.) If a game is already being
