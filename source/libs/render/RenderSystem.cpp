@@ -136,9 +136,13 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
       if (renderObject)
       {
-        renderObject->setPosition(transform->getPosition());
-        renderObject->setScale(transform->getScale());
-        renderObject->setOrientationEuler(transform->getRotation());
+        if (assetCache.claimTransformPush(uuid, transform->getWorldUpdateID()))
+        {
+          renderObject->setPosition(transform->getPosition());
+          renderObject->setScale(transform->getScale());
+          renderObject->setOrientationEuler(transform->getRotation());
+        }
+
         renderObject->setReflectivity(modelRenderer->getReflectivity());
 
         // pointer is stable: unordered_map keeps element references valid across rehash.

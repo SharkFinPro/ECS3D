@@ -286,6 +286,7 @@ add_executable(${PROJECT_NAME}
   MissingAssetFallbackTest.cpp
   RenderComponentsTest.cpp
   LiveObjectTrackerTest.cpp
+  TransformPushGateTest.cpp
   TransportLogTest.cpp
   SharedAssetLoadsTest.cpp
   SmokeTest.cpp

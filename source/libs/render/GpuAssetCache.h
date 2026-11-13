@@ -4,7 +4,9 @@
 #include "MissingAssetFallback.h"
 #include <array>
 #include "SharedAssetLoads.h"
+#include "TransformPushGate.h"
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <objects/components/collisions/ConvexHull.h>
 #include <memory>
@@ -61,6 +63,11 @@ public:
                                                      const uuids::uuid& textureUUID,
                                                      const uuids::uuid& specularMapUUID);
 
+  // True when the owner's render object needs its transform pushed this frame: the world update id differs from
+  // the one last pushed, or nothing was pushed yet. The memory lives with the cached render object, so a rebuilt
+  // or replaced render object is always pushed. Also true for an owner with no cached render object.
+  [[nodiscard]] bool claimTransformPush(const uuids::uuid& ownerUUID, uint64_t worldUpdateID);
+
   // A debug render object for a collider's shape (a path-loaded cube/sphere/cylinder, white, no specular),
   // keyed per collider OWNER and part, and rebuilt if the model path changes. A shape drawn from several
   // meshes (a capsule's cylinder and two end spheres) asks for one part index per mesh; the rest use part 0.
@@ -103,6 +110,7 @@ private:
     bool usedPlaceholder = false;
     // What the uuids resolved to, before placeholders, so a placeholder entry notices a real asset arriving.
     RenderAssets<vke::Model, vke::Texture2D> resolved;
+    TransformPushGate transformPush;
   };
 
   using GpuRenderAssets = RenderAssets<vke::Model, vke::Texture2D>;

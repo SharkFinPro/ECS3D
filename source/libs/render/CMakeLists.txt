@@ -5,6 +5,7 @@ add_library(${PROJECT_NAME}
   RenderSystem.h
   RenderComponents.h
   LiveObjectTracker.h
+  TransformPushGate.h
   GpuAssetCache.cpp
   GpuAssetCache.h
   Billboard.cpp
