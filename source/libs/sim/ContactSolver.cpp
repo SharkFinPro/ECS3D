@@ -361,6 +361,14 @@ namespace {
 
     void addConstraint(const ContactPair& pair, const ContactSolver::Cache& previous)
     {
+      // A contact with no direction has nothing to resolve, and its normal would carry NaN into every body of the
+      // island.
+      const float mtvLength = glm::length(pair.contact.minimumTranslationVector);
+      if (!(mtvLength > 0.0f) || !std::isfinite(mtvLength))
+      {
+        return;
+      }
+
       Constraint constraint;
       constraint.pair = &pair;
       constraint.body = indexOf(pair.body);

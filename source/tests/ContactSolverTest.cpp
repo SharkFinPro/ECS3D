@@ -16,9 +16,12 @@
 #include <glm/geometric.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <cmath>
 #include <memory>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -272,6 +275,128 @@ TEST(ContactSolver, ARestingContactStopsTheBodyAndKeepsItsImpulseForTheNextTick)
   {
     EXPECT_NEAR(again[0].points[i].normalImpulse, resolved[0].points[i].normalImpulse, 1e-3f);
   }
+}
+
+TEST(ContactSolver, AContactWithNoDirectionLeavesItsBodiesAlone)
+{
+  const auto scene = makeScene();
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 5, 1, 5 });
+  const auto groundCollider = fixtures::addBoxCollider(ground);
+  const auto box = addObject(scene, "Box", { 0, 2, 0 });
+  const auto collider = fixtures::addBoxCollider(box);
+  const auto body = addBody(box, false);
+
+  ContactPair pair{ body.get(), nullptr, collider.get(), groundCollider.get(), {} };
+  pair.contact.point = { 0, 1, 0 };
+
+  const ContactSolver::Cache empty;
+  for (const auto mtv : { glm::vec3(0), glm::vec3(std::nanf(""), 0, 0) })
+  {
+    body->setVelocity({ 0, -0.1f, 0 });
+    pair.contact.minimumTranslationVector = mtv;
+    std::vector<ContactSolver::CachedContact> resolved;
+    ContactSolver::solve(std::span<const ContactPair>(&pair, 1), empty, resolved, serverTick);
+
+    EXPECT_TRUE(resolved.empty());
+    fixtures::expectNear("velocity", body->getVelocity(), { 0, -0.1f, 0 }, 1e-6f);
+    fixtures::expectNear("position", positionOf(box), { 0, 2, 0 }, 1e-6f);
+  }
+
+  // Positive control: given a direction, the same contact stops the body.
+  pair.contact.minimumTranslationVector = { 0, 0.001f, 0 };
+  std::vector<ContactSolver::CachedContact> resolved;
+  ContactSolver::solve(std::span<const ContactPair>(&pair, 1), empty, resolved, serverTick);
+  EXPECT_EQ(resolved.size(), 1u);
+  EXPECT_NEAR(body->getVelocity().y, 0.0f, 1e-5f);
+}
+
+TEST(ContactSolver, ABodyLiftedOutOfTheFloorIsStillStoppedByTheWallItIsAboutToMeet)
+{
+  // A box set a fifth of a unit into the slab, deeper than any landing leaves it, and sliding at half a unit a tick
+  // toward a wall it reaches in the second tick.
+  World world;
+  const auto wall = addObject(world.scene, "Wall", { 2.5f, 2, 0 }, { 0.5f, 2, 5 });
+  fixtures::addBoxCollider(wall);
+  const auto box = world.addBox("Box", { 0.7f, 1.3f, 0 }, glm::vec3(0.5f));
+  bodyOf(box)->setFriction(0.0f);
+  bodyOf(box)->setVelocity({ 0.5f, 0, 0 });
+
+  world.run(1);
+  EXPECT_GT(positionOf(box).y, 1.4f);
+
+  world.run(1);
+  EXPECT_LT(positionOf(box).x + 0.5f, 2.0f + 0.001f);
+}
+
+TEST(ContactSolver, BodiesClosingTooSlowlyToBounceMoveOnTogether)
+{
+  const auto collide = [](const float speed)
+  {
+    const auto scene = makeScene();
+    const auto first = addObject(scene, "First", { -2, 0, 0 });
+    fixtures::addSphereCollider(first, 1.0f);
+    const auto firstBody = addBody(first, false);
+    firstBody->setVelocity({ speed, 0, 0 });
+
+    const auto second = addObject(scene, "Second", { 2, 0, 0 });
+    fixtures::addSphereCollider(second, 1.0f);
+    const auto secondBody = addBody(second, false);
+
+    CollisionSystem collisions;
+    for (int tick = 0; tick < 300; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+      collisions.fixedUpdate(*scene.objectManager, serverTick);
+    }
+
+    return std::pair{ firstBody->getVelocity().x, secondBody->getVelocity().x };
+  };
+
+  // One unit a second, under the two at which a pair bounces: the two share the speed.
+  const float slow = 1.0f * serverTick;
+  const auto [first, second] = collide(slow);
+  EXPECT_NEAR(first, 0.5f * slow, 1e-4f);
+  EXPECT_NEAR(second, 0.5f * slow, 1e-4f);
+
+  // Positive control: at three units a second they trade it.
+  const float fast = 3.0f * serverTick;
+  const auto [stopped, launched] = collide(fast);
+  EXPECT_NEAR(stopped, 0.0f, 1e-4f);
+  EXPECT_NEAR(launched, fast, 1e-4f);
+}
+
+TEST(ContactSolver, FrictionSlowsASlidingBodyByItsCoefficientTimesItsWeightAndNeverReversesIt)
+{
+  World world;
+  const auto box = world.addBox("Box", { 0, 2, 0 });
+  bodyOf(box)->setFriction(0.5f);
+  bodyOf(box)->setVelocity({ 0.2f, 0, 0 });
+
+  world.run(5);
+  EXPECT_NEAR(bodyOf(box)->getVelocity().x, 0.2f - 5.0f * 0.5f * gravityStep, 0.01f);
+
+  world.run(100);
+  EXPECT_NEAR(bodyOf(box)->getVelocity().x, 0.0f, 1e-5f);
+  EXPECT_GT(positionOf(box).x, 0.0f);
+}
+
+TEST(ContactSolver, ALandingIsAnsweredTheSameMirrored)
+{
+  // The pair's order in the solver follows the boxes' order along x, which mirroring flips.
+  const auto land = [](const float side)
+  {
+    World world;
+    world.addBox("Resting", { 0, 2, 0 });
+    const auto landing = world.addBox("Landing", { side * 0.6f, 4.5f, 0 });
+    world.run(100);
+
+    return std::pair{ positionOf(landing), transformOf(landing)->getRotation() };
+  };
+
+  const auto [right, rightRotation] = land(1.0f);
+  const auto [left, leftRotation] = land(-1.0f);
+  fixtures::expectNear("position", left, { -right.x, right.y, right.z }, 1e-3f);
+  EXPECT_NEAR(leftRotation.z, -rightRotation.z, 0.05f);
 }
 
 TEST(ContactSolver, AHitOnARestingBodyBouncesLessTheMoreItPressesIntoTheSupport)

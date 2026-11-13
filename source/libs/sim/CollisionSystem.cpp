@@ -332,6 +332,7 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
     // the pair it becomes once this tick's motion presses it together.
     auto contact = hit.approaching ? std::nullopt
                                    : collisions::findContact(*first.collider, *second.collider, witness);
+    glm::vec3 askedWith(0);
     if (hit.approaching)
     {
       for (const auto& sweep : approachSweeps(first, second))
@@ -339,6 +340,7 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
         if (!contact && sweep != glm::vec3(0))
         {
           contact = collisions::findContact(*first.collider, *second.collider, sweep);
+          askedWith = sweep;
         }
       }
     }
@@ -351,13 +353,15 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
       const float distance = glm::length(apart);
       if (distance > 0.0f)
       {
-        contact = collisions::findContact(*first.collider, *second.collider, apart * (press / distance));
+        askedWith = apart * (press / distance);
+        contact = collisions::findContact(*first.collider, *second.collider, askedWith);
       }
     }
 
     if (contact)
     {
-      pairs.push_back({ first.body.get(), second.body.get(), first.collider.get(), second.collider.get(), *contact });
+      pairs.push_back({ first.body.get(), second.body.get(), first.collider.get(), second.collider.get(), *contact,
+                        askedWith });
     }
   }
 
@@ -539,7 +543,11 @@ void CollisionSystem::liftOutOfStatic(std::vector<ContactPair>& pairs)
         continue;
       }
 
-      if (const auto contact = collisions::findContact(*pairs[i].collider, *pairs[i].other))
+      // Asked the way it was found, so a pair that was about to meet is still stopped where it meets.
+      const auto contact = pairs[i].sweep == glm::vec3(0)
+                             ? collisions::findContact(*pairs[i].collider, *pairs[i].other)
+                             : collisions::findContact(*pairs[i].collider, *pairs[i].other, pairs[i].sweep);
+      if (contact)
       {
         pairs[i].contact = *contact;
       }

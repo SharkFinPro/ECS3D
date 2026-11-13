@@ -48,7 +48,7 @@ standing still, since a body about to be stopped by its own support no longer mo
 
 An island is the bodies linked by dynamic-vs-dynamic hits or by one body's hierarchy; static colliders link
 nothing. A trigger pair is recorded for events and gets no response. Each island's pairs are ordered by the lower
-of their two bounding-box minY values, lowest first, so the solver's passes run up and down a stack and the order
+of their two bounding-box minY values (the bounds stretched by the tick's sweep), lowest first, so the solver's passes run up and down a stack and the order
 does not depend on where along x a body sits. With OpenMP the narrow phase runs per sweep edge and the solve per
 island, each island on one thread, so results match a serial pass.
 
@@ -57,7 +57,8 @@ the sweep saw the pair: from the overlap witness for a pair that overlaps, and w
 order above, for one that approaches. A pair that only touches has no depth to measure, so it is asked for pressed
 0.02 together along the line between the colliders. `liftOutOfStatic` then moves any body deeper than
 `collisions::contactMargin` into static geometry out to half that margin, deepest contact first, and measures that
-body's other contacts again.
+body's other contacts again, each with the sweep or press it was found with, so a pair about to meet is still
+stopped where it meets.
 
 ### The contact
 
@@ -88,7 +89,8 @@ take some back. Static geometry is one body with no inverse mass. In order:
    ones so hands its speed along and sends the last one off. Only a point that touches, or reaches the other shape
    this tick, bounces.
 2. **Warm start.** Each pair starts from the impulses it ended the last tick with (`CollisionSystem`'s contact
-   cache, keyed by the collider pair), where the normal still agrees and a point is still about where it was.
+   cache, keyed by the collider pair), where the normal still agrees and a point is still about where it was. A
+contact of one point both ticks keeps its impulse wherever the point has moved.
 3. **Velocity passes.** 32 passes over the constraints, alternating direction. Each resists rolling, then holds
    sliding, then stops the points closing, so the normal impulses have the last word. A point short of the other
    shape may close the distance it has left this tick and no more.
@@ -144,8 +146,9 @@ the corners where their edges cross.
 
 `collisions/SupportFaces.h` returns a box's or convex mesh's world-space planar faces (outward normal,
 counter-clockwise corners, center; coplanar hull triangles merged in the hull's own space) with `faceToward` and
-`clampToFace` queries. `collisions::warmContactCaches` fills a static collider's lazy caches before the islands
-read it in parallel.
+`clampToFace` queries. The contact response does not use them. `collisions::warmContactCaches` fills a static
+collider's lazy caches (box world frame, hull face normals and support faces) before the islands read it in
+parallel.
 
 `queries/HullQueries` answers raycasts and sphere overlaps against a convex hull exactly, orienting each face away
 from the hull center so a mirrored transform still works. The library operates on `ECS3DData` via accessors.

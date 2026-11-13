@@ -362,8 +362,12 @@ namespace collisions {
     std::vector<ManifoldPoint> contacts;
     for (const auto& point : largestSpread(candidates, faceNormal, std::max<size_t>(maxPoints, 1)))
     {
+      // largestSpread returns copies of candidate points, so a match is exact unless a point is NaN.
       const auto chosen = std::ranges::find(candidates, point, &Candidate::point);
-      contacts.push_back({ point, chosen->depth });
+      if (chosen != candidates.end())
+      {
+        contacts.push_back({ point, chosen->depth });
+      }
     }
 
     return contacts;

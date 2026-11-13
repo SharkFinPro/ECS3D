@@ -21,6 +21,8 @@ struct ContactPair {
   Collider* collider = nullptr;
   Collider* other = nullptr;
   collisions::Contact contact;
+  // The displacement of collider the contact was asked for with, or zero when it was measured as the pair stands.
+  glm::vec3 sweep{ 0 };
 };
 
 // Resolves the contacts of one island together: every contact point is a constraint on the relative velocity of
