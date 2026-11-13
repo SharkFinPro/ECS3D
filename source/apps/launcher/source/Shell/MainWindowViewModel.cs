@@ -301,7 +301,7 @@ public class MainWindowViewModel : ObservableObject
             post,
             now,
             new PhysicalFileSystem(),
-            work => _ = Task.Run(work))
+            work => Task.Run(work).Forget())
     {
     }
 
@@ -441,11 +441,11 @@ public class MainWindowViewModel : ObservableObject
         PlayProjectCommand = new RelayCommand<Project>(PlayProject, project => _actions.Play.Available && IsPresent(project));
         CloseOverlayCommand = new RelayCommand(CloseOverlay);
         HostProjectCommand = new RelayCommand<Project>(HostProject, project => _actions.Host.Available && IsPresent(project));
-        ShowInFolderCommand = new RelayCommand<Project>(project => _ = ShowInFolderAsync(project), IsPresent);
+        ShowInFolderCommand = new RelayCommand<Project>(project => ShowInFolderAsync(project).Forget(), IsPresent);
         TogglePinCommand = new RelayCommand<Project>(TogglePin);
         RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
-        LocateProjectCommand = new RelayCommand<Project>(project => _ = LocateAsync(project));
-        OpenExistingCommand = new RelayCommand(() => _ = OpenExistingAsync());
+        LocateProjectCommand = new RelayCommand<Project>(project => LocateAsync(project).Forget());
+        OpenExistingCommand = new RelayCommand(() => OpenExistingAsync().Forget());
         PlaySampleCommand = new RelayCommand<SampleCard>(PlaySample, _ => _actions.Play.Available);
         HostSampleCommand = new RelayCommand<SampleCard>(
             HostSample, card => _actions.Host.Available && card is { IsMultiplayer: true });
@@ -453,7 +453,7 @@ public class MainWindowViewModel : ObservableObject
         OpenJoinCommand = new RelayCommand(OpenJoin, () => _actions.Play.Available);
         CloseJoinCommand = new RelayCommand(() => JoinDialog = null);
         DismissToastCommand = new RelayCommand(DismissToast);
-        OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
+        OpenLogsCommand = new RelayCommand(() => OpenLogsAsync().Forget(), () => HasToastLog);
 
         Projects = new ProjectsViewModel(
             OpenDefaultNewProject,
@@ -484,7 +484,7 @@ public class MainWindowViewModel : ObservableObject
         ReloadCatalog(_engine);
 
         Learn = new LearnViewModel(
-            url => _ = OpenUrlAsync(url),
+            url => OpenUrlAsync(url).Forget(),
             () => ActiveNav = "library",
             ExploreCommand,
             _actions.Explore.Tooltip);
@@ -643,7 +643,7 @@ public class MainWindowViewModel : ObservableObject
     {
         if (IsInteractive)
         {
-            _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
+            _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions()).Forget();
         }
     }
 
@@ -904,7 +904,7 @@ public class MainWindowViewModel : ObservableObject
     {
         if (IsInteractive && project is { IsRealCard: true } && _actions.Play.Available)
         {
-            _ = _coordinator.PlayProjectAsync(project.Path);
+            _coordinator.PlayProjectAsync(project.Path).Forget();
         }
     }
 
@@ -957,7 +957,7 @@ public class MainWindowViewModel : ObservableObject
     private void OpenRecorded(string path, string? template = null)
     {
         RecordOpened(path, template);
-        _ = _coordinator.OpenProjectAsync(path, _settings.Current.ToLaunchOptions());
+        _coordinator.OpenProjectAsync(path, _settings.Current.ToLaunchOptions()).Forget();
     }
 
     private void RecordOpened(string path, string? template) =>
@@ -1128,7 +1128,7 @@ public class MainWindowViewModel : ObservableObject
     {
         if (IsInteractive && card is not null && _actions.Play.Available)
         {
-            _ = _coordinator.PlayProjectAsync(card.FolderPath);
+            _coordinator.PlayProjectAsync(card.FolderPath).Forget();
         }
     }
 
@@ -1156,7 +1156,7 @@ public class MainWindowViewModel : ObservableObject
         ApplyUpdate(_settings.SetLastJoin(target));
         Settings.RefreshLastJoin();
         JoinDialog = null;
-        _ = _coordinator.JoinGameAsync(target.Address, target.Port);
+        _coordinator.JoinGameAsync(target.Address, target.Port).Forget();
     }
 
     // Notices come from background continuations, so they are handed to the UI thread explicitly.
@@ -1200,7 +1200,7 @@ public class MainWindowViewModel : ObservableObject
 
         var timer = new CancellationTokenSource();
         _toastTimer = timer;
-        _ = DismissAfterTimeoutAsync(_toastGeneration, timer.Token);
+        DismissAfterTimeoutAsync(_toastGeneration, timer.Token).Forget();
     }
 
     // Bumping the generation retires any timer already running.

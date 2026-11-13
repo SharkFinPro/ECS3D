@@ -28,8 +28,8 @@ public sealed class SettingsViewModel : ObservableObject
         _engineFolder = editor.EngineFolderText;
         _projectsFolder = editor.Current.ProjectsDirectory;
         _portText = editor.Current.HostPort.ToString(CultureInfo.InvariantCulture);
-        BrowseEngineCommand = new RelayCommand(() => _ = BrowseAsync(PickEngineFolder, path => EngineFolder = path));
-        BrowseProjectsCommand = new RelayCommand(() => _ = BrowseAsync(PickProjectsFolder, path => ProjectsFolder = path));
+        BrowseEngineCommand = new RelayCommand(() => BrowseAsync(PickEngineFolder, path => EngineFolder = path).Forget());
+        BrowseProjectsCommand = new RelayCommand(() => BrowseAsync(PickProjectsFolder, path => ProjectsFolder = path).Forget());
         ResetEngineCommand = new RelayCommand(() => EngineFolder = "");
     }
 

@@ -230,7 +230,7 @@ public sealed class NewProjectViewModel : ObservableObject
         _projectName = ProjectNameRules.UniqueDefault(template.Manifest.Name, IsTaken);
         CreateCommand = new RelayCommand(Create, () => CanCreate);
         CancelCommand = new RelayCommand(Cancel, () => !IsBusy);
-        BrowseCommand = new RelayCommand(() => _ = BrowseAsync(), () => !IsBusy);
+        BrowseCommand = new RelayCommand(() => BrowseAsync().Forget(), () => !IsBusy);
         Evaluate();
     }
 
@@ -258,7 +258,7 @@ public sealed class NewProjectViewModel : ObservableObject
         TargetPreview = CheckingText;
         IsChecking = true;
         NotifyCanCreate();
-        _ = CheckAsync(generation, location, _projectName, NameError is null);
+        CheckAsync(generation, location, _projectName, NameError is null).Forget();
     }
 
     private void NotifyCanCreate()

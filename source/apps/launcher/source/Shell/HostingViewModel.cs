@@ -109,7 +109,7 @@ public class HostingViewModel : ObservableObject
                 {
                     if (confirmed)
                     {
-                        _ = ReplaceAsync(folder, name);
+                        ReplaceAsync(folder, name).Forget();
                     }
                 });
             return;
@@ -232,7 +232,7 @@ public class HostingViewModel : ObservableObject
     // Set by the window, which owns the clipboard. A copy that fails is reported on the toast.
     public Func<string, Task<bool>>? CopyToClipboard { get; set; }
 
-    private void Copy(string text) => _ = CopyAsync(text);
+    private void Copy(string text) => CopyAsync(text).Forget();
 
     private async Task CopyAsync(string text)
     {

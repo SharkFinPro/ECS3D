@@ -34,9 +34,16 @@ public sealed class UnhandledErrorPolicy
     public Action<LaunchNotice>? ShowNotice { get; set; }
 
     // Returns whether the exception was handled, i.e. whether the launcher keeps running.
-    public bool HandleUiException(Exception exception)
+    public bool HandleUiException(Exception exception) =>
+        Handle("Unhandled exception on the UI thread", exception, "the launcher is closing");
+
+    // For a fire-and-forget command task that faulted; the caller is on the UI thread.
+    public bool HandleTaskException(Exception exception) =>
+        Handle("Unhandled exception in a command task", exception, "further notices are suppressed");
+
+    private bool Handle(string description, Exception exception, string stormOutcome)
     {
-        LogError($"Unhandled exception on the UI thread: {exception}");
+        LogError($"{description}: {exception}");
         var show = ShowNotice;
         if (exception is OutOfMemoryException || show is null)
         {
@@ -51,7 +58,7 @@ public sealed class UnhandledErrorPolicy
 
         if (IsStorm())
         {
-            LogError("Too many unhandled exceptions in a row; the launcher is closing.");
+            LogError($"Too many unhandled exceptions in a row; {stormOutcome}.");
             return false;
         }
 
