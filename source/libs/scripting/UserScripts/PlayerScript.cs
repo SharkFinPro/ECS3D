@@ -88,8 +88,10 @@ public class PlayerScript : ScriptBase
         {
             // Replaces the vertical velocity rather than adding to it, so every jump leaves at the same speed
             // whatever the player was moving at when it pressed the key.
-            steer.Y = m_jumpSpeed * dt - velocity.Y;
-            m_rising = true;
+            // A support already rising faster than a jump leaves carries the player on untouched, and must not lock
+            // out the next jump while it does.
+            steer.Y = MathF.Max(m_jumpSpeed * dt - velocity.Y, 0.0f);
+            m_rising = steer.Y > 0.0f;
         }
 
         rigidBody.applyForce(steer, transform.getPosition(), ForceMode.VelocityChange);

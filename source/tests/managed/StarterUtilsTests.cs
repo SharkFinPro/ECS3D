@@ -435,6 +435,22 @@ public unsafe class StarterUtilsTests : IDisposable
   }
 
   [Fact]
+  public void PlayerScript_AJumpFromASupportRisingFasterThanAJumpDoesNotLockOutTheNext()
+  {
+    var player = NewPlayer();
+    FakeNatives.Set("RigidBody.getVelocity", new Vector3(0f, 2.0f, 0f));
+    Press(Key.SPACE);
+
+    Step(player);
+    Assert.Equal(0f, LastSteer().Y, 1e-5f);
+
+    // Still carried up by the support: the held key may jump again as soon as the support slows.
+    FakeNatives.Set("RigidBody.getVelocity", new Vector3(0f, 1.0f, 0f));
+    Step(player);
+    Assert.Equal(0.5f, LastSteer().Y, 1e-4f);
+  }
+
+  [Fact]
   public void PlayerScript_UnknownForwardKeyWarnsOnceAndLeavesForwardUnbound()
   {
     var player = NewPlayer();
