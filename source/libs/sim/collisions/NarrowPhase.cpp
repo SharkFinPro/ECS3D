@@ -1,7 +1,9 @@
 #include "NarrowPhase.h"
+#include "FaceManifold.h"
 #include "Polytope.h"
 #include "Simplex.h"
 #include "Support.h"
+#include <limits>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
@@ -229,6 +231,8 @@ namespace collisions {
       {
         contact.points[0] = points[0];
         contact.points[1] = points[1];
+        contact.depths[0] = contact.depth();
+        contact.depths[1] = contact.depth();
         contact.pointCount = 2;
       }
     }
@@ -400,6 +404,16 @@ namespace collisions {
     return length(minimumTranslationVector);
   }
 
+  float Contact::overlap() const
+  {
+    return depth() - advance;
+  }
+
+  float Contact::depthAt(const std::size_t index) const
+  {
+    return pointCount > 1 ? depths[index] : overlap();
+  }
+
   glm::vec3 Contact::normal() const
   {
     return normalize(minimumTranslationVector);
@@ -410,6 +424,64 @@ namespace collisions {
     return findContact(collider, other, std::nullopt);
   }
 
+  namespace {
+    // Round shapes about to meet: the closest points now say where and along what, and the sweep whether the
+    // distance between them closes within it.
+    std::optional<Contact> findRoundApproach(Collider& collider, Collider& other, const glm::vec3& sweep)
+    {
+      const auto first = roundShapeOf(collider);
+      const auto second = roundShapeOf(other);
+      const auto [pointA, pointB] = closestPointsBetweenSegments(first, second);
+
+      const auto delta = pointB - pointA;
+      const float distance = glm::length(delta);
+      if (!(distance > 0.0f))
+      {
+        return std::nullopt;
+      }
+
+      const auto toward = delta / distance;
+      const float gap = distance - first.radius - second.radius;
+      const float closing = glm::dot(sweep, toward);
+      if (gap < 0.0f || closing <= gap)
+      {
+        return std::nullopt;
+      }
+
+      Contact contact{ -toward * (closing - gap), pointA + toward * (first.radius + gap * 0.5f) };
+      contact.advance = closing;
+
+      return contact;
+    }
+
+    std::optional<Contact> findSweptContact(Collider& collider, Collider& other,
+                                            const std::optional<OverlapWitness>& witness, const glm::vec3& sweep);
+  }
+
+  std::optional<Contact> findContact(Collider& collider, Collider& other, const glm::vec3& sweep)
+  {
+    if (isRound(collider) && isRound(other))
+    {
+      auto contact = findRoundContact(collider, other);
+
+      return contact ? contact : findRoundApproach(collider, other, sweep);
+    }
+
+    return findSweptContact(collider, other, std::nullopt, sweep);
+  }
+
+  bool approaches(Collider& collider, Collider& other, const glm::vec3& sweep)
+  {
+    if (isRound(collider) && isRound(other))
+    {
+      return roundShapesOverlap(collider, other) || findRoundApproach(collider, other, sweep).has_value();
+    }
+
+    Simplex simplex;
+
+    return runGjk(SupportShape(collider, sweep), SupportShape(other), simplex);
+  }
+
   std::optional<Contact> findContact(Collider& collider, Collider& other, const std::optional<OverlapWitness>& witness)
   {
     if (isRound(collider) && isRound(other))
@@ -417,7 +489,14 @@ namespace collisions {
       return findRoundContact(collider, other);
     }
 
-    const SupportShape shape(collider);
+    return findSweptContact(collider, other, witness, glm::vec3(0));
+  }
+
+  namespace {
+  std::optional<Contact> findSweptContact(Collider& collider, Collider& other,
+                                          const std::optional<OverlapWitness>& witness, const glm::vec3& sweep)
+  {
+    const SupportShape shape(collider, sweep);
     const SupportShape otherShape(other);
 
     Simplex simplex;
@@ -444,16 +523,59 @@ namespace collisions {
     }
 
     // Negated so it moves the first collider, matching the sphere path and what the response expects.
-    const auto [point, manifold] = polytope.findContactPoints();
+    const auto [point, manifold, depths] = polytope.findContactPoints();
     Contact contact{ -minimumTranslationVector, point };
+
+    if (const auto faceOn = polytope.faceOnDirection())
+    {
+      contact.minimumTranslationVector = -*faceOn * glm::length(minimumTranslationVector);
+    }
+
+    // The swept shape reaches further toward the other one by the part of the sweep along the normal.
+    contact.advance = std::max(glm::dot(-contact.normal(), sweep), 0.0f);
+
+    // The shortest way out of a sweep through something thin can be on through its far side, a normal that pushes
+    // the shape the way it is already going. The pair is then stopped along the motion itself: how far the swept
+    // shape reaches past the other one that way, less the sweep, is the distance left before they meet. A normal
+    // across the motion is left alone, since that is a shape sliding past. So is a shape already that far into the
+    // other one before it moved: it did not sweep through anything, and its way out is the way it is going.
+    constexpr float onwardCosine = 0.5f;
+    const float length = glm::length(sweep);
+    if (length > 0.0f && glm::dot(contact.normal(), sweep) > onwardCosine * length)
+    {
+      const auto along = sweep / length;
+      const float reach = glm::dot(shape.furthestPoint(along) - otherShape.furthestPoint(-along), along);
+
+      if (reach - length <= contactMargin)
+      {
+        Contact meeting{ -along * std::max(reach, length * 1e-3f), collider.getPosition() };
+        meeting.advance = length;
+
+        return meeting;
+      }
+    }
 
     if (manifold.size() > 1)
     {
       contact.pointCount = static_cast<std::uint8_t>(std::min(manifold.size(), contact.points.size()));
       std::copy_n(manifold.begin(), contact.pointCount, contact.points.begin());
+
+      // The manifold measures its depths from the reference face and EPA along its own normal, so the deepest
+      // point takes the contact's depth and the others keep their distance from it.
+      float deepest = std::numeric_limits<float>::lowest();
+      for (std::size_t i = 0; i < contact.pointCount; ++i)
+      {
+        deepest = std::isnan(depths[i]) ? deepest : std::max(deepest, depths[i]);
+      }
+
+      for (std::size_t i = 0; i < contact.pointCount; ++i)
+      {
+        contact.depths[i] = std::isnan(depths[i]) ? contact.overlap() : contact.overlap() - (deepest - depths[i]);
+      }
     }
 
     return contact;
+  }
   }
 
   bool intersects(Collider& collider, Collider& other)

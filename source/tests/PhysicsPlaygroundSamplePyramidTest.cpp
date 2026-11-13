@@ -47,7 +47,7 @@ namespace
   }
 }
 
-TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidBringsItDown)
+TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidShovesItsCubesWithoutSinkingAny)
 {
   LoadedTemplate loaded(sampleFolder);
   ASSERT_TRUE(loaded.loaded);
@@ -63,12 +63,14 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidBringsItDown)
 
   std::vector<std::shared_ptr<Object>> cubes;
   std::vector<float> startHeights;
+  std::vector<glm::vec3> starts;
   for (const auto& object : objectManager.getAllObjects())
   {
     if (object->getName() == "Pyramid Cube")
     {
       cubes.push_back(object);
       startHeights.push_back(fixtures::positionOf(object).y);
+      starts.push_back(fixtures::positionOf(object));
     }
   }
   ASSERT_EQ(cubes.size(), 30u);
@@ -102,9 +104,10 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidBringsItDown)
            position.z > groundBounds.minZ + edgeMargin && position.z < groundBounds.maxZ - edgeMargin;
   };
 
-  // Measured at top speeds 4 and 9: the top cube fell 1.0 and 3.0, and 2 and 8 cubes dropped over half a unit.
-  EXPECT_LT(fixtures::positionOf(cubes[topIndex]).y, startHeights[topIndex] - 0.5f);
-  int dropped = 0;
+  // The pyramid weighs seven times what the player does and its cubes grip each other and the pad, so a walk into
+  // it does not bring it down: the cubes in the player's way are driven back into it, and none is pushed into the
+  // floor.
+  int shoved = 0;
   for (std::size_t i = 0; i < cubes.size(); ++i)
   {
     const auto position = fixtures::positionOf(cubes[i]);
@@ -114,7 +117,7 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidBringsItDown)
     {
       EXPECT_GT(position.y, 0.0f);
     }
-    dropped += position.y < startHeights[i] - 0.5f ? 1 : 0;
+    shoved += glm::distance(glm::vec2(position.x, position.z), glm::vec2(starts[i].x, starts[i].z)) > 0.05f ? 1 : 0;
   }
-  EXPECT_GE(dropped, 2);
+  EXPECT_GE(shoved, 2);
 }

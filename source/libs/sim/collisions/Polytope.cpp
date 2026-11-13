@@ -119,8 +119,10 @@ glm::vec3 clampToFootprint(const glm::vec3& point, const BoxGeometry& box, const
 
 // The capsule's two cap points facing the other shape, those within a tolerance of the deepest along that
 // direction: both when it lies flat against a surface, one when it stands on an end. Against a box they are
-// pulled onto the box's footprint, like a box's touching vertices.
-std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& other, const glm::vec3& towardOther)
+// pulled onto the box's footprint, like a box's touching vertices. Each comes with how far short of the deepest it
+// is, as a depth of zero or less, and margin widens the tolerance to take in a cap that has not arrived yet.
+std::vector<collisions::ManifoldPoint> capsuleContactPoints(CapsuleCollider& capsule, Collider& other,
+                                                            const glm::vec3& towardOther, const float margin)
 {
   const auto [start, end] = capsule.getSegment();
   const float radius = capsule.getRadius();
@@ -129,15 +131,15 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
   const float extreme = std::max(glm::dot(candidates[0], towardOther), glm::dot(candidates[1], towardOther));
   // Scaled by the segment so a capsule within about a degree of lying flat still counts as flush, the way
   // touchingFeature treats a box face.
-  const float epsilon = 1e-3f * std::max(radius, 1.0f) + 0.02f * glm::distance(start, end);
+  const float epsilon = std::max(1e-3f * std::max(radius, 1.0f) + 0.02f * glm::distance(start, end), margin);
 
-  std::vector<glm::vec3> points;
+  std::vector<collisions::ManifoldPoint> points;
   points.reserve(candidates.size());
   for (const auto& candidate : candidates)
   {
-    if (glm::dot(candidate, towardOther) >= extreme - epsilon)
+    if (const float reach = glm::dot(candidate, towardOther); reach >= extreme - epsilon)
     {
-      points.push_back(candidate);
+      points.push_back({ candidate, reach - extreme });
     }
   }
 
@@ -148,7 +150,7 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
 
     for (auto& point : points)
     {
-      point = clampToFootprint(point, box, axisIndex);
+      point.point = clampToFootprint(point.point, box, axisIndex);
     }
   }
 
@@ -160,7 +162,13 @@ std::vector<glm::vec3> touchingFeatureOf(Collider& collider, Collider& other, co
 {
   if (collider.getColliderType() == ColliderType::capsuleCollider)
   {
-    return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(collider), other, towardOther);
+    std::vector<glm::vec3> points;
+    for (const auto& cap : capsuleContactPoints(dynamic_cast<CapsuleCollider&>(collider), other, towardOther, 0.0f))
+    {
+      points.push_back(cap.point);
+    }
+
+    return points;
   }
 
   if (collider.getColliderType() == ColliderType::convexMeshCollider)
@@ -324,16 +332,20 @@ Polytope::ContactPoints Polytope::findContactPoints() const
     return { sphereContactPoint(), {} };
   }
 
-  auto points = shapeContactPoints();
+  const auto contacts = shapeContactPoints();
 
-  glm::vec3 centroid{ 0 };
-  for (const auto& point : points)
+  ContactPoints found{ glm::vec3(0), {}, {} };
+  for (const auto& contact : contacts)
   {
-    centroid += point;
+    found.point += contact.point;
+    found.manifold.push_back(contact.point);
+    found.depths.push_back(contact.depth);
   }
 
   // Never empty (each feature always yields at least one point), so no fallback case is needed.
-  return { centroid / static_cast<float>(points.size()), std::move(points) };
+  found.point /= static_cast<float>(contacts.size());
+
+  return found;
 }
 
 glm::vec3 Polytope::sphereContactPoint() const
@@ -377,7 +389,22 @@ glm::vec3 Polytope::sphereContactPoint() const
   }
 }
 
-std::vector<glm::vec3> Polytope::shapeContactPoints() const
+namespace {
+  // Points of a manifold that reports no depths of its own.
+  std::vector<collisions::ManifoldPoint> atContactDepth(const std::vector<glm::vec3>& points)
+  {
+    std::vector<collisions::ManifoldPoint> contacts;
+    contacts.reserve(points.size());
+    for (const auto& point : points)
+    {
+      contacts.push_back({ point, std::numeric_limits<float>::quiet_NaN() });
+    }
+
+    return contacts;
+  }
+}
+
+std::vector<collisions::ManifoldPoint> Polytope::shapeContactPoints() const
 {
   if (isHullPair())
   {
@@ -393,7 +420,7 @@ bool Polytope::isHullPair() const
          m_otherCollider->getColliderType() == ColliderType::convexMeshCollider;
 }
 
-std::vector<glm::vec3> Polytope::hullContactPoints() const
+std::vector<collisions::ManifoldPoint> Polytope::hullContactPoints() const
 {
   // closestPoint runs from m_collider toward m_otherCollider, so the first shape touches along the normal
   // and the second along its reverse.
@@ -404,16 +431,17 @@ std::vector<glm::vec3> Polytope::hullContactPoints() const
     const auto first = facesOf(*m_collider);
     const auto second = facesOf(*m_otherCollider);
 
-    if (auto points = collisions::referenceFaceManifold(first.view(), second.view(), normal, maxManifoldPoints);
+    if (auto points = collisions::referenceFaceContacts(first.view(), second.view(), normal, maxManifoldPoints,
+                                                        collisions::contactMargin);
         !points.empty())
     {
       return points;
     }
   }
 
-  return collisions::clipManifold(touchingFeatureOf(*m_collider, *m_otherCollider, normal),
-                                  touchingFeatureOf(*m_otherCollider, *m_collider, -normal), normal,
-                                  maxManifoldPoints);
+  return atContactDepth(collisions::clipManifold(touchingFeatureOf(*m_collider, *m_otherCollider, normal),
+                                                 touchingFeatureOf(*m_otherCollider, *m_collider, -normal), normal,
+                                                 maxManifoldPoints));
 }
 
 bool Polytope::isCapsulePair() const
@@ -422,7 +450,7 @@ bool Polytope::isCapsulePair() const
          m_otherCollider->getColliderType() == ColliderType::capsuleCollider;
 }
 
-std::vector<glm::vec3> Polytope::capsuleFeaturePoints() const
+std::vector<collisions::ManifoldPoint> Polytope::capsuleFeaturePoints() const
 {
   // closestPoint runs from m_collider toward m_otherCollider (see sphereContactPoint), so the direction
   // toward the other shape is its normal when the capsule is m_collider and the reverse when it is not.
@@ -430,21 +458,23 @@ std::vector<glm::vec3> Polytope::capsuleFeaturePoints() const
 
   if (m_collider->getColliderType() == ColliderType::capsuleCollider)
   {
-    return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(*m_collider), *m_otherCollider, normal);
+    return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(*m_collider), *m_otherCollider, normal,
+                                collisions::contactMargin);
   }
 
-  return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(*m_otherCollider), *m_collider, -normal);
+  return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(*m_otherCollider), *m_collider, -normal,
+                              collisions::contactMargin);
 }
 
-std::vector<glm::vec3> Polytope::distinctPoints(const std::vector<glm::vec3>& points)
+std::vector<collisions::ManifoldPoint> Polytope::distinctPoints(const std::vector<collisions::ManifoldPoint>& points)
 {
-  std::vector<glm::vec3> manifold;
+  std::vector<collisions::ManifoldPoint> manifold;
   manifold.reserve(points.size());
   for (const auto& point : points)
   {
-    const bool duplicate = std::ranges::any_of(manifold, [&point](const glm::vec3& existing)
+    const bool duplicate = std::ranges::any_of(manifold, [&point](const collisions::ManifoldPoint& existing)
     {
-      return glm::distance(existing, point) < 1e-4f;
+      return glm::distance(existing.point, point.point) < 1e-4f;
     });
 
     if (!duplicate)
@@ -456,13 +486,27 @@ std::vector<glm::vec3> Polytope::distinctPoints(const std::vector<glm::vec3>& po
   return manifold;
 }
 
-std::vector<glm::vec3> Polytope::boxContactPoints() const
+std::optional<glm::vec3> Polytope::faceOnDirection() const
+{
+  if (hasSphere() || isCapsulePair())
+  {
+    return std::nullopt;
+  }
+
+  const auto first = facesOf(*m_collider);
+  const auto second = facesOf(*m_otherCollider);
+
+  return collisions::referenceFaceNormal(first.view(), second.view(), glm::normalize(m_closestFaceData.closestPoint));
+}
+
+std::vector<collisions::ManifoldPoint> Polytope::boxContactPoints() const
 {
   const auto normal = glm::normalize(m_closestFaceData.closestPoint);
   const auto first = facesOf(*m_collider);
   const auto second = facesOf(*m_otherCollider);
 
-  return collisions::referenceFaceManifold(first.view(), second.view(), normal, maxManifoldPoints);
+  return collisions::referenceFaceContacts(first.view(), second.view(), normal, maxManifoldPoints,
+                                           collisions::contactMargin);
 }
 
 namespace {

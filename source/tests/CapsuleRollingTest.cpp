@@ -273,39 +273,6 @@ TEST(CapsuleRolling, FrictionAlongALineContactDoesNotPitchTheCapsule)
   EXPECT_GT(roll, 5.0f);
 }
 
-TEST(CapsuleRolling, ADynamicBoxUnderACapsuleIsNotPitchedByFrictionAlongTheLine)
-{
-  // The box's spin about z after the capsule's first tick on it. Where the capsule's weight lands off the box's
-  // center also turns it, so friction is judged against the same slide with none.
-  const auto spinOfBox = [](const glm::vec3& capsuleRotation, const float friction)
-  {
-    const auto scene = makeScene();
-    const auto support = addObject(scene, "Support", { 0, 0, 0 });
-    transformOf(support)->setScale({ 4, 1, 4 });
-    fixtures::addBoxCollider(support);
-    const auto supportBody = addBody(support, false);
-
-    const auto capsule = addObject(scene, "Capsule", { 0, 1.4f, 0 });
-    transformOf(capsule)->setRotation(capsuleRotation);
-    fixtures::addCapsuleCollider(capsule, 0.5f, 2.0f);
-    const auto body = addBody(capsule, false);
-    body->setVelocity({ 1.0f, -0.2f, 0 });
-    body->setFriction(friction);
-
-    CollisionSystem collisions;
-    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisions.fixedUpdate(*scene.objectManager, dt);
-
-    return supportBody->getAngularVelocity().z;
-  };
-
-  // The capsule lies along x, the way it slides, so friction must not pitch the box about z.
-  EXPECT_NEAR(spinOfBox({ 0, 0, 90 }, 0.5f), spinOfBox({ 0, 0, 90 }, 0.0f), 0.5f);
-
-  // Positive control: lying along z, the same slide is across the line, and friction does turn the box.
-  EXPECT_GT(std::fabs(spinOfBox({ 90, 0, 0 }, 0.5f) - spinOfBox({ 90, 0, 0 }, 0.0f)), 1.0f);
-}
-
 TEST(CapsuleRolling, ACapsuleTumblingOnItsCapRollsAboutAnyAxisAndComesToRest)
 {
   Config config;

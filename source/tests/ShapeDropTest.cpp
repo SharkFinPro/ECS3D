@@ -123,7 +123,9 @@ TEST_P(ShapeDrop, ComesToRestFlatOnAFace)
 
 TEST(ShapeDropControl, AnOctahedronStartedTenDegreesOffItsPointTopplesAndLandsOnAFace)
 {
-  expectComesToRestFlat("D8", { 10.0f, 0.0f, 0.0f });
+  // Leaning a little to the side as well: tipped about one axis alone it comes down squarely on an edge and
+  // balances there, which nothing in the scene would disturb.
+  expectComesToRestFlat("D8", { 10.0f, 0.0f, 3.0f });
 }
 
 INSTANTIATE_TEST_SUITE_P(Library, ShapeDrop,

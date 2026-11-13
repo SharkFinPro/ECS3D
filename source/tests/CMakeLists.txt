@@ -137,9 +137,9 @@ add_executable(${PROJECT_NAME}
   CollisionEventTest.cpp
   CollisionIslandTest.cpp
   CollisionProfileTest.cpp
+  ContactSolverTest.cpp
   CompoundBodyCollisionTest.cpp
   CompoundFlushTest.cpp
-  CompoundRollingArmTest.cpp
   SettingsStoreTest.cpp
   RecentProjectsTest.cpp
   RecentProjectRecordingTest.cpp
@@ -226,7 +226,6 @@ add_executable(${PROJECT_NAME}
   PhysicsStackingTest.cpp
   PhysicsTippingTest.cpp
   PhysicsTwoBodyTest.cpp
-  PhysicsContactResponseTest.cpp
   PhysicsFrictionHoldTest.cpp
   PhysicsSlopeStackTest.cpp
   DefaultProjectTest.cpp

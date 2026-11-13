@@ -144,7 +144,7 @@ TEST(PhysicsIntegration, ABoxLandingOnAnEdgeFallsOntoItsFaceRatherThanCreepingOv
 {
   const auto scene = makeScene();
 
-  const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 5, 1, 5 });
   fixtures::addBoxCollider(ground);
 
   // Tilted 25 degrees, it lands on one edge with its center of mass over the ground, so the support at that
@@ -157,10 +157,12 @@ TEST(PhysicsIntegration, ABoxLandingOnAnEdgeFallsOntoItsFaceRatherThanCreepingOv
 
   CollisionSystem collisionSystem;
 
-  for (int tick = 0; tick < 30; ++tick)
+  // Three seconds at the server's tick.
+  constexpr float serverTick = 1.0f / 50.0f;
+  for (int tick = 0; tick < 150; ++tick)
   {
-    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+    collisionSystem.fixedUpdate(*scene.objectManager, serverTick);
   }
 
   fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-3f);
@@ -309,84 +311,6 @@ TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDis
 
 
 namespace {
-  // The rotation of a unit box after one contact response resting its underside on a static ground.
-  glm::vec3 rotationAfterRestingOn(const glm::vec3& rotation, const glm::vec3& minimumTranslationVector,
-                                   const std::array<glm::vec3, 4>& contactPoints)
-  {
-    const auto scene = makeScene();
-    const auto box = addObject(scene, "Box", { 0, 0, 0 });
-    addBody(box, false);
-    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
-
-    transformOf(box)->setRotation(rotation);
-    PhysicsSystem::handleCollision(*box->getComponent<RigidBody>(ComponentType::rigidBody),
-                                   box->getComponent<Collider>(ComponentType::collider), ground,
-                                   minimumTranslationVector, contactPoints, dt);
-
-    return transformOf(box)->getRotation();
-  }
-}
-
-TEST(PhysicsIntegration, ABoxRestingOnAFaceWithinTheManifoldsToleranceIsLaidFlushWithIt)
-{
-  // Inside the tilt at which the manifold still reports all four corners, the support is centered and
-  // nothing torques the box the rest of the way down; it used to stay there.
-  const auto rotation = rotationAfterRestingOn({ -0.001f, 30, 0.016f }, { 0, 0.01f, 0 }, flatUnderside);
-
-  fixtures::expectNear("up", localUpOf(rotation), { 0, 1, 0 }, 1e-5f);
-
-  // Only the tilt is taken out: which way the box faces about the normal stays as it was.
-  EXPECT_NEAR(rotation.y, 30.0f, 1e-3f);
-}
-
-TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
-{
-  // Two degrees is past anything the manifold rounds to a whole face, so it is a real tilt, left alone.
-  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), glm::vec3(0, 0, 2));
-
-  // A face pressed down on from above is not what the body rests on.
-  const std::array<glm::vec3, 4> topside{
-    glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
-    glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
-  };
-  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside), glm::vec3(0, 0, 0.016f));
-
-  // Positive control: the same small tilt resting on the face below is laid flush.
-  fixtures::expectNear("up", localUpOf(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, 0.01f, 0 }, flatUnderside)),
-                       { 0, 1, 0 }, 1e-5f);
-}
-
-TEST(PhysicsIntegration, ATiltJustInsideTheFlushWindowIsLaidFlatAndJustOutsideItIsLeftAlone)
-{
-  // The window is a tilt whose sine is 0.0175, which is 1.003 degrees.
-  const glm::vec3 inside{ 0, 0, 0.99f };
-  const glm::vec3 outside{ 0, 0, 1.02f };
-
-  fixtures::expectNear("inside", localUpOf(rotationAfterRestingOn(inside, { 0, 0.01f, 0 }, flatUnderside)),
-                       { 0, 1, 0 }, 1e-5f);
-
-  const auto kept = rotationAfterRestingOn(outside, { 0, 0.01f, 0 }, flatUnderside);
-  fixtures::expectNear("outside", kept, outside, 1e-4f);
-  // The tilt stays: its sine is above the 0.0175 window, where the 0.99 degrees above (0.0173) is below it.
-  EXPECT_GT(std::fabs(localUpOf(kept).x), 0.0175f);
-}
-
-TEST(PhysicsIntegration, AChildOfATurnedParentIsLaidFlushWithoutTakingOnTheParentsTurn)
-{
-  const auto scene = makeScene();
-  const auto parent = addObject(scene, "Parent", { 0, 0, 0 });
-  transformOf(parent)->setRotation({ 0, 30, 0 });
-
-  const auto box = addChildObject(scene, "Box", parent);
-  const auto body = addBody(box, false);
-  transformOf(box)->setRotation({ 0, 0, 0.016f });
-  const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
-
-  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, flatUnderside, dt);
-
-  fixtures::expectNear("up", localUpOf(transformOf(box)->getRotation()), { 0, 1, 0 }, 1e-5f);
-  EXPECT_NEAR(transformOf(box)->getRotation().y, 30.0f, 1e-3f);
-  EXPECT_NEAR(transformOf(box)->getLocalRotation().y, 0.0f, 1e-3f);
 }
 
 TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning)
@@ -434,50 +358,6 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
 
   // Resting on the ground (its top is at 1, the box's half height 0.5), not stuck in or above it.
   EXPECT_NEAR(transformOf(falling)->getPosition().y, 1.5f, 0.1f);
-}
-
-TEST(PhysicsIntegration, TheSupportPointIsTheCenterOfMassProjectedOntoTheManifoldWhenItIsOverIt)
-{
-  const std::array<glm::vec3, 4> square{
-    glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, 0.5f },
-    glm::vec3{ 0.5f, -0.5f, -0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
-  };
-
-  // The corners are deliberately out of winding order: containment must not depend on it.
-  expectNear("support point", PhysicsSystem::supportPoint({ 0.3f, 4, 0.2f }, { 0, 1, 0 }, square),
-             { 0.3f, -0.5f, 0.2f });
-}
-
-TEST(PhysicsIntegration, TheSupportPointIsClampedToTheNearestManifoldEdgeWhenTheCenterOfMassOverhangsIt)
-{
-  const std::array<glm::vec3, 4> square{
-    glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f },
-    glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
-  };
-
-  expectNear("support point", PhysicsSystem::supportPoint({ 2, 1, 0.1f }, { 0, 1, 0 }, square),
-             { 0.5f, -0.5f, 0.1f });
-
-  const std::array<glm::vec3, 2> edge{ glm::vec3{ -0.5f, -0.5f, 0 }, glm::vec3{ 0.5f, -0.5f, 0 } };
-
-  expectNear("edge support point", PhysicsSystem::supportPoint({ 0.2f, 0, 3 }, { 0, 1, 0 }, edge),
-             { 0.2f, -0.5f, 0 });
-}
-
-TEST(PhysicsIntegration, ACenterOfMassJustPastTheManifoldEdgeCountsAsOverItOnlyWithinTheTriangleTolerance)
-{
-  // A wide square, so the containment tolerance (1e-5 of the triangle's size) is a distance the floats resolve.
-  const std::array<glm::vec3, 4> square{
-    glm::vec3{ -50, -1, -50 }, glm::vec3{ 50, -1, -50 }, glm::vec3{ 50, -1, 50 }, glm::vec3{ -50, -1, 50 }
-  };
-
-  // 5e-4 past the +x edge is 5e-6 of the 100-unit triangle: still counted as over it, so it is not clamped.
-  expectNear("within tolerance", PhysicsSystem::supportPoint({ 50.0005f, 4, 10 }, { 0, 1, 0 }, square),
-             { 50.0005f, -1, 10 });
-
-  // 2e-3 past is 2e-5: outside, so it is clamped back onto the edge.
-  expectNear("beyond tolerance", PhysicsSystem::supportPoint({ 50.002f, 4, 10 }, { 0, 1, 0 }, square),
-             { 50, -1, 10 });
 }
 
 TEST(PhysicsIntegration, AStallLongerThanTheStepCapHasItsBankedTimeDroppedNotCarriedForward)

@@ -204,10 +204,11 @@ TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
   scene.objectManager->addObject(child);
 
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
 
   // getComponent walks to the parent for a rigid body, so a child would otherwise be integrated with its
   // parent's body and double every force on it - once per descendant.
-  EXPECT_NEAR(body->getVelocity().y, gravityPerTick, 1e-5f);
+  EXPECT_NEAR(body->getVelocity().y, 2.0f * gravityPerTick, 1e-5f);
   EXPECT_NEAR(transformOf(parent)->getPosition().y, gravityPerTick, 1e-5f);
 }
 
@@ -297,84 +298,4 @@ TEST(PhysicsIntegration, ASpinTooSlowToSeeIsKeptButDoesNotRewriteTheRotation)
 
   // Still there for a torque to build on, so a slow start to tipping is not lost - just damped as usual.
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0.005f * 0.99f, 0 });
-}
-
-TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
-{
-  const auto scene = makeScene();
-
-  const auto left = addObject(scene, "Left", { 0, 0, 0 });
-  const auto leftBody = addBody(left, false);
-  const auto right = addObject(scene, "Right", { 0, 0, 0 });
-  const auto rightBody = addBody(right, false);
-
-  leftBody->setVelocity({ -1, 0, 0 });
-  rightBody->setVelocity({ 1, 0, 0 });
-
-  // Both bodies are corrected, in opposite directions - unlike the static case, where only the one with
-  // a body moves. Equal masses split the overlap evenly. The contact is placed along the normal so the
-  // impulse produces no torque of its own.
-  PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
-
-  expectNear("left position", transformOf(left)->getPosition(), { 0.5f, 0, 0 });
-  expectNear("right position", transformOf(right)->getPosition(), { -0.5f, 0, 0 });
-
-  // They are closing, so the impulse fires: the relative velocity along the normal is 2, applied to this
-  // body and subtracted from the other in the same call. Both end up moving the way the one they hit was
-  // going - which is what makes a collision between two dynamic bodies conserve anything.
-  expectNear("left velocity", leftBody->getVelocity(), { 1, 0, 0 });
-  expectNear("right velocity", rightBody->getVelocity(), { -1, 0, 0 });
-
-  // The contact sits along the normal from both centres, so neither impulse has a lever arm.
-  expectNear("left spin", leftBody->getAngularVelocity(), { 0, 0, 0 });
-  expectNear("right spin", rightBody->getAngularVelocity(), { 0, 0, 0 });
-}
-
-TEST(PhysicsIntegration, TwoBodiesAlreadyMovingApartAreSeparatedButNotSlowed)
-{
-  const auto scene = makeScene();
-
-  const auto left = addObject(scene, "Left", { 0, 0, 0 });
-  const auto leftBody = addBody(left, false);
-  const auto right = addObject(scene, "Right", { 0, 0, 0 });
-  addBody(right, false);
-
-  leftBody->setVelocity({ 1, 0, 0 });
-  right->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity({ -1, 0, 0 });
-
-  PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
-
-  // Still pushed apart - an overlap is an overlap - but no impulse to either body, because they are
-  // already separating and adding one would fling apart two bodies that were resolving themselves.
-  expectNear("left position", transformOf(left)->getPosition(), { 0.5f, 0, 0 });
-  expectNear("left velocity", leftBody->getVelocity(), { 1, 0, 0 });
-  expectNear("right velocity", right->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity(),
-             { -1, 0, 0 });
-}
-
-TEST(PhysicsIntegration, ALightBodyHittingAHeavyOneReboundsWhileTheHeavyOneBarelyMoves)
-{
-  const auto scene = makeScene();
-
-  const auto light = addObject(scene, "Light", { 0, 0, 0 });
-  const auto lightBody = addBody(light, false);
-  const auto heavy = addObject(scene, "Heavy", { 2, 0, 0 });
-  const auto heavyBody = addBody(heavy, false);
-
-  lightBody->setMass(1.0f);
-  heavyBody->setMass(9.0f);
-  lightBody->setVelocity({ 1, 0, 0 });
-
-  // Overlapping by a tenth, touching on the line between the centers.
-  PhysicsSystem::handleCollision(*lightBody, ownColliderOf(*lightBody), heavy, { -0.1f, 0, 0 }, { 1, 0, 0 }, dt);
-
-  // An elastic collision: (1 - 9) / 10 of the light body's speed comes back, and 2 / 10 of it goes on in the
-  // heavy one. Momentum is kept.
-  expectNear("light velocity", lightBody->getVelocity(), { -0.8f, 0, 0 });
-  expectNear("heavy velocity", heavyBody->getVelocity(), { 0.2f, 0, 0 });
-  EXPECT_NEAR(lightBody->getVelocity().x * 1.0f + heavyBody->getVelocity().x * 9.0f, 1.0f, 1e-5f);
-
-  // The overlap is split by inverse mass too: nine tenths of it is the light body's to clear.
-  expectNear("light position", transformOf(light)->getPosition(), { -0.09f, 0, 0 });
-  expectNear("heavy position", transformOf(heavy)->getPosition(), { 2.01f, 0, 0 });
 }

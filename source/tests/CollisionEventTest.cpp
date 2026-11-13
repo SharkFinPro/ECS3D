@@ -24,6 +24,9 @@ namespace {
   using fixtures::makeScene;
   using fixtures::positionOf;
   using fixtures::Scene;
+  // A body pushed out of a deep overlap is left a little way in, where its contact goes on being found, so it
+  // ends within this of where the overlap ends.
+  constexpr float nearlyClear = 0.02f;
 
   // The server's tick, which the responses to the contacts below are worked out at.
   constexpr float dt = 1.0f / 50.0f;
@@ -55,7 +58,7 @@ namespace {
     glm::vec3 moverPosition;
   };
 
-  // A dynamic body one unit into a static one: the single-candidate path of handleCollisions.
+  // A dynamic body one unit into a static one.
   SingleContactResult runSingleContact(const bool moverIsTrigger, const bool restingIsTrigger)
   {
     const auto scene = makeScene();
@@ -411,9 +414,9 @@ TEST(CollisionEvent, SeveralIndependentDynamicPairsAllResolveInOneTick)
 
   // Same geometry as ASolidContactPushesTheBodyOut's single pair (unit boxes one apart, a full unit of
   // overlap), repeated three times, so each mover is pushed exactly 1 clear on x and nowhere else.
-  expectNear(positionOf(moverA), { -1.0f, 0, 0 }, 1e-3f);
-  expectNear(positionOf(moverB), { 99.0f, 0, 0 }, 1e-3f);
-  expectNear(positionOf(moverC), { 199.0f, 0, 0 }, 1e-3f);
+  expectNear(positionOf(moverA), { -1.0f, 0, 0 }, nearlyClear);
+  expectNear(positionOf(moverB), { 99.0f, 0, 0 }, nearlyClear);
+  expectNear(positionOf(moverC), { 199.0f, 0, 0 }, nearlyClear);
 }
 
 TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
@@ -436,7 +439,7 @@ TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
 
   // Both contacts are real, so the multi-contact path has to resolve both in the same tick: 0.5 clear of
   // Shallow on x, 1.0 clear of Deep on y.
-  expectNear(positionOf(moving), { -0.5f, -1.0f, 0 }, 1e-3f);
+  expectNear(positionOf(moving), { -0.5f, -1.0f, 0 }, nearlyClear);
 }
 
 TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
@@ -452,7 +455,7 @@ TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
     CollisionSystem collisionSystem;
     collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
-    expectNear(positionOf(moving), { -0.5f, 0, 0 }, 1e-3f);
+    expectNear(positionOf(moving), { -0.5f, 0, 0 }, nearlyClear);
   }
 
   {
@@ -463,7 +466,7 @@ TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
     CollisionSystem collisionSystem;
     collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
-    expectNear(positionOf(moving), { 0, -1.0f, 0 }, 1e-3f);
+    expectNear(positionOf(moving), { 0, -1.0f, 0 }, nearlyClear);
   }
 }
 
@@ -484,7 +487,7 @@ TEST(CollisionEvent, AContactTheFirstResponseAlreadyClearedIsNotAppliedAgain)
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, deep));
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
 
-  expectNear(positionOf(moving), { 0, 0.5f, 0 }, 1e-3f);
+  expectNear(positionOf(moving), { 0, 0.5f, 0 }, nearlyClear);
 }
 
 TEST(CollisionEvent, AOneSidedTriggerReportsTheContactButAppliesNoResponse)
@@ -492,7 +495,7 @@ TEST(CollisionEvent, AOneSidedTriggerReportsTheContactButAppliesNoResponse)
   // The positive control: neither side a trigger, and the same overlap is corrected.
   const auto solid = runSingleContact(false, false);
   ASSERT_TRUE(solid.entered);
-  expectNear(solid.moverPosition, { -1.0f, 0, 0 }, 1e-3f);
+  expectNear(solid.moverPosition, { -1.0f, 0, 0 }, nearlyClear);
 
   // Either side being a trigger is enough, whichever one is the moving body.
   const auto triggerMover = runSingleContact(true, false);
@@ -510,19 +513,19 @@ TEST(CollisionEvent, OneSidedTriggersAmongSeveralContactsSkipOnlyTheirOwnRespons
   const auto solid = runTwoContacts(false, false, false);
   ASSERT_TRUE(solid.enteredShallow);
   ASSERT_TRUE(solid.enteredDeep);
-  expectNear(solid.moverPosition, { -0.5f, -1.0f, 0 }, 1e-3f);
+  expectNear(solid.moverPosition, { -0.5f, -1.0f, 0 }, nearlyClear);
 
   // The deeper contact is a trigger: it still reports, and only the shallow one pushes.
   const auto deepTrigger = runTwoContacts(false, false, true);
   EXPECT_TRUE(deepTrigger.enteredShallow);
   EXPECT_TRUE(deepTrigger.enteredDeep);
-  expectNear(deepTrigger.moverPosition, { -0.5f, 0, 0 }, 1e-3f);
+  expectNear(deepTrigger.moverPosition, { -0.5f, 0, 0 }, nearlyClear);
 
   // The shallower contact is a trigger: it still reports, and only the deep one pushes.
   const auto shallowTrigger = runTwoContacts(false, true, false);
   EXPECT_TRUE(shallowTrigger.enteredShallow);
   EXPECT_TRUE(shallowTrigger.enteredDeep);
-  expectNear(shallowTrigger.moverPosition, { 0, -1.0f, 0 }, 1e-3f);
+  expectNear(shallowTrigger.moverPosition, { 0, -1.0f, 0 }, nearlyClear);
 
   // The moving body itself is the trigger: both contacts report and neither pushes.
   const auto triggerMover = runTwoContacts(true, false, false);

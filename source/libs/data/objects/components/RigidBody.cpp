@@ -142,36 +142,6 @@ void RigidBody::setNextFalling(const bool nextFalling)
   m_nextFalling = nextFalling;
 }
 
-float RigidBody::getStackedLoad() const
-{
-  return m_stackedLoad;
-}
-
-void RigidBody::setStackedLoad(const float stackedLoad)
-{
-  m_stackedLoad = stackedLoad;
-}
-
-glm::vec3 RigidBody::getHeldImpulse() const
-{
-  return m_heldImpulse;
-}
-
-void RigidBody::setHeldImpulse(const glm::vec3& heldImpulse)
-{
-  m_heldImpulse = heldImpulse;
-}
-
-glm::vec3 RigidBody::getDriveStep() const
-{
-  return m_driveStep;
-}
-
-void RigidBody::setDriveStep(const glm::vec3& driveStep)
-{
-  m_driveStep = driveStep;
-}
-
 glm::vec3 RigidBody::getSupportNormal() const
 {
   return m_supportNormal;

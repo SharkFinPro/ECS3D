@@ -61,23 +61,8 @@ public:
   [[nodiscard]] bool getNextFalling() const;
   void setNextFalling(bool nextFalling);
 
-  // What the bodies resting on this one press it down with this tick, as an impulse. Its own support carries
-  // that too, so friction there holds the whole stack rather than this body alone.
-  [[nodiscard]] float getStackedLoad() const;
-  void setStackedLoad(float stackedLoad);
-
-  // The impulse along its support that the support has held for it this tick against what presses on it from above.
-  // Friction there has only the rest of its grip for this body's own sliding, and pushes the opposite way cancel.
-  [[nodiscard]] glm::vec3 getHeldImpulse() const;
-  void setHeldImpulse(const glm::vec3& heldImpulse);
-
-  // The velocity change that gravity and queued forces gave the body this tick, which moved it before any contact
-  // saw it. Friction that holds the body still takes back the part of it along the support.
-  [[nodiscard]] glm::vec3 getDriveStep() const;
-  void setDriveStep(const glm::vec3& driveStep);
-
-  // The contact normal of the support the body rested on last tick, or zero when it had none. A push from above
-  // splits along it, so a stack on a slope is held the way one on flat ground is.
+  // The contact normal of the support the body rested on last tick, or zero when it had none. The contact solver
+  // judges by it whether a hit presses the body into what holds it up.
   [[nodiscard]] glm::vec3 getSupportNormal() const;
   void setSupportNormal(const glm::vec3& supportNormal);
 
@@ -103,12 +88,6 @@ private:
 
   bool m_falling = true;
   bool m_nextFalling = true;
-
-  float m_stackedLoad = 0.0f;
-
-  glm::vec3 m_heldImpulse{ 0 };
-
-  glm::vec3 m_driveStep{ 0 };
 
   glm::vec3 m_supportNormal{ 0 };
 

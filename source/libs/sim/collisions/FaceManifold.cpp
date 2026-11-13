@@ -240,6 +240,42 @@ namespace collisions {
   std::vector<glm::vec3> referenceFaceManifold(const FaceShape& first, const FaceShape& second,
                                                const glm::vec3& normal, const size_t maxPoints)
   {
+    std::vector<glm::vec3> points;
+    for (const auto& contact : referenceFaceContacts(first, second, normal, maxPoints, 0.0f))
+    {
+      points.push_back(contact.point);
+    }
+
+    return points;
+  }
+
+  std::optional<glm::vec3> referenceFaceNormal(const FaceShape& first, const FaceShape& second,
+                                               const glm::vec3& normal)
+  {
+    if (first.faceNormals.empty() || second.faceNormals.empty())
+    {
+      return std::nullopt;
+    }
+
+    // Cosine of about a degree.
+    constexpr float faceOnCosine = 0.9998f;
+
+    const AlignedFace faceFirst = mostAlignedFace(first.faceNormals, normal);
+    const AlignedFace faceSecond = mostAlignedFace(second.faceNormals, -normal);
+    const bool firstIsReference = faceFirst.alignment >= faceSecond.alignment - faceAlignmentTie;
+    const auto& face = firstIsReference ? faceFirst : faceSecond;
+    if (face.alignment < faceOnCosine)
+    {
+      return std::nullopt;
+    }
+
+    return firstIsReference ? face.normal : -face.normal;
+  }
+
+  std::vector<ManifoldPoint> referenceFaceContacts(const FaceShape& first, const FaceShape& second,
+                                                   const glm::vec3& normal, const size_t maxPoints,
+                                                   const float margin)
+  {
     if (first.faceNormals.empty() || second.faceNormals.empty())
     {
       return {};
@@ -263,7 +299,22 @@ namespace collisions {
     const glm::vec3 planePoint = centroidOf(polygon);
     const glm::vec3 towardReference = firstIsReference ? -normal : normal;
 
-    const auto incidentFeature = touchingFeature(incident.vertices, towardReference, incident.featureEpsilon);
+    auto incidentFeature = touchingFeature(incident.vertices, towardReference, incident.featureEpsilon);
+
+    // With a margin, the whole of the other side's face that is turned toward the reference face is part of the
+    // contact wherever it is past that face or within the margin of it, however deep the touching vertex is: a
+    // face sunk in at an angle then reports all of itself that is inside, not just its deepest edge.
+    if (margin > 0.0f)
+    {
+      const auto facing = mostAlignedFace(incident.faceNormals, towardReference).normal;
+      for (const auto& vertex : touchingFeature(incident.vertices, facing, incident.featureEpsilon))
+      {
+        if (glm::dot(vertex - planePoint, faceNormal) <= margin && !containsNear(incidentFeature, vertex))
+        {
+          incidentFeature.push_back(vertex);
+        }
+      }
+    }
 
     std::vector<Candidate> candidates;
     std::vector<glm::vec3> placed;
@@ -283,7 +334,8 @@ namespace collisions {
     if (polygon.size() >= 3 && incidentLoop.size() >= 2)
     {
       auto overlap = detail::clipToPolygon(std::move(incidentLoop), polygon, faceNormal);
-      overlap = detail::clipAgainstPlane(overlap, planePoint, -faceNormal, reference.featureEpsilon);
+      overlap = detail::clipAgainstPlane(overlap, planePoint, -faceNormal,
+                                         std::max(reference.featureEpsilon, margin));
       for (const auto& point : overlap)
       {
         place(point, glm::dot(point - planePoint, faceNormal));
@@ -307,6 +359,13 @@ namespace collisions {
       }
     }
 
-    return largestSpread(candidates, faceNormal, std::max<size_t>(maxPoints, 1));
+    std::vector<ManifoldPoint> contacts;
+    for (const auto& point : largestSpread(candidates, faceNormal, std::max<size_t>(maxPoints, 1)))
+    {
+      const auto chosen = std::ranges::find(candidates, point, &Candidate::point);
+      contacts.push_back({ point, chosen->depth });
+    }
+
+    return contacts;
   }
 }

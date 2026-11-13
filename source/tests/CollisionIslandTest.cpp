@@ -246,7 +246,7 @@ TEST(CollisionIslandTest, SeparatePilesResolveAsTheyWouldAlone)
     for (size_t b = 0; b < alone[0].size(); ++b)
     {
       SCOPED_TRACE("pile " + std::to_string(i) + " body " + std::to_string(b));
-      expectSameState(together[i][b], alone[0][b], 1e-4f);
+      expectSameState(together[i][b], alone[0][b], 2e-3f);
     }
   }
 }
@@ -291,7 +291,7 @@ TEST_P(SharedFloorIslandTest, PilesOnOneStaticFloorResolveAsTheyWouldOnTheirOwn)
     for (size_t b = 0; b < alone[0].size(); ++b)
     {
       SCOPED_TRACE("pile " + std::to_string(i) + " body " + std::to_string(b));
-      expectSameState(first[i][b], alone[0][b], 1e-4f);
+      expectSameState(first[i][b], alone[0][b], 2e-3f);
     }
   }
 

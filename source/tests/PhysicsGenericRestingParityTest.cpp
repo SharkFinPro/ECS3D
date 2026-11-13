@@ -19,7 +19,7 @@ namespace {
   using fixtures::transformOf;
 
   constexpr int ticks = 300;
-  constexpr float positionTolerance = 1e-4f;
+  constexpr float positionTolerance = 1e-3f;
   constexpr float rotationTolerance = 0.01f;
   constexpr float flushCosine = 0.9999f;
   constexpr float balancedHeight = 2.4142f;

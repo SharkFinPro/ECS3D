@@ -10,6 +10,8 @@ add_library(${PROJECT_NAME}
   InertiaTensor.h
   CollisionSystem.cpp
   CollisionSystem.h
+  ContactSolver.cpp
+  ContactSolver.h
   collisions/NarrowPhase.cpp
   collisions/NarrowPhase.h
   collisions/Simplex.cpp
@@ -44,13 +46,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DProfile
 )
-
-# CollisionSystem holds the migrated sweep-and-prune (CollisionManager). The GJK/EPA that arrived with it
-# (Collider.cpp, Simplex, Polytope) now sits behind collisions/NarrowPhase, which CollisionSystem calls
-# into. Both were transplanted nearly verbatim. PhysicsSystem carries the physics bodies
-# (integrate, applyForce, handleCollision/respondToCollision, limitMovement)
-# lifted from RigidBody.cpp, and CollisionSystem routes its detected collisions into
-# PhysicsSystem::handleCollision.
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

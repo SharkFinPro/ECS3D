@@ -117,40 +117,24 @@ TEST(CapsuleResting, ACapsuleRollingSidewaysStaysFlushAndComesToRest)
   expectLyingFlushAtRest(lying);
 }
 
-TEST(CapsuleResting, ACapsuleJustPastTheFlushLimitIsNotSnappedOnContact)
+TEST(CapsuleResting, ACapsuleSetDownTiltedLaysItselfFlushByGravity)
 {
-  // Both start a hair above the slab, so they touch on the first tick. The first capsule's end gap (sin 1.5
-  // degrees = 0.026) is outside the manifold's line band, so it has one contact point; the control is inside it.
-  Lying past({ 0, 1.505f, 0 }, { 0, 0, 91.5f }, { 0, 0, 0 });
-  Lying inside({ 0, 1.505f, 0 }, { 0, 0, 90.5f }, { 0, 0, 0 });
-  EXPECT_NEAR(past.tiltDegrees(), 1.5f, 1e-3f);
+  // Both start a hair above the slab. Nothing turns either flat on contact: the low end is held, the high end is
+  // free to come down, and gravity lays the capsule along the slab.
+  for (const float tilt : { 0.5f, 1.1f, 1.5f })
+  {
+    SCOPED_TRACE(testing::Message() << "tilt " << tilt);
 
-  past.run(1);
-  inside.run(1);
+    Lying lying({ 0, 1.505f, 0 }, { 0, 0, 90.0f + tilt }, { 0, 0, 0 });
+    EXPECT_NEAR(lying.tiltDegrees(), tilt, 1e-3f);
 
-  // Both touched the slab on that tick: free fall would have lowered them, and the push out raised them.
-  EXPECT_GT(transformOf(past.object)->getPosition().y, 1.505f);
-  EXPECT_GT(transformOf(inside.object)->getPosition().y, 1.5f);
-  // Positive control: the one inside the limit was laid flush on that tick, the one past it was left tilted.
-  EXPECT_LT(inside.tiltDegrees(), flushToleranceDegrees);
-  EXPECT_GT(past.tiltDegrees(), 1.4f);
+    // It does not sink into the slab on the way down.
+    lying.run(1);
+    EXPECT_GT(transformOf(lying.object)->getPosition().y, 1.49f);
 
-  // It then lays itself down by gravity.
-  past.run(400);
-  expectLyingFlushAtRest(past);
-}
-
-TEST(CapsuleResting, ACapsuleInTheLineBandPastADegreeIsLaidFlush)
-{
-  // sin 1.1 degrees = 0.0192: past a degree, inside the manifold's 0.021 line band, so both ends touch.
-  Lying lying({ 0, 1.505f, 0 }, { 0, 0, 91.1f }, { 0, 0, 0 });
-  EXPECT_NEAR(lying.tiltDegrees(), 1.1f, 1e-3f);
-
-  lying.run(1);
-  EXPECT_LT(lying.tiltDegrees(), flushToleranceDegrees);
-
-  lying.run(400);
-  expectLyingFlushAtRest(lying);
+    lying.run(400);
+    expectLyingFlushAtRest(lying);
+  }
 }
 
 TEST(CapsuleResting, ACapsuleLyingByItsColliderRotationRestsFlush)
