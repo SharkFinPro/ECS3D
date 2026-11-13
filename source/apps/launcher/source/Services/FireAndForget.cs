@@ -22,7 +22,8 @@ public static class FireAndForget
 
         _ = task.ContinueWith(
             finished => Observe(finished, report),
-            TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously);
+            TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private static void Observe(Task finished, Action<Exception> report)

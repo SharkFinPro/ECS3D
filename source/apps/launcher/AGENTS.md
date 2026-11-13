@@ -61,7 +61,8 @@
   pause; a newer notice restarts it, a manual dismiss cancels it); one with an Open logs link stays until dismissed.
   Once the window exists, an unhandled exception on the UI thread is written to `logs/launcher.log` and shown as a
   toast with the Open logs link instead of ending the launcher. More than five within ten seconds, or an
-  out-of-memory error, still ends it. A fire-and-forget command task that fails (`Forget()`) is logged and toasted the same way. AppDomain and
+  out-of-memory error, still ends it. A fire-and-forget command task that fails (`Forget()`) is logged and toasted the
+  same way, but never ends the launcher; after a storm its notices are only suppressed. AppDomain and
   unobserved-task exceptions are only logged.
   A `LaunchNotice` may carry a `NoticeTopic`: a Hosting failure toast clears when a later host starts listening, and
   the no-templates toast clears when a catalog reload finds templates. A toast of another topic stays. The toast
