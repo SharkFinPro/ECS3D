@@ -32,6 +32,7 @@ public class App : Application
             (_, e) => _errors.LogBackgroundException("AppDomain", e.ExceptionObject);
         TaskScheduler.UnobservedTaskException +=
             (_, e) => _errors.LogBackgroundException("unobserved task", e.Exception);
+        FireAndForget.Install(error => Dispatcher.UIThread.Post(() => _errors.HandleTaskException(error)));
     }
 
     public override void OnFrameworkInitializationCompleted()

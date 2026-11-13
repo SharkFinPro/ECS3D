@@ -254,7 +254,7 @@ public sealed class HostSession
             return CancelledResult();
         }
 
-        _ = WatchAsync(session, token);
+        WatchAsync(session, token).Forget();
         return OpenHostWindow(session, port);
     }
 

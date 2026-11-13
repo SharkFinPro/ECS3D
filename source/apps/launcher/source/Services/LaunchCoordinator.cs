@@ -73,7 +73,7 @@ public sealed class LaunchCoordinator
         var watchEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (tracked)
         {
-            _ = TrackAsync(process, trackedProject!, watchEnded.Task);
+            TrackAsync(process, trackedProject!, watchEnded.Task).Forget();
         }
 
         LaunchNotice? notice;
