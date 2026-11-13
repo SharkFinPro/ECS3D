@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ECS3DLauncher.Services;
@@ -22,6 +23,7 @@ public static class FireAndForget
 
         _ = task.ContinueWith(
             finished => Observe(finished, report),
+            CancellationToken.None,
             TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
     }
