@@ -184,6 +184,13 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::u
   return storeRenderObject(ownerUUID, { modelUUID, textureUUID, specularMapUUID }, drawn, assets);
 }
 
+bool GpuAssetCache::claimTransformPush(const uuids::uuid& ownerUUID, const uint64_t worldUpdateID)
+{
+  const auto it = m_renderObjects.find(ownerUUID);
+
+  return it == m_renderObjects.end() || it->second.transformPush.needsPush(worldUpdateID);
+}
+
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::uuid& ownerUUID,
                                                                    const std::string& modelPath,
                                                                    const std::size_t part)
