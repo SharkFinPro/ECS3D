@@ -2966,7 +2966,7 @@
                     "type": "RigidBody",
                     "velocity": [0, 0, 0],
                     "angularVelocity": [0, 0, 0],
-                    "friction": 0.5,
+                    "friction": 0.04,
                     "doGravity": true,
                     "gravity": -9.81,
                     "mass": 0.523599

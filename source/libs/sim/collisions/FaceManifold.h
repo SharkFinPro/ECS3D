@@ -4,6 +4,7 @@
 #include <glm/vec3.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -33,6 +34,28 @@ namespace collisions {
   // area, otherwise spread by depth and distance. Empty when either shape has no faces.
   [[nodiscard]] std::vector<glm::vec3> referenceFaceManifold(const FaceShape& first, const FaceShape& second,
                                                              const glm::vec3& normal, size_t maxPoints);
+
+  // The reference face's normal, turned to point from first toward second, when it lies within a degree or so of
+  // normal: the two shapes then meet face on, and the face says which way more exactly than EPA's polytope does.
+  [[nodiscard]] std::optional<glm::vec3> referenceFaceNormal(const FaceShape& first, const FaceShape& second,
+                                                             const glm::vec3& normal);
+
+  // How far short of the reference face a point of the other side's face may be and still be reported. A face
+  // about to land flat then reports the corners that have not arrived yet, and the solver can stop them where
+  // they arrive instead of meeting them a tick later, already past the face and turning.
+  inline constexpr float contactMargin = 0.1f;
+
+  struct ManifoldPoint {
+    glm::vec3 point;
+    // How far the point is past the reference face; negative for a point still short of it.
+    float depth;
+  };
+
+  // referenceFaceManifold with each point's depth. The other side's vertices within margin of its touching one
+  // count as its feature, and the overlap is kept up to margin short of the reference face.
+  [[nodiscard]] std::vector<ManifoldPoint> referenceFaceContacts(const FaceShape& first, const FaceShape& second,
+                                                                 const glm::vec3& normal, size_t maxPoints,
+                                                                 float margin);
 }
 
 #endif //FACEMANIFOLD_H

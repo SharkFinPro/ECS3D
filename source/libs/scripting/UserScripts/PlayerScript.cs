@@ -49,7 +49,9 @@ public class PlayerScript : ScriptBase
 
     private bool m_jumpRequested = false;
 
-    private bool m_wasJumping = true;
+    // Set by a jump until the player is airborne or stops rising. The ground can still count as holding the player
+    // for a tick or two after a jump, and a held key must not jump again from it.
+    private bool m_rising = false;
 
     // Accumulated mouse-look angles (degrees). The camera follows the object's rotation (RenderSystem
     // rotates the Camera's direction by it), so rotating the Transform here is what turns the view.
@@ -73,18 +75,23 @@ public class PlayerScript : ScriptBase
             respawn();
         }
 
-        if (!m_jumpRequested)
-        {
-            m_wasJumping = false;
-        }
-
         // Changes of velocity, so the player moves the same whatever its mass; the mass only decides how hard it
         // pushes what it runs into. Velocity is in units per tick, hence dt.
         Vector3 velocity = rigidBody.getVelocity();
+        if (rigidBody.isFalling() || velocity.Y <= 0.0f)
+        {
+            m_rising = false;
+        }
+
         Vector3 steer = (m_heading * (m_topSpeed * dt) - new Vector3(velocity.X, 0.0f, velocity.Z)) * Grip;
         if (m_jumpRequested)
         {
-            steer.Y = m_jumpSpeed * dt;
+            // Replaces the vertical velocity rather than adding to it, so every jump leaves at the same speed
+            // whatever the player was moving at when it pressed the key.
+            // A support already rising faster than a jump leaves carries the player on untouched, and must not lock
+            // out the next jump while it does.
+            steer.Y = MathF.Max(m_jumpSpeed * dt - velocity.Y, 0.0f);
+            m_rising = steer.Y > 0.0f;
         }
 
         rigidBody.applyForce(steer, transform.getPosition(), ForceMode.VelocityChange);
@@ -207,10 +214,9 @@ public class PlayerScript : ScriptBase
         }
 
         Key? jumpKey = m_jumpBinding.refresh(m_jump);
-        if (!m_wasJumping && !rigidBody.isFalling() && jumpKey.HasValue && input.keyIsPressed(jumpKey.Value))
+        if (!m_rising && !rigidBody.isFalling() && jumpKey.HasValue && input.keyIsPressed(jumpKey.Value))
         {
             m_jumpRequested = true;
-            m_wasJumping = true;
         }
     }
 

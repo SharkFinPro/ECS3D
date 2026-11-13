@@ -1,5 +1,7 @@
 #include "CollisionSystem.h"
+#include "ContactSolver.h"
 #include "PhysicsSystem.h"
+#include "collisions/FaceManifold.h"
 #include "collisions/NarrowPhase.h"
 #include <ProfileScope.h>
 #include <objects/Object.h>
@@ -20,14 +22,6 @@
 #include <utility>
 
 namespace {
-  // One candidate's narrow-phase result, kept beside its squared penetration depth so
-  // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
-  struct ScoredContact {
-    float distance;
-    size_t touch;
-    std::optional<collisions::Contact> contact;
-  };
-
   // Colliders that belong to one body never touch each other: they move together, and a response between
   // them would push the body against itself. Static colliders (no body) are not one assembly.
   bool partOfSameAssembly(const CollisionEdge& a, const CollisionEdge& b)
@@ -102,6 +96,13 @@ void CollisionSystem::checkCollisions(const float dt)
     for (auto& edge : m_collisionEdges)
     {
       edge.bounds = edge.collider->getBoundingBox();
+      edge.sweep = edge.body ? edge.body->getVelocity() : glm::vec3(0);
+      edge.bounds.minX += std::min(edge.sweep.x, 0.0f);
+      edge.bounds.maxX += std::max(edge.sweep.x, 0.0f);
+      edge.bounds.minY += std::min(edge.sweep.y, 0.0f);
+      edge.bounds.maxY += std::max(edge.sweep.y, 0.0f);
+      edge.bounds.minZ += std::min(edge.sweep.z, 0.0f);
+      edge.bounds.maxZ += std::max(edge.sweep.z, 0.0f);
       edge.position = edge.bounds.minX;
       edge.layer = edge.collider->getLayer();
       edge.mask = edge.collider->getMask();
@@ -144,23 +145,22 @@ void CollisionSystem::checkCollisions(const float dt)
     // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
     for (size_t i = 0; i < edgeCount; ++i)
     {
-      for (auto& hit : forwardHits[i])
+      for (const auto& hit : forwardHits[i])
       {
         if (hit.lowerSees)
         {
-          m_touches[i].push_back({ hit.other, std::move(hit.lowerWitness) });
+          m_touches[i].push_back(hit.other);
         }
 
         if (hit.higherSees)
         {
-          m_touches[hit.other].push_back({ i, std::move(hit.higherWitness) });
+          m_touches[hit.other].push_back(i);
         }
       }
     }
 
-    // Applied after the narrow phase's parallel region is done: a response moves the transform of either
-    // object in a pair, which would invalidate a collider cache another thread might still be reading if
-    // this ran inside the loop above.
+    // Solved after the narrow phase's parallel region is done: the solver moves the bodies of a pair, which
+    // would invalidate a collider cache another thread might still be reading if this ran inside the loop above.
     resolveInIslands(dt);
 
     recordCollisionEvents();
@@ -185,80 +185,95 @@ void CollisionSystem::resolveInIslands(const float dt)
     return x;
   };
 
-  // Colliders of one body, or of a body nested under another body, move together, so a response through any of
+  // Colliders of one body, or of a body nested under another body, move together, so solving through any of
   // them writes state the others read. A static parent (a grouping folder) moves nothing and links nothing.
   std::unordered_map<const Object*, size_t> edgeOfRootBody;
 
-  // A response moves both bodies of a dynamic pair, so those bodies share an island. A static collider is only
+  // The solver moves both bodies of a dynamic pair, so those bodies share an island. A static collider is only
   // read, so it links nothing - but its lazily built contact caches are filled here, before any thread reads it.
   for (size_t i = 0; i < edgeCount; ++i)
   {
-    if (!m_collisionEdges[i].body)
+    const auto& edge = m_collisionEdges[i];
+    if (edge.body)
     {
-      continue;
-    }
-
-    const Object* root = m_collisionEdges[i].body->getOwner();
-    while (const auto up = root->getParent())
-    {
-      const auto outer = up->getComponent<RigidBody>(ComponentType::rigidBody);
-      if (!outer)
+      const Object* root = edge.body->getOwner();
+      while (const auto up = root->getParent())
       {
-        break;
+        const auto outer = up->getComponent<RigidBody>(ComponentType::rigidBody);
+        if (!outer)
+        {
+          break;
+        }
+
+        root = outer->getOwner();
       }
 
-      root = outer->getOwner();
-    }
-
-    if (const auto [entry, inserted] = edgeOfRootBody.try_emplace(root, i); !inserted)
-    {
-      parent[find(i)] = find(entry->second);
-    }
-
-    for (const auto& touch : m_touches[i])
-    {
-      const auto& other = m_collisionEdges[touch.other];
-      if (other.body)
+      if (const auto [entry, inserted] = edgeOfRootBody.try_emplace(root, i); !inserted)
       {
-        parent[find(i)] = find(touch.other);
+        parent[find(i)] = find(entry->second);
+      }
+    }
+
+    for (const auto& hit : m_forwardHits[i])
+    {
+      const auto& other = m_collisionEdges[hit.other];
+      if (edge.body && other.body)
+      {
+        parent[find(i)] = find(hit.other);
       }
       else
       {
-        collisions::warmContactCaches(*other.collider);
+        collisions::warmContactCaches(edge.body ? *other.collider : *edge.collider);
       }
     }
   }
 
-  // Walking the global response order keeps each island's own order identical to the serial pass.
-  std::vector<std::vector<size_t>> islands;
+  std::vector<std::vector<PairRef>> islands;
   std::vector<size_t> islandOf(edgeCount, std::numeric_limits<size_t>::max());
-  for (const auto i : responseOrder())
+  for (size_t i = 0; i < edgeCount; ++i)
   {
-    if (!m_collisionEdges[i].body)
+    for (const auto& hit : m_forwardHits[i])
     {
-      continue;
-    }
+      const auto& edge = m_collisionEdges[i];
+      const auto& other = m_collisionEdges[hit.other];
 
-    auto& slot = islandOf[find(i)];
-    if (slot == std::numeric_limits<size_t>::max())
-    {
-      slot = islands.size();
-      islands.emplace_back();
-    }
+      // Triggers still recorded the pair (events fire), but get no response.
+      if (isTriggerPair(*edge.collider, *other.collider))
+      {
+        continue;
+      }
 
-    islands[slot].push_back(i);
+      auto& slot = islandOf[find(edge.body ? i : hit.other)];
+      if (slot == std::numeric_limits<size_t>::max())
+      {
+        slot = islands.size();
+        islands.emplace_back();
+      }
+
+      // A blown-up transform gives a NaN bound, which would break the sort's ordering.
+      const float bottom = std::min(edge.bounds.minY, other.bounds.minY);
+      islands[slot].push_back({ i, &hit, std::isnan(bottom) ? std::numeric_limits<float>::lowest() : bottom });
+    }
+  }
+
+  // Lowest first, so the solver's passes run up and down each stack rather than across it in sweep order, and
+  // the order does not depend on where along x a body sits.
+  for (auto& island : islands)
+  {
+    std::ranges::stable_sort(island, std::ranges::less{}, &PairRef::bottom);
   }
 
   // Largest first, so the long islands start early and the small ones fill in the gaps behind them.
-  std::ranges::stable_sort(islands, std::ranges::greater{}, [](const std::vector<size_t>& island)
+  std::ranges::stable_sort(islands, std::ranges::greater{}, [](const std::vector<PairRef>& island)
   {
     return island.size();
   });
 
   std::exception_ptr failure;
   const int islandCount = static_cast<int>(islands.size());
+  std::vector<std::vector<ContactSolver::CachedContact>> resolved(islands.size());
 
-#pragma omp parallel default(none) shared(islands, failure, dt, islandCount) num_threads(6)
+#pragma omp parallel default(none) shared(islands, resolved, failure, dt, islandCount) num_threads(6)
   {
     // A worker's inertia cache would otherwise carry entries from earlier ticks.
     PhysicsSystem::clearInertiaCache();
@@ -268,10 +283,7 @@ void CollisionSystem::resolveInIslands(const float dt)
     {
       try
       {
-        for (const auto i : islands[n])
-        {
-          handleCollisions(i, dt);
-        }
+        solveIsland(islands[n], resolved[n], dt);
       }
       catch (...)
       {
@@ -286,41 +298,75 @@ void CollisionSystem::resolveInIslands(const float dt)
     }
   }
 
+  m_contactCache.clear();
+  for (const auto& island : resolved)
+  {
+    for (const auto& contact : island)
+    {
+      m_contactCache.insert_or_assign(ContactSolver::PairKey{ contact.first, contact.second }, contact);
+    }
+  }
+
   if (failure)
   {
     std::rethrow_exception(failure);
   }
 }
 
-std::vector<size_t> CollisionSystem::responseOrder() const
+void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
+                                  std::vector<ContactSolver::CachedContact>& resolved, const float dt) const
 {
-  std::vector<std::pair<size_t, float>> bottoms;
-  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  std::vector<ContactPair> pairs;
+  pairs.reserve(island.size());
+
+  for (const auto& ref : island)
   {
-    if (m_touches[i].empty())
+    // The narrow phase is not symmetric in its arguments, so the contact is asked for the way the sweep saw it.
+    const auto& hit = *ref.hit;
+    const bool lowerFirst = hit.approaching ? m_collisionEdges[ref.lower].body != nullptr : hit.lowerSees;
+    const auto& first = m_collisionEdges[lowerFirst ? ref.lower : hit.other];
+    const auto& second = m_collisionEdges[lowerFirst ? hit.other : ref.lower];
+    const auto& witness = hit.lowerSees ? hit.lowerWitness : hit.higherWitness;
+
+    // A pair that only touches passes the overlap test but has no depth to report, so it too is asked for as
+    // the pair it becomes once this tick's motion presses it together.
+    auto contact = hit.approaching ? std::nullopt
+                                   : collisions::findContact(*first.collider, *second.collider, witness);
+    glm::vec3 askedWith(0);
+    if (hit.approaching)
     {
-      continue;
+      for (const auto& sweep : approachSweeps(first, second))
+      {
+        if (!contact && sweep != glm::vec3(0))
+        {
+          contact = collisions::findContact(*first.collider, *second.collider, sweep);
+          askedWith = sweep;
+        }
+      }
+    }
+    if (!contact && !hit.approaching)
+    {
+      // A pair that only touches passes the overlap test but has no depth to measure. Pressed a little way
+      // together it has, and the contact reports that press apart from the overlap, which is none.
+      constexpr float press = 0.02f;
+      const auto apart = second.collider->getPosition() - first.collider->getPosition();
+      const float distance = glm::length(apart);
+      if (distance > 0.0f)
+      {
+        askedWith = apart * (press / distance);
+        contact = collisions::findContact(*first.collider, *second.collider, askedWith);
+      }
     }
 
-    // A blown-up transform gives a NaN bound, which would break the sort's ordering; resolve it last.
-    const float bottom = m_collisionEdges[i].bounds.minY;
-    bottoms.emplace_back(i, std::isnan(bottom) ? std::numeric_limits<float>::lowest() : bottom);
+    if (contact)
+    {
+      pairs.push_back({ first.body.get(), second.body.get(), first.collider.get(), second.collider.get(), *contact,
+                        askedWith });
+    }
   }
 
-  // Highest first, not sweep (minX) order. A response pushes both bodies of a dynamic pair apart, so
-  // resolving a body before the one resting on it lets that later push drive it back into its own support
-  // for the rest of the tick. Top-down, each push is absorbed by the contact beneath it, and the order no
-  // longer depends on horizontal position. Gravity only acts along -y, which is what makes y "up" here.
-  std::ranges::stable_sort(bottoms, std::ranges::greater{}, &std::pair<size_t, float>::second);
-
-  std::vector<size_t> order;
-  order.reserve(bottoms.size());
-  for (const auto& entry : bottoms)
-  {
-    order.push_back(entry.first);
-  }
-
-  return order;
+  liftOutOfStatic(pairs);
+  ContactSolver::solve(pairs, m_contactCache, resolved, dt);
 }
 
 void CollisionSystem::recordCollisionEvents()
@@ -332,9 +378,9 @@ void CollisionSystem::recordCollisionEvents()
   {
     const auto& selfUUID = m_collisionEdges[i].object->getUUID();
 
-    for (const auto& touch : m_touches[i])
+    for (const auto other : m_touches[i])
     {
-      current.push_back(CollisionPair::make(selfUUID, m_collisionEdges[touch.other].object->getUUID()));
+      current.push_back(CollisionPair::make(selfUUID, m_collisionEdges[other].object->getUUID()));
     }
   }
 
@@ -356,6 +402,7 @@ void CollisionSystem::recordCollisionEvents()
 
 void CollisionSystem::reset()
 {
+  m_contactCache.clear();
   m_previousPairs.clear();
   m_enters.clear();
   m_stays.clear();
@@ -415,91 +462,111 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
     hit.lowerSees = selfDynamic && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
     hit.higherSees = box.dynamic && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
 
-    if (hit.lowerSees || hit.higherSees)
+    if (!hit.lowerSees && !hit.higherSees && !isTriggerPair(*edge.collider, *other.collider))
+    {
+      // Against each other as they move now, and each alone against the other standing still: a body about to
+      // be stopped by its own support no longer moves with what falls onto it.
+      for (const auto& sweep : approachSweeps(edge, other))
+      {
+        hit.approaching = hit.approaching ||
+                          (sweep != glm::vec3(0) && collisions::approaches(*edge.collider, *other.collider, sweep));
+      }
+    }
+
+    if (hit.lowerSees || hit.higherSees || hit.approaching)
     {
       hits.push_back(std::move(hit));
     }
   }
 }
 
-void CollisionSystem::handleCollisions(const size_t index, const float dt) const
+std::array<glm::vec3, 3> CollisionSystem::approachSweeps(const CollisionEdge& first, const CollisionEdge& second)
 {
-  const auto& edge = m_collisionEdges[index];
-  const auto& rigidBody = edge.body;
-  const auto& collider = edge.collider;
-  const auto& touches = m_touches[index];
+  return { first.sweep - second.sweep, first.sweep, -second.sweep };
+}
 
-  // The edge already holds the other side's collider, so the response asks the narrow phase directly.
-  const auto contactWith = [&](const Touch& touch) {
-    return collisions::findContact(*collider, *m_collisionEdges[touch.other].collider, touch.witness);
+void CollisionSystem::liftOutOfStatic(std::vector<ContactPair>& pairs)
+{
+  // Deeper than a resting or landing contact ever is: the body moved this far into static geometry in one tick.
+  constexpr float deepOverlap = collisions::contactMargin;
+
+  const auto isDeepInStatic = [](const ContactPair& pair)
+  {
+    return (pair.body == nullptr) != (pair.otherBody == nullptr) && pair.contact.overlap() > deepOverlap;
   };
 
-  if (touches.size() == 1)
+  std::vector<size_t> deep;
+  for (size_t i = 0; i < pairs.size(); ++i)
   {
-    const auto& other = m_collisionEdges[touches[0].other];
-
-    // Triggers still recorded the pair (events fire), but get no MTV correction / impulse.
-    if (isTriggerPair(*collider, *other.collider))
+    if (isDeepInStatic(pairs[i]))
     {
-      return;
+      deep.push_back(i);
     }
+  }
 
-    if (const auto contact = contactWith(touches[0]))
-    {
-      PhysicsSystem::handleCollision(*rigidBody, collider, other.object, contact->minimumTranslationVector,
-                                     contact->contactPoints(), dt);
-    }
-
+  if (deep.empty())
+  {
     return;
   }
 
-  // Each candidate's contact alongside its squared penetration depth, so the deepest overlap is resolved
-  // first. A pair with no contact scores zero, which the loop below stops at.
-  std::vector<ScoredContact> scoredContacts;
-  scoredContacts.reserve(touches.size());
-
-  for (size_t i = 0; i < touches.size(); ++i)
+  // Deepest first: the way out of a thin collider lying on a thick one can point further into the thick one, and
+  // only the thick one's own way out is to be trusted. Each move is followed by measuring the body's other
+  // contacts again, since it may have cleared them or changed their depth.
+  std::ranges::stable_sort(deep, std::ranges::greater{}, [&pairs](const size_t index)
   {
-    auto contact = contactWith(touches[i]);
-    const float distance = contact ? dot(contact->minimumTranslationVector, contact->minimumTranslationVector)
-                                   : 0.0f;
-
-    scoredContacts.push_back({ distance, i, std::move(contact) });
-  }
-
-  std::ranges::stable_sort(scoredContacts, [](const ScoredContact& a, const ScoredContact& b)
-  {
-    return a.distance > b.distance;
+    return pairs[index].contact.overlap();
   });
 
-  bool bodyMoved = false;
-  for (const auto& scoredContact : scoredContacts)
+  std::vector<bool> gone(pairs.size(), false);
+  for (const auto index : deep)
   {
-    if (scoredContact.distance == 0)
-    {
-      break;
-    }
-
-    const auto& touch = touches[scoredContact.touch];
-    const auto& other = m_collisionEdges[touch.other];
-
-    if (isTriggerPair(*collider, *other.collider))
+    if (gone[index] || !isDeepInStatic(pairs[index]))
     {
       continue;
     }
 
-    // Once a response has moved the body, the contacts scored before it no longer describe the overlap -
-    // the earlier push may have cleared this one, or changed its depth - so it is measured again.
-    const auto contact = bodyMoved ? contactWith(touch) : scoredContact.contact;
-    if (!contact)
+    const auto& pair = pairs[index];
+    RigidBody* body = pair.body ? pair.body : pair.otherBody;
+    const auto transform = body->getOwner()->getComponent<Transform>(ComponentType::transform);
+    if (!transform)
     {
       continue;
     }
 
-    PhysicsSystem::handleCollision(*rigidBody, collider, other.object, contact->minimumTranslationVector,
-                                   contact->contactPoints(), dt);
-    bodyMoved = true;
+    const auto away = pair.body ? pair.contact.normal() : -pair.contact.normal();
+    transform->moveWorld(away * (pair.contact.overlap() - deepOverlap * 0.5f));
+
+    for (size_t i = 0; i < pairs.size(); ++i)
+    {
+      if (gone[i] || (pairs[i].body != body && pairs[i].otherBody != body))
+      {
+        continue;
+      }
+
+      // Asked the way it was found, so a pair that was about to meet is still stopped where it meets.
+      const auto contact = pairs[i].sweep == glm::vec3(0)
+                             ? collisions::findContact(*pairs[i].collider, *pairs[i].other)
+                             : collisions::findContact(*pairs[i].collider, *pairs[i].other, pairs[i].sweep);
+      if (contact)
+      {
+        pairs[i].contact = *contact;
+      }
+      else
+      {
+        gone[i] = true;
+      }
+    }
   }
+
+  size_t kept = 0;
+  for (size_t i = 0; i < pairs.size(); ++i)
+  {
+    if (!gone[i])
+    {
+      pairs[kept++] = pairs[i];
+    }
+  }
+  pairs.resize(kept);
 }
 
 bool CollisionSystem::isTriggerPair(const Collider& collider, const Collider& other)

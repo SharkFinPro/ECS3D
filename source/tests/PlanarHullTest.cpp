@@ -83,19 +83,3 @@ TEST(PlanarHull, CollinearPointsReduceToTheirEnds)
   EXPECT_TRUE(contains(outline, line.back()));
   EXPECT_LE(outline.size(), 3u);
 }
-
-TEST(PhysicsSupportPolygon, EightPointsAreOneSupportRegion)
-{
-  const auto corners = octagon(1.0f);
-
-  const glm::vec3 insideTheLastCorners{ -0.5f, 1.0f, 0.1f };
-  const auto support = PhysicsSystem::supportPoint(insideTheLastCorners, up, corners);
-  fixtures::expectNear("inside, over the later corners", support, { -0.5f, 0.0f, 0.1f }, 1e-5f);
-
-  const auto outside = PhysicsSystem::supportPoint({ 3, 1, 0 }, up, corners);
-  fixtures::expectNear("outside, clamped to the nearest corner", outside, { 1, 0, 0 }, 1e-5f);
-
-  const auto between = PhysicsSystem::supportPoint({ 2, 1, 0.3f }, up, corners);
-  EXPECT_LE(glm::length(glm::vec2(between.x, between.z)), 1.0f + 1e-5f);
-  EXPECT_GT(between.x, 0.9f);
-}

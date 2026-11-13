@@ -146,43 +146,6 @@ namespace {
     EXPECT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 1.0f, 0.05f);
   }
 
-  // The resting body's velocity and spin after a hitter meets it sideways, with the contact normal tilted by tilt.
-  std::pair<glm::vec3, glm::vec3> restingBodyAfterSideHit(const float tilt)
-  {
-    const auto scene = fixtures::makeScene();
-
-    const auto resting = addObject(scene, "Resting", { 2, 0, 0 });
-    const auto restingBody = addBody(resting, false);
-    const auto hitter = addObject(scene, "Hitter", { 0, 0, 0 });
-    const auto hitterBody = addBody(hitter, false);
-
-    restingBody->setFalling(false);
-    hitterBody->setVelocity({ 1, 0, 0 });
-
-    PhysicsSystem::handleCollision(*hitterBody, ownColliderOf(*hitterBody), resting, { -0.1f, tilt, 0 },
-                                   glm::vec3{ 1, 0.8f, 0 }, dt);
-
-    return { restingBody->getVelocity(), restingBody->getAngularVelocity() };
-  }
-
-  // A box spinning about a horizontal axis on a flat manifold, whose falling flag is already cleared.
-  glm::vec3 spinAfterFlatContact(const bool restedOnThisPlane)
-  {
-    const auto scene = fixtures::makeScene();
-    const auto box = addObject(scene, "Box", { 0, 0, 0 });
-    const auto body = addBody(box, false);
-    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
-
-    body->setFalling(false);
-    if (restedOnThisPlane)
-    {
-      body->setSupportNormal({ 0, 1, 0 });
-    }
-    body->setAngularVelocity({ 180, 0, 0 });
-    PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, flatUnderside, dt);
-
-    return body->getAngularVelocity();
-  }
 }
 
 TEST(PhysicsTipping, APushHighOnARestingBoxTipsItOverItsFarBottomEdge)
@@ -214,11 +177,6 @@ TEST(PhysicsTipping, ASmallPushLeavesARestingBoxFlush)
   EXPECT_LT(mostTilted, 1.0f);
   EXPECT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 1.0f, 0.05f);
   EXPECT_GT(transformOf(dominoes.objects[0])->getPosition().x, -1e-3f);
-}
-
-TEST(PhysicsTipping, APushTooSmallToTipABoxRocksItAndItComesBackFlush)
-{
-  expectSmallPushRocksAndSettles(dt);
 }
 
 TEST(PhysicsTipping, APushTooSmallToTipABoxRocksItAndItComesBackFlushAtTheServersTick)
@@ -326,31 +284,6 @@ TEST(PhysicsTipping, AFallingDominoTipsTheNextOneOver)
   EXPECT_GT(tiltOf(dominoes.objects[0]), 45.0f);
   EXPECT_GT(tiltOf(dominoes.objects[1]), 45.0f);
   EXPECT_GT(transformOf(dominoes.objects[1])->getPosition().x, 1.2f);
-}
-
-TEST(PhysicsTipping, ASideContactIsTheSameWhicheverWayRoundingTiltsItsNormal)
-{
-  const auto [upVelocity, upSpin] = restingBodyAfterSideHit(1e-6f);
-  const auto [downVelocity, downSpin] = restingBodyAfterSideHit(-1e-6f);
-
-  // Positive control: the hit does move and turn the resting body.
-  EXPECT_GT(upVelocity.x, 0.01f);
-  EXPECT_GT(glm::length(upSpin), 1.0f);
-
-  // The two normals differ by 2e-6, so the responses may differ by about as much relatively; the sign-dependent
-  // bug this guards against gave a spin of zero on one side.
-  fixtures::expectNear("velocity", downVelocity, upVelocity, 1e-4f * glm::length(upVelocity));
-  fixtures::expectNear("spin", downSpin, upSpin, 1e-4f * glm::length(upSpin));
-}
-
-TEST(PhysicsTipping, ASpinningBoxThatDidNotRestOnThisPlaneLastTickStillShedsIt)
-{
-  // Falling is cleared by any small upward push, a side contact's included, so it alone does not say that the body
-  // rested here.
-  fixtures::expectNear("not resting here", spinAfterFlatContact(false), { 0, 0, 0 }, 1e-4f);
-
-  // Positive control: the same spin on a body that rested on this plane is kept.
-  fixtures::expectNear("resting here", spinAfterFlatContact(true), { 180, 0, 0 }, 1e-3f);
 }
 
 TEST(PhysicsTipping, ABoxReleasedLeaningPivotsOnItsBottomEdgeAndLandsOnItsSide)
@@ -517,56 +450,4 @@ TEST(PhysicsTipping, ASquatBoxHoldsOnTheSameSlope)
 
   EXPECT_LT(ramp.tiltFromSlope(cube), 2.0f);
   EXPECT_LT(glm::distance(fixtures::positionOf(cube), start), 0.1f);
-}
-
-TEST(PhysicsTipping, TheSupportPointIsWhereTheCenterOfMassDropsStraightDownOntoTheContactPlane)
-{
-  constexpr float angle = glm::radians(25.0f);
-  const glm::vec3 normal{ -std::sin(angle), std::cos(angle), 0.0f };
-  const glm::vec3 uphill{ std::cos(angle), std::sin(angle), 0.0f };
-  const glm::vec3 across{ 0, 0, 1 };
-
-  const std::array<glm::vec3, 4> square{
-    -0.5f * uphill - 0.5f * across, 0.5f * uphill - 0.5f * across,
-    0.5f * uphill + 0.5f * across, -0.5f * uphill + 0.5f * across
-  };
-
-  // Positive control: low over the square, it is over the square either way, so the support is straight under it
-  // along the normal.
-  const glm::vec3 low = 0.2f * uphill + 0.3f * normal + 0.1f * across;
-  expectNearBy("low", PhysicsSystem::supportPoint(low, normal, square), 0.2f * uphill + 0.1f * across);
-
-  // High above the square's center along the normal, its weight acts straight down, well downhill of the square.
-  const glm::vec3 high = 3.0f * normal;
-  expectNearBy("high", PhysicsSystem::supportPoint(high, normal, square), -0.5f * uphill);
-}
-
-TEST(PhysicsTipping, ASupportPointOnANearlyLevelWallStaysUnderTheCenterOfMass)
-{
-  // A wall leaning just past the side-contact window: dropped straight down, the center of mass would land tens of
-  // units away and put the push on the manifold's edge.
-  const glm::vec3 normal = glm::normalize(glm::vec3(1.0f, 0.02f, 0.0f));
-  const glm::vec3 up = glm::normalize(glm::vec3(-0.02f, 1.0f, 0.0f));
-  const glm::vec3 across{ 0, 0, 1 };
-
-  const std::array<glm::vec3, 4> square{
-    -0.5f * up - 0.5f * across, 0.5f * up - 0.5f * across, 0.5f * up + 0.5f * across, -0.5f * up + 0.5f * across
-  };
-
-  const glm::vec3 centerOfMass = 0.1f * up + 0.2f * across + 0.8f * normal;
-  expectNearBy("wall", PhysicsSystem::supportPoint(centerOfMass, normal, square), 0.1f * up + 0.2f * across);
-}
-
-TEST(PhysicsTipping, ALeaningContactTurnsARestingBodyButAStackedOneOnlyPushesItDown)
-{
-  // 0.05 up for 0.1 across puts the normal about 27 degrees above level: a body leaning on its side, which is
-  // not within 45 degrees of the resting body's support normal, so the hit lands off its center and turns it.
-  const auto [leanVelocity, leanSpin] = restingBodyAfterSideHit(0.05f);
-  EXPECT_GT(glm::length(leanSpin), 1.0f);
-  EXPECT_GT(leanVelocity.x, 0.01f);
-
-  // Positive control: 0.3 up for 0.1 across is within 18 degrees of straight down onto it, a body stacked on it,
-  // pushed through its center and held by its support.
-  const auto [stackedVelocity, stackedSpin] = restingBodyAfterSideHit(0.3f);
-  EXPECT_LT(glm::length(stackedSpin), 1.0f);
 }

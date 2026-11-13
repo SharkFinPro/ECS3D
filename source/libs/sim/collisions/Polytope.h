@@ -1,6 +1,7 @@
 #ifndef POLYTOPE_H
 #define POLYTOPE_H
 
+#include "FaceManifold.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <cstdint>
@@ -43,9 +44,17 @@ public:
     // the reference face on a box or hull pair, or a capsule's cap points facing the other shape. Empty when
     // only point applies, as against a sphere.
     std::vector<glm::vec3> manifold;
+
+    // Each manifold point's depth past the reference face, negative for one still short of it, or NaN where the
+    // pair's manifold has no depth of its own and the contact's applies.
+    std::vector<float> depths;
   };
 
   [[nodiscard]] ContactPoints findContactPoints() const;
+
+  // The direction of the minimum translation vector as the face the pair meets on gives it, when a box or hull
+  // pair meets face on.
+  [[nodiscard]] std::optional<glm::vec3> faceOnDirection() const;
 
 private:
   // Where a sphere in the pair touches the other shape.
@@ -53,20 +62,21 @@ private:
 
   [[nodiscard]] bool hasSphere() const;
 
-  [[nodiscard]] std::vector<glm::vec3> boxContactPoints() const;
+  [[nodiscard]] std::vector<collisions::ManifoldPoint> boxContactPoints() const;
 
   [[nodiscard]] bool isCapsulePair() const;
 
   [[nodiscard]] bool isHullPair() const;
 
-  [[nodiscard]] std::vector<glm::vec3> hullContactPoints() const;
+  [[nodiscard]] std::vector<collisions::ManifoldPoint> hullContactPoints() const;
 
   // The manifold of whichever shapes the pair holds, never empty.
-  [[nodiscard]] std::vector<glm::vec3> shapeContactPoints() const;
+  [[nodiscard]] std::vector<collisions::ManifoldPoint> shapeContactPoints() const;
 
-  [[nodiscard]] std::vector<glm::vec3> capsuleFeaturePoints() const;
+  [[nodiscard]] std::vector<collisions::ManifoldPoint> capsuleFeaturePoints() const;
 
-  [[nodiscard]] static std::vector<glm::vec3> distinctPoints(const std::vector<glm::vec3>& points);
+  [[nodiscard]] static std::vector<collisions::ManifoldPoint> distinctPoints(
+    const std::vector<collisions::ManifoldPoint>& points);
 
   Collider* m_collider;
   Collider* m_otherCollider;

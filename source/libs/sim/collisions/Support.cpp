@@ -6,8 +6,8 @@ glm::vec3 getSupport(Collider& collider, Collider& other, const glm::vec3& direc
   return collider.findFurthestPoint(direction) - other.findFurthestPoint(-direction);
 }
 
-SupportShape::SupportShape(Collider& collider)
-  : m_type(collider.getColliderType())
+SupportShape::SupportShape(Collider& collider, const glm::vec3& sweep)
+  : m_sweep(sweep), m_type(collider.getColliderType())
 {
   switch (m_type)
   {

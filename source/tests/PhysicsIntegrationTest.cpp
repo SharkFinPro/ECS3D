@@ -46,11 +46,11 @@ TEST(PhysicsIntegration, GravityAccumulatesInVelocityAndAddsUpInDistance)
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
   }
 
-  // Velocity gains the same amount every tick, and the position gains the running total - so after three
-  // ticks the body has moved 1+2+3 tick-steps rather than 3. Getting this wrong is the classic way a
-  // physics change looks plausible and is not.
+  // Velocity gains the same amount every tick, and the position gains the running total of the ticks before:
+  // a tick moves the body by the velocity it began with and only then adds gravity, which the contact solver
+  // gets to answer before it moves anything. So after three ticks the body has moved 0+1+2 tick-steps.
   EXPECT_NEAR(body->getVelocity().y, 3.0f * gravityPerTick, 1e-5f);
-  EXPECT_NEAR(transformOf(object)->getPosition().y, 6.0f * gravityPerTick, 1e-5f);
+  EXPECT_NEAR(transformOf(object)->getPosition().y, 3.0f * gravityPerTick, 1e-5f);
 }
 
 namespace {
@@ -73,8 +73,8 @@ namespace {
 
 TEST(PhysicsIntegration, AFallCoversTheSameDistanceWhateverTheTickLength)
 {
-  // Closed form for a drop from rest: g t^2 / 2, in world units. Moving by the new velocity each tick overshoots it
-  // by the share dt of that distance, so the tolerance is that overshoot and not a loose guess.
+  // Closed form for a drop from rest: g t^2 / 2, in world units. Moving by the velocity each tick began with falls
+  // short of it by the share dt of that distance, so the tolerance is that shortfall and not a loose guess.
   constexpr float expected = 0.5f * 9.81f * PhysicsSystem::unitsPerMeter;
   constexpr float coarse = 0.1f;
   constexpr float fine = 1.0f / 50.0f;
@@ -82,8 +82,8 @@ TEST(PhysicsIntegration, AFallCoversTheSameDistanceWhateverTheTickLength)
   const float coarseFall = fallInOneSecond(coarse);
   const float fineFall = fallInOneSecond(fine);
 
-  EXPECT_NEAR(coarseFall, expected * (1.0f + coarse), 1e-2f);
-  EXPECT_NEAR(fineFall, expected * (1.0f + fine), 1e-2f);
+  EXPECT_NEAR(coarseFall, expected * (1.0f - coarse), 1e-2f);
+  EXPECT_NEAR(fineFall, expected * (1.0f - fine), 1e-2f);
   EXPECT_NEAR(fineFall, coarseFall, expected * (coarse - fine) + 1e-2f);
 }
 
@@ -95,7 +95,7 @@ TEST(PhysicsIntegration, AFallAtTheServerTickMatchesTheGravityOfFiveUnitsToTheMe
 
   const float fall = fallInOneSecond(serverTick);
 
-  EXPECT_NEAR(fall, 0.5f * authoredAcceleration * (1.0f + serverTick), 1e-2f);
+  EXPECT_NEAR(fall, 0.5f * authoredAcceleration * (1.0f - serverTick), 1e-2f);
 }
 
 TEST(PhysicsIntegration, GravityInMetersPerSecondSquaredAcceleratesAtUnitsPerMeterWorldUnitsAtAnyTick)
@@ -135,6 +135,7 @@ TEST(PhysicsIntegration, ABodyWithGravityOffDoesNotMoveOnItsOwn)
   // running - which is what an assertion that only checks nothing happened would otherwise allow.
   body->setDoGravity(true);
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_NEAR(transformOf(object)->getPosition().y, 2.0f + gravityPerTick, 1e-5f);
 }
@@ -169,13 +170,15 @@ TEST(PhysicsIntegration, AQueuedForceIsAppliedOnceAndThenForgotten)
 
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
 
+  // The force changes the velocity this tick and moves the body from the next, once the contacts have seen it.
   EXPECT_NEAR(body->getVelocity().y, 5.0f, 1e-5f);
-  EXPECT_NEAR(transformOf(object)->getPosition().y, 5.0f, 1e-5f);
+  EXPECT_NEAR(transformOf(object)->getPosition().y, 0.0f, 1e-5f);
 
   // A script queues a force for the tick, not forever. Draining is what stops one jump input from
   // accelerating the body every tick after it.
   EXPECT_TRUE(body->getPendingForces().empty());
 
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_NEAR(body->getVelocity().y, 5.0f, 1e-5f);
@@ -446,104 +449,4 @@ TEST(PhysicsIntegration, UnpackingABodyFloorsAMassOfZeroOrLess)
 
   // Positive control: an ordinary mass unpacks as given.
   EXPECT_FLOAT_EQ(massAfterUnpacking(12.5f), 12.5f);
-}
-
-TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIntoIt)
-{
-  const auto scene = makeScene();
-
-  const auto falling = addObject(scene, "Falling", { 0, 0, 0 });
-  const auto body = addBody(falling, false);
-  // Placed anywhere: handleCollision is given the translation vector directly and never reads the other
-  // object's transform when it has no rigid body of its own.
-  const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
-
-  body->setVelocity({ 0, -1, 0 });
-
-  // Pushed a quarter unit back up out of the ground, with the contact directly under the body.
-  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
-
-  // The correction moves the body clear, and the impulse removes exactly the velocity that was driving
-  // it into the surface - so it rests rather than accumulating downward speed against something solid.
-  EXPECT_NEAR(transformOf(falling)->getPosition().y, 0.25f, 1e-5f);
-  EXPECT_NEAR(body->getVelocity().y, 0.0f, 1e-5f);
-
-  // The impulse is applied at the contact point, which by then is 1.25 below the corrected centre - far
-  // enough past the lever-arm guard to reach the cross product. It produces no spin only because the arm
-  // and the impulse are parallel, so a swapped argument order or a sign slip in there would show up here
-  // and nowhere else.
-  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
-}
-
-TEST(PhysicsIntegration, AStaticContactDoesNotHoldBackABodyAlreadyLeavingIt)
-{
-  const auto scene = makeScene();
-
-  const auto rising = addObject(scene, "Rising", { 0, 0, 0 });
-  const auto body = addBody(rising, false);
-  const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
-
-  body->setVelocity({ 0, 1, 0 });
-
-  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
-
-  // Still moved clear of the overlap, but its velocity is kept: it is already leaving, and stopping it would
-  // pull a body tipping up off an edge back down onto it.
-  EXPECT_NEAR(transformOf(rising)->getPosition().y, 0.25f, 1e-5f);
-  EXPECT_NEAR(body->getVelocity().y, 1.0f, 1e-5f);
-}
-
-TEST(PhysicsIntegration, AContactOffTheCenterStopsThePointItTouchesRatherThanTheWholeBody)
-{
-  const auto scene = makeScene();
-
-  const auto box = addObject(scene, "Box", { 0, 0, 0 });
-  const auto body = addBody(box, false);
-  const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
-
-  // The spin leaves the edge sliding along the ground, which friction would then act on too.
-  body->setFriction(0.0f);
-  body->setVelocity({ 0, -1, 0 });
-
-  // Under an edge, one unit to the side of the centre: r = (1, -1.01, 0) once the correction lifts the body.
-  const glm::vec3 edge{ 1, -1, 0 };
-  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, edge, dt);
-
-  // |r x n| is 1 and the inverse inertia 1.5, so the push that stops the point is 1 / (1 + 1.5) = 0.4 of the
-  // fall, and it spins the body at 1.5 * 0.4 radians per tick. Stopping the whole fall and adding that spin
-  // on top, as before, gave the body more energy than it landed with.
-  EXPECT_NEAR(body->getVelocity().y, -0.6f, 1e-5f);
-  expectNear("spin per tick", spinPerTickOf(*body), { 0, 0, 0.6f });
-
-  const auto arm = edge - transformOf(box)->getPosition();
-  EXPECT_NEAR(body->getVelocity().y + glm::cross(spinPerTickOf(*body), arm).y, 0.0f, 1e-5f);
-}
-
-TEST(PhysicsIntegration, AStaticContactStopsABodyAlikeWhateverItsMass)
-{
-  // Static geometry cannot move, so the push that stops the contact grows with the mass and the body's
-  // response comes out the same. Off the center, so the share the spin takes is in it too.
-  const auto responseOf = [](const float mass)
-  {
-    const auto scene = makeScene();
-    const auto box = addObject(scene, "Box", { 0, 0, 0 });
-    const auto body = addBody(box, false);
-    const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
-
-    body->setMass(mass);
-    body->setFriction(0.0f);
-    body->setVelocity({ 0, -1, 0 });
-    PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, { 1, -1, 0 }, dt);
-
-    return std::pair{ body->getVelocity(), spinPerTickOf(*body) };
-  };
-
-  const auto [lightVelocity, lightSpin] = responseOf(1.0f);
-  const auto [heavyVelocity, heavySpin] = responseOf(100.0f);
-
-  expectNear("velocity", heavyVelocity, lightVelocity);
-  expectNear("spin per tick", heavySpin, lightSpin);
-
-  // The contact did act: the same numbers as the unit-mass case above.
-  EXPECT_NEAR(lightVelocity.y, -0.6f, 1e-5f);
 }

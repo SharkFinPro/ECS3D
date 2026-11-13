@@ -1,8 +1,10 @@
 #ifndef COLLISIONSYSTEM_H
 #define COLLISIONSYSTEM_H
 
+#include "ContactSolver.h"
 #include "collisions/NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
+#include <glm/vec3.hpp>
 #include <array>
 #include <bit>
 #include <compare>
@@ -29,6 +31,10 @@ struct CollisionEdge {
   BoundingBox bounds{};
   uint32_t layer = 0;
   uint32_t mask = 0;
+
+  // How far the body of the collider moves this tick, which bounds is stretched along so the sweep finds what it
+  // is about to reach.
+  glm::vec3 sweep{ 0 };
 };
 
 // An unordered colliding pair, stored canonically (a < b) so the same contact recorded from either
@@ -89,7 +95,7 @@ private:
 
 class CollisionSystem {
 public:
-  // dt is the tick length, which contact responses need to combine per-tick velocity with spin.
+  // dt is the tick length, which the contact solver needs to combine per-tick velocity with spin.
   void fixedUpdate(const ObjectManager& objectManager, float dt);
 
   // Collision events for the most recent tick, diffed against the tick before it. enters = pairs new
@@ -112,13 +118,16 @@ private:
     bool higherSees;
     std::optional<collisions::OverlapWitness> lowerWitness;
     std::optional<collisions::OverlapWitness> higherWitness;
+    // Neither side overlaps the other yet, but they close on each other fast enough to meet this tick. Such a
+    // pair is solved, so it meets without sinking in, and raises no collision event until it does overlap.
+    bool approaching = false;
   };
 
-  // One edge's contact with another edge, and the GJK result that found it from this edge's side, which the
-  // response hands back to the narrow phase.
-  struct Touch {
-    size_t other;
-    std::optional<collisions::OverlapWitness> witness;
+  // A pair for the solver: the lower edge, the hit that names the higher one, and the pair's lowest bound.
+  struct PairRef {
+    size_t lower;
+    const SweepHit* hit;
+    float bottom;
   };
 
   // What the sweep's inner loop reads per candidate, packed so scanning neighbors streams through a few cache
@@ -136,7 +145,11 @@ private:
   // entries belong to the current tick. m_sweepBoxes is index-aligned with the sorted m_collisionEdges.
   std::vector<SweepBox> m_sweepBoxes;
   std::vector<std::vector<SweepHit>> m_forwardHits;
-  std::vector<std::vector<Touch>> m_touches;
+  // The edges each edge touches, ascending, which the collision events are built from.
+  std::vector<std::vector<size_t>> m_touches;
+
+  // Last tick's solved impulses by collider pair, which this tick's solve starts from.
+  ContactSolver::Cache m_contactCache;
 
   // Sorted set of colliding pairs from the previous tick, diffed against the current tick to produce
   // the enter/stay/exit lists.
@@ -151,20 +164,25 @@ private:
   // refresh m_enters/m_stays/m_exits.
   void recordCollisionEvents();
 
-  // Applies the responses island by island: bodies linked by dynamic-vs-dynamic touches resolve serially in
-  // response order on one thread, and separate islands resolve in parallel.
+  // Solves the contacts island by island: bodies linked by dynamic-vs-dynamic touches are solved together on
+  // one thread, and separate islands in parallel.
   void resolveInIslands(float dt);
 
-  // Indices of the edges with something to resolve, in the order their responses should run. Reads the
-  // bounding boxes the sweep just warmed, so it has to run before any response moves a transform.
-  [[nodiscard]] std::vector<size_t> responseOrder() const;
+  // Measures the island's contacts and hands them to the solver.
+  void solveIsland(const std::vector<PairRef>& island, std::vector<ContactSolver::CachedContact>& resolved,
+                   float dt) const;
+
+  // The displacements of first relative to second to look for an approach along: the two as they move now, then
+  // each one moving alone.
+  [[nodiscard]] static std::array<glm::vec3, 3> approachSweeps(const CollisionEdge& first, const CollisionEdge& second);
+
+  // Moves a body that sank deep into static geometry this tick straight back out of it, as a fall fast enough to
+  // pass most of the way through a thin floor would otherwise be pushed on out of the far side.
+  static void liftOutOfStatic(std::vector<ContactPair>& pairs);
 
   // Forward sweep from one edge: appends a hit for every higher-indexed edge it meets, ascending. A pair is
   // visited once, from its lower-indexed edge, and only if at least one side is dynamic.
   void findCollisions(size_t index, std::vector<SweepHit>& hits) const;
-
-  // Resolves every touch the edge's body has, deepest first.
-  void handleCollisions(size_t index, float dt) const;
 
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
   static bool isTriggerPair(const Collider& collider, const Collider& other);

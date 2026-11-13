@@ -144,14 +144,15 @@ TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
   }
 }
 
+// Only stacks that can stand: the boxes are two units wide, so one of count boxes at an angle keeps its center of
+// mass over the bottom box while count * tan(angle) stays under one.
 INSTANTIATE_TEST_SUITE_P(PhysicsSlopeStack, StackOnSlope,
-                         testing::Values(std::pair{ 2, 15.0f }, std::pair{ 3, 15.0f }, std::pair{ 4, 15.0f },
-                                         std::pair{ 2, 10.0f }, std::pair{ 3, 20.0f },
+                         testing::Values(std::pair{ 2, 15.0f }, std::pair{ 3, 15.0f },
+                                         std::pair{ 2, 10.0f }, std::pair{ 4, 10.0f },
                                          std::pair{ 2, 0.0f }, std::pair{ 3, 0.0f },
                                          // Friction 0.5 holds up to about 26.6 degrees. Closer to it, a settled stack's
                                          // creep depends on the platform's float rounding, and the slack allows for it.
-                                         std::pair{ 2, 22.0f }, std::pair{ 3, 22.0f },
-                                         std::pair{ 2, 24.0f }, std::pair{ 3, 24.0f }, std::pair{ 3, 25.0f }));
+                                         std::pair{ 2, 22.0f }, std::pair{ 2, 24.0f }));
 
 TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
 {
@@ -176,50 +177,21 @@ TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
   }
 }
 
-TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
+TEST(PhysicsSlopeStack, AStackTooTallForItsSlopeTopplesDownhill)
 {
+  // Five boxes two units wide put their shared center of mass five units above the slope, and at 20 degrees that
+  // is 1.8 units downhill of the middle of the bottom box: past its edge, so the stack goes over although friction
+  // would hold every box of it.
   constexpr int count = 5;
   SlopeStack stack(count, 20.0f);
   stack.run(10 * ticksPerSecond);
 
-  // Each box presses its support with a tick of its own weight along the normal, and the support passes what rests
-  // on it on whole, so every level holds one box's load more than the level above it. Projected onto world up,
-  // what a level passes on would shrink by the cosine of the slope at every level below it.
-  const auto& body = *stack.bodies[0];
-  const float perBox = body.getMass() * gravityStep * glm::dot(stack.normal, glm::vec3(0, 1, 0));
+  EXPECT_GT(stack.slidDownhill(count - 1), 2.0f);
 
-  // A top box that slid off would leave the level under it nothing to pass on.
-  // Measured along the slope, so sinking into the boxes below does not count. The top box slips about 0.09 from its
-  // start, and 0.03 along the box under it, before friction holds it. The slip follows from EPA's contact depths, the
-  // same whichever equally furthest corner a box's support returns.
-  constexpr float topBoxBound = 0.25f;
-  constexpr float topBoxRelativeBound = 0.1f;
-  EXPECT_LT(std::fabs(stack.slidDownhill(count - 1)), topBoxBound);
-  EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)),
-            topBoxRelativeBound);
-
-  // Positive control: the bound is not vacuous, since the same stack on a steeper slope moves farther than it.
-  SlopeStack sliding(count, 40.0f);
-  sliding.run(10 * ticksPerSecond);
-  EXPECT_GT(sliding.slidDownhill(count - 1), topBoxBound);
-
-  for (const auto& box : stack.bodies)
-  {
-    EXPECT_LT(glm::length(box->getAngularVelocity()), 0.5f);
-  }
-
-  for (int tick = 0; tick < 10; ++tick)
-  {
-    stack.run(1);
-
-    for (int level = 0; level + 1 < count; ++level)
-    {
-      SCOPED_TRACE(testing::Message() << "tick " << tick << ", level " << level);
-
-      const float added = stack.bodies[level]->getStackedLoad() - stack.bodies[level + 1]->getStackedLoad();
-      EXPECT_NEAR(added, perBox, 0.01f * perBox);
-    }
-  }
+  // Positive control: two boxes keep their center of mass over the bottom one and stay.
+  SlopeStack low(2, 20.0f);
+  low.run(10 * ticksPerSecond);
+  EXPECT_LT(std::fabs(low.slidDownhill(1)), 0.01f);
 }
 
 TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)

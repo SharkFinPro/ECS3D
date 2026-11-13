@@ -22,7 +22,8 @@ other stations loop on their own.
 
 - **Domino run** (north west): 30 dominoes on an S curve. The first leans 15 degrees; the last knocks a
   small sphere off a ledge.
-- **Pyramid** (north): 30 unit cubes in layers of 16, 9, 4 and 1. It stands until you walk into it.
+- **Pyramid** (north): 30 unit cubes in layers of 16, 9, 4 and 1. It stands on its own and outweighs you seven
+  times, so walking into it shoves the bottom row back rather than bringing it down.
 - **Cradle row** (north east): seven touching spheres; one more rolls down the feeder ramp on Play.
 - **Friction slopes** (west): identical pucks with friction 0, 0.5 and 1 on 35 degree slopes. A new puck
   appears every 8 seconds.

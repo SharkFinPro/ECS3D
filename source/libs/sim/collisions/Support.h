@@ -5,6 +5,7 @@
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <span>
 
@@ -23,9 +24,18 @@ glm::vec3 getSupport(Collider& collider, Collider& other, const glm::vec3& direc
 // collider geometry changes - for the length of one narrow-phase call.
 class SupportShape {
 public:
-  explicit SupportShape(Collider& collider);
+  // With a sweep, the shape answers for everything it passes through when carried along that displacement.
+  explicit SupportShape(Collider& collider, const glm::vec3& sweep = glm::vec3(0));
 
   [[nodiscard]] glm::vec3 furthestPoint(const glm::vec3& direction) const
+  {
+    const auto point = furthestPointAtRest(direction);
+
+    return glm::dot(direction, m_sweep) > 0.0f ? point + m_sweep : point;
+  }
+
+private:
+  [[nodiscard]] glm::vec3 furthestPointAtRest(const glm::vec3& direction) const
   {
     switch (m_type)
     {
@@ -42,7 +52,7 @@ public:
     return glm::vec3(0);
   }
 
-private:
+  glm::vec3 m_sweep;
   ColliderType m_type;
   const BoxSupport* m_box = nullptr;
   SphereSupport m_sphere;

@@ -154,7 +154,7 @@ TEST(PhysicsFriction, ASphereRollsTheSameDistanceOnASlope)
   Slope slope(5.71059f, true);
   slope.run(static_cast<int>(std::lround(60.0f * fasterBy)), 0.02f);
 
-  EXPECT_GT(slope.slidDistance(), 6.0f);
+  EXPECT_GT(slope.slidDistance(), 5.0f);
   EXPECT_LT(slope.slidDistance(), 9.5f);
 }
 

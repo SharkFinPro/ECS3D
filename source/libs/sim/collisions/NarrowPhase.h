@@ -4,6 +4,7 @@
 #include "Simplex.h"
 #include <glm/vec3.hpp>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -30,10 +31,25 @@ namespace collisions {
     std::array<glm::vec3, 4> points{};
     std::uint8_t pointCount = 0;
 
+    // How deep each of points is, along the normal. A box or hull face reports the corners of its overlap that are
+    // still a little short of the other face too, with a negative depth: how far they have left to go.
+    std::array<float, 4> depths{};
+
     // The manifold, or just point when there is none. Refers into this Contact.
     [[nodiscard]] std::span<const glm::vec3> contactPoints() const;
 
     [[nodiscard]] float depth() const;
+
+    // How much of depth() the first collider's sweep this tick accounts for, when the contact was asked for with
+    // one. The rest is the overlap there is now.
+    float advance = 0.0f;
+
+    // How far the shapes are into each other now: depth() without the sweep's share, so negative while they are
+    // still apart.
+    [[nodiscard]] float overlap() const;
+
+    // The depth of contactPoints()[index].
+    [[nodiscard]] float depthAt(std::size_t index) const;
 
     // Unit length, pointing the way the first collider has to move.
     [[nodiscard]] glm::vec3 normal() const;
@@ -61,6 +77,14 @@ namespace collisions {
   // The same, skipping GJK when witness was recorded for this ordered pair and is still current.
   [[nodiscard]] std::optional<Contact> findContact(Collider& collider, Collider& other,
                                                    const std::optional<OverlapWitness>& witness);
+
+  // The contact of a pair that does not overlap yet but would once collider has moved by sweep, its displacement
+  // relative to other over the coming tick: the normal it will meet along, and through overlap() and depthAt() the
+  // distance still between them. A pair that overlaps already answers as without a sweep.
+  [[nodiscard]] std::optional<Contact> findContact(Collider& collider, Collider& other, const glm::vec3& sweep);
+
+  // Whether collider, carried along sweep, passes through other.
+  [[nodiscard]] bool approaches(Collider& collider, Collider& other, const glm::vec3& sweep);
 
   // For a caller that only needs to know whether the pair touches, which is what the sweep asks. It
   // skips the work findContact does to describe the overlap - EPA on a general pair, the contact point

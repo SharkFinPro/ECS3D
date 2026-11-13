@@ -41,13 +41,13 @@ namespace {
   const std::vector<Pose> poses{
     { "flat", { 0, 1.9f, 0 }, { 0, 0, 0 }, 4 },
     { "shifted over the edge", { 0.7f, 1.9f, 0.3f }, { 0, 0, 0 }, 4 },
-    { "tilted half a degree", { 0.2f, 1.9f, -0.1f }, { 0, 0, 0.5f }, 2 },
+    { "tilted half a degree", { 0.2f, 1.9f, -0.1f }, { 0, 0, 0.5f }, 4 },
     { "tilted a twentieth of a degree", { 0.2f, 1.9f, -0.1f }, { 0, 0, 0.05f }, 4 },
-    { "tilted three degrees", { -0.3f, 1.9f, 0.1f }, { 3, 0, 0 }, 2 },
+    { "tilted three degrees", { -0.3f, 1.9f, 0.1f }, { 3, 0, 0 }, 4 },
     { "on a 45 degree edge", { 0.1f, 2.36f, 0 }, { 0, 0, 45 }, 2 },
     { "on a corner", { 0.1f, 2.62f, 0.2f }, { 35, 0, 45 }, 1 },
     { "yawed 30 degrees", { 0.4f, 1.9f, 0.2f }, { 0, 30, 0 }, 4 },
-    { "yawed and tilted", { 0.3f, 1.92f, 0.1f }, { 3, 30, 2 }, 2 }
+    { "yawed and tilted", { 0.3f, 1.92f, 0.1f }, { 3, 30, 2 }, 4 }
   };
 
   std::shared_ptr<Collider> attach(const std::shared_ptr<Object>& object, const Kind kind)
