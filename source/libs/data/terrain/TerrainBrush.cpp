@@ -43,16 +43,17 @@ namespace terrain
       return op.kind != BrushOp::Kind::flatten || glm::length(op.planeNormal) > 1.0e-6f;
     }
 
-    float weightAt(const BrushOp& op, const float voxelSize, const float distance)
+    // The ramp ends at the influence radius so that a falloff of zero keeps full weight across the whole border.
+    float weightAt(const BrushOp& op, const float influence, const float distance)
     {
-      const float inner = op.radius * (1.0f - op.falloff);
+      const float inner = influence * (1.0f - op.falloff);
 
       if (distance <= inner)
       {
         return op.strength;
       }
 
-      const float t = std::clamp((distance - inner) / (op.radius + voxelSize - inner), 0.0f, 1.0f);
+      const float t = std::clamp((distance - inner) / (influence - inner), 0.0f, 1.0f);
       return op.strength * (1.0f - t * t * (3.0f - 2.0f * t));
     }
 
@@ -130,7 +131,7 @@ namespace terrain
     }
 
     const float voxelSize = volume.voxelSize();
-    const float influence = op.radius + voxelSize;
+    const float influence = op.radius + brushBorderVoxels * voxelSize;
     const glm::vec3 low = glm::floor((op.center - glm::vec3(influence)) / voxelSize);
     const glm::vec3 high = glm::ceil((op.center + glm::vec3(influence)) / voxelSize);
 
@@ -147,7 +148,7 @@ namespace terrain
     }
 
     const float voxelSize = volume.voxelSize();
-    const float influence = op.radius + voxelSize;
+    const float influence = op.radius + brushBorderVoxels * voxelSize;
     const glm::vec3 normal = op.kind == BrushOp::Kind::flatten ? glm::normalize(op.planeNormal) : glm::vec3(0.0f);
     const Field blurred = op.kind == BrushOp::Kind::smooth ? blurredField(volume, box)
                                                            : Field(glm::ivec3(0), glm::ivec3(0));
@@ -162,7 +163,7 @@ namespace terrain
         return;
       }
 
-      const float weight = weightAt(op, voxelSize, reach);
+      const float weight = weightAt(op, influence, reach);
       const float before = decodeDistance(distance);
       const float sphere = (reach - op.radius) / voxelSize;
       bool paintsRaisedGround = false;

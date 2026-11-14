@@ -27,6 +27,10 @@ namespace terrain
 
   inline constexpr float maxBrushRadiusVoxels = 64.0f;
 
+  // A trilinear cell's corners reach up to sqrt(3) voxels from the surface, so every corner of every cell the surface
+  // crosses must be rewritten.
+  inline constexpr float brushBorderVoxels = 2.0f;
+
   // Every sample applyBrush can change lies inside the box. Both return empty results for a brush that is invalid
   // for the volume (non-finite field, radius beyond maxBrushRadiusVoxels, out-of-range value or a center too far out).
   [[nodiscard]] SampleBox dirtyBox(const TerrainVolume& volume, const BrushOp& op);

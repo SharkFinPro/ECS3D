@@ -141,7 +141,11 @@ TEST(TerrainBrushTest, AddBuildsASphereIntoEmptySpace)
   terrain::Sampler sampler(volume);
 
   for (const glm::vec3 direction : { glm::vec3(1, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0),
-                                     glm::vec3(0, -1, 0), glm::vec3(0, 0, 1), glm::vec3(0, 0, -1) })
+                                     glm::vec3(0, -1, 0), glm::vec3(0, 0, 1), glm::vec3(0, 0, -1),
+                                     glm::normalize(glm::vec3(1, 1, 1)), glm::normalize(glm::vec3(-1, 1, 1)),
+                                     glm::normalize(glm::vec3(1, -1, 1)), glm::normalize(glm::vec3(1, 1, -1)),
+                                     glm::normalize(glm::vec3(-1, -1, 1)), glm::normalize(glm::vec3(-1, 1, -1)),
+                                     glm::normalize(glm::vec3(1, -1, -1)), glm::normalize(glm::vec3(-1, -1, -1)) })
   {
     EXPECT_NEAR(sampler.distance(op.center + direction * op.radius), 0.0f, 0.05f);
     EXPECT_LT(sampler.distance(op.center + direction * op.radius * 0.5f), -1.0f);
@@ -150,6 +154,40 @@ TEST(TerrainBrushTest, AddBuildsASphereIntoEmptySpace)
 
   EXPECT_NEAR(sampler.distance(op.center), -terrain::bandVoxels, 1e-3f);
   EXPECT_EQ(volume.materialAtSample({ 20, 20, 20 }), 7);
+}
+
+TEST(TerrainBrushTest, AddRewritesEveryCornerOfEverySurfaceCell)
+{
+  terrain::TerrainVolume volume(voxel);
+  const terrain::BrushOp op = brush(Kind::add, { 50.0f, 50.0f, 50.0f }, 25.0f);
+  apply(volume, op);
+
+  const float reachVoxels = std::sqrt(3.0f);
+  int checked = 0;
+  int beyondOneVoxel = 0;
+
+  for (int z = 0; z <= 40; ++z)
+  {
+    for (int y = 0; y <= 40; ++y)
+    {
+      for (int x = 0; x <= 40; ++x)
+      {
+        const float sphere = (glm::length(glm::vec3(x, y, z) * voxel - op.center) - op.radius) / voxel;
+
+        if (sphere > reachVoxels)
+        {
+          continue;
+        }
+
+        ++checked;
+        beyondOneVoxel += sphere > 1.0f ? 1 : 0;
+        ASSERT_NEAR(distanceAt(volume, x, y, z), std::clamp(sphere, -terrain::bandVoxels, terrain::bandVoxels), 2e-3f);
+      }
+    }
+  }
+
+  EXPECT_GT(checked, 0);
+  EXPECT_GT(beyondOneVoxel, 0);
 }
 
 TEST(TerrainBrushTest, SubtractCarvesACraterOutOfGround)
