@@ -48,6 +48,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainTypes.h
   terrain/TerrainVolume.cpp
   terrain/TerrainVolume.h
+  terrain/TerrainSampling.cpp
+  terrain/TerrainSampling.h
   objects/Object.cpp
   objects/Object.h
   objects/ObjectManager.cpp
