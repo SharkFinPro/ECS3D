@@ -217,6 +217,8 @@ add_executable(${PROJECT_NAME}
   AppIconTest.cpp
   TemplateManifestTest.cpp
   ProjectFingerprintTest.cpp
+  TerrainChunkTest.cpp
+  TerrainVolumeTest.cpp
   ProjectIdentityCheckTest.cpp
   ProjectLoadTrackerTest.cpp
   ProjectOriginTest.cpp
