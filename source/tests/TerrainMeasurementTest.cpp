@@ -182,6 +182,55 @@ namespace {
 
     return static_cast<size_t>(std::count(crossed.begin(), crossed.end(), true));
   }
+
+  struct HeldLayers
+  {
+    int bottom = 0;
+    int top = 0;
+  };
+
+  HeldLayers fillVolume(const Grid& grid, terrain::TerrainVolume& volume)
+  {
+    constexpr int chunksPerSide = columns / terrain::chunkSize;
+    // One full chunk layer below the lowest band is held as solid; nothing lies beneath it.
+    const auto [lowestBand, highestBand] = bandSampleRange(grid);
+    const int bottomLayer = terrain::floorDiv(lowestBand, terrain::chunkSize) - 1;
+    const int topLayer = terrain::floorDiv(highestBand, terrain::chunkSize);
+
+    for (int chunkZ = 0; chunkZ < chunksPerSide; ++chunkZ)
+    {
+      for (int chunkX = 0; chunkX < chunksPerSide; ++chunkX)
+      {
+        const ColumnRange range = rangeOfColumn(grid, chunkX, chunkZ);
+        const float reach = terrain::bandVoxels * voxelSize / range.smallestSlope;
+
+        for (int chunkY = bottomLayer; chunkY <= topLayer; ++chunkY)
+        {
+          const float lowestUnits = static_cast<float>(chunkY * terrain::chunkSize) * voxelSize;
+          const float highestUnits = lowestUnits + static_cast<float>(terrain::chunkSize - 1) * voxelSize;
+          const bool aboveSurface = lowestUnits - range.highestHeight >= reach;
+          const bool deepSolid = highestUnits - range.lowestHeight <= -reach;
+
+          // The pruned cases are what building the arrays would collapse to, give or take samples at the exact
+          // band edge, so counts may differ slightly from an unpruned fill.
+          if (aboveSurface)
+          {
+            continue;
+          }
+
+          if (deepSolid)
+          {
+            volume.setChunk({ chunkX, chunkY, chunkZ }, terrain::TerrainChunk::uniform(-terrain::airDistance, 0));
+            continue;
+          }
+
+          volume.setChunk({ chunkX, chunkY, chunkZ }, buildChunk(grid, chunkX, chunkY, chunkZ));
+        }
+      }
+    }
+
+    return { bottomLayer, topLayer };
+  }
 }
 
 TEST(TerrainMeasurement, RollingTerrain512Meters)
@@ -193,44 +242,7 @@ TEST(TerrainMeasurement, RollingTerrain512Meters)
   const auto started = std::chrono::steady_clock::now();
   const Grid grid = buildGrid();
   terrain::TerrainVolume volume(voxelSize);
-  constexpr int chunksPerSide = columns / terrain::chunkSize;
-  // One full chunk layer below the lowest band is held as solid; nothing lies beneath it.
-  const auto [lowestBand, highestBand] = bandSampleRange(grid);
-  const int bottomLayer = terrain::floorDiv(lowestBand, terrain::chunkSize) - 1;
-  const int topLayer = terrain::floorDiv(highestBand, terrain::chunkSize);
-
-  for (int chunkZ = 0; chunkZ < chunksPerSide; ++chunkZ)
-  {
-    for (int chunkX = 0; chunkX < chunksPerSide; ++chunkX)
-    {
-      const ColumnRange range = rangeOfColumn(grid, chunkX, chunkZ);
-      const float reach = terrain::bandVoxels * voxelSize / range.smallestSlope;
-
-      for (int chunkY = bottomLayer; chunkY <= topLayer; ++chunkY)
-      {
-        const float lowestUnits = static_cast<float>(chunkY * terrain::chunkSize) * voxelSize;
-        const float highestUnits = lowestUnits + static_cast<float>(terrain::chunkSize - 1) * voxelSize;
-        const bool aboveSurface = lowestUnits - range.highestHeight >= reach;
-        const bool deepSolid = highestUnits - range.lowestHeight <= -reach;
-
-        // The pruned cases are what building the arrays would collapse to, give or take samples at the exact
-        // band edge, so counts may differ slightly from an unpruned fill.
-        if (aboveSurface)
-        {
-          continue;
-        }
-
-        if (deepSolid)
-        {
-          volume.setChunk({ chunkX, chunkY, chunkZ }, terrain::TerrainChunk::uniform(-terrain::airDistance, 0));
-          continue;
-        }
-
-        volume.setChunk({ chunkX, chunkY, chunkZ }, buildChunk(grid, chunkX, chunkY, chunkZ));
-      }
-    }
-  }
-
+  const HeldLayers layers = fillVolume(grid, volume);
   const double fillSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
 
   size_t denseCount = 0;
@@ -252,7 +264,7 @@ TEST(TerrainMeasurement, RollingTerrain512Meters)
 
   std::cout << "[terrain] chunk 32: dense " << denseCount << ", uniform " << uniformCount << ", byteSize "
             << volumeMiB << " MiB, encoded " << encodedMiB << " MiB, fill " << fillSeconds << " s, dense only "
-            << denseThirtyTwoMiB << " MiB, layers " << bottomLayer << ".." << topLayer << "\n";
+            << denseThirtyTwoMiB << " MiB, layers " << layers.bottom << ".." << layers.top << "\n";
   std::cout << "[terrain] chunk 16 (analytic): dense " << denseSixteen << ", " << denseSixteenMiB << " MiB\n";
 
   RecordProperty("denseChunks32", std::to_string(denseCount));
