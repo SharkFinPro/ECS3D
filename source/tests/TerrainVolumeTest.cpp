@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -30,11 +31,11 @@ namespace {
 
     return terrain::TerrainChunk::dense(std::move(distances), std::move(materials));
   }
-}
 
-static terrain::TerrainVolume makeVolume(const float voxelSize)
-{
-  return terrain::TerrainVolume(voxelSize);
+  terrain::TerrainVolume makeVolume(const float voxelSize)
+  {
+    return terrain::TerrainVolume(voxelSize);
+  }
 }
 
 TEST(TerrainVolumeTest, AbsentChunkReadsAsAir)
@@ -192,6 +193,52 @@ TEST(TerrainVolumeTest, ByteSizeGrowsWithDenseChunks)
 
   EXPECT_GT(withUniform, empty);
   EXPECT_GT(volume.byteSize(), withUniform + static_cast<size_t>(terrain::samplesPerChunk) * 3);
+}
+
+TEST(TerrainVolumeTest, ExtremeChunkCoordinatesThrowAndLeaveTheVolumeUnchanged)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid(1));
+  const auto before = volume.snapshotChunks();
+  constexpr int32_t beyond = terrain::maxChunkCoord + 1;
+  constexpr int32_t minimum = std::numeric_limits<int32_t>::min();
+
+  EXPECT_THROW(volume.setChunk({ beyond, 0, 0 }, solid()), std::out_of_range);
+  EXPECT_THROW(volume.setChunk({ 0, -beyond, 0 }, solid()), std::out_of_range);
+  EXPECT_THROW(volume.setChunk({ 0, 0, std::numeric_limits<int32_t>::max() }, solid()), std::out_of_range);
+  EXPECT_THROW(volume.setChunk({ minimum, 0, 0 }, solid()), std::out_of_range);
+  EXPECT_THROW(volume.setChunk({ beyond, 0, 0 }, nullptr), std::out_of_range);
+
+  terrain::TerrainVolume::ChunkMap bad;
+  bad[{ 5, 5, 5 }] = solid(2);
+  bad[{ 0, minimum, 0 }] = solid(3);
+  EXPECT_THROW(volume.restoreChunks(bad), std::out_of_range);
+
+  EXPECT_EQ(volume.chunks().size(), 1u);
+  EXPECT_EQ(volume.chunk({ 0, 0, 0 }), before.at({ 0, 0, 0 }));
+  EXPECT_EQ(volume.chunk({ 5, 5, 5 }), nullptr);
+}
+
+TEST(TerrainVolumeTest, AChunkAtExactlyTheCoordinateLimitIsAccepted)
+{
+  terrain::TerrainVolume volume;
+  constexpr int32_t limit = terrain::maxChunkCoord;
+
+  EXPECT_TRUE(terrain::isValidChunkCoord({ limit, -limit, limit }));
+  EXPECT_FALSE(terrain::isValidChunkCoord({ limit + 1, 0, 0 }));
+
+  volume.setChunk({ limit, -limit, 0 }, solid(1));
+
+  EXPECT_EQ(volume.chunks().size(), 1u);
+  const terrain::SampleBox bounds = volume.occupiedBounds();
+  EXPECT_EQ(bounds.min, glm::ivec3(limit * 32, -limit * 32, 0));
+  EXPECT_EQ(bounds.max, glm::ivec3(limit * 32 + 32, -limit * 32 + 32, 32));
+  EXPECT_EQ(volume.distanceAtSample({ limit * 32, -limit * 32, 0 }), -terrain::airDistance);
+
+  terrain::TerrainVolume::ChunkMap map;
+  map[{ -limit, limit, limit }] = solid(2);
+  volume.restoreChunks(map);
+  EXPECT_EQ(volume.chunks().size(), 1u);
 }
 
 TEST(TerrainVolumeTest, VoxelSizeIsKeptAndInvalidSizesThrow)

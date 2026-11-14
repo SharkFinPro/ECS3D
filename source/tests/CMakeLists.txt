@@ -216,10 +216,10 @@ add_executable(${PROJECT_NAME}
   AgentDocsTest.cpp
   AppIconTest.cpp
   TemplateManifestTest.cpp
-  ProjectFingerprintTest.cpp
-  TerrainSamplingTest.cpp
   TerrainChunkTest.cpp
+  TerrainSamplingTest.cpp
   TerrainVolumeTest.cpp
+  ProjectFingerprintTest.cpp
   ProjectIdentityCheckTest.cpp
   ProjectLoadTrackerTest.cpp
   ProjectOriginTest.cpp

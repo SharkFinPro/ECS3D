@@ -45,11 +45,11 @@ add_library(${PROJECT_NAME}
   templates/TemplateManifest.h
   terrain/TerrainChunk.cpp
   terrain/TerrainChunk.h
+  terrain/TerrainSampling.cpp
+  terrain/TerrainSampling.h
   terrain/TerrainTypes.h
   terrain/TerrainVolume.cpp
   terrain/TerrainVolume.h
-  terrain/TerrainSampling.cpp
-  terrain/TerrainSampling.h
   objects/Object.cpp
   objects/Object.h
   objects/ObjectManager.cpp

@@ -67,11 +67,12 @@ fails names the scene and the object it choked on) / `ProjectPacker` (binary wir
 history swap), and `RecordEdits`, which derives the command for an edit the editor is about to send from its
 pre-edit replicated view; see [undo-redo.md](undo-redo.md)), and `scenes/SceneScriptEdits` (the scene script
 list's `sceneEdit` op builders and apply). `templates/TemplateManifest`
-(`parseTemplateManifest`/`loadTemplateManifest`, the headless `template.json` parser). `terrain/` holds the sparse
-signed-distance volume in `namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample
-`TerrainChunk`s that an edit swaps copy-on-write, and `Sampler` reads trilinear distance and gradient from it. A `CapsuleCollider`
+(`parseTemplateManifest`/`loadTemplateManifest`, the headless `template.json` parser). A `CapsuleCollider`
 points along local +Y, and its `height` is the total height including both caps. Its radius scales with the
-larger of the object's x and z scale, and its half-height with y. **No Vulkan, no ImGui.**
+larger of the object's x and z scale, and its half-height with y. `terrain/` holds the sparse signed-distance volume in
+`namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample `TerrainChunk`s that an edit swaps copy-on-write,
+and `Sampler` reads trilinear distance and gradient from it.
+**No Vulkan, no ImGui.**
 
 ## ECS3DRender
 

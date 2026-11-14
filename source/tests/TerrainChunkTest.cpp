@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "ProjectFingerprint.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainTypes.h"
 
@@ -7,8 +8,10 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -93,6 +96,38 @@ TEST(TerrainChunkTest, DenseRejectsWrongSizes)
   EXPECT_NE(terrain::TerrainChunk::dense(filledDistances(1), filledMaterials(0)), nullptr);
 }
 
+TEST(TerrainChunkTest, UniformRejectsOutOfRangeValues)
+{
+  EXPECT_EQ(terrain::TerrainChunk::uniform(terrain::airDistance + 1, 0), nullptr);
+  EXPECT_EQ(terrain::TerrainChunk::uniform(-terrain::airDistance - 1, 0), nullptr);
+  EXPECT_EQ(terrain::TerrainChunk::uniform(std::numeric_limits<int16_t>::min(), 0), nullptr);
+  EXPECT_EQ(terrain::TerrainChunk::uniform(0, terrain::reservedMaterial), nullptr);
+
+  EXPECT_NE(terrain::TerrainChunk::uniform(terrain::airDistance, 0), nullptr);
+  EXPECT_NE(terrain::TerrainChunk::uniform(-terrain::airDistance, 254), nullptr);
+}
+
+TEST(TerrainChunkTest, DenseRejectsOutOfRangeValuesAnywhere)
+{
+  for (const size_t at : { size_t{ 0 }, size_t{ 2000 }, static_cast<size_t>(terrain::samplesPerChunk - 1) })
+  {
+    auto distances = filledDistances(5);
+    distances[at] = terrain::airDistance + 1;
+    EXPECT_EQ(terrain::TerrainChunk::dense(distances, filledMaterials(1)), nullptr) << at;
+
+    distances[at] = -terrain::airDistance - 1;
+    EXPECT_EQ(terrain::TerrainChunk::dense(distances, filledMaterials(1)), nullptr) << at;
+
+    auto materials = filledMaterials(1);
+    materials[at] = terrain::reservedMaterial;
+    EXPECT_EQ(terrain::TerrainChunk::dense(filledDistances(5), materials), nullptr) << at;
+
+    distances[at] = terrain::airDistance;
+    materials[at] = 254;
+    EXPECT_NE(terrain::TerrainChunk::dense(distances, materials), nullptr) << at;
+  }
+}
+
 TEST(TerrainChunkTest, DenseCollapsesToUniformWhenEverySampleIsEqual)
 {
   const auto chunk = terrain::TerrainChunk::dense(filledDistances(-500), filledMaterials(3));
@@ -161,6 +196,40 @@ TEST(TerrainChunkTest, EqualContentHashesEqualWhicheverFactoryBuiltIt)
   EXPECT_EQ(first->hash(), second->hash());
 }
 
+TEST(TerrainChunkTest, HashMatchesFingerprintBytesOfTheCanonicalForm)
+{
+  std::vector<int16_t> distances(terrain::samplesPerChunk);
+  std::vector<uint8_t> materials(terrain::samplesPerChunk);
+
+  for (int i = 0; i < terrain::samplesPerChunk; ++i)
+  {
+    distances[static_cast<size_t>(i)] = static_cast<int16_t>((i * 37) % 60000 - 30000);
+    materials[static_cast<size_t>(i)] = static_cast<uint8_t>(i % 251);
+  }
+
+  std::string canonical(1, '\x01');
+
+  for (const int16_t distance : distances)
+  {
+    const auto raw = static_cast<uint16_t>(distance);
+    canonical.push_back(static_cast<char>(raw & 0xFF));
+    canonical.push_back(static_cast<char>(raw >> 8));
+  }
+
+  for (const uint8_t material : materials)
+  {
+    canonical.push_back(static_cast<char>(material));
+  }
+
+  const auto chunk = terrain::TerrainChunk::dense(distances, materials);
+
+  ASSERT_NE(chunk, nullptr);
+  EXPECT_EQ(chunk->hash(), fingerprintBytes(canonical));
+
+  const std::string uniformCanonical{ '\x00', '\x0A', '\x00', '\x03' };
+  EXPECT_EQ(terrain::TerrainChunk::uniform(10, 3)->hash(), fingerprintBytes(uniformCanonical));
+}
+
 TEST(TerrainChunkTest, DifferentContentHashesDifferently)
 {
   const auto base = terrain::TerrainChunk::uniform(-800, 2);
@@ -176,6 +245,28 @@ TEST(TerrainChunkTest, DifferentContentHashesDifferently)
 
   EXPECT_NE(base->hash(), changed->hash());
   EXPECT_NE(changed->hash(), changedAgain->hash());
+}
+
+TEST(TerrainChunkTest, ChangingTheLastDistanceOrOneMaterialChangesTheHash)
+{
+  auto distances = filledDistances(-800);
+  distances[0] = 3;
+  const auto base = terrain::TerrainChunk::dense(distances, filledMaterials(2));
+
+  auto lastChanged = distances;
+  lastChanged.back() = 4;
+  const auto byLastDistance = terrain::TerrainChunk::dense(lastChanged, filledMaterials(2));
+
+  auto materials = filledMaterials(2);
+  materials[1500] = 3;
+  const auto byMaterial = terrain::TerrainChunk::dense(distances, materials);
+
+  ASSERT_NE(byLastDistance, nullptr);
+  ASSERT_NE(byMaterial, nullptr);
+  EXPECT_NE(base->hash(), byLastDistance->hash());
+  EXPECT_NE(base->hash(), byMaterial->hash());
+  EXPECT_NE(byLastDistance->hash(), byMaterial->hash());
+  EXPECT_EQ(base->hash(), terrain::TerrainChunk::dense(distances, filledMaterials(2))->hash());
 }
 
 TEST(TerrainChunkTest, DenseByteSizeDwarfsUniform)
