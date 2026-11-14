@@ -62,9 +62,8 @@ namespace terrain
     return cell;
   }
 
-  float Sampler::distance(const glm::vec3 local)
+  float Sampler::distanceOf(const Cell& cell)
   {
-    const Cell cell = fetchCell(local);
     const glm::vec3 f = cell.fraction;
     const auto& c = cell.corners;
 
@@ -78,9 +77,8 @@ namespace terrain
     return y0 + (y1 - y0) * f.z;
   }
 
-  glm::vec3 Sampler::gradient(const glm::vec3 local)
+  glm::vec3 Sampler::gradientOf(const Cell& cell) const
   {
-    const Cell cell = fetchCell(local);
     const glm::vec3 f = cell.fraction;
     const auto& c = cell.corners;
 
@@ -103,10 +101,22 @@ namespace terrain
     return glm::vec3(dx, dy, dz) / m_volume.voxelSize();
   }
 
+  float Sampler::distance(const glm::vec3 local)
+  {
+    return distanceOf(fetchCell(local));
+  }
+
+  glm::vec3 Sampler::gradient(const glm::vec3 local)
+  {
+    return gradientOf(fetchCell(local));
+  }
+
   float Sampler::metricDistance(const glm::vec3 local)
   {
+    const Cell cell = fetchCell(local);
     const float voxelSize = m_volume.voxelSize();
-    const float length = std::max(glm::length(gradient(local)), minGradientLength / voxelSize);
-    return distance(local) / length;
+    const float length = std::max(glm::length(gradientOf(cell)), minGradientLength / voxelSize);
+    const float reach = bandVoxels * voxelSize;
+    return std::clamp(distanceOf(cell) / length, -reach, reach);
   }
 }

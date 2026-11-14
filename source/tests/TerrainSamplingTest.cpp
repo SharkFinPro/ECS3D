@@ -12,6 +12,7 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -166,12 +167,15 @@ TEST(TerrainSamplingTest, ValuesAndGradientsAgreeEitherSideOfAChunkBorder)
   {
     glm::vec3 center;
     glm::vec3 probe;
+    int axis;
   };
 
   // Chunk borders sit at sample 32 (80 units) and sample -32 (-80 units).
-  for (const Case c : { Case{ { 80.0f, 0.0f, 0.0f }, { 80.0f, 30.0f, 0.0f } },
-                        Case{ { -80.0f, 0.0f, 0.0f }, { -80.0f, 0.0f, 30.0f } },
-                        Case{ { 0.0f, 80.0f, 0.0f }, { 0.0f, 80.0f, 30.0f } } })
+  for (const Case c : { Case{ { 80.0f, 0.0f, 0.0f }, { 80.0f, 30.0f, 0.0f }, 0 },
+                        Case{ { -80.0f, 0.0f, 0.0f }, { -80.0f, 0.0f, 30.0f }, 0 },
+                        Case{ { 0.0f, 80.0f, 0.0f }, { 0.0f, 80.0f, 30.0f }, 1 },
+                        Case{ { 0.0f, 0.0f, 80.0f }, { 30.0f, 0.0f, 80.0f }, 2 },
+                        Case{ { 0.0f, 0.0f, -80.0f }, { 0.0f, 30.0f, -80.0f }, 2 } })
   {
     terrain::TerrainVolume volume;
     fillField(volume, sphere(c.center, 30.0f));
@@ -180,9 +184,8 @@ TEST(TerrainSamplingTest, ValuesAndGradientsAgreeEitherSideOfAChunkBorder)
     const float axisStep = 1.0e-3f;
     glm::vec3 below = c.probe;
     glm::vec3 above = c.probe;
-    const int axis = (c.center.x != 0.0f) ? 0 : 1;
-    below[axis] -= axisStep;
-    above[axis] += axisStep;
+    below[c.axis] -= axisStep;
+    above[c.axis] += axisStep;
 
     EXPECT_NEAR(sampler.distance(below), sampler.distance(above), 1.0e-3f);
     EXPECT_NEAR(sampler.distance(below), 0.0f, 0.05f);
@@ -222,13 +225,15 @@ TEST(TerrainSamplingTest, UniformRegionHasZeroGradientAndAFiniteMetricDistance)
   EXPECT_EQ(gradient, glm::vec3(0.0f));
   EXPECT_FLOAT_EQ(sampler.distance(inside), -terrain::bandVoxels);
   EXPECT_TRUE(std::isfinite(metric));
-  EXPECT_NEAR(metric, -terrain::bandVoxels * 2.5f / terrain::minGradientLength, 1.0e-2f);
+  EXPECT_NEAR(metric, -terrain::bandVoxels * 2.5f, 1.0e-3f);
 
   // Positive control: a field with a real gradient is not floored.
   terrain::TerrainVolume sloped;
   fillField(sloped, plane(0.0f));
   terrain::Sampler slopedSampler(sloped);
   EXPECT_GT(glm::length(slopedSampler.gradient({ 1.0f, 1.0f, 1.0f })), 0.3f);
+  EXPECT_NEAR(slopedSampler.metricDistance({ 1.0f, 1.0f, 1.0f }), 1.0f, 1.0e-2f);
+  EXPECT_NEAR(slopedSampler.metricDistance({ 1.0f, -1.5f, 1.0f }), -1.5f, 1.0e-2f);
 }
 
 TEST(TerrainSamplingTest, AbsentChunksReadAsAir)
@@ -250,8 +255,16 @@ TEST(TerrainSamplingTest, NonFinitePositionsAreAnswered)
   const float nan = std::numeric_limits<float>::quiet_NaN();
   const float inf = std::numeric_limits<float>::infinity();
 
-  EXPECT_TRUE(std::isfinite(sampler.distance({ nan, 0.0f, 0.0f })));
-  EXPECT_TRUE(std::isfinite(sampler.distance({ 0.0f, inf, 0.0f })));
+  const float airMetric = terrain::bandVoxels * 2.5f;
+
+  for (const glm::vec3 position :
+       { glm::vec3(nan, 0.0f, 0.0f), glm::vec3(0.0f, inf, 0.0f), glm::vec3(0.0f, 0.0f, -inf) })
+  {
+    EXPECT_EQ(sampler.distance(position), terrain::bandVoxels);
+    EXPECT_EQ(sampler.gradient(position), glm::vec3(0.0f));
+    EXPECT_EQ(sampler.metricDistance(position), airMetric);
+  }
+
   EXPECT_TRUE(std::isfinite(sampler.distance({ 1.0e30f, 0.0f, 0.0f })));
   EXPECT_NE(sampler.distance({ 0.0f, 1.0f, 0.0f }), terrain::bandVoxels);
 }
@@ -289,8 +302,103 @@ TEST(TerrainSamplingTest, AHeldChunkStaysValidAfterTheVolumeSwapsIt)
 
   volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(500, 1));
 
+  // The live Sampler still holds the chunk it fetched, so it keeps answering from it.
+  EXPECT_FLOAT_EQ(sampler.distance(point), before);
   EXPECT_NEAR(before, -1000.0f / 8191.0f, 1.0e-5f);
   EXPECT_NEAR(terrain::Sampler(volume).distance(point), 500.0f / 8191.0f, 1.0e-5f);
+}
+
+TEST(TerrainSamplingTest, MetricDistanceIsClampedToTheBandWhereCornersAreClamped)
+{
+  // The plane sits half a voxel above the sample row at y = 0, so the corner at y = 5 is clamped at 4 voxels.
+  terrain::TerrainVolume volume;
+  fillField(volume, plane(0.5f * 2.5f));
+  terrain::Sampler sampler(volume);
+  const float reach = terrain::bandVoxels * 2.5f;
+
+  const glm::vec3 above(7.0f, 4.9f * 2.5f, 7.0f);
+  const glm::vec3 below(7.0f, -4.9f * 2.5f + 2.5f, 7.0f);
+
+  // d / |g| would be 7.9 voxels here without the clamp.
+  EXPECT_NEAR(sampler.distance(above), 3.95f, 1.0e-3f);
+  EXPECT_NEAR(glm::length(sampler.gradient(above)), 0.5f / 2.5f, 1.0e-3f);
+  EXPECT_FLOAT_EQ(sampler.metricDistance(above), reach);
+
+  terrain::TerrainVolume inverted;
+  fillField(inverted, [](const glm::vec3 p) { return -(p.y - 0.5f * 2.5f); });
+  terrain::Sampler invertedSampler(inverted);
+  EXPECT_FLOAT_EQ(invertedSampler.metricDistance(above), -reach);
+  EXPECT_LE(std::abs(sampler.metricDistance(below)), reach);
+
+  // Positive control: near the surface the metric distance is the exact distance and not clamped.
+  const glm::vec3 nearSurface(7.0f, 1.5f * 2.5f, 7.0f);
+  EXPECT_NEAR(sampler.metricDistance(nearSurface), 1.0f * 2.5f, 1.0e-2f);
+}
+
+TEST(TerrainSamplingTest, GradientMatchesACentralDifferenceOfDistanceOnRandomData)
+{
+  std::mt19937 rng(2024);
+  std::uniform_int_distribution<int> distance(-terrain::airDistance, terrain::airDistance);
+  std::uniform_int_distribution<int> material(0, 10);
+  terrain::TerrainVolume volume;
+
+  // Chunks -1 and 0 on every axis, so cells cross the chunk borders at sample 0 and the volume has a negative side.
+  for (const terrain::ChunkCoord coord : terrain::chunksTouched({ { -32, -32, -32 }, { 32, 32, 32 } }))
+  {
+    std::vector<int16_t> distances(terrain::samplesPerChunk);
+    std::vector<uint8_t> materials(terrain::samplesPerChunk);
+
+    for (size_t i = 0; i < distances.size(); ++i)
+    {
+      distances[i] = static_cast<int16_t>(distance(rng));
+      materials[i] = static_cast<uint8_t>(material(rng));
+    }
+
+    volume.setChunk(coord, terrain::TerrainChunk::dense(std::move(distances), std::move(materials)));
+  }
+
+  const float voxelSize = volume.voxelSize();
+  terrain::Sampler sampler(volume);
+  std::uniform_int_distribution<int> corner(-32, 30);
+  std::uniform_real_distribution<float> inside(0.25f, 0.75f);
+  // A tenth of a voxel stays inside the cell for fractions in [0.25, 0.75].
+  const float step = 0.1f * voxelSize;
+
+  int nearBorder = 0;
+
+  for (int i = 0; i < 300; ++i)
+  {
+    glm::ivec3 base(corner(rng), corner(rng), corner(rng));
+
+    if (i % 3 == 0)
+    {
+      // Force a cell straddling the chunk border at sample 0 on a random axis.
+      const int axis = i % 9 / 3;
+      base[axis] = -1;
+    }
+
+    const glm::vec3 voxelPoint = glm::vec3(base) + glm::vec3(inside(rng), inside(rng), inside(rng));
+    const glm::vec3 point = voxelPoint * voxelSize;
+    const glm::vec3 analytic = sampler.gradient(point);
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      glm::vec3 forward = point;
+      glm::vec3 backward = point;
+      forward[axis] += step;
+      backward[axis] -= step;
+      const float numeric = (sampler.distance(forward) - sampler.distance(backward)) / (2.0f * step);
+
+      EXPECT_NEAR(analytic[axis], numeric, 1.0e-3f) << i << " axis " << axis;
+    }
+
+    if (base.x == -1 || base.y == -1 || base.z == -1)
+    {
+      ++nearBorder;
+    }
+  }
+
+  EXPECT_GT(nearBorder, 50);
 }
 
 TEST(TerrainSamplingTest, VoxelSizeChangesUnitsButNotVoxelTerms)
