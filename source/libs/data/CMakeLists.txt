@@ -43,6 +43,11 @@ add_library(${PROJECT_NAME}
   scenes/SceneScriptEdits.h
   templates/TemplateManifest.cpp
   templates/TemplateManifest.h
+  terrain/TerrainChunk.cpp
+  terrain/TerrainChunk.h
+  terrain/TerrainTypes.h
+  terrain/TerrainVolume.cpp
+  terrain/TerrainVolume.h
   objects/Object.cpp
   objects/Object.h
   objects/ObjectManager.cpp
