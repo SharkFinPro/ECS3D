@@ -30,8 +30,13 @@ namespace terrain
   // isValidChunkCoord. Never mutates the volume.
   [[nodiscard]] ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit);
 
-  // Restores a distance-like slope inside the box without moving the surface. Returns empty edits for an empty or
-  // over-cap box, like editSamples.
+  // One maximum brush box (160 samples per axis) with its one-sample margin; callers split larger regions so a single
+  // redistance stays a bounded synchronous cost.
+  inline constexpr int64_t maxRedistanceSamples = 160ll * 160ll * 160ll;
+
+  // Restores a distance-like slope inside the box without moving the surface. Returns empty edits for an empty box,
+  // a box editSamples refuses, or a box whose grown grid (the box plus a one-sample margin per side) exceeds
+  // maxRedistanceSamples.
   [[nodiscard]] ChunkEdits redistance(const TerrainVolume& volume, const SampleBox& box);
 }
 

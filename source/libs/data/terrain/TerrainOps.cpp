@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
 #include <utility>
 #include <vector>
-#include <stdexcept>
 
 namespace terrain
 {
@@ -24,9 +24,6 @@ namespace terrain
       return before->isUniform() == after->isUniform() && std::ranges::equal(before->distances(), after->distances()) &&
              std::ranges::equal(before->materials(), after->materials());
     }
-
-    // A grid beyond this many samples is refused to bound the memory of one redistance.
-    constexpr int64_t maxRedistanceSamples = 256ll * 256ll * 256ll;
 
     bool withinEditLimits(const SampleBox& box)
     {
