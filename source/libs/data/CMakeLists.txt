@@ -47,6 +47,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainChunk.h
   terrain/TerrainCodec.cpp
   terrain/TerrainCodec.h
+  terrain/TerrainSampling.cpp
+  terrain/TerrainSampling.h
   terrain/TerrainTypes.h
   terrain/TerrainVolume.cpp
   terrain/TerrainVolume.h
