@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 namespace terrain
@@ -24,6 +25,18 @@ namespace terrain
              op.strength <= 1.0f && op.falloff >= 0.0f && op.falloff <= 1.0f && op.material != reservedMaterial;
     }
 
+    // Keeps the dirty box, in exact arithmetic, inside the valid chunk range.
+    constexpr double centerBoundSamples =
+      static_cast<double>(maxChunkCoord - 1) * chunkSize - (maxBrushRadiusVoxels + brushBorderVoxels + 2.0);
+
+    bool withinBound(const glm::vec3& position, const float voxelSize)
+    {
+      const double size = voxelSize;
+      return std::abs(static_cast<double>(position.x)) / size <= centerBoundSamples &&
+             std::abs(static_cast<double>(position.y)) / size <= centerBoundSamples &&
+             std::abs(static_cast<double>(position.z)) / size <= centerBoundSamples;
+    }
+
     bool validFor(const TerrainVolume& volume, const BrushOp& op)
     {
       if (!validFields(op))
@@ -32,15 +45,14 @@ namespace terrain
       }
 
       const float voxelSize = volume.voxelSize();
-      const float reach = static_cast<float>(maxChunkCoord - 2) * static_cast<float>(chunkSize);
 
-      if (op.radius > maxBrushRadiusVoxels * voxelSize ||
-          glm::any(glm::greaterThan(glm::abs(op.center) / voxelSize, glm::vec3(reach))))
+      if (op.radius > maxBrushRadiusVoxels * voxelSize || !withinBound(op.center, voxelSize))
       {
         return false;
       }
 
-      return op.kind != BrushOp::Kind::flatten || glm::length(op.planeNormal) > 1.0e-6f;
+      return op.kind != BrushOp::Kind::flatten ||
+             (withinBound(op.planePoint, voxelSize) && glm::length(glm::dvec3(op.planeNormal)) > 1.0e-6);
     }
 
     // The ramp ends at the influence radius so that a falloff of zero keeps full weight across the whole border.
@@ -101,6 +113,9 @@ namespace terrain
     {
       const SampleBox grown{ box.min - glm::ivec3(1), box.max + glm::ivec3(1) };
       Field raw(grown.min, grown.max);
+      ChunkCoord cachedCoord{};
+      std::shared_ptr<const TerrainChunk> cached;
+      bool hasCached = false;
 
       for (int z = grown.min.z; z < grown.max.z; ++z)
       {
@@ -108,7 +123,18 @@ namespace terrain
         {
           for (int x = grown.min.x; x < grown.max.x; ++x)
           {
-            raw.values[raw.at(x, y, z)] = decodeDistance(volume.distanceAtSample({ x, y, z }));
+            const glm::ivec3 sample(x, y, z);
+            const ChunkCoord coord = chunkOfSample(sample);
+
+            if (!hasCached || !(coord == cachedCoord))
+            {
+              cached = volume.chunk(coord);
+              cachedCoord = coord;
+              hasCached = true;
+            }
+
+            raw.values[raw.at(x, y, z)] = cached ? decodeDistance(cached->distanceAtIndex(indexInChunk(sample)))
+                                                 : bandVoxels;
           }
         }
       }
@@ -130,12 +156,19 @@ namespace terrain
       return {};
     }
 
-    const float voxelSize = volume.voxelSize();
-    const float influence = op.radius + brushBorderVoxels * voxelSize;
-    const glm::vec3 low = glm::floor((op.center - glm::vec3(influence)) / voxelSize);
-    const glm::vec3 high = glm::ceil((op.center + glm::vec3(influence)) / voxelSize);
+    const double voxelSize = volume.voxelSize();
+    const double influence = op.radius + brushBorderVoxels * voxelSize;
+    glm::ivec3 low;
+    glm::ivec3 high;
 
-    return { glm::ivec3(low), glm::ivec3(high) + glm::ivec3(1) };
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      const double center = op.center[axis];
+      low[axis] = static_cast<int>(std::floor((center - influence) / voxelSize));
+      high[axis] = static_cast<int>(std::ceil((center + influence) / voxelSize)) + 1;
+    }
+
+    return { low, high };
   }
 
   ChunkEdits applyBrush(const TerrainVolume& volume, const BrushOp& op)
@@ -149,7 +182,8 @@ namespace terrain
 
     const float voxelSize = volume.voxelSize();
     const float influence = op.radius + brushBorderVoxels * voxelSize;
-    const glm::vec3 normal = op.kind == BrushOp::Kind::flatten ? glm::normalize(op.planeNormal) : glm::vec3(0.0f);
+    const glm::vec3 normal =
+      op.kind == BrushOp::Kind::flatten ? glm::vec3(glm::normalize(glm::dvec3(op.planeNormal))) : glm::vec3(0.0f);
     const Field blurred = op.kind == BrushOp::Kind::smooth ? blurredField(volume, box)
                                                            : Field(glm::ivec3(0), glm::ivec3(0));
 
@@ -164,6 +198,12 @@ namespace terrain
       }
 
       const float weight = weightAt(op, influence, reach);
+
+      if (weight <= 0.0f)
+      {
+        return;
+      }
+
       const float before = decodeDistance(distance);
       const float sphere = (reach - op.radius) / voxelSize;
       bool paintsRaisedGround = false;
@@ -186,11 +226,16 @@ namespace terrain
           paintsRaisedGround = true;
           break;
         case BrushOp::Kind::paint:
-          if (reach <= op.radius && weight > 0.0f && std::abs(before) <= 1.0f)
+          if (reach <= op.radius && std::abs(before) <= 1.0f)
           {
             material = op.material;
           }
           return;
+      }
+
+      if (!std::isfinite(target))
+      {
+        return;
       }
 
       const int16_t after = encodeDistance(before + weight * (target - before));
