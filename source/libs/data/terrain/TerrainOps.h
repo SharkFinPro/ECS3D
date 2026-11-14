@@ -29,6 +29,10 @@ namespace terrain
   // Returns empty edits for an empty box, a box over maxEditChunks chunks or a box with a chunk outside
   // isValidChunkCoord. Never mutates the volume.
   [[nodiscard]] ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit);
+
+  // Restores a distance-like slope inside the box without moving the surface. Returns empty edits for an empty or
+  // over-cap box, like editSamples.
+  [[nodiscard]] ChunkEdits redistance(const TerrainVolume& volume, const SampleBox& box);
 }
 
 #endif //TERRAINOPS_H
