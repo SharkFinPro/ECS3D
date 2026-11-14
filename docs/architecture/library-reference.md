@@ -71,7 +71,7 @@ list's `sceneEdit` op builders and apply). `templates/TemplateManifest`
 points along local +Y, and its `height` is the total height including both caps. Its radius scales with the
 larger of the object's x and z scale, and its half-height with y. `terrain/` holds the sparse signed-distance volume in
 `namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample `TerrainChunk`s that an edit swaps copy-on-write,
-`encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and gradient from it.
+`encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and gradient from it, which `raycast` sphere-traces with absent chunks skipped.
 **No Vulkan, no ImGui.**
 
 ## ECS3DRender

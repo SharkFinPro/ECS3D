@@ -219,6 +219,7 @@ add_executable(${PROJECT_NAME}
   TerrainChunkTest.cpp
   TerrainCodecTest.cpp
   TerrainMeasurementTest.cpp
+  TerrainRaycastTest.cpp
   TerrainSamplingTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp
