@@ -70,18 +70,20 @@ namespace {
     return (yUnits - height) * slope / voxelSize;
   }
 
-  // Lowest sample row, over every column, with a sample inside the band (|d| < 4 voxels before clamping).
-  int lowestBandSample(const Grid& grid)
+  // Lowest and highest sample rows, over every column, inside the band (|d| < 4 voxels before clamping).
+  std::pair<int, int> bandSampleRange(const Grid& grid)
   {
     int lowest = std::numeric_limits<int>::max();
+    int highest = std::numeric_limits<int>::min();
 
     for (size_t at = 0; at < grid.height.size(); ++at)
     {
       const float reach = terrain::bandVoxels * voxelSize / grid.slope[at];
       lowest = std::min(lowest, static_cast<int>(std::floor((grid.height[at] - reach) / voxelSize)) + 1);
+      highest = std::max(highest, static_cast<int>(std::ceil((grid.height[at] + reach) / voxelSize)) - 1);
     }
 
-    return lowest;
+    return { lowest, highest };
   }
 
   struct ColumnRange
@@ -184,12 +186,18 @@ namespace {
 
 TEST(TerrainMeasurement, RollingTerrain512Meters)
 {
+#ifndef NDEBUG
+  GTEST_SKIP() << "A Release measurement: Debug, sanitizer and coverage builds skip it";
+#endif
+
   const auto started = std::chrono::steady_clock::now();
   const Grid grid = buildGrid();
   terrain::TerrainVolume volume(voxelSize);
   constexpr int chunksPerSide = columns / terrain::chunkSize;
   // One full chunk layer below the lowest band is held as solid; nothing lies beneath it.
-  const int bottomLayer = terrain::floorDiv(lowestBandSample(grid), terrain::chunkSize) - 1;
+  const auto [lowestBand, highestBand] = bandSampleRange(grid);
+  const int bottomLayer = terrain::floorDiv(lowestBand, terrain::chunkSize) - 1;
+  const int topLayer = terrain::floorDiv(highestBand, terrain::chunkSize);
 
   for (int chunkZ = 0; chunkZ < chunksPerSide; ++chunkZ)
   {
@@ -198,14 +206,15 @@ TEST(TerrainMeasurement, RollingTerrain512Meters)
       const ColumnRange range = rangeOfColumn(grid, chunkX, chunkZ);
       const float reach = terrain::bandVoxels * voxelSize / range.smallestSlope;
 
-      for (int chunkY = bottomLayer; chunkY <= 1; ++chunkY)
+      for (int chunkY = bottomLayer; chunkY <= topLayer; ++chunkY)
       {
         const float lowestUnits = static_cast<float>(chunkY * terrain::chunkSize) * voxelSize;
         const float highestUnits = lowestUnits + static_cast<float>(terrain::chunkSize - 1) * voxelSize;
         const bool aboveSurface = lowestUnits - range.highestHeight >= reach;
         const bool deepSolid = highestUnits - range.lowestHeight <= -reach;
 
-        // The pruned cases are exactly what building the arrays would collapse to.
+        // The pruned cases are what building the arrays would collapse to, give or take samples at the exact
+        // band edge, so counts may differ slightly from an unpruned fill.
         if (aboveSurface)
         {
           continue;
@@ -242,7 +251,8 @@ TEST(TerrainMeasurement, RollingTerrain512Meters)
     static_cast<double>(denseSixteen) * 16.0 * 16.0 * 16.0 * 3.0 / bytesPerMiB;
 
   std::cout << "[terrain] chunk 32: dense " << denseCount << ", uniform " << uniformCount << ", byteSize "
-            << volumeMiB << " MiB, encoded " << encodedMiB << " MiB, fill " << fillSeconds << " s, dense only " << denseThirtyTwoMiB << " MiB, bottom layer " << bottomLayer << "\n";
+            << volumeMiB << " MiB, encoded " << encodedMiB << " MiB, fill " << fillSeconds << " s, dense only "
+            << denseThirtyTwoMiB << " MiB, layers " << bottomLayer << ".." << topLayer << "\n";
   std::cout << "[terrain] chunk 16 (analytic): dense " << denseSixteen << ", " << denseSixteenMiB << " MiB\n";
 
   RecordProperty("denseChunks32", std::to_string(denseCount));
