@@ -3,6 +3,7 @@
 
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -43,11 +44,22 @@ namespace terrain
     bool operator==(const ChunkCoord&) const = default;
   };
 
+  // Keeps coordinate * chunkSize and the one-chunk extents built from it inside int32_t.
+  inline constexpr int32_t maxChunkCoord = 1 << 24;
+
+  [[nodiscard]] inline bool isValidChunkCoord(const ChunkCoord coord)
+  {
+    return coord.x >= -maxChunkCoord && coord.x <= maxChunkCoord && coord.y >= -maxChunkCoord &&
+           coord.y <= maxChunkCoord && coord.z >= -maxChunkCoord && coord.z <= maxChunkCoord;
+  }
+
+  // The divisor must be positive.
   [[nodiscard]] inline int32_t floorDiv(const int32_t value, const int32_t divisor)
   {
+    assert(divisor > 0);
     int32_t quotient = value / divisor;
 
-    if (value % divisor != 0 && ((value < 0) != (divisor < 0)))
+    if (value % divisor != 0 && value < 0)
     {
       --quotient;
     }

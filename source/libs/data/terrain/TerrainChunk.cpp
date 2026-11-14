@@ -1,47 +1,64 @@
 #include "TerrainChunk.h"
 #include "TerrainTypes.h"
-#include "../ProjectFingerprint.h"
 #include <algorithm>
-#include <string_view>
+#include <cassert>
 #include <utility>
 
 namespace terrain
 {
   namespace
   {
-    // Canonical little-endian form, so equal content hashes equally whichever factory built the chunk.
-    uint64_t hashContent(const std::vector<int16_t>& distances, const std::vector<uint8_t>& materials,
-                         const bool isUniform)
+    bool validSample(const int16_t distance, const uint8_t material)
     {
-      std::vector<char> bytes;
-      bytes.reserve(1 + distances.size() * 2 + materials.size());
-      bytes.push_back(isUniform ? 0 : 1);
+      return distance >= -airDistance && distance <= airDistance && material != reservedMaterial;
+    }
+
+    // The same 64-bit FNV-1a as fingerprintBytes (including its mapping of 0 to 1), fed value by value over the
+    // canonical little-endian byte form, so equal content hashes equally whichever factory built the chunk and no
+    // temporary buffer is needed.
+    uint64_t hashContent(const std::vector<int16_t>& distances, const std::vector<uint8_t>& materials,
+                         const bool uniformContent)
+    {
+      uint64_t hash = 14695981039346656037ULL;
+
+      const auto feed = [&hash](const uint8_t byte)
+      {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+      };
+
+      feed(uniformContent ? 0 : 1);
 
       for (const int16_t distance : distances)
       {
         const auto raw = static_cast<uint16_t>(distance);
-        bytes.push_back(static_cast<char>(raw & 0xFF));
-        bytes.push_back(static_cast<char>(raw >> 8));
+        feed(static_cast<uint8_t>(raw & 0xFF));
+        feed(static_cast<uint8_t>(raw >> 8));
       }
 
       for (const uint8_t material : materials)
       {
-        bytes.push_back(static_cast<char>(material));
+        feed(material);
       }
 
-      return fingerprintBytes(std::string_view(bytes.data(), bytes.size()));
+      return hash == 0 ? 1 : hash;
     }
   }
 
-  TerrainChunk::TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, const bool isUniform)
+  TerrainChunk::TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, const bool uniformContent)
     : m_distances(std::move(distances)),
       m_materials(std::move(materials)),
-      m_isUniform(isUniform),
-      m_hash(hashContent(m_distances, m_materials, isUniform))
+      m_isUniform(uniformContent),
+      m_hash(hashContent(m_distances, m_materials, uniformContent))
   {}
 
   std::shared_ptr<const TerrainChunk> TerrainChunk::uniform(const int16_t distance, const uint8_t material)
   {
+    if (!validSample(distance, material))
+    {
+      return nullptr;
+    }
+
     return std::shared_ptr<const TerrainChunk>(
       new TerrainChunk(std::vector<int16_t>{ distance }, std::vector<uint8_t>{ material }, true));
   }
@@ -53,6 +70,14 @@ namespace terrain
         materials.size() != static_cast<size_t>(samplesPerChunk))
     {
       return nullptr;
+    }
+
+    for (size_t i = 0; i < distances.size(); ++i)
+    {
+      if (!validSample(distances[i], materials[i]))
+      {
+        return nullptr;
+      }
     }
 
     const int16_t firstDistance = distances.front();
@@ -97,11 +122,13 @@ namespace terrain
 
   int16_t TerrainChunk::distanceAtIndex(const int index) const
   {
+    assert(index >= 0 && index < samplesPerChunk);
     return m_isUniform ? m_distances.front() : m_distances[static_cast<size_t>(index)];
   }
 
   uint8_t TerrainChunk::materialAtIndex(const int index) const
   {
+    assert(index >= 0 && index < samplesPerChunk);
     return m_isUniform ? m_materials.front() : m_materials[static_cast<size_t>(index)];
   }
 

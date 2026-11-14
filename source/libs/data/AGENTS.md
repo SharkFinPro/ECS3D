@@ -21,3 +21,5 @@ Related design notes: [replication.md](../../../docs/architecture/replication.md
   system shares. Collider caches key on `Transform::getWorldUpdateID`.
 - Recursion into a wire or JSON object tree stops at `maxObjectDepth` (`objects/Object.h`).
 - A user preference belongs in `ECS3DSettings`, not in a scene, a prefab or a snapshot.
+- Terrain chunks are immutable: there is no mutable accessor, and an edit builds new chunks and swaps pointers in the
+  volume (copy on write).

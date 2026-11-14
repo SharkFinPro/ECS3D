@@ -11,6 +11,8 @@
 
 namespace terrain
 {
+  // Not thread safe: share chunks across threads through snapshotChunks() or held chunk pointers, never through
+  // chunks() while another thread writes.
   class TerrainVolume
   {
   public:
@@ -22,13 +24,14 @@ namespace terrain
 
     [[nodiscard]] std::shared_ptr<const TerrainChunk> chunk(ChunkCoord coord) const;
 
-    // A null or air chunk erases the entry.
+    // A null or air chunk erases the entry. Throws std::out_of_range for a coordinate beyond maxChunkCoord.
     void setChunk(ChunkCoord coord, std::shared_ptr<const TerrainChunk> chunk);
 
     [[nodiscard]] const ChunkMap& chunks() const;
 
     [[nodiscard]] ChunkMap snapshotChunks() const;
 
+    // Throws std::out_of_range, leaving the volume unchanged, if any key is beyond maxChunkCoord.
     void restoreChunks(ChunkMap chunks);
 
     [[nodiscard]] int16_t distanceAtSample(glm::ivec3 sample) const;

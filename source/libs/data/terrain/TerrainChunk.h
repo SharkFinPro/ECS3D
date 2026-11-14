@@ -12,6 +12,8 @@ namespace terrain
   class TerrainChunk
   {
   public:
+    // Both factories return nullptr for a distance outside -airDistance..airDistance or the reserved material, so
+    // every chunk that exists can be encoded.
     [[nodiscard]] static std::shared_ptr<const TerrainChunk> uniform(int16_t distance, uint8_t material);
 
     [[nodiscard]] static std::shared_ptr<const TerrainChunk> dense(std::vector<int16_t> distances,
@@ -39,7 +41,7 @@ namespace terrain
     [[nodiscard]] size_t byteSize() const;
 
   private:
-    TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, bool isUniform);
+    TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, bool uniformContent);
 
     std::vector<int16_t> m_distances;
     std::vector<uint8_t> m_materials;

@@ -35,6 +35,11 @@ namespace terrain
 
   void TerrainVolume::setChunk(const ChunkCoord coord, std::shared_ptr<const TerrainChunk> chunk)
   {
+    if (!isValidChunkCoord(coord))
+    {
+      throw std::out_of_range("terrain chunk coordinate out of range");
+    }
+
     if (!chunk || chunk->isAir())
     {
       m_chunks.erase(coord);
@@ -56,6 +61,14 @@ namespace terrain
 
   void TerrainVolume::restoreChunks(ChunkMap chunks)
   {
+    for (const auto& entry : chunks)
+    {
+      if (!isValidChunkCoord(entry.first))
+      {
+        throw std::out_of_range("terrain chunk coordinate out of range");
+      }
+    }
+
     std::erase_if(chunks, [](const auto& entry)
     {
       return !entry.second || entry.second->isAir();
