@@ -45,6 +45,8 @@ add_library(${PROJECT_NAME}
   templates/TemplateManifest.h
   terrain/TerrainChunk.cpp
   terrain/TerrainChunk.h
+  terrain/TerrainCodec.cpp
+  terrain/TerrainCodec.h
   terrain/TerrainSampling.cpp
   terrain/TerrainSampling.h
   terrain/TerrainTypes.h
