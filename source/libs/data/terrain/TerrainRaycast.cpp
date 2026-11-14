@@ -3,6 +3,7 @@
 #include "TerrainTypes.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
+#include <glm/vector_relational.hpp>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -21,6 +22,8 @@ namespace terrain
     constexpr int maxIterations = 1 << 20;
     constexpr float parallelEpsilon = 1.0e-12f;
     constexpr float degenerateNormalLength = 1.0e-6f;
+    // Matches the sampler's position limit, so the float to int sample conversion stays defined.
+    constexpr float maxPositionVoxels = 1.0e9f;
 
     [[nodiscard]] bool isFinite(const glm::vec3 value)
     {
@@ -100,8 +103,14 @@ namespace terrain
       return std::nullopt;
     }
 
-    const glm::vec3 dir = direction / directionLength;
     const float voxelSize = volume.voxelSize();
+
+    if (glm::any(glm::greaterThan(glm::abs(origin), glm::vec3(maxPositionVoxels * voxelSize))))
+    {
+      return std::nullopt;
+    }
+
+    const glm::vec3 dir = direction / directionLength;
     Sampler sampler(volume);
 
     if (sampler.distance(origin) <= 0.0f)
@@ -136,7 +145,8 @@ namespace terrain
     for (int iteration = 0; iteration < maxIterations; ++iteration)
     {
       const glm::vec3 point = origin + t * dir;
-      const glm::ivec3 baseSample(glm::floor(point / voxelSize));
+      const glm::ivec3 baseSample(
+        glm::floor(glm::clamp(point / voxelSize, glm::vec3(-maxPositionVoxels), glm::vec3(maxPositionVoxels))));
       const ChunkCoord baseChunk = chunkOfSample(baseSample);
 
       if (!volume.chunk(baseChunk))

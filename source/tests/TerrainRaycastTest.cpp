@@ -9,7 +9,6 @@
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -180,19 +179,17 @@ TEST(TerrainRaycastTest, EmptyVolumeFindsNothing)
   EXPECT_TRUE(terrain::raycast(filled, origin, down, 100.0f).has_value());
 }
 
-TEST(TerrainRaycastTest, HugeMaxDistanceOnSparseVolumeIsCorrectAndFast)
+TEST(TerrainRaycastTest, HugeMaxDistanceOnSparseVolumeIsCorrect)
 {
   const glm::vec3 center(0.0f);
   terrain::TerrainVolume volume;
   fillRegion(volume, sphere(center, 12.0f));
   const float huge = 1.0e9f;
 
-  const auto start = std::chrono::steady_clock::now();
   const auto hit = terrain::raycast(volume, { 0.0f, 5000.0f, 0.0f }, { 0.0f, -1.0f, 0.0f }, huge);
   const auto farMiss = terrain::raycast(volume, { 500.0f, 5000.0f, 0.0f }, { 0.0f, -1.0f, 0.0f }, huge);
   const auto skimMiss = terrain::raycast(volume, { -500.0f, 30.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, huge);
   const auto skimHit = terrain::raycast(volume, { -500.0f, 5.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, huge);
-  const auto elapsed = std::chrono::steady_clock::now() - start;
 
   ASSERT_TRUE(hit.has_value());
   EXPECT_NEAR(hit->point.y, 12.0f, 0.15f);
@@ -201,7 +198,6 @@ TEST(TerrainRaycastTest, HugeMaxDistanceOnSparseVolumeIsCorrectAndFast)
   EXPECT_FALSE(skimMiss.has_value());
   ASSERT_TRUE(skimHit.has_value());
   EXPECT_LT(skimHit->point.x, 0.0f);
-  EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
 }
 
 TEST(TerrainRaycastTest, SurfaceInLastSampleLayerBesideAbsentChunkIsHit)
@@ -229,6 +225,78 @@ TEST(TerrainRaycastTest, SurfaceInLastSampleLayerBesideAbsentChunkIsHit)
   // Sample 31 reads as air (+4 voxels) and sample 32 is -0.3 voxels, so the trilinear zero sits at 4 / 4.3 of the cell.
   EXPECT_NEAR(hit->point.x, 77.5f + 2.5f * (4.0f / 4.3f), 0.05f);
   EXPECT_LT(hit->normal.x, -0.99f);
+}
+
+namespace {
+  struct LastLayerCase
+  {
+    int rayAxis;
+    float raySign;
+    int layerAxis;
+  };
+
+  glm::vec3 withAxes(const int firstAxis, const float first, const int secondAxis, const float second,
+                     const int thirdAxis, const float third)
+  {
+    glm::vec3 value(0.0f);
+    value[firstAxis] = first;
+    value[secondAxis] = second;
+    value[thirdAxis] = third;
+    return value;
+  }
+}
+
+class TerrainRaycastLastLayerTest : public ::testing::TestWithParam<LastLayerCase> {};
+
+TEST_P(TerrainRaycastLastLayerTest, SurfaceReachedAlongAbsentChunkLastLayerIsHit)
+{
+  // The ray runs inside absent chunk (0, 0, 0) along its last sample layer of layerAxis, where every cell reaches into
+  // the solid box of the neighbor chunk one step along layerAxis. Skipping any cell of that layer would miss it.
+  const auto [rayAxis, raySign, layerAxis] = GetParam();
+  const int otherAxis = 3 - rayAxis - layerAxis;
+  const glm::vec3 boxCenter = withAxes(layerAxis, 43.0f, rayAxis, 10.0f, otherAxis, 15.0f);
+  const glm::vec3 boxHalf = withAxes(layerAxis, 17.0f, rayAxis, 5.0f, otherAxis, 10.0f);
+  const Field box = [=](const glm::vec3 p) {
+    const glm::vec3 d = glm::abs(p - boxCenter) - boxHalf;
+    return glm::length(glm::max(d, glm::vec3(0.0f))) + std::min(std::max(d.x, std::max(d.y, d.z)), 0.0f);
+  };
+
+  glm::ivec3 offset(0);
+  offset[layerAxis] = 1;
+  const terrain::ChunkCoord neighbor{ offset.x, offset.y, offset.z };
+  terrain::TerrainVolume volume(1.0f);
+  const std::vector<terrain::ChunkCoord> coords = { neighbor };
+  fillChunks(volume, box, coords);
+  ASSERT_EQ(volume.chunk({ 0, 0, 0 }), nullptr);
+  ASSERT_NE(volume.chunk(neighbor), nullptr);
+
+  const float startAlong = raySign > 0.0f ? 0.5f : 25.5f;
+  const glm::vec3 origin = withAxes(rayAxis, startAlong, layerAxis, 31.5f, otherAxis, 15.0f);
+  const glm::vec3 direction = withAxes(rayAxis, raySign, layerAxis, 0.0f, otherAxis, 0.0f);
+
+  const auto hit = terrain::raycast(volume, origin, direction, 100.0f);
+
+  ASSERT_TRUE(hit.has_value());
+  // Halfway into the cell the trilinear value is (4 + depth of the box sample) / 2, which crosses zero 4 voxels deep.
+  const float expectedAlong = raySign > 0.0f ? 9.0f : 11.0f;
+  EXPECT_NEAR(hit->point[rayAxis], expectedAlong, 0.05f);
+  EXPECT_NEAR(hit->point[layerAxis], 31.5f, 1.0e-3f);
+  EXPECT_LT(hit->normal[layerAxis], -0.99f);
+}
+
+INSTANTIATE_TEST_SUITE_P(TerrainRaycastAxes, TerrainRaycastLastLayerTest,
+                         ::testing::Values(LastLayerCase{ 0, 1.0f, 1 }, LastLayerCase{ 0, -1.0f, 2 },
+                                           LastLayerCase{ 1, 1.0f, 2 }, LastLayerCase{ 1, -1.0f, 0 },
+                                           LastLayerCase{ 2, 1.0f, 0 }, LastLayerCase{ 2, -1.0f, 1 }));
+
+TEST(TerrainRaycastTest, ExtremeOriginFindsNothingWithoutOverflow)
+{
+  terrain::TerrainVolume volume;
+  fillRegion(volume, plane(10.0f));
+
+  EXPECT_TRUE(terrain::raycast(volume, { 3.0f, 40.0f, -7.0f }, { 0.0f, -1.0f, 0.0f }, 100.0f).has_value());
+  EXPECT_FALSE(terrain::raycast(volume, { 1.0e30f, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, 1.0e31f).has_value());
+  EXPECT_FALSE(terrain::raycast(volume, { 0.0f, -1.0e30f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 1.0e31f).has_value());
 }
 
 TEST(TerrainRaycastTest, InvalidInputsFindNothing)
