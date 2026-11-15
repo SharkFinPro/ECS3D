@@ -12,6 +12,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <terrain/TerrainBinding.h>
+#include <terrain/TerrainFiles.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -133,6 +134,22 @@ void ServerApp::loadStartupProject()
     if (loaded)
     {
       m_terrainStore->reconcile(*m_assetRegistry);
+
+      if (!m_projectRoot.empty())
+      {
+        const auto report = terrain::loadProjectTerrains(m_projectRoot, *m_assetRegistry, *m_terrainStore);
+        for (const auto& error : report.errors)
+        {
+          Log::warn(LogCategory::server, "Terrain not loaded: " + error);
+        }
+
+        if (report.loaded + report.missing + report.errors.size() > 0)
+        {
+          Log::info(LogCategory::server, "Loaded " + std::to_string(report.loaded) + " terrain(s) from "
+            + pathToUtf8(m_projectRoot) + " (" + std::to_string(report.missing) + " not saved yet)");
+        }
+      }
+
       m_projectPacker->setProjectFingerprint(fingerprintProjectFile(location.projectFile));
     }
 

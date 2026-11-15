@@ -51,6 +51,10 @@ namespace terrain
     // Valid until the next remove, create or reconcile.
     [[nodiscard]] const TerrainDescription* description(const uuids::uuid& uuid) const;
 
+    // Installs a loaded terrain, replacing any entry with the same uuid. False, with no change, for an invalid
+    // description, a null volume or a volume whose voxel size differs from the description's.
+    bool adopt(const TerrainDescription& description, std::shared_ptr<TerrainVolume> volume);
+
     bool remove(const uuids::uuid& uuid);
 
     // Replaces the description of a held terrain. The volume is kept while the voxel size is unchanged; a new voxel

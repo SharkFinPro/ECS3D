@@ -287,3 +287,48 @@ TEST(TerrainStore, ApplyDescriptionRefusesAnUnknownUuidOrAnInvalidDescription)
 
   EXPECT_TRUE(store.applyDescription(describe(firstUUID, 4.0f)));
 }
+
+TEST(TerrainStore, AdoptInstallsTheGivenVolumeAndReplacesAnEntryWithTheSameUuid)
+{
+  terrain::TerrainStore store;
+  const auto original = store.create(describe(firstUUID));
+  ASSERT_NE(original, nullptr);
+
+  auto adopted = std::make_shared<terrain::TerrainVolume>(4.0f);
+  adopted->setChunk({ 0, 0, 0 }, solidChunk());
+
+  auto description = describe(firstUUID, 4.0f);
+  description.palette.push_back({ "rock", {}, {} });
+
+  EXPECT_TRUE(store.adopt(description, adopted));
+  EXPECT_EQ(store.find(firstUUID), adopted);
+  EXPECT_NE(store.find(firstUUID), original);
+  ASSERT_NE(store.description(firstUUID), nullptr);
+  EXPECT_EQ(store.description(firstUUID)->voxelSize, 4.0f);
+  EXPECT_EQ(store.description(firstUUID)->palette.size(), 1u);
+  EXPECT_EQ(store.terrains().size(), 1u);
+
+  EXPECT_TRUE(store.adopt(describe(secondUUID), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  EXPECT_EQ(store.terrains().size(), 2u);
+}
+
+TEST(TerrainStore, AdoptRefusalsLeaveTheOldEntryAlone)
+{
+  terrain::TerrainStore store;
+  const auto original = store.create(describe(firstUUID));
+  ASSERT_NE(original, nullptr);
+
+  EXPECT_FALSE(store.adopt(describe(firstUUID, 0.0f), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  EXPECT_FALSE(store.adopt(describe(firstUUID), nullptr));
+  EXPECT_FALSE(store.adopt(describe(firstUUID, 2.5f), std::make_shared<terrain::TerrainVolume>(3.0f)));
+  EXPECT_FALSE(store.adopt(describe(secondUUID), nullptr));
+
+  EXPECT_EQ(store.find(firstUUID), original);
+  EXPECT_EQ(store.description(firstUUID)->voxelSize, 2.5f);
+  EXPECT_EQ(store.find(secondUUID), nullptr);
+
+  // Positive control: a matching adopt does take effect.
+  const auto good = std::make_shared<terrain::TerrainVolume>(2.5f);
+  EXPECT_TRUE(store.adopt(describe(firstUUID), good));
+  EXPECT_EQ(store.find(firstUUID), good);
+}

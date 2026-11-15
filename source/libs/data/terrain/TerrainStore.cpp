@@ -2,6 +2,7 @@
 #include "assets/AssetRegistry.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace terrain
 {
@@ -121,6 +122,18 @@ namespace terrain
     const auto it = m_terrains.find(uuid);
 
     return it != m_terrains.end() ? &it->second.description : nullptr;
+  }
+
+  bool TerrainStore::adopt(const TerrainDescription& description, std::shared_ptr<TerrainVolume> volume)
+  {
+    if (!isValidDescription(description) || volume == nullptr || volume->voxelSize() != description.voxelSize)
+    {
+      return false;
+    }
+
+    m_terrains.insert_or_assign(description.uuid, Entry{ description, std::move(volume) });
+
+    return true;
   }
 
   bool TerrainStore::remove(const uuids::uuid& uuid)

@@ -1,9 +1,11 @@
 #include "TerrainFiles.h"
 #include "ProjectPaths.h"
+#include "assets/AssetRegistry.h"
 #include "TerrainFormat.h"
 #include "TerrainTypes.h"
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <cstdint>
 #include <fstream>
 #include <map>
@@ -378,5 +380,63 @@ namespace terrain
     result.description = std::move(index.description);
     result.volume = std::move(volume);
     return result;
+  }
+
+  TerrainLoadReport loadProjectTerrains(const std::filesystem::path& root, const AssetRegistry& registry,
+                                        TerrainStore& store)
+  {
+    TerrainLoadReport report;
+
+    if (root.empty())
+    {
+      return report;
+    }
+
+    std::vector<uuids::uuid> ordered;
+
+    for (const auto& [uuid, record] : registry.getAssets())
+    {
+      if (record.type == AssetType::Terrain)
+      {
+        ordered.push_back(uuid);
+      }
+    }
+
+    std::sort(ordered.begin(), ordered.end());
+
+    for (const uuids::uuid& uuid : ordered)
+    {
+      try
+      {
+        std::error_code existsError;
+
+        if (!std::filesystem::exists(terrainFolder(root, uuid) / indexFileName, existsError))
+        {
+          ++report.missing;
+          continue;
+        }
+
+        TerrainLoadResult loaded = loadTerrain(root, uuid);
+
+        if (loaded.description.has_value() && store.adopt(*loaded.description, std::move(loaded.volume)))
+        {
+          ++report.loaded;
+        }
+        else if (!loaded.error.empty())
+        {
+          report.errors.push_back(std::move(loaded.error));
+        }
+        else
+        {
+          report.errors.push_back(failure(terrainFolder(root, uuid) / indexFileName, "the terrain was refused"));
+        }
+      }
+      catch (const std::exception& e)
+      {
+        report.errors.push_back(failure(terrainFolder(root, uuid), e.what()));
+      }
+    }
+
+    return report;
   }
 }

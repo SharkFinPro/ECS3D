@@ -23,4 +23,6 @@ new folder. Until then an import or a new script (`assetWritesBlocked`) logs why
 writes nothing, so the template stays as it was. The spawned server gets the
 project by the `loadProject` blob. Its own root, used for scripts, stays what `--project` gave it.
 Dialog and drop paths arrive as 8-bit Unicode text (`pathFromUtf8`), and logs use `pathToUtf8`.
+A `--project` server reads each terrain's files from `<root>/terrain/<uuid>/` after the project loads. A
+missing folder is an unsaved terrain and stays empty; an unreadable one is logged and also stays empty.
 The server compiles `<root>/scripts/**/*.cs` together with the built-in scripts (see [scripting.md](scripting.md)).
