@@ -32,6 +32,8 @@ namespace {
   // A tenth of the speed gravity adds in one tick, so two ticks of free fall are not mistaken for rest.
   constexpr float restSpeed = 0.1f * 9.81f * PhysicsSystem::unitsPerMeter * dt * dt;
   constexpr float flushToleranceDegrees = 2.0f;
+  // Consecutive ticks at rest after which a drop is over: a shape balanced for a moment would not stay still this long.
+  constexpr int calmTicksToStop = 50;
 
   const std::vector<std::string> shapeNames = {
     "D4", "D6", "D8", "D12", "D20", "Hex Prism", "Drum", "Gem", "Boulder"
@@ -93,10 +95,15 @@ namespace {
     ASSERT_NEAR(lowestWorldY(*collider), dropHeight, 1e-3f);
 
     CollisionSystem collisionSystem;
-    for (int tick = 0; tick < maxTicks; ++tick)
+    int calmTicks = 0;
+    for (int tick = 0; tick < maxTicks && calmTicks < calmTicksToStop; ++tick)
     {
       PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
       collisionSystem.fixedUpdate(*scene.objectManager, dt);
+
+      const bool atRest = glm::length(body->getVelocity()) < restSpeed &&
+                          glm::length(body->getAngularVelocity()) < PhysicsSystem::restAngularSpeed;
+      calmTicks = atRest ? calmTicks + 1 : 0;
     }
 
     EXPECT_LT(glm::length(body->getVelocity()), restSpeed);

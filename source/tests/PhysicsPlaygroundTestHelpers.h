@@ -164,6 +164,21 @@ namespace playgroundtest {
     return nullptr;
   }
 
+  // Drops every station but the named ones, so a test simulates only the bodies it checks. The stations stand far
+  // apart, so the rest cannot reach the kept ones within a run.
+  inline void keepOnlyStations(ObjectManager& objectManager, const std::vector<std::string>& kept)
+  {
+    const auto roots = objectManager.getObjects();
+    for (const auto& object : roots)
+    {
+      const auto& name = object->getName();
+      if (name.rfind("Station: ", 0) == 0 && std::ranges::find(kept, name) == kept.end())
+      {
+        objectManager.removeSubtree(object);
+      }
+    }
+  }
+
   inline float tiltDegrees(const std::shared_ptr<Object>& object)
   {
     const auto up = fixtures::transformOf(object)->getOrientation() * glm::vec3(0, 1, 0);

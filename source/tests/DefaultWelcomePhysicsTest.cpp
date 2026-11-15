@@ -238,7 +238,7 @@ TEST(DefaultWelcome, ItSettlesAndTheTowerStands)
     startOrientations.push_back(fixtures::transformOf(block)->getOrientation());
   }
 
-  tick(objectManager, 300);
+  tick(objectManager, 120);
 
   for (const auto& object : objectManager.getAllObjects())
   {

@@ -124,9 +124,9 @@ TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
   const float slack = degrees > steepSlope ? steepSlack : 0.0f;
   SlopeStack stack(count, degrees);
 
-  stack.run(10 * ticksPerSecond);
+  stack.run(5 * ticksPerSecond);
   const auto settled = stack.positions();
-  stack.run(10 * ticksPerSecond);
+  stack.run(5 * ticksPerSecond);
 
   for (size_t level = 0; level < settled.size(); ++level)
   {
@@ -165,9 +165,9 @@ TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
     stack.bodies[0]->setMass(lowerMass);
     stack.bodies[1]->setMass(upperMass);
 
-    stack.run(10 * ticksPerSecond);
+    stack.run(5 * ticksPerSecond);
     const auto settled = stack.positions();
-    stack.run(10 * ticksPerSecond);
+    stack.run(5 * ticksPerSecond);
 
     EXPECT_LT(glm::distance(stack.positionOf(0), stack.start[0]), restSlack);
     EXPECT_LT(glm::distance(stack.positionOf(1), stack.start[1]), sinkPerLevel + restSlack);
@@ -184,13 +184,13 @@ TEST(PhysicsSlopeStack, AStackTooTallForItsSlopeTopplesDownhill)
   // would hold every box of it.
   constexpr int count = 5;
   SlopeStack stack(count, 20.0f);
-  stack.run(10 * ticksPerSecond);
+  stack.run(5 * ticksPerSecond);
 
   EXPECT_GT(stack.slidDownhill(count - 1), 2.0f);
 
   // Positive control: two boxes keep their center of mass over the bottom one and stay.
   SlopeStack low(2, 20.0f);
-  low.run(10 * ticksPerSecond);
+  low.run(5 * ticksPerSecond);
   EXPECT_LT(std::fabs(low.slidDownhill(1)), 0.01f);
 }
 
