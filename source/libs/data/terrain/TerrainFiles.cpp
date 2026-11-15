@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -256,7 +257,7 @@ namespace terrain
       const auto old = havePrevious ? previous.regions.find(region) : previous.regions.end();
       const bool sizeKnown = old != previous.regions.end() && old->second.tag == record.tag;
 
-      std::vector<uint8_t> encoded;
+      std::optional<std::vector<uint8_t>> encoded;
       uintmax_t expectedBytes = 0;
 
       if (sizeKnown)
@@ -266,7 +267,7 @@ namespace terrain
       else
       {
         encoded = encodeRegion(regions.at(region));
-        expectedBytes = encoded.size();
+        expectedBytes = encoded.has_value() ? encoded->size() : 0;
       }
 
       std::error_code sizeError;
@@ -274,30 +275,38 @@ namespace terrain
 
       if (sizeError || onDisk != expectedBytes)
       {
-        if (encoded.empty())
+        if (!encoded.has_value())
         {
           encoded = encodeRegion(regions.at(region));
         }
 
-        if (!writeFile(file, encoded, result.error))
+        if (!encoded.has_value())
+        {
+          result.error = failure(file, "the region could not be encoded");
+          return result;
+        }
+
+        if (!writeFile(file, *encoded, result.error))
         {
           return result;
         }
 
-        expectedBytes = encoded.size();
+        expectedBytes = encoded->size();
         ++result.regionsWritten;
       }
 
       record.bytes = expectedBytes;
     }
 
-    const std::string text = writeIndex(newIndex);
+    const std::optional<std::string> index = writeIndex(newIndex);
 
-    if (text.size() > maxIndexBytes)
+    if (!index.has_value())
     {
-      result.error = failure(folder / indexFileName, "the index would be larger than the format allows");
+      result.error = failure(folder / indexFileName, "the index would be invalid or larger than the format allows");
       return result;
     }
+
+    const std::string& text = *index;
 
     if (!writeFile(folder / indexFileName,
                    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()), result.error))
