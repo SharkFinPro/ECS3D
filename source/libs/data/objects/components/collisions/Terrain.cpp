@@ -94,6 +94,7 @@ void Terrain::setTerrainUUID(const uuids::uuid& terrainUUID)
   if (terrainUUID != m_terrainUUID)
   {
     m_volume.reset();
+    m_volumeBound = false;
   }
 
   m_terrainUUID = terrainUUID;
@@ -122,6 +123,7 @@ void Terrain::setCastShadows(const bool castShadows)
 
 void Terrain::setVolume(std::weak_ptr<const terrain::TerrainVolume> volume)
 {
+  m_volumeBound = volume.use_count() > 0;
   m_volume = std::move(volume);
   invalidateBoundingBox();
 }
@@ -129,6 +131,11 @@ void Terrain::setVolume(std::weak_ptr<const terrain::TerrainVolume> volume)
 std::shared_ptr<const terrain::TerrainVolume> Terrain::volume() const
 {
   return m_volume.lock();
+}
+
+bool Terrain::volumeExpired() const
+{
+  return m_volumeBound && m_volume.expired();
 }
 
 void Terrain::invalidateBounds()
@@ -273,6 +280,7 @@ void Terrain::assign(const Data& data)
   if (data.terrainUUID != m_terrainUUID)
   {
     m_volume.reset();
+    m_volumeBound = false;
   }
 
   m_terrainUUID = data.terrainUUID;

@@ -119,6 +119,14 @@ namespace {
     return message;
   }
 
+  void writeDescription(net::Message& message, const uuids::uuid& uuid, const float voxelSize)
+  {
+    message.write(uuid);
+    message.write(voxelSize);
+    message.write(static_cast<uint32_t>(0));
+    message.write(static_cast<uint32_t>(0));
+  }
+
   // A receiver with a scene and a terrain, to show a refused snapshot changes none of it.
   struct GuardedReceiver {
     Project project;
@@ -152,6 +160,7 @@ TEST(TerrainSnapshot, ADescriptionAppliesInPlaceAndKeepsTheReceiversVolume)
   receiver.assetRegistry.registerAsset(terrainRecord(firstUUID));
   const auto held = receiver.store.create({ .uuid = firstUUID, .voxelSize = 4.0f });
   ASSERT_NE(held, nullptr);
+  held->setChunk({ 2, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
 
   receiver.packer.unpack(packed(sender.packer));
 
@@ -166,7 +175,8 @@ TEST(TerrainSnapshot, ADescriptionAppliesInPlaceAndKeepsTheReceiversVolume)
   EXPECT_EQ(description->palette[0].albedoTexture, secondUUID);
   EXPECT_EQ(description->palette[0].specularTexture, thirdUUID);
 
-  EXPECT_TRUE(held->chunks().empty());
+  EXPECT_EQ(held->chunks().size(), 1u);
+  EXPECT_NE(held->chunk({ 2, 0, 0 }), nullptr);
 }
 
 TEST(TerrainSnapshot, ATerrainOnlyTheSnapshotNamesIsCreatedAndOneWithoutARecordIsDropped)
@@ -224,7 +234,7 @@ TEST(TerrainSnapshot, OnlyTheDescriptionsRideTheSnapshotNeverChunkData)
   EXPECT_EQ(sender.store.find(firstUUID)->chunks().size(), 1u);
 }
 
-TEST(TerrainSnapshot, ASnapshotWithoutAStoreCarriesNoDescriptionsSoTheReceiverKeepsItsOwn)
+TEST(TerrainSnapshot, AStorelessSendersSnapshotLeavesTheReceiversTerrainsAndStillReconcilesNewRecords)
 {
   Project sender;
   fillSender(sender);
@@ -232,13 +242,70 @@ TEST(TerrainSnapshot, ASnapshotWithoutAStoreCarriesNoDescriptionsSoTheReceiverKe
   const ProjectPacker withoutStore(&sender.assetRegistry, &sender.sceneManager, sender.componentRegistry);
   Project receiver;
   receiver.assetRegistry.registerAsset(terrainRecord(firstUUID));
-  ASSERT_NE(receiver.store.create({ .uuid = firstUUID, .voxelSize = 3.0f }), nullptr);
+  const auto held = receiver.store.create({ .uuid = firstUUID, .voxelSize = 3.0f });
+  ASSERT_NE(held, nullptr);
+  held->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
 
   receiver.packer.unpack(packed(withoutStore));
+
+  EXPECT_EQ(receiver.store.find(firstUUID), held);
+  EXPECT_EQ(held->chunks().size(), 1u);
 
   const auto* description = receiver.store.description(firstUUID);
   ASSERT_NE(description, nullptr);
   EXPECT_NEAR(description->voxelSize, 3.0f, 1.0e-6f);
+  EXPECT_TRUE(description->palette.empty());
+
+  EXPECT_NE(receiver.store.find(secondUUID), nullptr);
+}
+
+TEST(TerrainSnapshot, ADescriptionNamingAUUIDWithoutATerrainRecordIsIgnored)
+{
+  auto message = snapshotWithoutTerrainSection();
+  message.write(static_cast<uint32_t>(1));
+  writeDescription(message, thirdUUID, 4.0f);
+
+  Project receiver;
+  receiver.packer.unpack(message);
+
+  EXPECT_EQ(receiver.store.find(thirdUUID), nullptr);
+  EXPECT_NE(receiver.store.find(firstUUID), nullptr);
+  EXPECT_EQ(receiver.store.terrains().size(), 1u);
+}
+
+TEST(TerrainSnapshot, WhenADescriptionsUUIDRepeatsTheLastOneApplies)
+{
+  auto message = snapshotWithoutTerrainSection();
+  message.write(static_cast<uint32_t>(2));
+  writeDescription(message, firstUUID, 4.0f);
+  writeDescription(message, firstUUID, 6.0f);
+
+  Project receiver;
+  receiver.packer.unpack(message);
+
+  const auto* description = receiver.store.description(firstUUID);
+  ASSERT_NE(description, nullptr);
+  EXPECT_NEAR(description->voxelSize, 6.0f, 1.0e-6f);
+}
+
+// The server reconciles its store with its registry before each snapshot; the app call site is not linked by the suite,
+// so this pins the library behavior it relies on.
+TEST(TerrainSnapshot, ASenderPacksATerrainAfterARegistryAddAndReconcileAndOmitsItAfterARemoval)
+{
+  Project sender;
+  const ProjectPacker withoutStore(&sender.assetRegistry, &sender.sceneManager, sender.componentRegistry);
+
+  sender.assetRegistry.registerAsset(terrainRecord(firstUUID));
+  sender.store.reconcile(sender.assetRegistry);
+
+  const size_t description = sizeof(uuids::uuid) + sizeof(float) + 2 * sizeof(uint32_t);
+  EXPECT_EQ(packed(sender.packer).bytes().size() - packed(withoutStore).bytes().size(), description);
+
+  sender.assetRegistry.removeAsset(firstUUID);
+  sender.store.reconcile(sender.assetRegistry);
+
+  EXPECT_EQ(packed(sender.packer).bytes().size(), packed(withoutStore).bytes().size());
+  EXPECT_EQ(sender.store.find(firstUUID), nullptr);
 }
 
 TEST(TerrainSnapshot, AValidDescriptionOfTheSameShapeApplies)
@@ -278,7 +345,7 @@ TEST(TerrainSnapshot, ATerrainCountOverTheBoundMakesUnpackThrowAndLeavesTheLiveP
 {
   GuardedReceiver receiver;
   auto message = snapshotWithoutTerrainSection();
-  message.write(static_cast<uint32_t>(4097));
+  message.write(ProjectPacker::maxSnapshotTerrains + 1);
 
   EXPECT_THROW(receiver.project.packer.unpack(message), std::exception);
 

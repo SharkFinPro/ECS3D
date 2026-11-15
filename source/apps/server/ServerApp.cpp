@@ -10,9 +10,9 @@
 #include <ProjectPacker.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
+#include <scenes/SceneAsset.h>
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainStore.h>
-#include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
@@ -122,6 +122,7 @@ void ServerApp::loadStartupProject()
     // No project file requested: run the built-in sample (Welcome and the demo scenes). It's generated in
     // code because the procedural scenes can't be a static file on disk.
     m_projectSerializer->deserialize(buildDefaultProject());
+    m_terrainStore->reconcile(*m_assetRegistry);
   }
   else
   {
@@ -129,9 +130,9 @@ void ServerApp::loadStartupProject()
     m_projectRoot = location.root;
 
     const bool loaded = m_projectSerializer->load(location.projectFile.string());
-    m_terrainStore->reconcile(*m_assetRegistry);
     if (loaded)
     {
+      m_terrainStore->reconcile(*m_assetRegistry);
       m_projectPacker->setProjectFingerprint(fingerprintProjectFile(location.projectFile));
     }
 
@@ -458,6 +459,8 @@ void ServerApp::pollScriptChangesWhileStopped(const float dt) const
 
 void ServerApp::startSceneScripts(SceneAsset& scene) const
 {
+  terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
+
   m_scriptSystem->start(scene);
 
   for (const auto slot : m_playerSlots.heldSlots())
@@ -520,12 +523,12 @@ void ServerApp::notifyObjectEvents(const std::vector<uuids::uuid>& spawned,
 
 void ServerApp::fixedUpdate(const float dt) const
 {
+  terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
+
   if (!sceneRunning())
   {
     return;
   }
-
-  terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
 
   const auto scene = m_sceneManager->getCurrentScene();
 

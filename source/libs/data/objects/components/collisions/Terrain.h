@@ -33,9 +33,12 @@ public:
   void setCastShadows(bool castShadows);
 
   // Never serialized or packed. The owner of the store re-binds after a uuid change, and calls invalidateBounds()
-  // when it drops or edits a volume (an expired volume keeps its last box until then).
+  // when it edits a volume (an expired volume keeps its last box until the binder resets it).
   void setVolume(std::weak_ptr<const terrain::TerrainVolume> volume);
   [[nodiscard]] std::shared_ptr<const terrain::TerrainVolume> volume() const;
+
+  // True when a volume was bound and the store has since dropped it, as opposed to never bound.
+  [[nodiscard]] bool volumeExpired() const;
 
   // A volume edit moves the occupied bounds without moving a transform, so whoever edits the volume calls this.
   void invalidateBounds();
@@ -58,6 +61,7 @@ private:
   bool m_castShadows = true;
 
   std::weak_ptr<const terrain::TerrainVolume> m_volume;
+  bool m_volumeBound = false;
 
   // The world corners of the occupied box, shared by the six support queries of one bounds recompute.
   std::array<glm::vec3, 8> m_corners{};

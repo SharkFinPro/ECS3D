@@ -2,16 +2,12 @@
 #include "assets/AssetRegistry.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
-#include "WireTypes.h"
 #include "terrain/TerrainStore.h"
+#include "WireTypes.h"
 #include <Protocol.h>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-
-namespace {
-  constexpr uint32_t maxSnapshotTerrains = 4096;
-}
 
 ProjectPacker::ProjectPacker(AssetRegistry* assetRegistry,
                              SceneManager* sceneManager,

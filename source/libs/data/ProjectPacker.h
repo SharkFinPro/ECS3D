@@ -22,10 +22,13 @@ namespace net {
 // tightly packed binary blob instead of JSON, reusing the existing pack()/unpack() on AssetRegistry,
 // SceneAsset, ObjectManager, Object, and the components. ProjectSerializer stays the JSON path for
 // file I/O (save/load). The snapshot also carries the terrain descriptions of the optional store (never chunk
-// data), and unpacking updates the store in place rather than clearing it. A snapshot also ends with a session-only project load id, which names the load of
-// a project it belongs to so an editor can tell another editor's loadProject from a plain re-snapshot.
+// data), and unpacking updates the store in place rather than clearing it; when a description's uuid repeats, the
+// last one applies. A snapshot also ends with a session-only project load id, which names the load of a project it
+// belongs to so an editor can tell another editor's loadProject from a plain re-snapshot.
 class ProjectPacker {
 public:
+  static constexpr uint32_t maxSnapshotTerrains = 4096;
+
   ProjectPacker(AssetRegistry* assetRegistry,
                 SceneManager* sceneManager,
                 std::shared_ptr<ComponentRegistry> componentRegistry,

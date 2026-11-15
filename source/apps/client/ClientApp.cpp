@@ -7,9 +7,9 @@
 #include <PlayerSlots.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
+#include <scenes/SceneAsset.h>
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainStore.h>
-#include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <GpuAssetCache.h>

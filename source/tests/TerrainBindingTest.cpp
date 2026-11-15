@@ -5,11 +5,14 @@
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/collisions/Collider.h"
 #include "objects/components/collisions/Terrain.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "terrain/TerrainBinding.h"
+#include "terrain/TerrainChunk.h"
 #include "terrain/TerrainStore.h"
+#include "terrain/TerrainTypes.h"
 
 #include <memory>
 #include <string>
@@ -124,4 +127,39 @@ TEST(TerrainBinding, RebindingAfterARemovalDropsTheVolume)
   terrain::bindTerrainVolumes(store, world.sceneManager);
 
   EXPECT_EQ(terrain->volume(), nullptr);
+}
+
+TEST(TerrainBinding, ARemovedVolumeWithNoReferencesLeftResetsTheBoundsOnTheNextBind)
+{
+  World world;
+  terrain::TerrainStore store;
+  {
+    const auto volume = store.create({ .uuid = terrainUUID });
+    ASSERT_NE(volume, nullptr);
+    volume->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+  }
+
+  const auto terrain = world.addTerrainChild(terrainUUID);
+  terrain::bindTerrainVolumes(store, world.sceneManager);
+  EXPECT_GT(terrain->getBoundingBox().maxX, 1.0f);
+
+  ASSERT_TRUE(store.remove(terrainUUID));
+  EXPECT_TRUE(terrain->volumeExpired());
+
+  terrain::bindTerrainVolumes(store, world.sceneManager);
+
+  EXPECT_FALSE(terrain->volumeExpired());
+  EXPECT_EQ(terrain->volume(), nullptr);
+
+  const auto& box = terrain->getBoundingBox();
+  EXPECT_NEAR(box.minX, 0.0f, 1.0e-4f);
+  EXPECT_NEAR(box.maxX, 0.0f, 1.0e-4f);
+  EXPECT_NEAR(box.minY, 0.0f, 1.0e-4f);
+  EXPECT_NEAR(box.maxY, 0.0f, 1.0e-4f);
+  EXPECT_NEAR(box.minZ, 0.0f, 1.0e-4f);
+  EXPECT_NEAR(box.maxZ, 0.0f, 1.0e-4f);
+
+  const auto settled = terrain->getGeometryRevision();
+  terrain::bindTerrainVolumes(store, world.sceneManager);
+  EXPECT_EQ(terrain->getGeometryRevision(), settled);
 }

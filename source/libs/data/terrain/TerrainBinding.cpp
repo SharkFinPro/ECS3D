@@ -22,7 +22,7 @@ namespace terrain
         }
 
         const std::shared_ptr<const TerrainVolume> found = store.find(component->getTerrainUUID());
-        if (component->volume() == found)
+        if (component->volume() == found && !component->volumeExpired())
         {
           continue;
         }
