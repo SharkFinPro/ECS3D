@@ -19,12 +19,12 @@ namespace terrain
 
     template <typename SurfaceAt>
     ChunkEdits generate(const TerrainVolume& volume, const int columns, const int rows, const double minHeight,
-                        const double maxHeight, const float thickness, const uint8_t material,
-                        const SurfaceAt& surfaceAt)
+                        const double maxHeight, const double maxNorm, const float thickness,
+                        const uint8_t material, const SurfaceAt& surfaceAt)
     {
       const float voxelSize = volume.voxelSize();
       const double lowVoxels = std::floor((minHeight - thickness) / voxelSize);
-      const double highVoxels = std::ceil(maxHeight / voxelSize + bandVoxels) + 1.0;
+      const double highVoxels = std::ceil(maxHeight / voxelSize + bandVoxels * maxNorm) + 1.0;
 
       if (!(std::abs(lowVoxels) < maxExtentVoxels) || !(std::abs(highVoxels) < maxExtentVoxels))
       {
@@ -57,7 +57,7 @@ namespace terrain
       return {};
     }
 
-    return generate(volume, sizeSamples.x, sizeSamples.y, groundHeight, groundHeight, thickness, material,
+    return generate(volume, sizeSamples.x, sizeSamples.y, groundHeight, groundHeight, 1.0, thickness, material,
                     [groundHeight](int, int)
     {
       return Surface{ groundHeight, 1.0f };
@@ -97,12 +97,24 @@ namespace terrain
       return after == before ? 0.0f : (read(after) - read(before)) / (static_cast<float>(after - before) * voxelSize);
     };
 
-    return generate(volume, width, rows, toHeight(*lowest), toHeight(*highest), thickness, material,
-                    [&](const int u, const int v)
+    const auto surfaceAt = [&](const int u, const int v)
     {
       const float gradX = slope([&](const int i) { return heightAt(i, v); }, u, width);
       const float gradZ = slope([&](const int i) { return heightAt(u, i); }, v, rows);
       return Surface{ heightAt(u, v), 1.0f / std::sqrt(1.0f + gradX * gradX + gradZ * gradZ) };
-    });
+    };
+
+    float smallestInverseNorm = 1.0f;
+
+    for (int v = 0; v < rows; ++v)
+    {
+      for (int u = 0; u < width; ++u)
+      {
+        smallestInverseNorm = std::min(smallestInverseNorm, surfaceAt(u, v).inverseNorm);
+      }
+    }
+
+    return generate(volume, width, rows, toHeight(*lowest), toHeight(*highest), 1.0 / smallestInverseNorm, thickness,
+                    material, surfaceAt);
   }
 }
