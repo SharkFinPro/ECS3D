@@ -209,6 +209,29 @@ TEST(TerrainCodecTest, SmoothDenseRoundTripsAndCompresses)
   EXPECT_LT(bytes.size(), 16u * 1024u);
 }
 
+TEST(TerrainCodecTest, WorstCaseDenseChunkFitsTheEncodedBound)
+{
+  std::vector<int16_t> distances(terrain::samplesPerChunk);
+  std::vector<uint8_t> materials(terrain::samplesPerChunk);
+
+  for (size_t i = 0; i < distances.size(); ++i)
+  {
+    distances[i] = (i % 2 == 0) ? 0 : 100;
+    materials[i] = static_cast<uint8_t>(1 + i % 2);
+  }
+
+  const auto chunk = terrain::TerrainChunk::dense(std::move(distances), std::move(materials));
+  ASSERT_FALSE(chunk->isUniform());
+
+  const auto encoded = terrain::encodeChunk(*chunk);
+  EXPECT_LE(encoded.size(), terrain::maxEncodedChunkBytes);
+  EXPECT_GT(encoded.size(), terrain::maxEncodedChunkBytes / 2);
+
+  const auto decoded = terrain::decodeChunk(encoded);
+  ASSERT_NE(decoded, nullptr);
+  expectSameSamples(*chunk, *decoded);
+}
+
 TEST(TerrainCodecTest, RandomDenseRoundTrips)
 {
   for (const uint32_t seed : { 1u, 2u, 12345u })
