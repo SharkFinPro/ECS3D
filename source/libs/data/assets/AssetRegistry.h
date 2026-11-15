@@ -19,7 +19,8 @@ enum class AssetType {
   Texture,
   Scene,
   Script,
-  Prefab
+  Prefab,
+  Terrain
 };
 
 // Which host a Script record's class can attach to. Packed raw over the wire, so only ever APPEND.
@@ -29,10 +30,14 @@ enum class ScriptKind : uint8_t {
   Scene
 };
 
+// The one path a Terrain record may carry. A later change names a folder under the project root after it, so
+// it must never come from untrusted input: registerAsset refuses any other path.
+[[nodiscard]] std::string terrainAssetPath(const uuids::uuid& uuid);
+
 struct AssetRecord {
   uuids::uuid uuid;
   AssetType type = AssetType::Unknown;
-  std::string path;        // scenes and prefabs store their display name here instead
+  std::string path;        // scenes and prefabs store their display name here instead; terrains terrainAssetPath
   std::string className;   // scripts only
   std::string body;        // prefabs only: a serialized Object blob (Object::serialize().dump())
   std::string displayName; // optional rename override: when non-empty it replaces the derived display
@@ -98,7 +103,7 @@ public:
   void loadFromJSON(const nlohmann::json& assetsData);
 
   // Binary equivalents of serialize()/loadFromJSON for the network snapshot. Like serialize(), pack()
-  // only writes the flat file assets (Model/Texture/Script/Prefab); Scene records belong to the
+  // only writes the flat file assets (Model/Texture/Script/Prefab/Terrain); Scene records belong to the
   // SceneManager.
   void pack(net::Message& message) const;
 

@@ -9,7 +9,7 @@
 
 namespace assetNaming {
   // The key a record of this type is registered under: the name for scenes and prefabs, the class name
-  // for scripts.
+  // for scripts. A terrain is keyed by its uuid-derived path, never by a name.
   [[nodiscard]] inline const std::string& keyOf(const AssetRecord& record)
   {
     return record.type == AssetType::Script ? record.className : record.path;

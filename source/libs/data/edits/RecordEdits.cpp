@@ -510,6 +510,13 @@ std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const
     return std::nullopt;
   }
 
+  // A terrain's volume lives outside the registry, so undoing its record would discard data that redo cannot
+  // restore. The op still applies; it just is not recorded.
+  if (type == AssetType::Terrain)
+  {
+    return std::nullopt;
+  }
+
   // Prefabs and scenes carry their display name where the file assets carry a path (AssetRecord::path).
   const bool nameKeyed = type == AssetType::Prefab || type == AssetType::Scene;
   const std::string path = nameKeyed ? stringField(asset, "name") : stringField(asset, "path");
@@ -595,6 +602,11 @@ std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const
 
   const auto* record = view.getByUUID(assetUUID.value());
   if (!record)
+  {
+    return std::nullopt;
+  }
+
+  if (record->type == AssetType::Terrain)
   {
     return std::nullopt;
   }

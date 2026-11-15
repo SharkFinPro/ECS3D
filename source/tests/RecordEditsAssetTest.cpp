@@ -427,3 +427,35 @@ TEST(RecordEdits, RenameAndRemoveAssetRefuseMalformedOps)
   EXPECT_FALSE(edits::commandForRenameAsset(renameWithBadUUID, scene.assetRegistry).has_value());
   EXPECT_FALSE(edits::commandForRemoveAsset(removeWithBadUUID, scene.assetRegistry, sceneManager).has_value());
 }
+
+TEST(RecordEdits, TerrainAddAndRemoveAreNotRecordedButRenameIs)
+{
+  AssetScene scene;
+  SceneManager sceneManager;
+  const auto terrainUUID = someOtherUUID();
+
+  const auto terrainAdd = edits::commandForAddAsset({ { "assetType", "terrain" }, { "uuid", uuidString(terrainUUID) },
+                                                      { "path", terrainAssetPath(terrainUUID) } },
+                                                    scene.assetRegistry);
+  EXPECT_FALSE(terrainAdd.has_value());
+
+  const auto textureUUID = anotherUUID();
+  const auto textureAdd = edits::commandForAddAsset({ { "assetType", "texture" }, { "uuid", uuidString(textureUUID) },
+                                                      { "path", "textures/a.png" } },
+                                                    scene.assetRegistry);
+  EXPECT_TRUE(textureAdd.has_value());
+
+  scene.assetRegistry.registerAsset({ .uuid = terrainUUID, .type = AssetType::Terrain,
+                                      .path = terrainAssetPath(terrainUUID), .displayName = "Hills" });
+  scene.assetRegistry.registerAsset({ .uuid = textureUUID, .type = AssetType::Texture, .path = "textures/a.png" });
+
+  EXPECT_FALSE(edits::commandForRemoveAsset(replication::buildRemoveAsset(terrainUUID), scene.assetRegistry,
+                                            sceneManager).has_value());
+  EXPECT_TRUE(edits::commandForRemoveAsset(replication::buildRemoveAsset(textureUUID), scene.assetRegistry,
+                                           sceneManager).has_value());
+
+  const auto renamed = edits::commandForRenameAsset(replication::buildRenameAsset(terrainUUID, "Dunes"),
+                                                    scene.assetRegistry);
+  ASSERT_TRUE(renamed.has_value());
+  EXPECT_EQ(*renamed, edits::EditCommand::renameAsset(terrainUUID, "Hills", "Dunes"));
+}

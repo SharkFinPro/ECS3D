@@ -57,6 +57,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainRaycast.h
   terrain/TerrainSampling.cpp
   terrain/TerrainSampling.h
+  terrain/TerrainStore.cpp
+  terrain/TerrainStore.h
   terrain/TerrainTypes.h
   terrain/TerrainVolume.cpp
   terrain/TerrainVolume.h

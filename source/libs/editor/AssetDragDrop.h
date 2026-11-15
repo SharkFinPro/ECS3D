@@ -26,6 +26,7 @@ namespace assetDragDrop {
       case AssetType::Script: return script;
       case AssetType::Prefab: return prefab;
       case AssetType::Scene: return scene;
+      case AssetType::Terrain: return nullptr;
       default: return nullptr;
     }
   }

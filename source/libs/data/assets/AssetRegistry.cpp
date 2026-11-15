@@ -15,12 +15,29 @@ namespace {
 
     return !parsed.is_discarded() && parsed.is_object();
   }
+
+  bool isCanonicalTerrainRecord(const AssetRecord& record)
+  {
+    return !record.uuid.is_nil() && record.path == terrainAssetPath(record.uuid) && record.className.empty() && record.body.empty();
+  }
+}
+
+std::string terrainAssetPath(const uuids::uuid& uuid)
+{
+  return "terrain/" + uuids::to_string(uuid);
 }
 
 void AssetRegistry::registerAsset(const AssetRecord& record)
 {
   if (record.type == AssetType::Prefab && !isUsablePrefabBody(record.body))
   {
+    return;
+  }
+
+  if (record.type == AssetType::Terrain && !isCanonicalTerrainRecord(record))
+  {
+    Log::warn(LogCategory::assets, "Refused terrain record '" + record.path + "': not the canonical record.");
+
     return;
   }
 
@@ -213,7 +230,8 @@ nlohmann::json AssetRegistry::serialize() const
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },
     { "scripts", nlohmann::json::array() },
-    { "prefabs", nlohmann::json::array() }
+    { "prefabs", nlohmann::json::array() },
+    { "terrains", nlohmann::json::array() }
   };
 
   // A rename sets a display-name override on the record; write it (append only, omitted when empty) so a
@@ -261,6 +279,9 @@ nlohmann::json AssetRegistry::serialize() const
         }, record));
         break;
       }
+      case AssetType::Terrain:
+        data["terrains"].push_back(withDisplayName({ { "filePath", record.path }, { "uuid", uuidString } }, record));
+        break;
       default:
         break;
     }
@@ -291,6 +312,19 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
       registerAsset({
         .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
         .type = AssetType::Texture,
+        .path = assetData.at("filePath"),
+        .displayName = assetData.value("displayName", std::string{})
+      });
+    }
+  }
+
+  if (assetsData.contains("terrains"))
+  {
+    for (const auto& assetData : assetsData.at("terrains"))
+    {
+      registerAsset({
+        .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
+        .type = AssetType::Terrain,
         .path = assetData.at("filePath"),
         .displayName = assetData.value("displayName", std::string{})
       });
@@ -337,7 +371,8 @@ void AssetRegistry::pack(net::Message& message) const
   for (const auto& [uuid, record] : m_assets)
   {
     if (record.type == AssetType::Model || record.type == AssetType::Texture
-        || record.type == AssetType::Script || record.type == AssetType::Prefab)
+        || record.type == AssetType::Script || record.type == AssetType::Prefab
+        || record.type == AssetType::Terrain)
     {
       records.push_back(&record);
     }

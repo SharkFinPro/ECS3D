@@ -134,6 +134,7 @@ namespace {
     {
       case AssetType::Model:
       case AssetType::Texture:
+      case AssetType::Terrain:
         asset["path"] = path;
         break;
       case AssetType::Script:
@@ -194,6 +195,7 @@ namespace {
       case AssetType::Scene:
       case AssetType::Prefab: name = path; break;
       case AssetType::Script: name = className; break;
+      case AssetType::Terrain: name = "Terrain " + std::filesystem::path(path).filename().string().substr(0, 8); break;
       default: name = std::filesystem::path(path).filename().string(); break;
     }
     return name.empty() ? fallback : name;

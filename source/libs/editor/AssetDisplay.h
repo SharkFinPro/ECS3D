@@ -23,6 +23,7 @@ namespace assetDisplay {
       case AssetType::Scene:   return "Scene";
       case AssetType::Script:  return "Script";
       case AssetType::Prefab:  return "Prefab";
+      case AssetType::Terrain: return "Terrain";
       default:                 return "Unknown";
     }
   }
@@ -42,6 +43,7 @@ namespace assetDisplay {
       case AssetType::Scene:
       case AssetType::Prefab: return record.path;
       case AssetType::Script: return record.className;
+      case AssetType::Terrain: return "Terrain " + std::filesystem::path(record.path).filename().string().substr(0, 8);
       default:                return std::filesystem::path(record.path).filename().string();
     }
   }
@@ -55,6 +57,7 @@ namespace assetDisplay {
       case AssetType::Script:  return gc::SecIcon::script;
       case AssetType::Scene:   return gc::SecIcon::scene;
       case AssetType::Prefab:  return gc::SecIcon::block;
+      case AssetType::Terrain: return gc::SecIcon::sphere;
       default:                 return gc::SecIcon::none;
     }
   }
@@ -67,6 +70,7 @@ namespace assetDisplay {
       case AssetType::Script: return theme::scriptAmber;
       case AssetType::Scene:  return theme::sceneGreen;
       case AssetType::Prefab: return theme::prefabBlue;
+      case AssetType::Terrain: return theme::sceneGreen;
       case AssetType::Texture:
       default:                return theme::accent;
     }
