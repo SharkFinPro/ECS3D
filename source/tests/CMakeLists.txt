@@ -216,6 +216,7 @@ add_executable(${PROJECT_NAME}
   AgentDocsTest.cpp
   AppIconTest.cpp
   TemplateManifestTest.cpp
+  TerrainBindingTest.cpp
   TerrainBrushTest.cpp
   TerrainBrushWireTest.cpp
   TerrainChunkTest.cpp
@@ -230,6 +231,7 @@ add_executable(${PROJECT_NAME}
   TerrainRedistanceTest.cpp
   TerrainRegionFormatTest.cpp
   TerrainSamplingTest.cpp
+  TerrainSnapshotTest.cpp
   TerrainStoreTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp

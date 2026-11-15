@@ -24,6 +24,9 @@ class ManagedHost;
 class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
+namespace terrain {
+  class TerrainStore;
+}
 class ProjectSerializer;
 class ProjectPacker;
 class CollisionSystem;
@@ -77,6 +80,7 @@ private:
 
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
+  std::shared_ptr<terrain::TerrainStore> m_terrainStore;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
   std::shared_ptr<ProjectPacker> m_projectPacker;

@@ -9,6 +9,10 @@ class AssetRegistry;
 class SceneManager;
 class ComponentRegistry;
 
+namespace terrain {
+  class TerrainStore;
+}
+
 namespace net {
   class Message;
 }
@@ -17,13 +21,18 @@ namespace net {
 // network Snapshot. It produces the same full project state (assets + scenes + current scene) as a
 // tightly packed binary blob instead of JSON, reusing the existing pack()/unpack() on AssetRegistry,
 // SceneAsset, ObjectManager, Object, and the components. ProjectSerializer stays the JSON path for
-// file I/O (save/load). A snapshot also ends with a session-only project load id, which names the load of
-// a project it belongs to so an editor can tell another editor's loadProject from a plain re-snapshot.
+// file I/O (save/load). The snapshot also carries the terrain descriptions of the optional store (never chunk
+// data), and unpacking updates the store in place rather than clearing it; when a description's uuid repeats, the
+// last one applies. A snapshot also ends with a session-only project load id, which names the load of a project it
+// belongs to so an editor can tell another editor's loadProject from a plain re-snapshot.
 class ProjectPacker {
 public:
+  static constexpr uint32_t maxSnapshotTerrains = 4096;
+
   ProjectPacker(AssetRegistry* assetRegistry,
                 SceneManager* sceneManager,
-                std::shared_ptr<ComponentRegistry> componentRegistry);
+                std::shared_ptr<ComponentRegistry> componentRegistry,
+                terrain::TerrainStore* terrainStore = nullptr);
 
   // Writes the full project state into message (typically a MessageType::snapshot message).
   void pack(net::Message& message) const;
@@ -50,6 +59,8 @@ private:
   SceneManager* m_sceneManager;
 
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
+
+  terrain::TerrainStore* m_terrainStore;
 
   uuids::uuid m_projectLoadId;
 

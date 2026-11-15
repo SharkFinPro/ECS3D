@@ -231,3 +231,59 @@ TEST(TerrainStore, MaterialNamesMustBeValidUtf8WithoutControlCharacters)
   EXPECT_FALSE(createWithName("a\x7F" "b"));
   EXPECT_FALSE(createWithName("a\nb"));
 }
+
+TEST(TerrainStore, ApplyDescriptionKeepsTheVolumeWhenTheVoxelSizeIsUnchanged)
+{
+  terrain::TerrainStore store;
+  const auto volume = store.create(describe(firstUUID, 4.0f));
+  ASSERT_NE(volume, nullptr);
+  volume->setChunk({ 0, 0, 0 }, solidChunk());
+
+  auto next = describe(firstUUID, 4.0f);
+  next.palette.push_back({ "rock", secondUUID, thirdUUID });
+  next.chunkCount = 9;
+
+  EXPECT_TRUE(store.applyDescription(next));
+  EXPECT_EQ(store.find(firstUUID), volume);
+  EXPECT_NE(volume->chunk({ 0, 0, 0 }), nullptr);
+
+  const auto* stored = store.description(firstUUID);
+  ASSERT_NE(stored, nullptr);
+  EXPECT_EQ(stored->chunkCount, 9u);
+  ASSERT_EQ(stored->palette.size(), 1u);
+  EXPECT_EQ(stored->palette[0].name, "rock");
+}
+
+TEST(TerrainStore, ApplyDescriptionReplacesTheVolumeWhenTheVoxelSizeChanges)
+{
+  terrain::TerrainStore store;
+  const auto volume = store.create(describe(firstUUID, 4.0f));
+  ASSERT_NE(volume, nullptr);
+  volume->setChunk({ 0, 0, 0 }, solidChunk());
+
+  EXPECT_TRUE(store.applyDescription(describe(firstUUID, 2.0f)));
+
+  const auto replaced = store.find(firstUUID);
+  ASSERT_NE(replaced, nullptr);
+  EXPECT_NE(replaced, volume);
+  EXPECT_NEAR(replaced->voxelSize(), 2.0f, 1.0e-6f);
+  EXPECT_TRUE(replaced->chunks().empty());
+  EXPECT_NEAR(store.description(firstUUID)->voxelSize, 2.0f, 1.0e-6f);
+}
+
+TEST(TerrainStore, ApplyDescriptionRefusesAnUnknownUuidOrAnInvalidDescription)
+{
+  terrain::TerrainStore store;
+  const auto volume = store.create(describe(firstUUID, 4.0f));
+  ASSERT_NE(volume, nullptr);
+
+  EXPECT_FALSE(store.applyDescription(describe(secondUUID)));
+  EXPECT_EQ(store.find(secondUUID), nullptr);
+
+  EXPECT_FALSE(store.applyDescription(describe(firstUUID, 0.0f)));
+  EXPECT_FALSE(store.applyDescription(describe(firstUUID, std::numeric_limits<float>::quiet_NaN())));
+  EXPECT_EQ(store.find(firstUUID), volume);
+  EXPECT_NEAR(store.description(firstUUID)->voxelSize, 4.0f, 1.0e-6f);
+
+  EXPECT_TRUE(store.applyDescription(describe(firstUUID, 4.0f)));
+}

@@ -10,6 +10,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/Object.h>
+#include <terrain/TerrainStore.h>
 #include <ProfileScope.h>
 #include <ScriptSystem.h>
 #include "StructuralChanges.h"
@@ -74,6 +75,8 @@ net::Message ServerApp::buildSnapshot(uint32_t& buildMicros) const
   {
     Log::error(LogCategory::server, std::string("Script class assets were not registered: ") + e.what());
   }
+
+  m_terrainStore->reconcile(*m_assetRegistry);
 
   // Binary snapshot: ProjectPacker writes the same project state ProjectSerializer::serialize would,
   // but tightly packed instead of JSON. ProjectSerializer stays the JSON path for file save/load.
