@@ -310,6 +310,8 @@ namespace {
         return hull && hullQueries::rayHull(origin, dir, hull->getWorldVertices(), hull->getHull().indices,
                                             maxDistance, t, normal);
       }
+      case ColliderType::terrainCollider:
+        break;
     }
 
     return false;
@@ -349,6 +351,8 @@ namespace {
         return hull && hullQueries::sphereOverlapsHull(center, radius, hull->getWorldVertices(),
                                                        hull->getHull().indices);
       }
+      case ColliderType::terrainCollider:
+        break;
     }
 
     return false;

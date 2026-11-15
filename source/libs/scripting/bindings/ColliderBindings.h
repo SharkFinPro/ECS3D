@@ -10,7 +10,7 @@
 // current ObjectManager via BindingContext.
 //
 // getShape returns a small integer shared with the managed ColliderShape enum: 0 = none (no collider, or
-// an unresolved uuid), 1 = box, 2 = sphere, 3 = capsule, 4 = convex mesh. The common get* accessors (isTrigger/layer/mask) return a
+// an unresolved uuid), 1 = box, 2 = sphere, 3 = capsule, 4 = convex mesh, 5 = terrain. The common get* accessors (isTrigger/layer/mask) return a
 // neutral default when the object has no collider - the same convention as
 // ModelRendererBindings::getShouldRender.
 //

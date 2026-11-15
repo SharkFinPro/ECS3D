@@ -138,7 +138,7 @@ TEST(ConvexMeshCollider, IsRegisteredUnderItsKeyAndNamedInTheComponentMaps)
   EXPECT_EQ(static_cast<int>(ComponentType::SubComponentType_convexMeshCollider),
             static_cast<int>(ComponentType::SubComponentType_capsuleCollider) + 1);
   EXPECT_EQ(static_cast<int>(ComponentType::count),
-            static_cast<int>(ComponentType::SubComponentType_convexMeshCollider) + 1);
+            static_cast<int>(ComponentType::SubComponentType_terrain) + 1);
 }
 
 TEST(ConvexMeshCollider, KeepsItsHullSourceOffsetsAndFlagsThroughJsonAndTheWire)

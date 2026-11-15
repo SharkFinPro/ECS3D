@@ -64,6 +64,10 @@ namespace {
       {
         return gc::SecIcon::model;
       }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_terrain)
+      {
+        return gc::SecIcon::collider;
+      }
       return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
     }
 
@@ -99,6 +103,10 @@ namespace {
       if (collider->second->getSubType() == ComponentType::SubComponentType_convexMeshCollider)
       {
         return "Convex Mesh";
+      }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_terrain)
+      {
+        return "Terrain";
       }
       return components.contains(ComponentType::rigidBody) ? "Rigid Block" : "Block";
     }

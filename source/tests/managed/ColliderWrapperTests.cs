@@ -256,4 +256,14 @@ public class ColliderWrapperTests : IDisposable
     Assert.Equal(ColliderShape.Capsule, collider.getShape());
     Assert.Equal(3, (int)ColliderShape.Capsule);
   }
+
+  [Fact]
+  public void Collider_ShapeReportsTerrain()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.getShape", (int)ColliderShape.Terrain);
+
+    Assert.Equal(ColliderShape.Terrain, collider.getShape());
+    Assert.Equal(5, (int)ColliderShape.Terrain);
+  }
 }

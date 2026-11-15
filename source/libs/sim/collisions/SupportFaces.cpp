@@ -415,6 +415,7 @@ namespace collisions {
         return hullSupportFaces(dynamic_cast<ConvexMeshCollider&>(collider));
       case ColliderType::sphereCollider:
       case ColliderType::capsuleCollider:
+      case ColliderType::terrainCollider:
         break;
     }
 

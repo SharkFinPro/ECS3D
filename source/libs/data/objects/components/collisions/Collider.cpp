@@ -89,7 +89,7 @@ bool Collider::isTrigger() const
 
 void Collider::setIsTrigger(const bool isTrigger)
 {
-  m_isTrigger = isTrigger;
+  m_isTrigger = isTrigger && m_colliderType != ColliderType::terrainCollider;
 }
 
 uint32_t Collider::getLayer() const

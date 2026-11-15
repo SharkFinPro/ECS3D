@@ -141,6 +141,8 @@ int ColliderBindingsProvider::bindGetShape(const char* uuid)
       return 3;
     case ColliderType::convexMeshCollider:
       return 4;
+    case ColliderType::terrainCollider:
+      return 5;
   }
 
   return 0; // unreachable for a valid ColliderType; keeps this a well-formed non-void function under gcc

@@ -212,6 +212,8 @@ namespace inertia {
         return capsuleOf(static_cast<CapsuleCollider&>(collider));
       case ColliderType::convexMeshCollider:
         return hullOf(static_cast<ConvexMeshCollider&>(collider));
+      case ColliderType::terrainCollider:
+        break;
     }
 
     return {};

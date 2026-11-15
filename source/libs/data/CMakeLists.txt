@@ -96,6 +96,8 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/CapsuleCollider.h
   objects/components/collisions/SphereCollider.cpp
   objects/components/collisions/SphereCollider.h
+  objects/components/collisions/Terrain.cpp
+  objects/components/collisions/Terrain.h
   objects/components/collisions/ConvexHull.cpp
   objects/components/collisions/ConvexHull.h
   objects/components/collisions/ConvexHullValidation.cpp

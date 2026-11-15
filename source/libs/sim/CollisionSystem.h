@@ -137,6 +137,9 @@ private:
     uint32_t layer;
     uint32_t mask;
     bool dynamic;
+
+    // Takes part in no pair: tested against nothing, and no event.
+    bool inert;
   };
 
   std::vector<CollisionEdge> m_collisionEdges;

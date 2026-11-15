@@ -22,6 +22,12 @@
 #include <utility>
 
 namespace {
+  // A terrain does not collide yet, so it joins no pair. Its collisionEnabled flag will gate this once it does.
+  bool isInert(const Collider& collider)
+  {
+    return collider.getColliderType() == ColliderType::terrainCollider;
+  }
+
   // Colliders that belong to one body never touch each other: they move together, and a response between
   // them would push the body against itself. Static colliders (no body) are not one assembly.
   bool partOfSameAssembly(const CollisionEdge& a, const CollisionEdge& b)
@@ -117,7 +123,7 @@ void CollisionSystem::checkCollisions(const float dt)
     for (size_t i = 0; i < edgeCount; ++i)
     {
       const auto& edge = m_collisionEdges[i];
-      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr };
+      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr, isInert(*edge.collider) };
     }
   }
 
@@ -428,6 +434,11 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
 
     // A pair of static colliders never needs testing.
     if (!selfDynamic && !box.dynamic)
+    {
+      continue;
+    }
+
+    if (self.inert || box.inert)
     {
       continue;
     }
