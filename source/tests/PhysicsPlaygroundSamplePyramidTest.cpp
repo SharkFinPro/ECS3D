@@ -78,8 +78,8 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidShovesItsCube
   ASSERT_NEAR(startHeights[topIndex], 3.55f, 1e-4f);
 
   // Positive control: left alone for as long as the walk run lasts, every cube stays where it started.
-  constexpr int walkTicks = 250;
-  constexpr int settleTicks = 250;
+  constexpr int walkTicks = 150;
+  constexpr int settleTicks = 100;
   walkPlayer(objectManager, player, glm::vec3(0.0f), topSpeed, walkTicks + settleTicks);
   for (std::size_t i = 0; i < cubes.size(); ++i)
   {

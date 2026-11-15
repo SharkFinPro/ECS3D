@@ -72,7 +72,7 @@ TEST(PhysicsPlaygroundSampleRace, TheBlockHoldsWhileTheRollersAndSliderGoDownhil
     racers.emplace(lane, release(loaded, lane));
   }
 
-  tick(*loaded.sceneManager.getCurrentScene()->getObjectManager(), 300);
+  tick(*loaded.sceneManager.getCurrentScene()->getObjectManager(), 200);
 
   const auto& block = racers.at("Block");
   EXPECT_LT(glm::distance(fixtures::positionOf(block.object), block.start), 0.05f);

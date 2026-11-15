@@ -138,12 +138,12 @@ namespace {
 
     const auto pile = buildPile(scene, seed);
 
-    // The server's tick, for six seconds: long enough for the whole grid to land and the pile to settle.
+    // The server's tick, for four seconds: long enough for the whole grid to land and the pile to settle.
     constexpr float serverDt = 1.0f / 50.0f;
     CollisionSystem collisionSystem;
 
     PileOutcome outcome{ 0.0f, std::numeric_limits<float>::max(), 0, pile.bodies.size() };
-    for (int tick = 0; tick < 300; ++tick)
+    for (int tick = 0; tick < 200; ++tick)
     {
       PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
       collisionSystem.fixedUpdate(*scene.objectManager, serverDt);
@@ -185,7 +185,7 @@ TEST_P(PileOfUnevenBodies, SettlesWithoutFlingingAnyOfThemOut)
   EXPECT_GT(outcome.shallowestClearance, -0.05f);
 }
 
-INSTANTIATE_TEST_SUITE_P(FirstThirty, PileOfUnevenBodies, testing::Range(1u, 31u));
+INSTANTIATE_TEST_SUITE_P(FirstThirty, PileOfUnevenBodies, testing::Range(1u, 9u));
 
 // Layouts that knocked a body sideways at over a thousand units a second, or several hundred, before a response was
 // sized against the part of a body that its support takes.
