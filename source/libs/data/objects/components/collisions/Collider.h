@@ -18,14 +18,15 @@ struct BoundingBox {
   float maxZ{};
 };
 
-// Adding a shape here also needs a case in ColliderBindingsProvider::bindGetShape
-// (source/libs/scripting/bindings/ColliderBindings.cpp) and a matching value in the managed ColliderShape
-// enum (source/libs/scripting/ScriptBridge/components/Collider.cs).
+// A new shape needs a case at every switch over ColliderType (the compiler warns about each) plus the two sites
+// no switch covers: the managed ColliderShape enum (ScriptBridge/components/Collider.cs) and CollisionSystem's
+// inert check.
 enum class ColliderType {
   boxCollider,
   sphereCollider,
   capsuleCollider,
-  convexMeshCollider
+  convexMeshCollider,
+  terrainCollider
 };
 
 // Data-only: shape geometry (findFurthestPoint, bounding box). The GJK/EPA narrow phase that consumes it
@@ -47,7 +48,8 @@ public:
 
   // A trigger still produces collision events but no physical response (no MTV correction, no
   // impulses) - a volume scripts can react to without it blocking anything. Shared by every collider
-  // shape; each subclass threads it through its own serialize/loadFromJSON/pack/unpack.
+  // shape; each subclass threads it through its own serialize/loadFromJSON/pack/unpack. A terrain is never a
+  // trigger: setting true on one is ignored.
   [[nodiscard]] bool isTrigger() const;
   void setIsTrigger(bool isTrigger);
 

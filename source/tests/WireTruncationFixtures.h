@@ -20,6 +20,7 @@
 #include "objects/components/collisions/ConvexHull.h"
 #include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
+#include "objects/components/collisions/Terrain.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 
@@ -220,6 +221,13 @@ namespace wiretest {
     static_cast<void>(hull->setHull(*buildConvexHull(hullPoints)));
     hull->setSourceModel(uuidFrom("11111111-1111-1111-1111-111111111111"));
     rock->addComponent(hull);
+
+    const auto ground = std::make_shared<Object>("Ground");
+    main->getObjectManager()->addObject(ground);
+    const auto terrain = std::make_shared<Terrain>();
+    terrain->setTerrainUUID(uuidFrom("22222222-2222-2222-2222-222222222222"));
+    terrain->setLayer(3);
+    ground->addComponent(terrain);
 
     addScene(project, "77777777-7777-7777-7777-777777777777", "Empty");
     project.sceneManager->loadScene(main);

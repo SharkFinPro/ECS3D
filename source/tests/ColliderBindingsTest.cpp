@@ -12,6 +12,7 @@
 #include "objects/components/collisions/ConvexHull.h"
 #include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
+#include "objects/components/collisions/Terrain.h"
 
 #include <glm/vec3.hpp>
 #include <functional>
@@ -81,6 +82,19 @@ TEST_F(ColliderBindingsTest, GetShapeNamesEachColliderAndNoneOtherwise)
   EXPECT_EQ(m_bindings.getShape(uuidOf(m_bareObject).c_str()), 0);
   EXPECT_EQ(m_bindings.getShape("not-a-uuid"), 0);
   EXPECT_EQ(m_bindings.getShape(uuids::to_string(objectManagerFixtures::unknownUUID()).c_str()), 0);
+}
+
+TEST_F(ColliderBindingsTest, GetShapeNamesATerrain)
+{
+  const auto terrainObject = fixtures::addObject(m_scene, "Terrain");
+  terrainObject->addComponent(std::make_shared<Terrain>());
+  const auto terrainUUID = uuidOf(terrainObject);
+
+  EXPECT_EQ(m_bindings.getShape(terrainUUID.c_str()), 5);
+  EXPECT_TRUE(m_bindings.has(terrainUUID.c_str()));
+
+  // A real box still reports its own shape, so 5 belongs to the terrain.
+  EXPECT_EQ(m_bindings.getShape(uuidOf(m_boxObject).c_str()), 1);
 }
 
 TEST_F(ColliderBindingsTest, HasIsTrueOnlyForARealCollider)

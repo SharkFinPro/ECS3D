@@ -10,6 +10,8 @@
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
+#include <objects/components/collisions/Terrain.h>
+#include <uuid.h>
 #include <glm/vec3.hpp>
 #include <imgui.h>
 #include <algorithm>
@@ -355,10 +357,56 @@ namespace {
   }
 }
 
+namespace {
+  // The terrain asset is shown as its uuid until the asset registry names terrains.
+  void registerTerrainEditor(ComponentEditor& componentEditor)
+  {
+    componentEditor.registerHandler("Terrain",
+      [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
+      const auto terrain = std::dynamic_pointer_cast<Terrain>(component);
+      if (!terrain)
+      {
+        return false;
+      }
+
+      bool edited = false;
+
+      if (ComponentEditor::displayHeader(component))
+      {
+        edited |= colliderRenderGizmoEditor(terrain, mixed);
+
+        gc::rowLabel("Terrain");
+        const std::string terrainName = terrain->getTerrainUUID().is_nil()
+          ? "None" : uuids::to_string(terrain->getTerrainUUID());
+        ImGui::TextUnformatted(terrainName.c_str());
+
+        bool collisionEnabled = terrain->getCollisionEnabled();
+        if (gc::accentCheckbox("Collision", &collisionEnabled, mixed.contains("collisionEnabled")))
+        {
+          terrain->setCollisionEnabled(collisionEnabled);
+          edited = true;
+        }
+
+        bool castShadows = terrain->getCastShadows();
+        if (gc::accentCheckbox("Cast Shadows", &castShadows, mixed.contains("castShadows")))
+        {
+          terrain->setCastShadows(castShadows);
+          edited = true;
+        }
+
+        edited |= colliderLayerMaskEditor(terrain, mixed);
+      }
+
+      return edited;
+    });
+  }
+}
+
 void registerColliderEditors(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
                              const AssetRegistry* assetRegistry)
 {
   registerConvexMeshEditor(componentEditor, std::move(assetCache), assetRegistry);
+  registerTerrainEditor(componentEditor);
 
   // Keyed by display name (componentTypeToString), since both colliders share a component type and
   // differ only by subType.

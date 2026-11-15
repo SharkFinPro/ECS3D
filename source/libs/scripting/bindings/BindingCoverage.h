@@ -34,7 +34,8 @@ constexpr std::array<BindingCoverageEntry, static_cast<size_t>(ComponentType::co
   { ComponentType::playerController,               BindingStatus::bound },        // PlayerControllerBindings
   { ComponentType::camera,                         BindingStatus::bound },        // CameraBindings
   { ComponentType::SubComponentType_capsuleCollider,BindingStatus::bound },       // ColliderBindings
-  { ComponentType::SubComponentType_convexMeshCollider, BindingStatus::bound }  // ColliderBindings
+  { ComponentType::SubComponentType_convexMeshCollider, BindingStatus::bound },  // ColliderBindings
+  { ComponentType::SubComponentType_terrain,       BindingStatus::bound }         // ColliderBindings: shape only, nothing terrain-specific
 }};
 
 // The table is filled positionally: row i must describe ComponentType i, not just appear somewhere in

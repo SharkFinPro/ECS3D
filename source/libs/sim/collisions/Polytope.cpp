@@ -231,6 +231,7 @@ void collisions::warmContactCaches(Collider& collider)
     }
     case ColliderType::sphereCollider:
     case ColliderType::capsuleCollider:
+    case ColliderType::terrainCollider:
       break;
   }
 }

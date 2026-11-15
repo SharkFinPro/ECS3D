@@ -13,7 +13,7 @@ drains it). It also leaves out `setFalling`/`getNextFalling`/`setNextFalling` (P
 falling state; `isFalling` is the read-only query scripts get). It also leaves out `getSupportNormal`/`setSupportNormal`/`getNextSupportNormal`/`setNextSupportNormal`,
 the contact normal its support pressed on it with.
 `ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size:
-box size, sphere radius, capsule radius and height, and the convex mesh's offset and read-only vertex count.
+box size, sphere radius, capsule radius and height, and the convex mesh's offset and read-only vertex count. `getShape` also reports a terrain (5), which has no accessors of its own.
 A shape's accessors fail safely on a collider of another shape. `CameraBindings` covers every field on
 `Camera`; its setters clamp fov/near/far to the same valid range as the editor UI (`Camera::minFovDegrees`/
 `maxFovDegrees`/`minNearPlane`/`minFarPlaneFor`), so a script cannot produce a degenerate projection.

@@ -22,6 +22,12 @@
 #include <utility>
 
 namespace {
+  // A terrain takes part in no pair, so it never becomes a broad-phase edge: no bounds, sort, scan or event.
+  bool isInert(const Collider& collider)
+  {
+    return collider.getColliderType() == ColliderType::terrainCollider;
+  }
+
   // Colliders that belong to one body never touch each other: they move together, and a response between
   // them would push the body against itself. Static colliders (no body) are not one assembly.
   bool partOfSameAssembly(const CollisionEdge& a, const CollisionEdge& b)
@@ -54,6 +60,11 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
         // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
         // every other pair's collision work for the tick.
         if (!object->getComponents().contains(ComponentType::transform))
+        {
+          continue;
+        }
+
+        if (isInert(*collider))
         {
           continue;
         }

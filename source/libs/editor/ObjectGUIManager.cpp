@@ -87,6 +87,10 @@ namespace {
       {
         return gc::SecIcon::model;
       }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_terrain)
+      {
+        return gc::SecIcon::collider;
+      }
       return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
     }
 

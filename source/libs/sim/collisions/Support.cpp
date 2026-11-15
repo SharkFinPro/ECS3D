@@ -23,5 +23,7 @@ SupportShape::SupportShape(Collider& collider, const glm::vec3& sweep)
     case ColliderType::convexMeshCollider:
       m_hullVertices = static_cast<ConvexMeshCollider&>(collider).getWorldVertices();
       break;
+    case ColliderType::terrainCollider:
+      break;
   }
 }

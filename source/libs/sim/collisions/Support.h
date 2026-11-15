@@ -47,6 +47,8 @@ private:
         return m_capsule.furthestPoint(direction);
       case ColliderType::convexMeshCollider:
         return ConvexMeshCollider::furthestOf(m_hullVertices, direction);
+      case ColliderType::terrainCollider:
+        break;
     }
 
     return glm::vec3(0);
