@@ -222,6 +222,8 @@ add_executable(${PROJECT_NAME}
   TerrainChunkTest.cpp
   TerrainCodecTest.cpp
   TerrainComponentTest.cpp
+  TerrainFileRecoveryTest.cpp
+  TerrainFilesTest.cpp
   TerrainFormatTest.cpp
   TerrainGeneratorsTest.cpp
   TerrainMeasurementTest.cpp
@@ -317,6 +319,7 @@ add_executable(${PROJECT_NAME}
   GizmoFixtures.h
   PhysicsTestHelpers.h
   PhysicsGenericRestingFixtures.h
+  TerrainFilesFixtures.h
   TerrainFormatFixtures.h
 
   # The CLR-free pieces of ECS3DNet are compiled in rather than linked: linking the library would pull

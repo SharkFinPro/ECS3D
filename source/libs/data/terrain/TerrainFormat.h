@@ -37,12 +37,13 @@ namespace terrain
   using HashByChunk = std::map<ChunkKey, uint64_t>;
   using ChunksByKey = std::map<ChunkKey, std::shared_ptr<const TerrainChunk>>;
 
-  // What the index records about one region file: its chunk hashes, its name tag and its byte size.
+  // What the index records about one region file: its chunk hashes, its name tag, its byte size and a hash of its bytes.
   struct RegionRecord
   {
     HashByChunk hashes;
     uint64_t tag = 0;
     uintmax_t bytes = 0;
+    uint64_t fileHash = 0;
   };
 
   using RegionIndex = std::map<ChunkKey, RegionRecord>;
@@ -59,6 +60,9 @@ namespace terrain
   // different content.
   [[nodiscard]] uint64_t regionTag(const HashByChunk& hashes);
 
+  // The hash a region file's bytes are checked against, so damage that keeps the size is still caught.
+  [[nodiscard]] uint64_t fileFingerprint(std::span<const uint8_t> bytes);
+
   // r.<x>.<y>.<z>.<16 lowercase hex>.bin
   [[nodiscard]] std::string regionFileName(const ChunkKey& region, uint64_t tag);
 
@@ -68,7 +72,7 @@ namespace terrain
   // Empty when the chunks are none, too many, null, air, out of range or from more than one region.
   [[nodiscard]] std::optional<std::vector<uint8_t>> encodeRegion(const ChunksByKey& chunks);
 
-  // Checks the bytes against the region and the index record. On failure the error names what is wrong, without a path
+  // Checks the bytes against the region and the index record, including the file hash. On failure the error names what is wrong, without a path
   // and chunks is untouched. Entries longer than maxEncodedChunkBytes are refused although decodeChunk accepts longer
   // non-minimal streams, because a file only holds this encoder's output.
   [[nodiscard]] bool decodeRegion(std::span<const uint8_t> bytes, const ChunkKey& region, const RegionRecord& record,
