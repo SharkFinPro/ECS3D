@@ -20,6 +20,7 @@
 #include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -230,7 +231,6 @@ TEST(TerrainComponentTest, EveryMalformedJsonPayloadIsRefusedAndChangesNothing)
   EXPECT_TRUE(refused(terrain, valid("collisionEnabled", "yes")));
   EXPECT_TRUE(refused(terrain, valid("castShadows", 1)));
   EXPECT_TRUE(refused(terrain, valid("renderCollider", "true")));
-  EXPECT_TRUE(refused(terrain, valid("layer", 32)));
   EXPECT_TRUE(refused(terrain, valid("layer", -1)));
   EXPECT_TRUE(refused(terrain, valid("layer", "3")));
   EXPECT_TRUE(refused(terrain, valid("mask", 1.5)));
@@ -256,13 +256,28 @@ TEST(TerrainComponentTest, AMalformedWirePayloadIsRefusedAndChangesNothing)
   const auto before = terrain.serialize();
 
   EXPECT_THROW(unpackInto(terrain, wirePayload(true, 5)), RefusedPayload);
-  EXPECT_THROW(unpackInto(terrain, wirePayload(false, 32)), RefusedPayload);
   EXPECT_EQ(terrain.serialize(), before);
 
   unpackInto(terrain, wirePayload(false, 5));
   EXPECT_EQ(terrain.getLayer(), 5u);
   EXPECT_EQ(terrain.getTerrainUUID(), someUUID());
   EXPECT_FALSE(terrain.getCollisionEnabled());
+}
+
+TEST(TerrainComponentTest, AnOutOfRangeLayerIsClampedOnLoadAndOffTheWire)
+{
+  Terrain fromJson;
+  auto saved = fromJson.serialize();
+  saved["layer"] = 99u;
+  fromJson.loadFromJSON(saved);
+  EXPECT_EQ(fromJson.getLayer(), 31u);
+
+  Terrain fromWire;
+  unpackInto(fromWire, wirePayload(false, 32));
+  EXPECT_EQ(fromWire.getLayer(), 31u);
+
+  unpackInto(fromWire, wirePayload(false, 30));
+  EXPECT_EQ(fromWire.getLayer(), 30u);
 }
 
 TEST(TerrainComponentTest, ATerrainCanNeverBeATrigger)
@@ -358,6 +373,80 @@ TEST(TerrainComponentTest, ChangingTheTerrainUuidInvalidatesTheBox)
   const auto revision = comp->getGeometryRevision();
   comp->setTerrainUUID(someUUID());
   EXPECT_GT(comp->getGeometryRevision(), revision);
+  EXPECT_EQ(comp->volume(), nullptr);
+  expectBounds(comp->getBoundingBox(), { 0, 0, 0 }, { 0, 0, 0 });
+}
+
+TEST(TerrainComponentTest, ALoadedUuidChangeDropsTheVolumeButTheSameUuidKeepsIt)
+{
+  const auto scene = makeScene();
+  const auto [object, comp] = addTerrain(scene);
+  comp->setTerrainUUID(someUUID());
+  const auto volume = volumeWithChunk({ 0, 0, 0 });
+  comp->setVolume(volume);
+
+  auto payload = comp->serialize();
+  comp->loadFromJSON(payload);
+  EXPECT_EQ(comp->volume(), volume);
+  expectBounds(comp->getBoundingBox(), { 0, 0, 0 }, { 64, 64, 64 });
+
+  payload["terrainUUID"] = "";
+  comp->loadFromJSON(payload);
+  EXPECT_EQ(comp->volume(), nullptr);
+  expectBounds(comp->getBoundingBox(), { 0, 0, 0 }, { 0, 0, 0 });
+
+  comp->setVolume(volume);
+  unpackInto(*comp, wirePayload(false, 5));
+  EXPECT_EQ(comp->volume(), nullptr);
+}
+
+TEST(TerrainComponentTest, AParentedTerrainHasTheBoxUnderTheCombinedTransform)
+{
+  const auto scene = makeScene();
+  const auto parent = fixtures::addObject(scene, "Parent", { 5, 0, 0 });
+  fixtures::transformOf(parent)->setRotation({ 0, 0, 90 });
+
+  const auto child = fixtures::addChildObject(scene, "Child", parent);
+  const auto comp = std::make_shared<Terrain>();
+  child->addComponent(comp);
+  const auto volume = volumeWithChunk({ 0, 0, 0 });
+  comp->setVolume(volume);
+
+  // Local box 0..64 on every axis; the parent's quarter turn about z sends (x, y) to (-y, x).
+  expectBounds(comp->getBoundingBox(), { -59, 0, 0 }, { 5, 64, 64 });
+
+  // The same child with the parent unrotated is a different box, so the rotation above was applied.
+  fixtures::transformOf(parent)->setRotation({ 0, 0, 0 });
+  expectBounds(comp->getBoundingBox(), { 5, 0, 0 }, { 69, 64, 64 });
+}
+
+TEST(TerrainComponentTest, AnObjectWithATerrainRoundTripsThroughThePackerAndJson)
+{
+  const auto scene = makeScene();
+  const auto [object, comp] = addTerrain(scene, { 1, 2, 3 });
+  setNonDefaults(*comp);
+
+  net::Message message(net::MessageType::objectSpawned);
+  object->pack(message);
+
+  const auto packedTarget = std::make_shared<Object>("Target");
+  scene.objectManager->addObject(packedTarget);
+  net::MessageReader reader(message);
+  packedTarget->unpack(reader);
+
+  const auto fromWire = packedTarget->getComponent<Terrain>(ComponentType::collider);
+  ASSERT_NE(fromWire, nullptr);
+  expectSameSettings(*fromWire, *comp);
+  EXPECT_EQ(reader.remaining(), 0u);
+  fixtures::expectNear(fixtures::positionOf(packedTarget), { 1, 2, 3 }, tolerance);
+
+  const auto json = object->serialize();
+  const auto jsonTarget = std::make_shared<Object>(json, scene.objectManager.get());
+
+  const auto fromJson = jsonTarget->getComponent<Terrain>(ComponentType::collider);
+  ASSERT_NE(fromJson, nullptr);
+  expectSameSettings(*fromJson, *comp);
+  fixtures::expectNear(fixtures::positionOf(jsonTarget), { 1, 2, 3 }, tolerance);
 }
 
 namespace {
@@ -415,6 +504,78 @@ TEST(TerrainComponentTest, ABodyInsideATerrainsBoundsProducesNoContact)
     EXPECT_FALSE(run.terrainPaired);
     fixtures::expectNear(run.moverPosition, { 30, 30, 30 }, tolerance);
   }
+}
+
+TEST(TerrainComponentTest, ATerrainIsNeverAPairAcrossTicksWhileOrdinaryPairsAre)
+{
+  const auto scene = makeScene();
+
+  const auto [terrainObject, comp] = addTerrain(scene);
+  const auto volume = volumeWithChunk({ 0, 0, 0 });
+  comp->setVolume(volume);
+
+  const auto inside = fixtures::addObject(scene, "Inside", { 30, 30, 30 });
+  fixtures::addBoxCollider(inside);
+  fixtures::addRigidBody(inside);
+
+  const auto controlMover = fixtures::addObject(scene, "ControlMover", { 300, 0, 0 });
+  fixtures::addBoxCollider(controlMover);
+  fixtures::addRigidBody(controlMover);
+
+  // A trigger takes no response, so the pair persists and a stay is possible on the second tick.
+  const auto controlStatic = fixtures::addObject(scene, "ControlStatic", { 300.5f, 0, 0 });
+  fixtures::addBoxCollider(controlStatic)->setIsTrigger(true);
+
+  const auto controlPair = CollisionPair::make(controlMover->getUUID(), controlStatic->getUUID());
+  const auto touchesTerrain = [&](const std::vector<CollisionPair>& pairs)
+  {
+    return std::ranges::any_of(pairs, [&](const CollisionPair& pair)
+    {
+      return pair.a == terrainObject->getUUID() || pair.b == terrainObject->getUUID();
+    });
+  };
+  const auto contains = [](const std::vector<CollisionPair>& pairs, const CollisionPair& pair)
+  {
+    return std::ranges::find(pairs, pair) != pairs.end();
+  };
+
+  CollisionSystem collisionSystem;
+
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), controlPair));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionEnters()));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionStays()));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionExits()));
+
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
+  EXPECT_TRUE(contains(collisionSystem.getCollisionStays(), controlPair));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionEnters()));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionStays()));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionExits()));
+}
+
+TEST(TerrainComponentTest, ATerrainObjectWithARigidBodyDoesNotBreakTheTick)
+{
+  const auto scene = makeScene();
+
+  const auto [terrainObject, comp] = addTerrain(scene);
+  const auto volume = volumeWithChunk({ 0, 0, 0 });
+  comp->setVolume(volume);
+  fixtures::addRigidBody(terrainObject);
+
+  const auto mover = fixtures::addObject(scene, "Mover", { 300, 0, 0 });
+  fixtures::addBoxCollider(mover);
+  fixtures::addRigidBody(mover);
+
+  const auto other = fixtures::addObject(scene, "Other", { 300.5f, 0, 0 });
+  fixtures::addBoxCollider(other);
+
+  CollisionSystem collisionSystem;
+  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager, dt));
+  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager, dt));
+
+  // The ordinary pair beside it still collides, so the tick ran rather than skipping everything.
+  EXPECT_FALSE(collisionSystem.getCollisionEnters().empty() && collisionSystem.getCollisionStays().empty());
 }
 
 namespace {

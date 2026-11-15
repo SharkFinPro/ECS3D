@@ -3,6 +3,7 @@
 
 #include "Collider.h"
 #include <glm/vec3.hpp>
+#include <array>
 #include <uuid.h>
 #include <cstdint>
 #include <memory>
@@ -11,6 +12,8 @@ namespace terrain
 {
   class TerrainVolume;
 }
+
+class Transform;
 
 // An object's terrain: a reference to terrain data plus the collider settings that govern it. It is a Collider
 // so the broad phase, layers, masks and events apply to it, but it never has a trigger and its geometry is the
@@ -29,7 +32,8 @@ public:
   [[nodiscard]] bool getCastShadows() const;
   void setCastShadows(bool castShadows);
 
-  // Never serialized or packed.
+  // Never serialized or packed. The owner of the store re-binds after a uuid change, and calls invalidateBounds()
+  // when it drops or edits a volume (an expired volume keeps its last box until then).
   void setVolume(std::weak_ptr<const terrain::TerrainVolume> volume);
   [[nodiscard]] std::shared_ptr<const terrain::TerrainVolume> volume() const;
 
@@ -55,6 +59,13 @@ private:
 
   std::weak_ptr<const terrain::TerrainVolume> m_volume;
 
+  // The world corners of the occupied box, shared by the six support queries of one bounds recompute.
+  std::array<glm::vec3, 8> m_corners{};
+  uint64_t m_cornersUpdateID = 0;
+  uint64_t m_cornersRevision = 0;
+  const terrain::TerrainVolume* m_cornersVolume = nullptr;
+  bool m_cornersValid = false;
+
   // Every persisted field, read and checked as a whole before any of it is assigned.
   struct Data {
     uuids::uuid terrainUUID;
@@ -66,6 +77,8 @@ private:
   };
 
   void assign(const Data& data);
+
+  [[nodiscard]] bool refreshCorners(Transform& transform);
 };
 
 #endif //TERRAIN_H

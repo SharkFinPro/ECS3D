@@ -11,18 +11,11 @@
 #include <Protocol.h>
 
 namespace {
-  constexpr uint32_t maxLayer = 31;
-
-  void requireValid(const bool isTrigger, const uint32_t layer)
+  void requireNotTrigger(const bool isTrigger)
   {
     if (isTrigger)
     {
       throw RefusedPayload("Terrain: a terrain cannot be a trigger");
-    }
-
-    if (layer > maxLayer)
-    {
-      throw RefusedPayload("Terrain: layer over the limit");
     }
   }
 
@@ -98,6 +91,11 @@ const uuids::uuid& Terrain::getTerrainUUID() const
 
 void Terrain::setTerrainUUID(const uuids::uuid& terrainUUID)
 {
+  if (terrainUUID != m_terrainUUID)
+  {
+    m_volume.reset();
+  }
+
   m_terrainUUID = terrainUUID;
   invalidateBoundingBox();
 }
@@ -167,50 +165,79 @@ void Terrain::loadFromJSON(const nlohmann::json& componentData)
   data.renderCollider = readBool(componentData, "renderCollider", false);
   data.layer = readUnsigned(componentData, "layer", 0u);
   data.mask = readUnsigned(componentData, "mask", 0xFFFFFFFFu);
-  requireValid(readBool(componentData, "isTrigger", false), data.layer);
+  requireNotTrigger(readBool(componentData, "isTrigger", false));
 
   assign(data);
 }
 
 glm::vec3 Terrain::findFurthestPoint(const glm::vec3& direction)
 {
-  const Transform& transform = cachedTransform();
-  const glm::vec3 origin = transform.getPosition();
+  Transform& transform = cachedTransform();
 
+  if (!refreshCorners(transform))
+  {
+    return transform.getPosition();
+  }
+
+  float largestDot = std::numeric_limits<float>::lowest();
+  glm::vec3 furthest = m_corners[0];
+
+  for (const glm::vec3& corner : m_corners)
+  {
+    if (const float currentDot = glm::dot(corner, direction); currentDot > largestDot)
+    {
+      largestDot = currentDot;
+      furthest = corner;
+    }
+  }
+
+  return furthest;
+}
+
+bool Terrain::refreshCorners(Transform& transform)
+{
   const auto volume = m_volume.lock();
   if (!volume)
   {
-    return origin;
+    m_cornersValid = false;
+    return false;
+  }
+
+  const uint64_t updateID = transform.getWorldUpdateID();
+  const uint64_t revision = getGeometryRevision();
+
+  if (m_cornersValid && m_cornersUpdateID == updateID && m_cornersRevision == revision
+      && m_cornersVolume == volume.get())
+  {
+    return true;
   }
 
   const terrain::SampleBox bounds = volume->occupiedBounds();
   if (bounds.empty())
   {
-    return origin;
+    m_cornersValid = false;
+    return false;
   }
 
   // Terrain space is metric (a sample sits at voxelSize * index), so the owner's scale does not apply.
   const glm::vec3 low = glm::vec3(bounds.min) * volume->voxelSize();
   const glm::vec3 high = glm::vec3(bounds.max) * volume->voxelSize();
+  const glm::vec3 origin = transform.getPosition();
   const glm::quat orientation = transform.getOrientation();
-
-  float largestDot = std::numeric_limits<float>::lowest();
-  glm::vec3 furthest = origin;
 
   for (int corner = 0; corner < 8; ++corner)
   {
     const glm::vec3 local((corner & 1) != 0 ? high.x : low.x, (corner & 2) != 0 ? high.y : low.y,
                           (corner & 4) != 0 ? high.z : low.z);
-    const glm::vec3 world = origin + orientation * local;
-
-    if (const float currentDot = glm::dot(world, direction); currentDot > largestDot)
-    {
-      largestDot = currentDot;
-      furthest = world;
-    }
+    m_corners[corner] = origin + orientation * local;
   }
 
-  return furthest;
+  m_cornersUpdateID = updateID;
+  m_cornersRevision = revision;
+  m_cornersVolume = volume.get();
+  m_cornersValid = true;
+
+  return true;
 }
 
 void Terrain::pack(net::Message& message) const
@@ -236,13 +263,18 @@ void Terrain::unpack(net::MessageReader& messageReader)
   const bool isTrigger = messageReader.read<bool>();
   data.layer = messageReader.read<uint32_t>();
   data.mask = messageReader.read<uint32_t>();
-  requireValid(isTrigger, data.layer);
+  requireNotTrigger(isTrigger);
 
   assign(data);
 }
 
 void Terrain::assign(const Data& data)
 {
+  if (data.terrainUUID != m_terrainUUID)
+  {
+    m_volume.reset();
+  }
+
   m_terrainUUID = data.terrainUUID;
   m_collisionEnabled = data.collisionEnabled;
   m_castShadows = data.castShadows;

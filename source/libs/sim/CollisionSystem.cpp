@@ -22,7 +22,7 @@
 #include <utility>
 
 namespace {
-  // A terrain does not collide yet, so it joins no pair. Its collisionEnabled flag will gate this once it does.
+  // A terrain takes part in no pair, so it never becomes a broad-phase edge: no bounds, sort, scan or event.
   bool isInert(const Collider& collider)
   {
     return collider.getColliderType() == ColliderType::terrainCollider;
@@ -60,6 +60,11 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
         // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
         // every other pair's collision work for the tick.
         if (!object->getComponents().contains(ComponentType::transform))
+        {
+          continue;
+        }
+
+        if (isInert(*collider))
         {
           continue;
         }
@@ -123,7 +128,7 @@ void CollisionSystem::checkCollisions(const float dt)
     for (size_t i = 0; i < edgeCount; ++i)
     {
       const auto& edge = m_collisionEdges[i];
-      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr, isInert(*edge.collider) };
+      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr };
     }
   }
 
@@ -434,11 +439,6 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
 
     // A pair of static colliders never needs testing.
     if (!selfDynamic && !box.dynamic)
-    {
-      continue;
-    }
-
-    if (self.inert || box.inert)
     {
       continue;
     }
