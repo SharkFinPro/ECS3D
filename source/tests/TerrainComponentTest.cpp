@@ -527,11 +527,13 @@ TEST(TerrainComponentTest, ATerrainIsNeverAPairAcrossTicksWhileOrdinaryPairsAre)
   fixtures::addBoxCollider(controlStatic)->setIsTrigger(true);
 
   const auto controlPair = CollisionPair::make(controlMover->getUUID(), controlStatic->getUUID());
+  // Clang 14 cannot capture a structured binding, so the uuid is copied out first.
+  const auto terrainUUID = terrainObject->getUUID();
   const auto touchesTerrain = [&](const std::vector<CollisionPair>& pairs)
   {
     return std::ranges::any_of(pairs, [&](const CollisionPair& pair)
     {
-      return pair.a == terrainObject->getUUID() || pair.b == terrainObject->getUUID();
+      return pair.a == terrainUUID || pair.b == terrainUUID;
     });
   };
   const auto contains = [](const std::vector<CollisionPair>& pairs, const CollisionPair& pair)
