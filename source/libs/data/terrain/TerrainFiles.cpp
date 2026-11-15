@@ -3,6 +3,7 @@
 #include "assets/AssetRegistry.h"
 #include "TerrainFormat.h"
 #include "TerrainTypes.h"
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <cstdint>
@@ -470,9 +471,21 @@ namespace terrain
       {
         std::error_code existsError;
 
-        if (!std::filesystem::exists(terrainFolder(root, uuid) / indexFileName, existsError))
+        const auto indexFile = terrainFolder(root, uuid) / indexFileName;
+
+        if (!std::filesystem::exists(indexFile, existsError))
         {
-          ++report.missing;
+          if (existsError && existsError != std::errc::no_such_file_or_directory &&
+              existsError != std::errc::not_a_directory)
+          {
+            report.errors.push_back(failure(terrainFolder(root, uuid), "could not check for the index: " +
+                                                                         existsError.message()));
+          }
+          else
+          {
+            ++report.missing;
+          }
+
           continue;
         }
 

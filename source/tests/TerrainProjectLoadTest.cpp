@@ -237,7 +237,6 @@ TEST_F(TerrainProjectLoadTest, ATerrainComponentGetsItsBoundsFromTheLoadedVolume
   EXPECT_EQ(component->volume(), store.find(savedUuid));
   ASSERT_FALSE(store.find(savedUuid)->occupiedBounds().empty());
 
-  component->invalidateBounds();
   EXPECT_GT(glm::length(component->findFurthestPoint({ 1.0f, 1.0f, 1.0f }) - position), 1.0f);
 }
 

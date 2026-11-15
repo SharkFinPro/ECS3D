@@ -34,6 +34,7 @@
 #include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -135,7 +136,15 @@ void ServerApp::loadStartupProject()
     {
       m_terrainStore->reconcile(*m_assetRegistry);
 
-      if (!m_projectRoot.empty())
+      if (m_projectRoot.empty())
+      {
+        if (std::ranges::any_of(m_assetRegistry->getAssets(),
+                                [](const auto& item) { return item.second.type == AssetType::Terrain; }))
+        {
+          Log::warn(LogCategory::server, "Terrain files cannot be read without a project folder");
+        }
+      }
+      else
       {
         const auto report = terrain::loadProjectTerrains(m_projectRoot, *m_assetRegistry, *m_terrainStore);
         for (const auto& error : report.errors)

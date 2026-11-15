@@ -38,6 +38,7 @@ while playing) the same way it already undoes an edited Transform.
   `run()` polls through `shouldKeepRunning`: the loop exits, live scripts are stopped and the shutdown is logged.
   `main` installs the handlers before boot and `run()` installs them again once the CLR is up, in case the
   runtime replaced them. A second signal ends the process at once.
+  A `--project` server loads each terrain's files after the project (see [project-layout.md](project-layout.md)).
   Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
   built-in `DefaultProject` when no `--project` is given. `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library

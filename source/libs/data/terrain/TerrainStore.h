@@ -48,7 +48,7 @@ namespace terrain
 
     [[nodiscard]] std::shared_ptr<TerrainVolume> find(const uuids::uuid& uuid) const;
 
-    // Valid until the next remove, create or reconcile.
+    // Valid until the next remove, create, reconcile, adopt or resetVolumes.
     [[nodiscard]] const TerrainDescription* description(const uuids::uuid& uuid) const;
 
     // Installs a loaded terrain, replacing any entry with the same uuid. False, with no change, for an invalid
@@ -61,6 +61,9 @@ namespace terrain
     // size means different data, so it gets a fresh empty volume. False, with no change, for an invalid description
     // or an unknown uuid.
     bool applyDescription(const TerrainDescription& description);
+
+    // Gives every held terrain a fresh empty volume of its description's voxel size and keeps the descriptions.
+    void resetVolumes();
 
     // Sorted, so callers that pack or log get a deterministic order.
     [[nodiscard]] std::vector<uuids::uuid> terrains() const;

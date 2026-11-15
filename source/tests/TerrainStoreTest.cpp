@@ -332,3 +332,40 @@ TEST(TerrainStore, AdoptRefusalsLeaveTheOldEntryAlone)
   EXPECT_TRUE(store.adopt(describe(firstUUID), good));
   EXPECT_EQ(store.find(firstUUID), good);
 }
+
+TEST(TerrainStore, ResetVolumesGivesEveryTerrainAFreshEmptyVolumeAndKeepsTheDescriptions)
+{
+  terrain::TerrainStore store;
+  auto description = describe(firstUUID, 4.0f);
+  description.palette.push_back({ "grass", secondUUID, thirdUUID });
+  const auto first = store.create(description);
+  const auto second = store.create(describe(secondUUID, 3.0f));
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+
+  first->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+  second->setChunk({ 1, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+  ASSERT_FALSE(first->chunks().empty());
+
+  store.resetVolumes();
+
+  const auto resetFirst = store.find(firstUUID);
+  const auto resetSecond = store.find(secondUUID);
+  ASSERT_NE(resetFirst, nullptr);
+  ASSERT_NE(resetSecond, nullptr);
+  EXPECT_NE(resetFirst, first);
+  EXPECT_NE(resetSecond, second);
+  EXPECT_TRUE(resetFirst->chunks().empty());
+  EXPECT_TRUE(resetSecond->chunks().empty());
+  EXPECT_NEAR(resetFirst->voxelSize(), 4.0f, 1.0e-6f);
+  EXPECT_NEAR(resetSecond->voxelSize(), 3.0f, 1.0e-6f);
+
+  // Positive control: the old volumes still hold their chunks, so the reset replaced them rather than clearing them.
+  EXPECT_FALSE(first->chunks().empty());
+
+  ASSERT_NE(store.description(firstUUID), nullptr);
+  EXPECT_NEAR(store.description(firstUUID)->voxelSize, 4.0f, 1.0e-6f);
+  ASSERT_EQ(store.description(firstUUID)->palette.size(), 1u);
+  EXPECT_EQ(store.description(firstUUID)->palette[0].name, "grass");
+  EXPECT_EQ(store.terrains().size(), 2u);
+}

@@ -160,6 +160,14 @@ namespace terrain
     return true;
   }
 
+  void TerrainStore::resetVolumes()
+  {
+    for (auto& [uuid, entry] : m_terrains)
+    {
+      entry.volume = std::make_shared<TerrainVolume>(entry.description.voxelSize);
+    }
+  }
+
   std::vector<uuids::uuid> TerrainStore::terrains() const
   {
     std::vector<uuids::uuid> result;

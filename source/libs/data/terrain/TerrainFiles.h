@@ -56,7 +56,7 @@ namespace terrain
   [[nodiscard]] TerrainLoadResult loadTerrain(const std::filesystem::path& root, const uuids::uuid& uuid);
 
   // Loads the files of every Terrain record in the registry into the store, in uuid order. A terrain that was never
-  // saved, or whose files fail to load, keeps the store's empty terrain. Never throws.
+  // saved, or whose files fail to load, keeps the store's empty terrain. Reports failures instead of throwing them.
   [[nodiscard]] TerrainLoadReport loadProjectTerrains(const std::filesystem::path& root,
                                                       const AssetRegistry& registry, TerrainStore& store);
 }
