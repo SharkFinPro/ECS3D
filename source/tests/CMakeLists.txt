@@ -220,6 +220,7 @@ add_executable(${PROJECT_NAME}
   TerrainBrushWireTest.cpp
   TerrainChunkTest.cpp
   TerrainCodecTest.cpp
+  TerrainFilesTest.cpp
   TerrainGeneratorsTest.cpp
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
