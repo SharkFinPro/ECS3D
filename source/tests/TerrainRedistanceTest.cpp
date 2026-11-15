@@ -8,6 +8,7 @@
 #include "terrain/TerrainVolume.h"
 
 #include <glm/geometric.hpp>
+#include <glm/vector_relational.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <cmath>
@@ -126,6 +127,48 @@ namespace {
     }
   }
 
+  bool contains(const terrain::SampleBox& box, const glm::ivec3 sample)
+  {
+    return glm::all(glm::greaterThanEqual(sample, box.min)) && glm::all(glm::lessThan(sample, box.max));
+  }
+
+  bool touchesSurface(const terrain::TerrainVolume& volume, const glm::ivec3 sample)
+  {
+    const int16_t distance = volume.distanceAtSample(sample);
+    bool touches = distance == 0;
+
+    for (int dz = -1; dz <= 1; ++dz)
+    {
+      for (int dy = -1; dy <= 1; ++dy)
+      {
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+          touches = touches || isInside(volume.distanceAtSample(sample + glm::ivec3(dx, dy, dz))) != isInside(distance);
+        }
+      }
+    }
+
+    return touches;
+  }
+
+  // Returns whether the sample is one redistance must hold fixed.
+  bool expectSampleKept(const terrain::TerrainVolume& flattened, const terrain::TerrainVolume& result,
+                        const terrain::SampleBox& box, const glm::ivec3 sample)
+  {
+    const int16_t old = flattened.distanceAtSample(sample);
+    const int16_t now = result.distanceAtSample(sample);
+    EXPECT_EQ(isInside(old), isInside(now));
+
+    const bool held = !contains(box, sample) || touchesSurface(flattened, sample);
+
+    if (held)
+    {
+      EXPECT_EQ(old, now);
+    }
+
+    return held && contains(box, sample);
+  }
+
   // Every sample in the chunks the box touches, including the margin and everything outside the box, keeps its sign;
   // samples outside the box are unchanged; samples next to the surface keep their exact value.
   void expectFrozenAndOutsideUnchanged(const terrain::TerrainVolume& flattened, const terrain::TerrainVolume& result,
@@ -143,38 +186,7 @@ namespace {
         {
           for (int x = origin.x; x < origin.x + terrain::chunkSize; ++x)
           {
-            const int16_t old = flattened.distanceAtSample({ x, y, z });
-            const int16_t now = result.distanceAtSample({ x, y, z });
-            EXPECT_EQ(isInside(old), isInside(now));
-
-            const bool inBox = x >= box.min.x && x < box.max.x && y >= box.min.y && y < box.max.y &&
-                               z >= box.min.z && z < box.max.z;
-
-            if (!inBox)
-            {
-              EXPECT_EQ(old, now);
-              continue;
-            }
-
-            bool nearSurface = old == 0;
-
-            for (int dz = -1; dz <= 1; ++dz)
-            {
-              for (int dy = -1; dy <= 1; ++dy)
-              {
-                for (int dx = -1; dx <= 1; ++dx)
-                {
-                  nearSurface = nearSurface ||
-                                isInside(flattened.distanceAtSample({ x + dx, y + dy, z + dz })) != isInside(old);
-                }
-              }
-            }
-
-            if (nearSurface)
-            {
-              EXPECT_EQ(old, now);
-              ++frozen;
-            }
+            frozen += expectSampleKept(flattened, result, box, { x, y, z }) ? 1 : 0;
           }
         }
       }
