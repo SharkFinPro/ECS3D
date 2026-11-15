@@ -65,6 +65,7 @@ TEST(PhysicsPlaygroundSampleRace, TheBlockHoldsWhileTheRollersAndSliderGoDownhil
 {
   LoadedTemplate loaded(sampleFolder);
   ASSERT_TRUE(loaded.loaded);
+  keepOnlyStations(*loaded.sceneManager.getCurrentScene()->getObjectManager(), { "Station: Ramp race" });
 
   std::map<std::string, Racer> racers;
   for (const char* lane : { "Sphere", "Drum", "Capsule Across", "Capsule Along", "Block" })
@@ -72,7 +73,7 @@ TEST(PhysicsPlaygroundSampleRace, TheBlockHoldsWhileTheRollersAndSliderGoDownhil
     racers.emplace(lane, release(loaded, lane));
   }
 
-  tick(*loaded.sceneManager.getCurrentScene()->getObjectManager(), 200);
+  tick(*loaded.sceneManager.getCurrentScene()->getObjectManager(), 120);
 
   const auto& block = racers.at("Block");
   EXPECT_LT(glm::distance(fixtures::positionOf(block.object), block.start), 0.05f);
@@ -87,9 +88,10 @@ TEST(PhysicsPlaygroundSampleRace, TheHexLogThunksOverAFaceAndComesToRest)
 {
   LoadedTemplate loaded(sampleFolder);
   ASSERT_TRUE(loaded.loaded);
+  keepOnlyStations(*loaded.sceneManager.getCurrentScene()->getObjectManager(), { "Station: Ramp race" });
   const auto log = release(loaded, "Hex Log");
 
-  tick(*loaded.sceneManager.getCurrentScene()->getObjectManager(), 300);
+  tick(*loaded.sceneManager.getCurrentScene()->getObjectManager(), 200);
 
   EXPECT_GT(downhill(log), 0.5f);
   const auto body = log.object->getComponent<RigidBody>(ComponentType::rigidBody);

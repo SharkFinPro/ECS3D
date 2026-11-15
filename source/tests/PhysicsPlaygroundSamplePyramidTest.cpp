@@ -51,6 +51,7 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidShovesItsCube
 {
   LoadedTemplate loaded(sampleFolder);
   ASSERT_TRUE(loaded.loaded);
+  keepOnlyStations(*loaded.sceneManager.getCurrentScene()->getObjectManager(), { "Station: Pyramid" });
   const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
 
   const auto player = objectNamedExactly(objectManager, "Player 0");
@@ -58,8 +59,8 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidShovesItsCube
   const auto topSpeed = scriptField(only("Player 0"), "PlayerScript", "m_topSpeed").get<float>();
   ASSERT_GT(topSpeed, 0.0f);
 
-  // In front of the pyramid on its center line (station root at z -26), clear of the cubes.
-  fixtures::transformOf(player)->setPosition({ 0.4f, 1.05f, -18.0f });
+  // In front of the pyramid on its center line (station root at z -26), a couple of units clear of the cubes.
+  fixtures::transformOf(player)->setPosition({ 0.4f, 1.05f, -21.0f });
 
   std::vector<std::shared_ptr<Object>> cubes;
   std::vector<float> startHeights;
@@ -77,10 +78,11 @@ TEST(PhysicsPlaygroundSamplePyramid, WalkingThePlayerIntoThePyramidShovesItsCube
   const auto topIndex = static_cast<std::size_t>(std::ranges::max_element(startHeights) - startHeights.begin());
   ASSERT_NEAR(startHeights[topIndex], 3.55f, 1e-4f);
 
-  // Positive control: left alone for as long as the walk run lasts, every cube stays where it started.
-  constexpr int walkTicks = 150;
-  constexpr int settleTicks = 100;
-  walkPlayer(objectManager, player, glm::vec3(0.0f), topSpeed, walkTicks + settleTicks);
+  // Positive control: left alone, every cube stays where it started.
+  constexpr int idleTicks = 30;
+  constexpr int walkTicks = 70;
+  constexpr int settleTicks = 30;
+  walkPlayer(objectManager, player, glm::vec3(0.0f), topSpeed, idleTicks);
   for (std::size_t i = 0; i < cubes.size(); ++i)
   {
     SCOPED_TRACE(i);

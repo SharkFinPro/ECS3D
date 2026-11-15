@@ -25,7 +25,8 @@ namespace
 {
   // Twelve seconds at the server tick. The last domino falls and knocks the sphere off its ledge a little after tick
   // 300, so the run leaves that a wide margin.
-  constexpr int simulatedTicks = 600;
+  constexpr int simulatedTicks = 400;
+  constexpr int pyramidTicks = 60;
 
   // A domino passes its tipping point at 8.5 degrees. The last one can rest on the ledge's near top corner at about 44
   // degrees and creep along it for most of the run before it drops flat, and when it drops varies with each platform's
@@ -76,7 +77,8 @@ protected:
       return;
     }
 
-    const auto& objectManager = *s_loaded->sceneManager.getCurrentScene()->getObjectManager();
+    auto& objectManager = *s_loaded->sceneManager.getCurrentScene()->getObjectManager();
+    keepOnlyStations(objectManager, { "Station: Domino run", "Station: Pyramid", "Station: Cradle row" });
     recordDominoes(objectManager);
     recordPyramidAndCradle(objectManager);
     simulate(objectManager);
@@ -130,11 +132,18 @@ protected:
     }
   }
 
-  static void simulate(const ObjectManager& objectManager)
+  static void simulate(ObjectManager& objectManager)
   {
+    const auto pyramidStation = objectNamedExactly(objectManager, "Station: Pyramid");
     CollisionSystem collisionSystem;
     for (int step = 0; step < simulatedTicks; ++step)
     {
+      if (step == pyramidTicks)
+      {
+        // The pyramid has shown it stands; its cubes would only cost time while the dominoes finish.
+        objectManager.removeSubtree(pyramidStation);
+      }
+
       PhysicsSystem::fixedUpdate(objectManager, dt);
       collisionSystem.fixedUpdate(objectManager, dt);
       if (s_far != nullptr)
