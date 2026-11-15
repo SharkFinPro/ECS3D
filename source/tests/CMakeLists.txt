@@ -224,6 +224,7 @@ add_executable(${PROJECT_NAME}
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
   TerrainRaycastTest.cpp
+  TerrainRedistanceTest.cpp
   TerrainSamplingTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp
