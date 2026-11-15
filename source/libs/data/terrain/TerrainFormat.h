@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <uuid.h>
@@ -54,7 +55,8 @@ namespace terrain
 
   [[nodiscard]] ChunkKey regionOfChunk(const ChunkKey& chunk);
 
-  // Names the exact chunk set a region file holds, so a file is never reused for different content.
+  // Names the exact chunk set a region file holds, and the codec that wrote it, so a file is never reused for
+  // different content.
   [[nodiscard]] uint64_t regionTag(const HashByChunk& hashes);
 
   // r.<x>.<y>.<z>.<16 lowercase hex>.bin
@@ -63,15 +65,20 @@ namespace terrain
   // True only for a name regionFileName can produce, so a foreign file is never mistaken for one.
   [[nodiscard]] bool isRegionFileName(const std::string& name);
 
-  [[nodiscard]] std::vector<uint8_t> encodeRegion(const ChunksByKey& chunks);
+  // Empty when the chunks are none, too many, null, air, out of range or from more than one region.
+  [[nodiscard]] std::optional<std::vector<uint8_t>> encodeRegion(const ChunksByKey& chunks);
 
-  // Checks the bytes against the region and the index record. On failure the error names what is wrong, without a path.
+  // Checks the bytes against the region and the index record. On failure the error names what is wrong, without a path
+  // and chunks is untouched. Entries longer than maxEncodedChunkBytes are refused although decodeChunk accepts longer
+  // non-minimal streams, because a file only holds this encoder's output.
   [[nodiscard]] bool decodeRegion(std::span<const uint8_t> bytes, const ChunkKey& region, const RegionRecord& record,
                                   TerrainVolume::ChunkMap& chunks, std::string& error);
 
-  [[nodiscard]] std::string writeIndex(const TerrainIndex& index);
+  // Empty when parseIndex would refuse the text, such as an invalid description or a region with no chunks.
+  [[nodiscard]] std::optional<std::string> writeIndex(const TerrainIndex& index);
 
-  // The description's uuid is taken from expectedUuid, which the file must also state. chunkCount is left zero.
+  // The description's uuid is taken from expectedUuid, which the file must also state. chunkCount is left zero. On
+  // failure index is untouched.
   [[nodiscard]] bool parseIndex(std::span<const uint8_t> text, const uuids::uuid& expectedUuid, TerrainIndex& index,
                                 std::string& error);
 }

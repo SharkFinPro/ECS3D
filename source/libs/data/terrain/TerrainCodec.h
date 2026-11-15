@@ -11,6 +11,9 @@
 
 namespace terrain
 {
+  // Bump when encodeChunk output changes; region file tags hash it, so old files are never reused.
+  inline constexpr uint32_t codecVersion = 1;
+
   // The longest literal run the dense format writes, in samples.
   inline constexpr size_t maxLiteralRunSamples = 128;
 

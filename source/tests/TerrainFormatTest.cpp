@@ -7,10 +7,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -65,7 +68,7 @@ namespace {
     }
 
     record.tag = terrain::regionTag(record.hashes);
-    record.bytes = terrain::encodeRegion(chunks).size();
+    record.bytes = terrain::encodeRegion(chunks).value().size();
     return record;
   }
 
@@ -87,12 +90,12 @@ namespace {
 
   std::vector<uint8_t> indexBytes(const terrain::TerrainIndex& index = makeIndex())
   {
-    return bytesOf(terrain::writeIndex(index));
+    return bytesOf(terrain::writeIndex(index).value());
   }
 
   std::vector<uint8_t> editedIndexBytes(const std::function<void(nlohmann::json&)>& edit)
   {
-    auto json = nlohmann::json::parse(terrain::writeIndex(makeIndex()));
+    auto json = nlohmann::json::parse(terrain::writeIndex(makeIndex()).value());
     edit(json);
     return bytesOf(json.dump());
   }
@@ -127,7 +130,7 @@ namespace {
   void expectRegionRejected(const std::vector<uint8_t>& bytes, const terrain::RegionRecord& record, const char* mention)
   {
     const auto chunks = twoChunks();
-    const auto goodBytes = terrain::encodeRegion(chunks);
+    const auto goodBytes = terrain::encodeRegion(chunks).value();
     terrain::TerrainVolume::ChunkMap good;
     std::string error;
     ASSERT_TRUE(terrain::decodeRegion(goodBytes, { 0, 0, 0 }, recordFor(chunks), good, error)) << error;
@@ -193,7 +196,7 @@ TEST(TerrainFormatTest, TagIsStableAndTracksTheChunkSet)
 TEST(TerrainFormatTest, RegionBytesRoundTrip)
 {
   const auto chunks = twoChunks();
-  const auto bytes = terrain::encodeRegion(chunks);
+  const auto bytes = terrain::encodeRegion(chunks).value();
   const auto record = recordFor(chunks);
   terrain::TerrainVolume::ChunkMap decoded;
   std::string error;
@@ -213,7 +216,7 @@ TEST(TerrainFormatTest, RegionBytesRoundTrip)
 TEST(TerrainFormatTest, TruncatedRegionBytesFail)
 {
   const auto chunks = twoChunks();
-  auto bytes = terrain::encodeRegion(chunks);
+  auto bytes = terrain::encodeRegion(chunks).value();
   auto record = recordFor(chunks);
   ASSERT_GT(bytes.size(), 10u);
   bytes.resize(bytes.size() - 5);
@@ -227,7 +230,7 @@ TEST(TerrainFormatTest, TruncatedRegionBytesFail)
 TEST(TerrainFormatTest, GarbledMagicFails)
 {
   const auto chunks = twoChunks();
-  auto bytes = terrain::encodeRegion(chunks);
+  auto bytes = terrain::encodeRegion(chunks).value();
   bytes[0] = 'X';
 
   expectRegionRejected(bytes, recordFor(chunks), "magic");
@@ -236,7 +239,7 @@ TEST(TerrainFormatTest, GarbledMagicFails)
 TEST(TerrainFormatTest, UnsupportedRegionVersionFails)
 {
   const auto chunks = twoChunks();
-  auto bytes = terrain::encodeRegion(chunks);
+  auto bytes = terrain::encodeRegion(chunks).value();
   bytes[4] = static_cast<uint8_t>(terrain::terrainFormatVersion + 1);
 
   expectRegionRejected(bytes, recordFor(chunks), "version");
@@ -248,7 +251,7 @@ TEST(TerrainFormatTest, HashDisagreeingWithIndexFails)
   auto record = recordFor(chunks);
   record.hashes[{ 1, 0, 0 }] = 0x0123456789abcdefull;
 
-  expectRegionRejected(terrain::encodeRegion(chunks), record, "hash disagrees");
+  expectRegionRejected(terrain::encodeRegion(chunks).value(), record, "hash disagrees");
 }
 
 TEST(TerrainFormatTest, IndexListingAChunkTheBytesLackFails)
@@ -257,13 +260,13 @@ TEST(TerrainFormatTest, IndexListingAChunkTheBytesLackFails)
   auto record = recordFor(chunks);
   record.hashes[{ 2, 0, 0 }] = 0x0123456789abcdefull;
 
-  expectRegionRejected(terrain::encodeRegion(chunks), record, "does not hold");
+  expectRegionRejected(terrain::encodeRegion(chunks).value(), record, "does not hold");
 }
 
 TEST(TerrainFormatTest, TrailingBytesFail)
 {
   const auto chunks = twoChunks();
-  auto bytes = terrain::encodeRegion(chunks);
+  auto bytes = terrain::encodeRegion(chunks).value();
   auto record = recordFor(chunks);
   bytes.push_back(0);
 
@@ -276,7 +279,7 @@ TEST(TerrainFormatTest, TrailingBytesFail)
 TEST(TerrainFormatTest, EntryCountOverTheMaximumFails)
 {
   const auto chunks = twoChunks();
-  auto bytes = terrain::encodeRegion(chunks);
+  auto bytes = terrain::encodeRegion(chunks).value();
   const uint32_t tooMany = static_cast<uint32_t>(terrain::maxRegionEntries) + 1;
   bytes[8] = static_cast<uint8_t>(tooMany & 0xFF);
   bytes[9] = static_cast<uint8_t>(tooMany >> 8);
@@ -287,7 +290,7 @@ TEST(TerrainFormatTest, EntryCountOverTheMaximumFails)
 TEST(TerrainFormatTest, EntryCoordOutsideItsRegionFails)
 {
   const auto chunks = twoChunks();
-  auto bytes = terrain::encodeRegion(chunks);
+  auto bytes = terrain::encodeRegion(chunks).value();
   bytes[terrain::regionHeaderBytes] = static_cast<uint8_t>(terrain::regionSize);
 
   expectRegionRejected(bytes, recordFor(chunks), "outside this region");
@@ -432,12 +435,336 @@ TEST(TerrainFormatTest, VoxelSizeRoundTripsAndReadsCleanlyInTheIndex)
   {
     terrain::TerrainIndex parsed;
     std::string error;
-    const std::string text = terrain::writeIndex(makeIndex(size));
+    const std::string text = terrain::writeIndex(makeIndex(size)).value();
 
     ASSERT_TRUE(terrain::parseIndex(bytesOf(text), terrainUuid, parsed, error)) << size << ": " << error;
     EXPECT_EQ(parsed.description.voxelSize, size);
     EXPECT_EQ(static_cast<float>(nlohmann::json::parse(text)["voxelSize"].get<double>()), size);
   }
 
-  EXPECT_EQ(nlohmann::json::parse(terrain::writeIndex(makeIndex(0.1f)))["voxelSize"].get<double>(), 0.1);
+  EXPECT_EQ(nlohmann::json::parse(terrain::writeIndex(makeIndex(0.1f)).value())["voxelSize"].get<double>(), 0.1);
+}
+
+namespace {
+  using terrain::ChunkKey;
+
+  nlohmann::json nestedArray(const int depth)
+  {
+    nlohmann::json value = nlohmann::json::array();
+
+    for (int i = 1; i < depth; ++i)
+    {
+      value = nlohmann::json::array({ value });
+    }
+
+    return value;
+  }
+
+  void putU32(std::vector<uint8_t>& out, const uint32_t value)
+  {
+    for (int shift = 0; shift < 32; shift += 8)
+    {
+      out.push_back(static_cast<uint8_t>((value >> shift) & 0xFF));
+    }
+  }
+
+  struct RawEntry
+  {
+    ChunkKey coord;
+    std::vector<uint8_t> encoded;
+    std::optional<uint32_t> claimedLength;
+  };
+
+  // Hand-built region bytes, so an entry can be malformed in ways encodeRegion never writes.
+  std::vector<uint8_t> rawRegion(const std::vector<RawEntry>& entries)
+  {
+    std::vector<uint8_t> out = { 'E', '3', 'T', 'R' };
+    putU32(out, static_cast<uint32_t>(terrain::terrainFormatVersion));
+    putU32(out, static_cast<uint32_t>(entries.size()));
+
+    for (const RawEntry& entry : entries)
+    {
+      for (const int32_t component : entry.coord)
+      {
+        putU32(out, static_cast<uint32_t>(component));
+      }
+
+      putU32(out, entry.claimedLength.value_or(static_cast<uint32_t>(entry.encoded.size())));
+      out.insert(out.end(), entry.encoded.begin(), entry.encoded.end());
+    }
+
+    return out;
+  }
+
+  void expectRawRegionRejected(const std::vector<RawEntry>& entries, const terrain::HashByChunk& hashes,
+                               const char* mention)
+  {
+    const auto bytes = rawRegion(entries);
+    terrain::RegionRecord record;
+    record.hashes = hashes;
+    record.tag = terrain::regionTag(hashes);
+    record.bytes = bytes.size();
+
+    terrain::TerrainVolume::ChunkMap decoded;
+    std::string error;
+    EXPECT_FALSE(terrain::decodeRegion(bytes, { 0, 0, 0 }, record, decoded, error));
+    EXPECT_NE(error.find(mention), std::string::npos) << error;
+    EXPECT_TRUE(decoded.empty());
+  }
+
+  RawEntry rawEntry(const ChunkKey& coord, const std::shared_ptr<const terrain::TerrainChunk>& chunk)
+  {
+    return { coord, terrain::encodeChunk(*chunk), std::nullopt };
+  }
+}
+
+TEST(TerrainFormatTest, EncodeRegionRefusesWhatDecodeRegionCouldNotRead)
+{
+  EXPECT_TRUE(terrain::encodeRegion(twoChunks()).has_value());
+
+  EXPECT_FALSE(terrain::encodeRegion({}).has_value());
+  EXPECT_FALSE(terrain::encodeRegion({ { { 0, 0, 0 }, nullptr } }).has_value());
+  EXPECT_FALSE(terrain::encodeRegion({ { { 0, 0, 0 }, terrain::TerrainChunk::uniform(terrain::airDistance, 0) } })
+                 .has_value());
+  EXPECT_FALSE(terrain::encodeRegion({ { { 0, 0, 0 }, solidChunk() }, { { 8, 0, 0 }, solidChunk() } }).has_value());
+  EXPECT_FALSE(terrain::encodeRegion({ { { terrain::maxChunkCoord + 1, 0, 0 }, solidChunk() } }).has_value());
+
+  terrain::ChunksByKey tooMany;
+
+  for (int i = 0; i <= static_cast<int>(terrain::maxRegionEntries); ++i)
+  {
+    tooMany.emplace(ChunkKey{ i, 0, 0 }, solidChunk());
+  }
+
+  EXPECT_FALSE(terrain::encodeRegion(tooMany).has_value());
+}
+
+TEST(TerrainFormatTest, RegionBytesRoundTripWithNegativeCoordinates)
+{
+  const terrain::ChunksByKey chunks = { { { -8, -8, -8 }, denseChunk(4) }, { { -1, -1, -1 }, solidChunk() } };
+  const auto record = recordFor(chunks);
+  const auto bytes = terrain::encodeRegion(chunks).value();
+  terrain::TerrainVolume::ChunkMap decoded;
+  std::string error;
+
+  ASSERT_TRUE(terrain::decodeRegion(bytes, { -1, -1, -1 }, record, decoded, error)) << error;
+  ASSERT_EQ(decoded.size(), 2u);
+  EXPECT_EQ(decoded.at({ -8, -8, -8 })->hash(), chunks.at({ -8, -8, -8 })->hash());
+  EXPECT_TRUE(decoded.contains({ -1, -1, -1 }));
+
+  terrain::TerrainVolume::ChunkMap other;
+  EXPECT_FALSE(terrain::decodeRegion(bytes, { 0, 0, 0 }, record, other, error));
+}
+
+TEST(TerrainFormatTest, WriteIndexRefusesWhatParseIndexCouldNotRead)
+{
+  EXPECT_TRUE(terrain::writeIndex(makeIndex()).has_value());
+
+  EXPECT_FALSE(terrain::writeIndex(makeIndex(0.0f)).has_value());
+  EXPECT_FALSE(terrain::writeIndex(makeIndex(1e-5f)).has_value());
+  EXPECT_FALSE(terrain::writeIndex(makeIndex(std::numeric_limits<float>::quiet_NaN())).has_value());
+  EXPECT_FALSE(terrain::writeIndex(makeIndex(std::numeric_limits<float>::infinity())).has_value());
+
+  auto emptyRegion = makeIndex();
+  emptyRegion.regions[{ 0, 0, 0 }].hashes.clear();
+  EXPECT_FALSE(terrain::writeIndex(emptyRegion).has_value());
+
+  auto staleTag = makeIndex();
+  staleTag.regions[{ 0, 0, 0 }].tag ^= 1;
+  EXPECT_FALSE(terrain::writeIndex(staleTag).has_value());
+
+  auto nilUuid = makeIndex();
+  nilUuid.description.uuid = uuids::uuid();
+  EXPECT_FALSE(terrain::writeIndex(nilUuid).has_value());
+}
+
+TEST(TerrainFormatTest, CodecVersionAndByteOrderArePinned)
+{
+  const terrain::HashByChunk entries = { { { 0, 0, 0 }, 0x0123456789abcdefull },
+                                         { { -1, 2, 3 }, 0xfedcba9876543210ull } };
+  // Guards the byte order and the codec version folded into the hash; changing either renames every region file.
+  EXPECT_EQ(terrain::regionFileName({ 0, 0, 0 }, terrain::regionTag(entries)), "r.0.0.0.ba4556b107ae6041.bin");
+  EXPECT_EQ(terrain::codecVersion, 1u);
+
+  const auto bytes = terrain::encodeRegion(twoChunks()).value();
+  const std::vector<uint8_t> prefix = { 'E', '3', 'T', 'R', 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+  ASSERT_GE(bytes.size(), prefix.size());
+  EXPECT_TRUE(std::equal(prefix.begin(), prefix.end(), bytes.begin()));
+}
+
+TEST(TerrainFormatTest, IndexWithAStaleTagFails)
+{
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["tag"] = "0123456789abcdef";
+  }), "tag does not match");
+}
+
+TEST(TerrainFormatTest, IndexWithABadTagOrHashStringFails)
+{
+  const char* bad[] = { "xyz", "0123456789ABCDEF", "0123456789abcde", "+123456789abcdef", "0x23456789abcdef0", "" };
+
+  for (const char* text : bad)
+  {
+    expectIndexRejected(editedIndexBytes([text](nlohmann::json& json) {
+      regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["tag"] = text;
+    }), "malformed");
+    expectIndexRejected(editedIndexBytes([text](nlohmann::json& json) {
+      regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["chunks"][0]["hash"] = text;
+    }), "malformed");
+  }
+
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 })).erase("tag");
+  }), "malformed");
+}
+
+TEST(TerrainFormatTest, IndexWithAnInvalidDescriptionFails)
+{
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) { json["voxelSize"] = 0; }), "description is invalid");
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) { json["voxelSize"] = 1e-5; }),
+                      "description is invalid");
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    const auto entry = json["palette"][0];
+
+    while (json["palette"].size() <= terrain::maxPaletteSize)
+    {
+      json["palette"].push_back(entry);
+    }
+  }), "palette");
+}
+
+TEST(TerrainFormatTest, IndexWithABadByteCountFails)
+{
+  const auto setBytes = [](const nlohmann::json& value) {
+    return editedIndexBytes([value](nlohmann::json& json) {
+      regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["bytes"] = value;
+    });
+  };
+
+  expectIndexRejected(setBytes(-1), "malformed");
+  expectIndexRejected(setBytes(1.5), "malformed");
+  expectIndexRejected(setBytes(terrain::regionHeaderBytes - 1), "impossible file size");
+}
+
+TEST(TerrainFormatTest, IndexWithTooManyRegionsFails)
+{
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    json["regions"] = nlohmann::json(std::vector<nlohmann::json>(terrain::maxRegions + 1));
+  }), "too many regions");
+}
+
+TEST(TerrainFormatTest, IndexWithABadCoordinateFails)
+{
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["chunks"][0]["coord"] =
+      nlohmann::json::array({ static_cast<int64_t>(INT32_MIN) - 1, 0, 0 });
+  }), "malformed");
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["chunks"][0]["coord"] = nlohmann::json::array({ 0.5, 0, 0 });
+  }), "malformed");
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    auto& chunks = regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["chunks"];
+    chunks.push_back(chunks[0]);
+  }), "repeated");
+}
+
+TEST(TerrainFormatTest, NestingIsAcceptedAtTheLimitAndRefusedPastIt)
+{
+  const auto withNesting = [](const int depth) {
+    return editedIndexBytes([depth](nlohmann::json& json) { json["extra"] = nestedArray(depth); });
+  };
+  terrain::TerrainIndex parsed;
+  std::string error;
+
+  EXPECT_TRUE(terrain::parseIndex(withNesting(7), terrainUuid, parsed, error)) << error;
+  expectIndexRejected(withNesting(8), "nests deeper");
+}
+
+TEST(TerrainFormatTest, EscapedQuotesAndBackslashesDoNotConfuseTheNestingScan)
+{
+  auto index = makeIndex();
+  index.description.palette[0].name = "ends in a backslash\\";
+  index.description.palette[1].name = "[[[[[[[[[[[[[[[[";
+  terrain::TerrainIndex parsed;
+  std::string error;
+
+  ASSERT_TRUE(terrain::parseIndex(indexBytes(index), terrainUuid, parsed, error)) << error;
+  EXPECT_EQ(parsed.description.palette[0].name, index.description.palette[0].name);
+  EXPECT_EQ(parsed.description.palette[1].name, index.description.palette[1].name);
+}
+
+TEST(TerrainFormatTest, NameMatcherAcceptsOnlyNamesTheWriterProduces)
+{
+  EXPECT_TRUE(terrain::isRegionFileName("r.2097152.-2097152.0.0123456789abcdef.bin"));
+
+  const char* refused[] = { "r.-0.0.0.0123456789abcdef.bin", "r.00.0.0.0123456789abcdef.bin",
+                            "r.+1.0.0.0123456789abcdef.bin", "r.2097153.0.0.0123456789abcdef.bin",
+                            "r.0.-2097153.0.0123456789abcdef.bin", "r.0.0.0.0123456789ABCDEF.bin" };
+
+  for (const char* name : refused)
+  {
+    EXPECT_FALSE(terrain::isRegionFileName(name)) << name;
+  }
+}
+
+TEST(TerrainFormatTest, FailedParseAndDecodeLeaveTheirOutputUntouched)
+{
+  terrain::TerrainIndex target;
+  target.description = makeDescription(7.0f);
+  target.regions[{ 5, 5, 5 }] = recordFor({ { { 40, 40, 40 }, solidChunk() } });
+
+  terrain::TerrainIndex failed = target;
+  std::string error;
+  EXPECT_FALSE(terrain::parseIndex(editedIndexBytes([](nlohmann::json& json) {
+    json["regions"].push_back(json["regions"][0]);
+  }), terrainUuid, failed, error));
+  EXPECT_EQ(failed.description.voxelSize, 7.0f);
+  EXPECT_EQ(failed.description.palette.size(), 2u);
+  ASSERT_EQ(failed.regions.size(), 1u);
+  EXPECT_TRUE(failed.regions.contains({ 5, 5, 5 }));
+
+  ASSERT_TRUE(terrain::parseIndex(indexBytes(), terrainUuid, target, error)) << error;
+  EXPECT_EQ(target.description.voxelSize, 2.5f);
+  EXPECT_EQ(target.regions.size(), 3u);
+  EXPECT_FALSE(target.regions.contains({ 5, 5, 5 }));
+
+  const auto chunks = twoChunks();
+  auto record = recordFor(chunks);
+  const auto bytes = terrain::encodeRegion(chunks).value();
+  terrain::TerrainVolume::ChunkMap decoded;
+  decoded.emplace(terrain::ChunkCoord{ 50, 50, 50 }, solidChunk());
+
+  record.hashes[{ 1, 0, 0 }] ^= 1;
+  EXPECT_FALSE(terrain::decodeRegion(bytes, { 0, 0, 0 }, record, decoded, error));
+  EXPECT_EQ(decoded.size(), 1u);
+
+  ASSERT_TRUE(terrain::decodeRegion(bytes, { 0, 0, 0 }, recordFor(chunks), decoded, error)) << error;
+  EXPECT_EQ(decoded.size(), 3u);
+}
+
+TEST(TerrainFormatTest, DecodeRegionNamesEachEntryProblem)
+{
+  const auto dense = denseChunk(1);
+  const terrain::HashByChunk hashes = { { { 0, 0, 0 }, dense->hash() } };
+
+  expectRawRegionRejected({ rawEntry({ 0, 0, 0 }, dense), rawEntry({ 0, 0, 0 }, dense) }, hashes, "repeated");
+
+  RawEntry tooLong = { { 0, 0, 0 }, std::vector<uint8_t>(terrain::maxEncodedChunkBytes + 1, 0), std::nullopt };
+  expectRawRegionRejected({ tooLong }, hashes, "longer than the encoder");
+
+  RawEntry pastEnd = rawEntry({ 0, 0, 0 }, dense);
+  pastEnd.claimedLength = static_cast<uint32_t>(pastEnd.encoded.size() + 1);
+  expectRawRegionRejected({ pastEnd }, hashes, "runs past the end");
+
+  expectRawRegionRejected({ { { 0, 0, 0 }, { 0xFF, 0xFF, 0xFF }, std::nullopt } }, hashes, "does not decode");
+
+  const auto air = terrain::TerrainChunk::uniform(terrain::airDistance, 0);
+  expectRawRegionRejected({ rawEntry({ 0, 0, 0 }, air) }, { { { 0, 0, 0 }, air->hash() } }, "air chunk");
+
+  expectRawRegionRejected({ rawEntry({ 0, 0, 0 }, dense) }, { { { 1, 0, 0 }, dense->hash() } }, "not in the index");
+
+  const auto chunks = twoChunks();
+  auto bytes = terrain::encodeRegion(chunks).value();
+  bytes[7] = 1;
+  expectRegionRejected(bytes, recordFor(chunks), "version");
 }
