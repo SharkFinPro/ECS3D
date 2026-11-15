@@ -146,6 +146,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
     case AssetType::Script:  displayScriptBody();         break;
     case AssetType::Scene:   displaySceneBody(record, activeSceneUUID); break;
     case AssetType::Prefab:  displayPrefabBody(record);   break;
+    case AssetType::Terrain: break;
     default: break;
   }
 
@@ -199,7 +200,8 @@ void AssetInspector::displayHeader(const AssetRecord& record)
 
   // Scenes and prefabs have no file on disk (their `path` holds the display name), so only the file-backed
   // types show a source path.
-  if (record.type != AssetType::Scene && record.type != AssetType::Prefab && !record.path.empty())
+  if (record.type != AssetType::Scene && record.type != AssetType::Prefab && record.type != AssetType::Terrain
+      && !record.path.empty())
   {
     gc::rowLabel("Path");
     ImGui::TextColored(theme::t2, "%s", record.path.c_str());
@@ -304,7 +306,8 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   m_scriptSource.clear();
 
   // Only file-backed types have a path on disk; scenes carry their name there, prefabs their inline body.
-  if (record.type == AssetType::Scene || record.type == AssetType::Prefab || record.path.empty())
+  if (record.type == AssetType::Scene || record.type == AssetType::Prefab || record.type == AssetType::Terrain
+      || record.path.empty())
   {
     return;
   }

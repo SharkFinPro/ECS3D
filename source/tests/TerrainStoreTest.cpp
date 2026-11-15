@@ -1,0 +1,189 @@
+#include <gtest/gtest.h>
+
+#include "assets/AssetRegistry.h"
+#include "terrain/TerrainChunk.h"
+#include "terrain/TerrainStore.h"
+#include "terrain/TerrainTypes.h"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+  uuids::uuid uuidFrom(const std::string& text)
+  {
+    return uuids::uuid::from_string(text).value();
+  }
+
+  const auto firstUUID = uuidFrom("11111111-1111-1111-1111-111111111111");
+  const auto secondUUID = uuidFrom("22222222-2222-2222-2222-222222222222");
+  const auto thirdUUID = uuidFrom("33333333-3333-3333-3333-333333333333");
+
+  terrain::TerrainDescription describe(const uuids::uuid& uuid, const float voxelSize = 2.5f)
+  {
+    terrain::TerrainDescription description;
+    description.uuid = uuid;
+    description.voxelSize = voxelSize;
+
+    return description;
+  }
+
+  AssetRecord terrainRecord(const uuids::uuid& uuid)
+  {
+    return { .uuid = uuid, .type = AssetType::Terrain, .path = terrainAssetPath(uuid) };
+  }
+
+  std::shared_ptr<const terrain::TerrainChunk> solidChunk()
+  {
+    return terrain::TerrainChunk::uniform(-terrain::airDistance, 1);
+  }
+}
+
+TEST(TerrainStore, CreateFindDescriptionAndRemove)
+{
+  terrain::TerrainStore store;
+  EXPECT_EQ(store.find(firstUUID), nullptr);
+  EXPECT_EQ(store.description(firstUUID), nullptr);
+  EXPECT_FALSE(store.remove(firstUUID));
+
+  auto description = describe(firstUUID, 4.0f);
+  description.palette.push_back({ "grass", secondUUID, thirdUUID });
+  description.chunkCount = 7;
+
+  const auto volume = store.create(description);
+  ASSERT_NE(volume, nullptr);
+  EXPECT_EQ(store.find(firstUUID), volume);
+  EXPECT_NEAR(volume->voxelSize(), 4.0f, 1.0e-6f);
+
+  const auto* stored = store.description(firstUUID);
+  ASSERT_NE(stored, nullptr);
+  EXPECT_EQ(stored->uuid, firstUUID);
+  EXPECT_EQ(stored->chunkCount, 7u);
+  ASSERT_EQ(stored->palette.size(), 1u);
+  EXPECT_EQ(stored->palette[0].name, "grass");
+  EXPECT_EQ(stored->palette[0].albedoTexture, secondUUID);
+
+  EXPECT_TRUE(store.remove(firstUUID));
+  EXPECT_EQ(store.find(firstUUID), nullptr);
+  EXPECT_TRUE(store.terrains().empty());
+}
+
+TEST(TerrainStore, CreateRefusesInvalidDescriptions)
+{
+  terrain::TerrainStore store;
+
+  EXPECT_EQ(store.create(describe(uuids::uuid{})), nullptr);
+  EXPECT_EQ(store.create(describe(firstUUID, std::numeric_limits<float>::quiet_NaN())), nullptr);
+  EXPECT_EQ(store.create(describe(firstUUID, std::numeric_limits<float>::infinity())), nullptr);
+  EXPECT_EQ(store.create(describe(firstUUID, 0.0f)), nullptr);
+  EXPECT_EQ(store.create(describe(firstUUID, -1.0f)), nullptr);
+  EXPECT_EQ(store.create(describe(firstUUID, 1.0e6f)), nullptr);
+
+  auto oversized = describe(firstUUID);
+  oversized.palette.assign(terrain::maxPaletteSize + 1, terrain::TerrainMaterial{});
+  EXPECT_EQ(store.create(oversized), nullptr);
+
+  auto longName = describe(firstUUID);
+  longName.palette.push_back({ std::string(terrain::maxMaterialNameLength + 1, 'a'), {}, {} });
+  EXPECT_EQ(store.create(longName), nullptr);
+  EXPECT_TRUE(store.terrains().empty());
+
+  auto maximal = describe(firstUUID);
+  maximal.palette.assign(terrain::maxPaletteSize, terrain::TerrainMaterial{});
+  maximal.palette[0].name = std::string(terrain::maxMaterialNameLength, 'a');
+  EXPECT_NE(store.create(maximal), nullptr);
+}
+
+TEST(TerrainStore, CreateRefusesADuplicateUuidAndLeavesTheFirstVolumeUntouched)
+{
+  terrain::TerrainStore store;
+
+  const auto first = store.create(describe(firstUUID, 3.0f));
+  ASSERT_NE(first, nullptr);
+  first->setChunk({ 0, 0, 0 }, solidChunk());
+
+  EXPECT_EQ(store.create(describe(firstUUID, 5.0f)), nullptr);
+
+  EXPECT_EQ(store.find(firstUUID), first);
+  EXPECT_NEAR(first->voxelSize(), 3.0f, 1.0e-6f);
+  EXPECT_NE(first->chunk({ 0, 0, 0 }), nullptr);
+  EXPECT_NEAR(store.description(firstUUID)->voxelSize, 3.0f, 1.0e-6f);
+
+  EXPECT_NE(store.create(describe(secondUUID)), nullptr);
+}
+
+TEST(TerrainStore, TerrainsAreSorted)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(thirdUUID)), nullptr);
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_NE(store.create(describe(secondUUID)), nullptr);
+
+  const auto terrains = store.terrains();
+  ASSERT_EQ(terrains.size(), 3u);
+  EXPECT_TRUE(std::is_sorted(terrains.begin(), terrains.end()));
+  EXPECT_EQ(terrains.front(), firstUUID);
+  EXPECT_EQ(terrains.back(), thirdUUID);
+}
+
+TEST(TerrainStore, ReconcileCreatesDefaultTerrainsForNewRecords)
+{
+  AssetRegistry registry;
+  registry.registerAsset(terrainRecord(firstUUID));
+  registry.registerAsset({ .uuid = secondUUID, .type = AssetType::Model, .path = "rock.glb" });
+
+  terrain::TerrainStore store;
+  store.reconcile(registry);
+
+  const auto volume = store.find(firstUUID);
+  ASSERT_NE(volume, nullptr);
+  EXPECT_TRUE(volume->chunks().empty());
+  const terrain::TerrainDescription defaults;
+  EXPECT_NEAR(volume->voxelSize(), defaults.voxelSize, 1.0e-6f);
+  ASSERT_NE(store.description(firstUUID), nullptr);
+  EXPECT_EQ(store.description(firstUUID)->uuid, firstUUID);
+  EXPECT_TRUE(store.description(firstUUID)->palette.empty());
+
+  EXPECT_EQ(store.find(secondUUID), nullptr);
+  EXPECT_EQ(store.terrains().size(), 1u);
+}
+
+TEST(TerrainStore, ReconcileDropsTerrainsWhoseRecordIsGoneAndKeepsTheRest)
+{
+  AssetRegistry registry;
+  registry.registerAsset(terrainRecord(firstUUID));
+  registry.registerAsset(terrainRecord(secondUUID));
+
+  terrain::TerrainStore store;
+  store.reconcile(registry);
+
+  const auto kept = store.find(firstUUID);
+  ASSERT_NE(kept, nullptr);
+  kept->setChunk({ 1, 0, 0 }, solidChunk());
+  ASSERT_NE(store.find(secondUUID), nullptr);
+
+  registry.removeAsset(secondUUID);
+  registry.registerAsset(terrainRecord(thirdUUID));
+  store.reconcile(registry);
+
+  EXPECT_EQ(store.find(secondUUID), nullptr);
+  EXPECT_NE(store.find(thirdUUID), nullptr);
+  EXPECT_EQ(store.find(firstUUID), kept);
+  EXPECT_NE(kept->chunk({ 1, 0, 0 }), nullptr);
+  EXPECT_EQ(store.terrains().size(), 2u);
+}
+
+TEST(TerrainStore, ReconcileDropsATerrainWhoseRecordIsAnotherType)
+{
+  AssetRegistry registry;
+  registry.registerAsset({ .uuid = firstUUID, .type = AssetType::Model, .path = "rock.glb" });
+
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  store.reconcile(registry);
+
+  EXPECT_EQ(store.find(firstUUID), nullptr);
+}

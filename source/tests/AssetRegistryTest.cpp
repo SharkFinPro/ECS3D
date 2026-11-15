@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "assets/AssetRegistry.h"
+#include "edits/AssetWireType.h"
 #include "Replication.h"
 #include "TestScene.h"
 #include "scenes/SceneAsset.h"
@@ -745,4 +746,85 @@ TEST(AssetRegistry, ApplyAddAssetKeepsOnlyTheFirstPathOfARepeatedUuid)
   ASSERT_NE(registry.getByPath("x.glb"), nullptr);
   EXPECT_EQ(registry.getByPath("x.glb")->uuid, modelUUID);
   EXPECT_EQ(registry.getAssets().size(), 1u);
+}
+
+TEST(AssetRegistry, TerrainRecordRoundTripsThroughJsonAndTheWire)
+{
+  AssetRegistry registry;
+  const AssetRecord terrain = { .uuid = modelUUID, .type = AssetType::Terrain, .path = terrainAssetPath(modelUUID),
+                                .displayName = "Hills" };
+  registry.registerAsset(terrain);
+  ASSERT_NE(registry.getByUUID(modelUUID), nullptr);
+
+  const auto checkCopy = [&](const AssetRegistry& copy) {
+    const auto* record = copy.getByUUID(modelUUID);
+    ASSERT_NE(record, nullptr);
+    EXPECT_EQ(record->type, AssetType::Terrain);
+    EXPECT_EQ(record->path, terrain.path);
+    EXPECT_EQ(record->displayName, "Hills");
+    EXPECT_EQ(copy.getAssets().size(), 1u);
+  };
+
+  const auto json = registry.serialize();
+  ASSERT_EQ(json.at("terrains").size(), 1u);
+  AssetRegistry fromJson;
+  fromJson.loadFromJSON(json);
+  checkCopy(fromJson);
+
+  net::Message message(net::MessageType::snapshot);
+  registry.pack(message);
+  net::MessageReader reader(message);
+  AssetRegistry fromWire;
+  fromWire.unpack(reader);
+  checkCopy(fromWire);
+}
+
+TEST(AssetRegistry, TerrainRecordWithANonCanonicalPathIsRefused)
+{
+  AssetRegistry registry;
+
+  const std::string otherPath = terrainAssetPath(otherUUID);
+  for (const std::string& path : { std::string("terrain/../x"), otherPath, std::string() })
+  {
+    registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Terrain, .path = path });
+    EXPECT_EQ(registry.getByUUID(modelUUID), nullptr) << path;
+  }
+
+  registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Terrain, .path = terrainAssetPath(modelUUID),
+                           .className = "X" });
+  registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Terrain, .path = terrainAssetPath(modelUUID),
+                           .body = "{}" });
+  EXPECT_EQ(registry.getByUUID(modelUUID), nullptr);
+
+  registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Terrain, .path = terrainAssetPath(modelUUID) });
+  EXPECT_NE(registry.getByUUID(modelUUID), nullptr);
+}
+
+TEST(AssetRegistry, TerrainWireTypeMapsBothWays)
+{
+  EXPECT_EQ(edits::assetTypeToWireString(AssetType::Terrain), "terrain");
+  EXPECT_EQ(edits::assetTypeFromWireString("terrain"), AssetType::Terrain);
+  EXPECT_EQ(edits::assetTypeFromWireString(edits::assetTypeToWireString(AssetType::Model)), AssetType::Model);
+}
+
+TEST(AssetRegistry, ApplyAddAssetRegistersATerrainOnlyUnderItsCanonicalPath)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  EXPECT_FALSE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                          { { "assetType", "terrain" }, { "uuid", uuids::to_string(modelUUID) },
+                                            { "path", "terrain/../x" } }));
+  EXPECT_FALSE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                          { { "assetType", "terrain" }, { "uuid", uuids::to_string(modelUUID) },
+                                            { "path", terrainAssetPath(otherUUID) } }));
+  EXPECT_TRUE(registry.getAssets().empty());
+
+  EXPECT_TRUE(replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                                         { { "assetType", "terrain" }, { "uuid", uuids::to_string(modelUUID) },
+                                           { "path", terrainAssetPath(modelUUID) } }));
+  const auto* record = registry.getByUUID(modelUUID);
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->type, AssetType::Terrain);
 }

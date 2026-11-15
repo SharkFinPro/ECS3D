@@ -1732,7 +1732,7 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
     return addSceneAsset(assetRegistry, sceneManager, componentRegistry, uuid, asset);
   }
 
-  if (type == "model" || type == "texture" || type == "script")
+  if (type == "model" || type == "texture" || type == "script" || type == "terrain")
   {
     const std::string path = asset.value("path", std::string{});
     const AssetType assetType = edits::assetTypeFromWireString(type);

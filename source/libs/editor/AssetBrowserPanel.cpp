@@ -25,12 +25,13 @@
 #include <string>
 
 namespace {
-  constexpr std::array<std::pair<AssetType, const char*>, 5> kAssetTypeLabels {{
+  constexpr std::array<std::pair<AssetType, const char*>, 6> kAssetTypeLabels {{
     { AssetType::Model,   "Model"   },
     { AssetType::Texture, "Texture" },
     { AssetType::Scene,   "Scene"   },
     { AssetType::Script,  "Script"  },
     { AssetType::Prefab,  "Prefab"  },
+    { AssetType::Terrain, "Terrain" },
   }};
 
   // Pick a single existing file through the OS dialog. filters = { { label, "ext1,ext2" }, ... }.
