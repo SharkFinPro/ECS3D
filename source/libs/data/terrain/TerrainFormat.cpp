@@ -56,17 +56,25 @@ namespace terrain
       });
     }
 
-    bool isSignedInteger(const std::string& text)
+    bool int32FromString(const std::string& text, int32_t& value)
     {
-      int32_t value = 0;
       const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
 
       return !text.empty() && error == std::errc() && end == text.data() + text.size();
     }
 
+    bool isValidRegion(const ChunkKey& region)
+    {
+      constexpr int32_t maxRegionCoord = maxChunkCoord / regionSize;
+
+      return std::ranges::all_of(region, [](const int32_t component) {
+        return component >= -maxRegionCoord && component <= maxRegionCoord;
+      });
+    }
+
     bool hashFromString(const std::string& text, uint64_t& hash)
     {
-      if (text.size() != 16)
+      if (!isLowercaseHex16(text))
       {
         return false;
       }
@@ -182,7 +190,7 @@ namespace terrain
       {
         std::snprintf(text, sizeof(text), "%.*g", digits, static_cast<double>(value));
 
-        if (std::strtof(text, nullptr) == value)
+        if (static_cast<float>(std::strtod(text, nullptr)) == value)
         {
           break;
         }
@@ -236,9 +244,15 @@ namespace terrain
 
     bool readRegions(const Json& value, RegionIndex& regions, std::string& what)
     {
-      if (!value.is_array() || value.size() > maxRegions)
+      if (!value.is_array())
       {
-        what = "regions is not an array or lists too many regions";
+        what = "regions is not an array";
+        return false;
+      }
+
+      if (value.size() > maxRegions)
+      {
+        what = "regions lists too many regions";
         return false;
       }
 
@@ -258,10 +272,27 @@ namespace terrain
 
         const Json& chunks = entry["chunks"];
 
-        if (chunks.empty() || chunks.size() > maxRegionEntries || regions.contains(region) ||
-            record.bytes < regionHeaderBytes || record.bytes > maxRegionFileBytes)
+        if (chunks.empty())
         {
-          what = "a region entry is empty, oversized, repeated or has an impossible file size";
+          what = "a region entry is empty";
+          return false;
+        }
+
+        if (chunks.size() > maxRegionEntries)
+        {
+          what = "a region entry is oversized";
+          return false;
+        }
+
+        if (regions.contains(region))
+        {
+          what = "a region entry is repeated";
+          return false;
+        }
+
+        if (record.bytes < regionHeaderBytes || record.bytes > maxRegionFileBytes)
+        {
+          what = "a region entry has an impossible file size";
           return false;
         }
 
@@ -278,12 +309,23 @@ namespace terrain
             return false;
           }
 
-          if (!isValidChunkCoord({ coord[0], coord[1], coord[2] }) || regionOfChunk(coord) != region ||
-              !record.hashes.emplace(coord, hash).second)
+          if (!isValidChunkCoord({ coord[0], coord[1], coord[2] }) || regionOfChunk(coord) != region)
           {
-            what = "a chunk entry is out of range, outside its region or repeated";
+            what = "a chunk entry is out of range or outside its region";
             return false;
           }
+
+          if (!record.hashes.emplace(coord, hash).second)
+          {
+            what = "a chunk entry is repeated";
+            return false;
+          }
+        }
+
+        if (record.tag != regionTag(record.hashes))
+        {
+          what = "a region tag does not match its chunk hashes";
+          return false;
         }
 
         regions.emplace(region, std::move(record));
@@ -301,6 +343,7 @@ namespace terrain
   uint64_t regionTag(const HashByChunk& hashes)
   {
     std::vector<uint8_t> bytes;
+    putU32(bytes, codecVersion);
 
     for (const auto& [coord, hash] : hashes)
     {
@@ -326,12 +369,32 @@ namespace terrain
   {
     const std::vector<std::string> parts = splitOnDots(name);
 
-    return parts.size() == 6 && parts[0] == "r" && isSignedInteger(parts[1]) && isSignedInteger(parts[2]) &&
-           isSignedInteger(parts[3]) && isLowercaseHex16(parts[4]) && parts[5] == "bin";
+    ChunkKey region;
+    uint64_t tag = 0;
+
+    return parts.size() == 6 && parts[0] == "r" && int32FromString(parts[1], region[0]) &&
+           int32FromString(parts[2], region[1]) && int32FromString(parts[3], region[2]) && isValidRegion(region) &&
+           hashFromString(parts[4], tag) && regionFileName(region, tag) == name;
   }
 
-  std::vector<uint8_t> encodeRegion(const ChunksByKey& chunks)
+  std::optional<std::vector<uint8_t>> encodeRegion(const ChunksByKey& chunks)
   {
+    if (chunks.empty() || chunks.size() > maxRegionEntries)
+    {
+      return std::nullopt;
+    }
+
+    const ChunkKey region = regionOfChunk(chunks.begin()->first);
+
+    for (const auto& [coord, chunk] : chunks)
+    {
+      if (chunk == nullptr || chunk->isAir() || !isValidChunkCoord({ coord[0], coord[1], coord[2] }) ||
+          regionOfChunk(coord) != region)
+      {
+        return std::nullopt;
+      }
+    }
+
     std::vector<uint8_t> out(regionMagic.begin(), regionMagic.end());
     putU32(out, static_cast<uint32_t>(terrainFormatVersion));
     putU32(out, static_cast<uint32_t>(chunks.size()));
@@ -385,6 +448,7 @@ namespace terrain
 
     size_t position = regionHeaderBytes;
     std::set<ChunkKey> seen;
+    TerrainVolume::ChunkMap decoded;
 
     for (uint32_t i = 0; i < count; ++i)
     {
@@ -400,37 +464,60 @@ namespace terrain
       const size_t length = getU32(bytes, position + 12);
       position += entryHeaderBytes;
 
-      if (!isValidChunkCoord({ coord[0], coord[1], coord[2] }) || regionOfChunk(coord) != region ||
-          !seen.insert(coord).second)
+      if (!isValidChunkCoord({ coord[0], coord[1], coord[2] }) || regionOfChunk(coord) != region)
       {
-        error = "an entry is out of range, outside this region or repeated";
+        error = "an entry is out of range or outside this region";
         return false;
       }
 
-      if (length > maxEncodedChunkBytes || length > bytes.size() - position)
+      if (!seen.insert(coord).second)
       {
-        error = "an entry length is out of bounds";
+        error = "an entry is repeated";
+        return false;
+      }
+
+      if (length > maxEncodedChunkBytes)
+      {
+        error = "an entry is longer than the encoder can write";
+        return false;
+      }
+
+      if (length > bytes.size() - position)
+      {
+        error = "an entry runs past the end of the file";
         return false;
       }
 
       const auto chunk = decodeChunk(bytes.subspan(position, length));
       position += length;
 
-      if (chunk == nullptr || chunk->isAir())
+      if (chunk == nullptr)
       {
-        error = "an entry does not decode to a chunk";
+        error = "an entry does not decode";
+        return false;
+      }
+
+      if (chunk->isAir())
+      {
+        error = "an entry is an air chunk";
         return false;
       }
 
       const auto it = expected.find(coord);
 
-      if (it == expected.end() || it->second != chunk->hash())
+      if (it == expected.end())
       {
-        error = "an entry is not in the index or its hash disagrees with it";
+        error = "an entry is not in the index";
         return false;
       }
 
-      chunks.emplace(ChunkCoord{ coord[0], coord[1], coord[2] }, chunk);
+      if (it->second != chunk->hash())
+      {
+        error = "an entry hash disagrees with the index";
+        return false;
+      }
+
+      decoded.emplace(ChunkCoord{ coord[0], coord[1], coord[2] }, chunk);
     }
 
     if (position != bytes.size())
@@ -445,11 +532,17 @@ namespace terrain
       return false;
     }
 
+    chunks.merge(decoded);
     return true;
   }
 
-  std::string writeIndex(const TerrainIndex& index)
+  std::optional<std::string> writeIndex(const TerrainIndex& index)
   {
+    if (!isValidDescription(index.description))
+    {
+      return std::nullopt;
+    }
+
     Json json;
     json["formatVersion"] = terrainFormatVersion;
     json["uuid"] = uuids::to_string(index.description.uuid);
@@ -480,7 +573,18 @@ namespace terrain
                                   { "chunks", chunkList } });
     }
 
-    return json.dump(2);
+    std::string text = json.dump(2);
+    TerrainIndex reread;
+    std::string error;
+
+    // Parsing the result back is what keeps the writer from emitting anything the reader refuses.
+    if (!parseIndex({ reinterpret_cast<const uint8_t*>(text.data()), text.size() }, index.description.uuid, reread,
+                    error))
+    {
+      return std::nullopt;
+    }
+
+    return text;
   }
 
   bool parseIndex(const std::span<const uint8_t> text, const uuids::uuid& expectedUuid, TerrainIndex& index,
@@ -535,16 +639,17 @@ namespace terrain
       return false;
     }
 
-    index.description.uuid = expectedUuid;
-    index.description.voxelSize = static_cast<float>(voxelSize);
+    TerrainIndex parsed;
+    parsed.description.uuid = expectedUuid;
+    parsed.description.voxelSize = static_cast<float>(voxelSize);
 
-    if (!json.contains("palette") || !readPalette(json["palette"], index.description.palette))
+    if (!json.contains("palette") || !readPalette(json["palette"], parsed.description.palette))
     {
       error = "the palette is missing or malformed";
       return false;
     }
 
-    if (!isValidDescription(index.description))
+    if (!isValidDescription(parsed.description))
     {
       error = "the description is invalid";
       return false;
@@ -552,12 +657,13 @@ namespace terrain
 
     std::string what;
 
-    if (!json.contains("regions") || !readRegions(json["regions"], index.regions, what))
+    if (!json.contains("regions") || !readRegions(json["regions"], parsed.regions, what))
     {
       error = what.empty() ? "regions is missing" : what;
       return false;
     }
 
+    index = std::move(parsed);
     return true;
   }
 }
