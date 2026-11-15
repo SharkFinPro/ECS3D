@@ -10,6 +10,8 @@
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainBinding.h>
+#include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <GpuAssetCache.h>
@@ -81,6 +83,7 @@ EditorApp::EditorApp(LaunchOptions options)
     m_host(std::make_shared<ManagedHost>()),
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
+    m_terrainStore(std::make_shared<terrain::TerrainStore>()),
     m_sceneManager(std::make_shared<SceneManager>())
 {
   // Boot the CLR from the net transport's runtimeconfig (the editor only needs the socket assembly;
@@ -93,7 +96,8 @@ EditorApp::EditorApp(LaunchOptions options)
   launchServer();
 
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
-  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
+  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry,
+                                                  m_terrainStore.get());
 
   // Before createRenderer: the renderer runs setupImGuiStyle during construction, and that reads the
   // theme tokens, so a stored override has to be on them by then or the editor repaints on first sight.
@@ -571,6 +575,8 @@ void EditorApp::variableUpdate()
 
   {
     ECS3D_PROFILE_SCOPE("Scene prep");
+
+    terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
 
     if (objectManager)
     {

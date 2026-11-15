@@ -2,17 +2,21 @@
 #include "assets/AssetRegistry.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
+#include "terrain/TerrainStore.h"
 #include "WireTypes.h"
 #include <Protocol.h>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 ProjectPacker::ProjectPacker(AssetRegistry* assetRegistry,
                              SceneManager* sceneManager,
-                             std::shared_ptr<ComponentRegistry> componentRegistry)
+                             std::shared_ptr<ComponentRegistry> componentRegistry,
+                             terrain::TerrainStore* terrainStore)
   : m_assetRegistry(assetRegistry),
     m_sceneManager(sceneManager),
-    m_componentRegistry(std::move(componentRegistry))
+    m_componentRegistry(std::move(componentRegistry)),
+    m_terrainStore(terrainStore)
 {}
 
 void ProjectPacker::pack(net::Message& message) const
@@ -32,6 +36,25 @@ void ProjectPacker::pack(net::Message& message) const
   message.writeString(currentScene ? uuids::to_string(currentScene->getUUID()) : "");
   message.write(m_projectLoadId);
   message.write(m_projectFingerprint);
+
+  const auto terrainUUIDs = m_terrainStore ? m_terrainStore->terrains() : std::vector<uuids::uuid>{};
+  message.write(static_cast<uint32_t>(terrainUUIDs.size()));
+  for (const auto& uuid : terrainUUIDs)
+  {
+    const auto* description = m_terrainStore->description(uuid);
+    const auto volume = m_terrainStore->find(uuid);
+
+    message.write(uuid);
+    message.write(description->voxelSize);
+    message.write(static_cast<uint32_t>(volume->chunks().size()));
+    message.write(static_cast<uint32_t>(description->palette.size()));
+    for (const auto& material : description->palette)
+    {
+      message.writeString(material.name);
+      message.write(material.albedoTexture);
+      message.write(material.specularTexture);
+    }
+  }
 }
 
 void ProjectPacker::setProjectLoadId(const uuids::uuid& id)
@@ -75,6 +98,45 @@ void ProjectPacker::unpack(const net::Message& message)
   const auto parsedLoadId = reader.read<uuids::uuid>();
   const auto parsedFingerprint = reader.read<uint64_t>();
 
+  const uint32_t terrainCount = reader.read<uint32_t>();
+  if (terrainCount > maxSnapshotTerrains)
+  {
+    throw std::runtime_error("Snapshot names too many terrains");
+  }
+
+  std::vector<terrain::TerrainDescription> parsedTerrains;
+  parsedTerrains.reserve(terrainCount);
+  for (uint32_t i = 0; i < terrainCount; ++i)
+  {
+    terrain::TerrainDescription description;
+    description.uuid = reader.read<uuids::uuid>();
+    description.voxelSize = reader.read<float>();
+    description.chunkCount = reader.read<uint32_t>();
+
+    const uint32_t paletteSize = reader.read<uint32_t>();
+    if (paletteSize > terrain::maxPaletteSize)
+    {
+      throw std::runtime_error("Snapshot terrain palette is too large");
+    }
+
+    description.palette.reserve(paletteSize);
+    for (uint32_t k = 0; k < paletteSize; ++k)
+    {
+      terrain::TerrainMaterial material;
+      material.name = reader.readString();
+      material.albedoTexture = reader.read<uuids::uuid>();
+      material.specularTexture = reader.read<uuids::uuid>();
+      description.palette.push_back(std::move(material));
+    }
+
+    if (!terrain::isValidDescription(description))
+    {
+      throw std::runtime_error("Snapshot terrain description is invalid");
+    }
+
+    parsedTerrains.push_back(std::move(description));
+  }
+
   // Commit phase: nothing below throws, so the swap to the new project is all-or-nothing. A fresh
   // snapshot must REPLACE the current state (the registries are keyed and won't overwrite), so clear
   // first.
@@ -112,6 +174,15 @@ void ProjectPacker::unpack(const net::Message& message)
       {
         m_sceneManager->loadScene(scene);
       }
+    }
+  }
+
+  if (m_terrainStore)
+  {
+    m_terrainStore->reconcile(*m_assetRegistry);
+    for (const auto& description : parsedTerrains)
+    {
+      m_terrainStore->applyDescription(description);
     }
   }
 }

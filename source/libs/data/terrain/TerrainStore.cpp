@@ -128,6 +128,25 @@ namespace terrain
     return m_terrains.erase(uuid) > 0;
   }
 
+  bool TerrainStore::applyDescription(const TerrainDescription& description)
+  {
+    const auto it = m_terrains.find(description.uuid);
+    if (it == m_terrains.end() || !isValidDescription(description))
+    {
+      return false;
+    }
+
+    Entry& entry = it->second;
+    if (entry.description.voxelSize != description.voxelSize)
+    {
+      entry.volume = std::make_shared<TerrainVolume>(description.voxelSize);
+    }
+
+    entry.description = description;
+
+    return true;
+  }
+
   std::vector<uuids::uuid> TerrainStore::terrains() const
   {
     std::vector<uuids::uuid> result;

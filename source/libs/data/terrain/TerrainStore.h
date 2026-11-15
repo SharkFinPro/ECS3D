@@ -53,6 +53,11 @@ namespace terrain
 
     bool remove(const uuids::uuid& uuid);
 
+    // Replaces the description of a held terrain. The volume is kept while the voxel size is unchanged; a new voxel
+    // size means different data, so it gets a fresh empty volume. False, with no change, for an invalid description
+    // or an unknown uuid.
+    bool applyDescription(const TerrainDescription& description);
+
     // Sorted, so callers that pack or log get a deterministic order.
     [[nodiscard]] std::vector<uuids::uuid> terrains() const;
 
