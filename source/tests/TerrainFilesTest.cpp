@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -78,6 +79,27 @@ namespace {
     out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
   }
 
+  nlohmann::json& regionEntry(nlohmann::json& index, const nlohmann::json& key)
+  {
+    for (auto& entry : index["regions"])
+    {
+      if (entry["region"] == key)
+      {
+        return entry;
+      }
+    }
+
+    ADD_FAILURE() << "no such region";
+    return index["regions"][0];
+  }
+
+  void expectErrorMentions(const terrain::TerrainLoadResult& loaded, const char* text)
+  {
+    EXPECT_FALSE(loaded.description.has_value());
+    EXPECT_EQ(loaded.volume, nullptr);
+    EXPECT_NE(loaded.error.find(text), std::string::npos) << loaded.error;
+  }
+
   class TerrainFilesTest : public testing::Test
   {
   protected:
@@ -105,6 +127,35 @@ namespace {
     [[nodiscard]] std::filesystem::path region(const char* name) const
     {
       return folder() / name;
+    }
+
+    // The region file whose name starts with prefix, such as "r.1.0.0.", or an empty path when there is none.
+    [[nodiscard]] std::filesystem::path regionFile(const std::string& prefix) const
+    {
+      for (const auto& entry : std::filesystem::directory_iterator(folder()))
+      {
+        const std::string name = pathToUtf8(entry.path().filename());
+
+        if (name.starts_with(prefix) && name.ends_with(".bin"))
+        {
+          return entry.path();
+        }
+      }
+
+      return {};
+    }
+
+    [[nodiscard]] static std::vector<std::string> fileNames(const std::filesystem::path& directory)
+    {
+      std::vector<std::string> names;
+
+      for (const auto& entry : std::filesystem::directory_iterator(directory))
+      {
+        names.push_back(pathToUtf8(entry.path().filename()));
+      }
+
+      std::sort(names.begin(), names.end());
+      return names;
     }
 
     void saveDefault()
@@ -147,7 +198,7 @@ TEST_F(TerrainFilesTest, RoundTripIsBitExact)
   ASSERT_TRUE(saved.ok) << saved.error;
   EXPECT_EQ(saved.regionsWritten, 4u);
   EXPECT_TRUE(std::filesystem::exists(region("terrain.json")));
-  EXPECT_TRUE(std::filesystem::exists(region("r.-1.-1.-1.bin")));
+  EXPECT_FALSE(regionFile("r.-1.-1.-1.").empty());
 
   const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
   ASSERT_TRUE(loaded.description.has_value()) << loaded.error;
@@ -174,6 +225,17 @@ TEST_F(TerrainFilesTest, RoundTripIsBitExact)
   }
 }
 
+TEST_F(TerrainFilesTest, FileNameCarriesCoordinatesAndSixteenHexTag)
+{
+  saveDefault();
+  const std::string name = pathToUtf8(regionFile("r.-1.-1.-1.").filename());
+  const std::string prefix = "r.-1.-1.-1.";
+
+  ASSERT_EQ(name.size(), prefix.size() + 16 + std::string(".bin").size());
+  EXPECT_EQ(name.find_first_not_of("0123456789abcdef", prefix.size()), prefix.size() + 16);
+  EXPECT_EQ(name.substr(prefix.size() + 16), ".bin");
+}
+
 TEST_F(TerrainFilesTest, SecondSaveWithoutChangesWritesNothing)
 {
   const auto volume = makeVolume();
@@ -192,29 +254,36 @@ TEST_F(TerrainFilesTest, ChangingOneChunkRewritesOnlyItsRegion)
   const auto volume = makeVolume();
   ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
 
-  const char* untouched[] = { "r.0.0.0.bin", "r.-1.-1.-1.bin", "r.-2.0.0.bin" };
+  const char* untouched[] = { "r.0.0.0.", "r.-1.-1.-1.", "r.-2.0.0." };
   const auto stale = std::filesystem::file_time_type::clock::now() - std::chrono::hours(2);
+  std::vector<std::filesystem::path> files;
+  std::vector<std::filesystem::file_time_type> staleRead;
   std::vector<std::vector<uint8_t>> before;
 
-  for (const char* name : untouched)
+  for (const char* prefix : untouched)
   {
-    std::filesystem::last_write_time(region(name), stale);
-    before.push_back(readBytes(region(name)));
+    const auto file = regionFile(prefix);
+    ASSERT_FALSE(file.empty()) << prefix;
+    std::filesystem::last_write_time(file, stale);
+    files.push_back(file);
+    staleRead.push_back(std::filesystem::last_write_time(file));
+    before.push_back(readBytes(file));
   }
 
-  const auto changedBefore = readBytes(region("r.1.0.0.bin"));
+  const auto changedBefore = regionFile("r.1.0.0.");
   volume->setChunk({ 9, 0, 0 }, denseChunk(99));
 
   const auto result = terrain::saveTerrain(m_root, makeDescription(), *volume);
   ASSERT_TRUE(result.ok) << result.error;
   EXPECT_EQ(result.regionsWritten, 1u);
-  EXPECT_EQ(result.regionsRemoved, 0u);
-  EXPECT_NE(readBytes(region("r.1.0.0.bin")), changedBefore);
+  EXPECT_EQ(result.regionsRemoved, 1u);
+  EXPECT_NE(regionFile("r.1.0.0."), changedBefore);
+  EXPECT_FALSE(std::filesystem::exists(changedBefore));
 
-  for (size_t i = 0; i < before.size(); ++i)
+  for (size_t i = 0; i < files.size(); ++i)
   {
-    EXPECT_EQ(readBytes(region(untouched[i])), before[i]) << untouched[i];
-    EXPECT_EQ(std::filesystem::last_write_time(region(untouched[i])), stale) << untouched[i];
+    EXPECT_EQ(readBytes(files[i]), before[i]) << untouched[i];
+    EXPECT_EQ(std::filesystem::last_write_time(files[i]), staleRead[i]) << untouched[i];
   }
 
   const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
@@ -226,7 +295,8 @@ TEST_F(TerrainFilesTest, EmptiedRegionFileIsDeleted)
 {
   const auto volume = makeVolume();
   ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
-  ASSERT_TRUE(std::filesystem::exists(region("r.-2.0.0.bin")));
+  const auto emptied = regionFile("r.-2.0.0.");
+  ASSERT_FALSE(emptied.empty());
 
   volume->setChunk({ -9, 2, 3 }, nullptr);
 
@@ -234,8 +304,8 @@ TEST_F(TerrainFilesTest, EmptiedRegionFileIsDeleted)
   ASSERT_TRUE(result.ok) << result.error;
   EXPECT_EQ(result.regionsWritten, 0u);
   EXPECT_EQ(result.regionsRemoved, 1u);
-  EXPECT_FALSE(std::filesystem::exists(region("r.-2.0.0.bin")));
-  EXPECT_TRUE(std::filesystem::exists(region("r.0.0.0.bin")));
+  EXPECT_FALSE(std::filesystem::exists(emptied));
+  EXPECT_FALSE(regionFile("r.0.0.0.").empty());
 
   const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
   ASSERT_NE(loaded.volume, nullptr) << loaded.error;
@@ -245,22 +315,24 @@ TEST_F(TerrainFilesTest, EmptiedRegionFileIsDeleted)
 TEST_F(TerrainFilesTest, TruncatedRegionFileFailsNamingIt)
 {
   saveDefault();
-  auto bytes = readBytes(region("r.0.0.0.bin"));
+  const auto file = regionFile("r.0.0.0.");
+  auto bytes = readBytes(file);
   ASSERT_GT(bytes.size(), 10u);
   bytes.resize(bytes.size() - 5);
-  writeBytes(region("r.0.0.0.bin"), bytes);
+  writeBytes(file, bytes);
 
-  expectLoadFails(region("r.0.0.0.bin"));
+  expectLoadFails(file);
 }
 
 TEST_F(TerrainFilesTest, GarbledMagicFailsNamingTheFile)
 {
   saveDefault();
-  auto bytes = readBytes(region("r.1.0.0.bin"));
+  const auto file = regionFile("r.1.0.0.");
+  auto bytes = readBytes(file);
   bytes[0] = 'X';
-  writeBytes(region("r.1.0.0.bin"), bytes);
+  writeBytes(file, bytes);
 
-  expectLoadFails(region("r.1.0.0.bin"));
+  expectLoadFails(file);
 }
 
 TEST_F(TerrainFilesTest, HashDisagreeingWithIndexFails)
@@ -276,15 +348,16 @@ TEST_F(TerrainFilesTest, HashDisagreeingWithIndexFails)
     }
   });
 
-  expectLoadFails(region("r.1.0.0.bin"));
+  expectLoadFails(regionFile("r.1.0.0."));
 }
 
 TEST_F(TerrainFilesTest, MissingRegionFileFails)
 {
   saveDefault();
-  ASSERT_TRUE(std::filesystem::remove(region("r.-1.-1.-1.bin")));
+  const auto missing = regionFile("r.-1.-1.-1.");
+  ASSERT_TRUE(std::filesystem::remove(missing));
 
-  expectLoadFails(region("r.-1.-1.-1.bin"));
+  expectLoadFails(missing);
 }
 
 TEST_F(TerrainFilesTest, IndexWithWrongUuidFails)
@@ -334,4 +407,275 @@ TEST_F(TerrainFilesTest, SaveRefusesNilUuidEmptyRootAndVoxelSizeMismatch)
   EXPECT_FALSE(std::filesystem::exists(folder()));
 
   EXPECT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
+}
+
+TEST_F(TerrainFilesTest, CrashAfterRegionsBeforeIndexLoadsTheOldState)
+{
+  const auto a = makeVolume();
+  ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *a).ok);
+  const auto namesA = fileNames(folder());
+
+  const auto b = makeVolume();
+  b->setChunk({ 9, 0, 0 }, denseChunk(99));
+  const auto otherRoot = m_root / "other";
+  ASSERT_TRUE(terrain::saveTerrain(otherRoot, makeDescription(), *b).ok);
+  const auto otherFolder = terrain::terrainFolder(otherRoot, terrainUuid);
+
+  size_t copied = 0;
+
+  for (const std::string& name : fileNames(otherFolder))
+  {
+    if (name != "terrain.json" && !std::filesystem::exists(folder() / name))
+    {
+      std::filesystem::copy_file(otherFolder / name, folder() / name);
+      ++copied;
+    }
+  }
+
+  ASSERT_EQ(copied, 1u);
+  ASSERT_EQ(fileNames(folder()).size(), namesA.size() + 1);
+
+  const auto loadedA = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loadedA.volume, nullptr) << loadedA.error;
+  ASSERT_EQ(loadedA.volume->chunks().size(), a->chunks().size());
+
+  for (const auto& [coord, chunk] : a->chunks())
+  {
+    ASSERT_NE(loadedA.volume->chunk(coord), nullptr);
+    EXPECT_EQ(loadedA.volume->chunk(coord)->hash(), chunk->hash());
+  }
+
+  const auto resumed = terrain::saveTerrain(m_root, makeDescription(), *b);
+  ASSERT_TRUE(resumed.ok) << resumed.error;
+  EXPECT_EQ(resumed.regionsWritten, 0u);
+  EXPECT_EQ(resumed.regionsRemoved, 1u);
+
+  const auto loadedB = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loadedB.volume, nullptr) << loadedB.error;
+  EXPECT_EQ(loadedB.volume->chunk({ 9, 0, 0 })->hash(), b->chunk({ 9, 0, 0 })->hash());
+}
+
+TEST_F(TerrainFilesTest, RegionFileReplacedOutOfBandIsRewrittenOnNextSave)
+{
+  saveDefault();
+  const auto file = regionFile("r.0.0.0.");
+  writeBytes(file, { 1, 2, 3 });
+
+  expectLoadFails(file);
+
+  const auto result = terrain::saveTerrain(m_root, makeDescription(), *makeVolume());
+  ASSERT_TRUE(result.ok) << result.error;
+  EXPECT_EQ(result.regionsWritten, 1u);
+
+  const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loaded.volume, nullptr) << loaded.error;
+  EXPECT_EQ(loaded.volume->chunks().size(), 5u);
+}
+
+TEST_F(TerrainFilesTest, SaveRemovesOwnTemporariesAndKeepsForeignFiles)
+{
+  saveDefault();
+
+  const char* removed[] = { "terrain.json.tmp", "r.9.9.9.0123456789abcdef.bin.tmp" };
+  const char* kept[] = { "notes.bin", "r.notes.bin", "r.1.2.3.xyz.bin", "r.1.2.3.0123456789ABCDEF.bin",
+                         "r.1.2.0123456789abcdef.bin", "keep.tmp", "r.1.2.3.0123456789abcdef.bin.bak" };
+
+  for (const char* name : removed)
+  {
+    writeBytes(region(name), { 7 });
+  }
+
+  for (const char* name : kept)
+  {
+    writeBytes(region(name), { 7 });
+  }
+
+  const auto result = terrain::saveTerrain(m_root, makeDescription(), *makeVolume());
+  ASSERT_TRUE(result.ok) << result.error;
+  EXPECT_EQ(result.regionsRemoved, 0u);
+
+  for (const char* name : removed)
+  {
+    EXPECT_FALSE(std::filesystem::exists(region(name))) << name;
+  }
+
+  for (const char* name : kept)
+  {
+    EXPECT_TRUE(std::filesystem::exists(region(name))) << name;
+  }
+
+  EXPECT_TRUE(terrain::loadTerrain(m_root, terrainUuid).description.has_value());
+}
+
+TEST_F(TerrainFilesTest, ObsoleteVersionedFilesAreRemovedAfterSave)
+{
+  const auto volume = makeVolume();
+  ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
+  const auto first = regionFile("r.0.0.0.");
+
+  volume->setChunk({ 0, 0, 0 }, denseChunk(50));
+  ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
+  const auto second = regionFile("r.0.0.0.");
+
+  EXPECT_NE(first, second);
+  EXPECT_FALSE(std::filesystem::exists(first));
+  EXPECT_TRUE(std::filesystem::exists(second));
+}
+
+TEST_F(TerrainFilesTest, DuplicateRegionInIndexFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) { json["regions"].push_back(json["regions"][0]); });
+
+  expectLoadFails(region("terrain.json"));
+}
+
+TEST_F(TerrainFilesTest, CoordOutsideItsRegionFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["chunks"][0]["coord"] = nlohmann::json::array({ 8, 0, 0 });
+  });
+
+  expectLoadFails(region("terrain.json"));
+}
+
+TEST_F(TerrainFilesTest, EntryCountOverTheMaximumFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) {
+    auto& chunks = regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["chunks"];
+    const auto first = chunks[0];
+
+    while (chunks.size() <= 512)
+    {
+      chunks.push_back(first);
+    }
+  });
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "oversized");
+}
+
+TEST_F(TerrainFilesTest, TrailingBytesFail)
+{
+  saveDefault();
+  const auto file = regionFile("r.1.0.0.");
+  auto bytes = readBytes(file);
+  const auto size = bytes.size();
+  bytes.push_back(0);
+  writeBytes(file, bytes);
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "disagrees with the index");
+
+  editIndex([size](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 1, 0, 0 }))["bytes"] = size + 1;
+  });
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "trailing");
+}
+
+TEST_F(TerrainFilesTest, IndexListingAChunkTheFileLacksFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 1, 0, 0 }))["chunks"].push_back(
+      { { "coord", nlohmann::json::array({ 10, 0, 0 }) }, { "hash", "0123456789abcdef" } });
+  });
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "does not hold");
+}
+
+TEST_F(TerrainFilesTest, VoxelSizeAsStringFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) { json["voxelSize"] = "2.5"; });
+
+  expectLoadFails(region("terrain.json"));
+}
+
+TEST_F(TerrainFilesTest, VoxelSizeOutsideFloatRangeFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) { json["voxelSize"] = 1e300; });
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "range");
+}
+
+TEST_F(TerrainFilesTest, PaletteEntryMissingAFieldFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) { json["palette"][0].erase("specularTexture"); });
+
+  expectLoadFails(region("terrain.json"));
+}
+
+TEST_F(TerrainFilesTest, RegionCoordAboveInt32MaxFails)
+{
+  saveDefault();
+  editIndex([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["region"] =
+      nlohmann::json::array({ static_cast<uint64_t>(4294967295u), 0, 0 });
+  });
+
+  expectLoadFails(region("terrain.json"));
+}
+
+TEST_F(TerrainFilesTest, DeeplyNestedIndexIsRefusedButBracketsInStringsAreNot)
+{
+  auto description = makeDescription();
+  description.palette[0].name = "[[[[[[[[[[[[[[[[{{{{{{{{{{\\\"[[[[";
+  ASSERT_TRUE(terrain::saveTerrain(m_root, description, *makeVolume()).ok);
+
+  const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_TRUE(loaded.description.has_value()) << loaded.error;
+  EXPECT_EQ(loaded.description->palette[0].name, description.palette[0].name);
+
+  const std::string nested = "[[[[[[[[[[]]]]]]]]]]";
+  writeBytes(region("terrain.json"), std::vector<uint8_t>(nested.begin(), nested.end()));
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "nests deeper");
+}
+
+TEST_F(TerrainFilesTest, OversizedIndexIsRefused)
+{
+  saveDefault();
+  writeBytes(region("terrain.json"), std::vector<uint8_t>(9u * 1024 * 1024, ' '));
+
+  expectErrorMentions(terrain::loadTerrain(m_root, terrainUuid), "larger than the format allows");
+}
+
+TEST_F(TerrainFilesTest, EmptyVolumeRoundTrips)
+{
+  const terrain::TerrainVolume empty(2.5f);
+  const auto saved = terrain::saveTerrain(m_root, makeDescription(), empty);
+  ASSERT_TRUE(saved.ok) << saved.error;
+  EXPECT_EQ(saved.regionsWritten, 0u);
+
+  const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_TRUE(loaded.description.has_value()) << loaded.error;
+  ASSERT_NE(loaded.volume, nullptr);
+  EXPECT_TRUE(loaded.volume->chunks().empty());
+  EXPECT_EQ(loaded.description->chunkCount, 0u);
+  EXPECT_EQ(loaded.description->palette.size(), 2u);
+}
+
+TEST_F(TerrainFilesTest, VoxelSizeRoundTripsAndReadsCleanlyInTheIndex)
+{
+  const float sizes[] = { 0.1f, 2.5f, 0.3f, 1.0f / 3.0f };
+
+  for (const float size : sizes)
+  {
+    ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(size), *makeVolume(size)).ok) << size;
+
+    const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
+    ASSERT_TRUE(loaded.description.has_value()) << loaded.error;
+    EXPECT_EQ(loaded.description->voxelSize, size);
+    EXPECT_EQ(loaded.volume->voxelSize(), size);
+
+    const auto json = nlohmann::json::parse(readBytes(region("terrain.json")));
+    EXPECT_EQ(static_cast<float>(json["voxelSize"].get<double>()), size);
+  }
+
+  ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(0.1f), *makeVolume(0.1f)).ok);
+  EXPECT_EQ(nlohmann::json::parse(readBytes(region("terrain.json")))["voxelSize"].get<double>(), 0.1);
 }

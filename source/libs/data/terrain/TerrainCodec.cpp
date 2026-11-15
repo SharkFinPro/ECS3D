@@ -14,7 +14,6 @@ namespace terrain
     constexpr uint8_t uniformTag = 0;
     constexpr uint8_t denseTag = 1;
     constexpr size_t uniformBytes = 4;
-    constexpr size_t maxLiteralRun = 128;
     constexpr size_t minRepeatRun = 3;
     constexpr size_t maxRepeatRun = 130;
     constexpr int repeatBias = 125;
@@ -62,7 +61,7 @@ namespace terrain
 
         size_t literal = 0;
 
-        while (index + literal < count && literal < maxLiteralRun &&
+        while (index + literal < count && literal < maxLiteralRunSamples &&
                !(index + literal != index && runLengthAt(index + literal) >= minRepeatRun))
         {
           ++literal;

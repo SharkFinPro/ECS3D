@@ -1,20 +1,27 @@
 #include "TerrainFiles.h"
+#include "ProjectFingerprint.h"
 #include "ProjectPaths.h"
 #include "TerrainCodec.h"
 #include "TerrainTypes.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <charconv>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <memory>
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -25,7 +32,15 @@ namespace terrain
     using Json = nlohmann::json;
     using Key = std::array<int32_t, 3>;
     using HashByChunk = std::map<Key, uint64_t>;
-    using RegionIndex = std::map<Key, HashByChunk>;
+
+    struct RegionRecord
+    {
+      HashByChunk hashes;
+      uint64_t tag = 0;
+      uintmax_t bytes = 0;
+    };
+
+    using RegionIndex = std::map<Key, RegionRecord>;
     using ChunksByRegion = std::map<Key, std::map<Key, std::shared_ptr<const TerrainChunk>>>;
 
     constexpr std::array<uint8_t, 4> regionMagic = { 'E', '3', 'T', 'R' };
@@ -33,18 +48,16 @@ namespace terrain
     constexpr size_t entryHeaderBytes = 16;
     constexpr size_t maxRegionEntries = static_cast<size_t>(regionSize) * regionSize * regionSize;
 
-    // Dense worst case: the codec splits each plane into literal runs of at most 128 samples, each costing one
-    // control byte plus its values, so a chunk of incompressible data is the longest stream it can write.
-    constexpr size_t maxLiteralRunSamples = 128;
-    constexpr size_t literalRuns = static_cast<size_t>(samplesPerChunk) / maxLiteralRunSamples;
-    constexpr size_t maxEncodedChunkBytes =
-      1 + literalRuns * (1 + maxLiteralRunSamples * sizeof(int16_t)) + literalRuns * (1 + maxLiteralRunSamples);
-
     constexpr size_t maxRegionFileBytes =
       regionHeaderBytes + maxRegionEntries * (entryHeaderBytes + maxEncodedChunkBytes);
-    constexpr uintmax_t maxIndexBytes = 64ull * 1024 * 1024;
+    constexpr uintmax_t maxIndexBytes = 8ull * 1024 * 1024;
+    constexpr size_t maxRegions = 65536;
+    constexpr int maxIndexDepth = 8;
+    constexpr int moveAttempts = 3;
+    constexpr auto moveRetryDelay = std::chrono::milliseconds(20);
 
     constexpr const char* indexFileName = "terrain.json";
+    constexpr const char* temporarySuffix = ".tmp";
 
     struct IndexData
     {
@@ -62,17 +75,74 @@ namespace terrain
       return { floorDiv(chunk[0], regionSize), floorDiv(chunk[1], regionSize), floorDiv(chunk[2], regionSize) };
     }
 
-    std::filesystem::path regionFile(const std::filesystem::path& folder, const Key& region)
-    {
-      return folder / ("r." + std::to_string(region[0]) + "." + std::to_string(region[1]) + "." +
-                       std::to_string(region[2]) + ".bin");
-    }
-
     std::string hashToString(const uint64_t hash)
     {
       char text[17];
       std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(hash));
       return text;
+    }
+
+    std::string regionFileName(const Key& region, const uint64_t tag)
+    {
+      return "r." + std::to_string(region[0]) + "." + std::to_string(region[1]) + "." + std::to_string(region[2]) +
+             "." + hashToString(tag) + ".bin";
+    }
+
+    std::vector<std::string> splitOnDots(const std::string& text)
+    {
+      std::vector<std::string> parts(1);
+
+      for (const char c : text)
+      {
+        if (c == '.')
+        {
+          parts.emplace_back();
+        }
+        else
+        {
+          parts.back().push_back(c);
+        }
+      }
+
+      return parts;
+    }
+
+    bool isLowercaseHex16(const std::string& text)
+    {
+      return text.size() == 16 && std::all_of(text.begin(), text.end(), [](const char c)
+      {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      });
+    }
+
+    bool isSignedInteger(const std::string& text)
+    {
+      int32_t value = 0;
+      const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+
+      return !text.empty() && error == std::errc() && end == text.data() + text.size();
+    }
+
+    // Only names this format writes are ever deleted, so a foreign file in the folder is left alone.
+    bool isRegionFileName(const std::string& name)
+    {
+      const std::vector<std::string> parts = splitOnDots(name);
+
+      return parts.size() == 6 && parts[0] == "r" && isSignedInteger(parts[1]) && isSignedInteger(parts[2]) &&
+             isSignedInteger(parts[3]) && isLowercaseHex16(parts[4]) && parts[5] == "bin";
+    }
+
+    bool isOwnTemporaryName(const std::string& name)
+    {
+      const std::string suffix = temporarySuffix;
+
+      if (!name.ends_with(suffix))
+      {
+        return false;
+      }
+
+      const std::string base = name.substr(0, name.size() - suffix.size());
+      return base == indexFileName || isRegionFileName(base);
     }
 
     bool hashFromString(const std::string& text, uint64_t& hash)
@@ -87,22 +157,25 @@ namespace terrain
       return error == std::errc() && end == text.data() + text.size();
     }
 
+    // Windows can refuse a rename while another process briefly holds a file, so a few short retries cover it.
     bool moveOnto(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& error)
     {
-      std::filesystem::rename(from, to, error);
-
-      if (!error)
+      for (int attempt = 0; attempt < moveAttempts; ++attempt)
       {
-        return true;
+        std::filesystem::rename(from, to, error);
+
+        if (!error)
+        {
+          return true;
+        }
+
+        if (attempt + 1 < moveAttempts)
+        {
+          std::this_thread::sleep_for(moveRetryDelay);
+        }
       }
 
-      // Windows refuses to rename over a file something else has open, so clear the destination and retry.
-      std::error_code ignored;
-      std::filesystem::remove(to, ignored);
-
-      std::filesystem::rename(from, to, error);
-
-      return !error;
+      return false;
     }
 
     bool writeFile(const std::filesystem::path& file, const std::span<const uint8_t> bytes, std::string& error)
@@ -183,6 +256,25 @@ namespace terrain
              (static_cast<uint32_t>(bytes[at + 2]) << 16) | (static_cast<uint32_t>(bytes[at + 3]) << 24);
     }
 
+    // Names the exact chunk set a region file holds, so a file is never reused for different content.
+    uint64_t regionTag(const HashByChunk& hashes)
+    {
+      std::vector<uint8_t> bytes;
+
+      for (const auto& [coord, hash] : hashes)
+      {
+        for (const int32_t component : coord)
+        {
+          putU32(bytes, static_cast<uint32_t>(component));
+        }
+
+        putU32(bytes, static_cast<uint32_t>(hash & 0xFFFFFFFFu));
+        putU32(bytes, static_cast<uint32_t>(hash >> 32));
+      }
+
+      return fingerprintBytes(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    }
+
     bool readKey(const Json& value, Key& key)
     {
       if (!value.is_array() || value.size() != 3)
@@ -192,7 +284,8 @@ namespace terrain
 
       for (size_t i = 0; i < 3; ++i)
       {
-        if (!value[i].is_number_integer())
+        if (!value[i].is_number_integer() ||
+            (value[i].is_number_unsigned() && value[i].get<uint64_t>() > static_cast<uint64_t>(INT32_MAX)))
         {
           return false;
         }
@@ -208,6 +301,79 @@ namespace terrain
       }
 
       return true;
+    }
+
+    bool readByteCount(const Json& value, uintmax_t& count)
+    {
+      if (!value.is_number_integer() || (!value.is_number_unsigned() && value.get<int64_t>() < 0))
+      {
+        return false;
+      }
+
+      count = value.get<uint64_t>();
+      return true;
+    }
+
+    // Nesting is bounded before parsing because the parser recurses once per level.
+    bool nestsWithin(const std::vector<uint8_t>& bytes, const int maxDepth)
+    {
+      int depth = 0;
+      bool inString = false;
+      bool escaped = false;
+
+      for (const uint8_t byte : bytes)
+      {
+        if (inString)
+        {
+          if (escaped)
+          {
+            escaped = false;
+          }
+          else if (byte == '\\')
+          {
+            escaped = true;
+          }
+          else if (byte == '"')
+          {
+            inString = false;
+          }
+
+          continue;
+        }
+
+        if (byte == '"')
+        {
+          inString = true;
+        }
+        else if ((byte == '[' || byte == '{') && ++depth > maxDepth)
+        {
+          return false;
+        }
+        else if ((byte == ']' || byte == '}') && depth > 0)
+        {
+          --depth;
+        }
+      }
+
+      return true;
+    }
+
+    // The shortest decimal text that reads back as the same float, so a stored size shows as 0.1 and not 0.10000000149.
+    double shortestFloatAsDouble(const float value)
+    {
+      char text[32];
+
+      for (int digits = 1; digits <= 9; ++digits)
+      {
+        std::snprintf(text, sizeof(text), "%.*g", digits, static_cast<double>(value));
+
+        if (std::strtof(text, nullptr) == value)
+        {
+          break;
+        }
+      }
+
+      return std::strtod(text, nullptr);
     }
 
     bool readUuid(const Json& value, uuids::uuid& uuid)
@@ -255,18 +421,21 @@ namespace terrain
 
     bool readRegions(const Json& value, RegionIndex& regions, std::string& what)
     {
-      if (!value.is_array())
+      if (!value.is_array() || value.size() > maxRegions)
       {
-        what = "regions is not an array";
+        what = "regions is not an array or lists too many regions";
         return false;
       }
 
       for (const Json& entry : value)
       {
         Key region;
+        RegionRecord record;
 
         if (!entry.is_object() || !entry.contains("region") || !readKey(entry["region"], region) ||
-            !entry.contains("chunks") || !entry["chunks"].is_array())
+            !entry.contains("tag") || !entry["tag"].is_string() ||
+            !hashFromString(entry["tag"].get<std::string>(), record.tag) || !entry.contains("bytes") ||
+            !readByteCount(entry["bytes"], record.bytes) || !entry.contains("chunks") || !entry["chunks"].is_array())
         {
           what = "a region entry is malformed";
           return false;
@@ -274,13 +443,12 @@ namespace terrain
 
         const Json& chunks = entry["chunks"];
 
-        if (chunks.empty() || chunks.size() > maxRegionEntries || regions.contains(region))
+        if (chunks.empty() || chunks.size() > maxRegionEntries || regions.contains(region) ||
+            record.bytes < regionHeaderBytes || record.bytes > maxRegionFileBytes)
         {
-          what = "a region entry is empty, oversized or repeated";
+          what = "a region entry is empty, oversized, repeated or has an impossible file size";
           return false;
         }
-
-        HashByChunk& hashes = regions[region];
 
         for (const Json& chunk : chunks)
         {
@@ -296,12 +464,14 @@ namespace terrain
           }
 
           if (!isValidChunkCoord({ coord[0], coord[1], coord[2] }) || regionOf(coord) != region ||
-              !hashes.emplace(coord, hash).second)
+              !record.hashes.emplace(coord, hash).second)
           {
             what = "a chunk entry is out of range, outside its region or repeated";
             return false;
           }
         }
+
+        regions.emplace(region, std::move(record));
       }
 
       return true;
@@ -313,6 +483,12 @@ namespace terrain
 
       if (!readFile(file, maxIndexBytes, bytes, error))
       {
+        return false;
+      }
+
+      if (!nestsWithin(bytes, maxIndexDepth))
+      {
+        error = failure(file, "the file nests deeper than the format allows");
         return false;
       }
 
@@ -345,8 +521,16 @@ namespace terrain
         return false;
       }
 
+      const double voxelSize = json["voxelSize"].get<double>();
+
+      if (!(std::fabs(voxelSize) <= static_cast<double>(FLT_MAX)))
+      {
+        error = failure(file, "voxelSize is outside the range of a float");
+        return false;
+      }
+
       index.description.uuid = uuid;
-      index.description.voxelSize = json["voxelSize"].get<float>();
+      index.description.voxelSize = static_cast<float>(voxelSize);
 
       if (!json.contains("palette") || !readPalette(json["palette"], index.description.palette))
       {
@@ -393,13 +577,21 @@ namespace terrain
       return out;
     }
 
-    bool decodeRegion(const std::filesystem::path& file, const Key& region, const HashByChunk& expected,
+    bool decodeRegion(const std::filesystem::path& file, const Key& region, const RegionRecord& record,
                       TerrainVolume::ChunkMap& chunks, std::string& error)
     {
       std::vector<uint8_t> bytes;
 
       if (!readFile(file, maxRegionFileBytes, bytes, error))
       {
+        return false;
+      }
+
+      const HashByChunk& expected = record.hashes;
+
+      if (bytes.size() != record.bytes)
+      {
+        error = failure(file, "the file size disagrees with the index");
         return false;
       }
 
@@ -488,9 +680,25 @@ namespace terrain
       return true;
     }
 
-    bool isRegionFileName(const std::string& name)
+    void removeLeftoverTemporaries(const std::filesystem::path& folder)
     {
-      return name.size() > 6 && name.starts_with("r.") && name.ends_with(".bin");
+      std::vector<std::filesystem::path> leftovers;
+      std::error_code listError;
+
+      for (std::filesystem::directory_iterator it(folder, listError), end; !listError && it != end;
+           it.increment(listError))
+      {
+        if (isOwnTemporaryName(pathToUtf8(it->path().filename())))
+        {
+          leftovers.push_back(it->path());
+        }
+      }
+
+      for (const std::filesystem::path& file : leftovers)
+      {
+        std::error_code removeError;
+        std::filesystem::remove(file, removeError);
+      }
     }
   }
 
@@ -526,6 +734,8 @@ namespace terrain
       return result;
     }
 
+    removeLeftoverTemporaries(folder);
+
     ChunksByRegion regions;
     RegionIndex newIndex;
 
@@ -534,39 +744,65 @@ namespace terrain
       const Key key = { coord.x, coord.y, coord.z };
       const Key region = regionOf(key);
       regions[region].emplace(key, chunk);
-      newIndex[region].emplace(key, chunk->hash());
+      newIndex[region].hashes.emplace(key, chunk->hash());
     }
 
     IndexData previous;
     std::string ignoredError;
     const bool havePrevious = readIndex(folder / indexFileName, description.uuid, previous, ignoredError);
 
-    std::set<std::filesystem::path> keptFiles;
+    std::set<std::string> keptNames;
 
-    for (const auto& [region, chunks] : regions)
+    for (auto& [region, record] : newIndex)
     {
-      const std::filesystem::path file = regionFile(folder, region);
-      keptFiles.insert(file.filename());
+      record.tag = regionTag(record.hashes);
+
+      const std::string name = regionFileName(region, record.tag);
+      const std::filesystem::path file = folder / name;
+      keptNames.insert(name);
 
       const auto old = havePrevious ? previous.regions.find(region) : previous.regions.end();
+      const bool sizeKnown = old != previous.regions.end() && old->second.tag == record.tag;
 
-      if (old != previous.regions.end() && old->second == newIndex.at(region) && std::filesystem::exists(file))
+      std::vector<uint8_t> encoded;
+      uintmax_t expectedBytes = 0;
+
+      if (sizeKnown)
       {
-        continue;
+        expectedBytes = old->second.bytes;
+      }
+      else
+      {
+        encoded = encodeRegion(regions.at(region));
+        expectedBytes = encoded.size();
       }
 
-      if (!writeFile(file, encodeRegion(chunks), result.error))
+      std::error_code sizeError;
+      const uintmax_t onDisk = std::filesystem::file_size(file, sizeError);
+
+      if (sizeError || onDisk != expectedBytes)
       {
-        return result;
+        if (encoded.empty())
+        {
+          encoded = encodeRegion(regions.at(region));
+        }
+
+        if (!writeFile(file, encoded, result.error))
+        {
+          return result;
+        }
+
+        expectedBytes = encoded.size();
+        ++result.regionsWritten;
       }
 
-      ++result.regionsWritten;
+      record.bytes = expectedBytes;
     }
 
     Json json;
     json["formatVersion"] = terrainFormatVersion;
     json["uuid"] = uuids::to_string(description.uuid);
-    json["voxelSize"] = description.voxelSize;
+    json["voxelSize"] = shortestFloatAsDouble(description.voxelSize);
     json["palette"] = Json::array();
 
     for (const TerrainMaterial& material : description.palette)
@@ -578,19 +814,28 @@ namespace terrain
 
     json["regions"] = Json::array();
 
-    for (const auto& [region, hashes] : newIndex)
+    for (const auto& [region, record] : newIndex)
     {
       Json chunkList = Json::array();
 
-      for (const auto& [coord, hash] : hashes)
+      for (const auto& [coord, hash] : record.hashes)
       {
         chunkList.push_back({ { "coord", coord }, { "hash", hashToString(hash) } });
       }
 
-      json["regions"].push_back({ { "region", region }, { "chunks", chunkList } });
+      json["regions"].push_back({ { "region", region },
+                                  { "tag", hashToString(record.tag) },
+                                  { "bytes", record.bytes },
+                                  { "chunks", chunkList } });
     }
 
     const std::string text = json.dump(2);
+
+    if (text.size() > maxIndexBytes)
+    {
+      result.error = failure(folder / indexFileName, "the index would be larger than the format allows");
+      return result;
+    }
 
     if (!writeFile(folder / indexFileName,
                    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()), result.error))
@@ -604,9 +849,9 @@ namespace terrain
     for (std::filesystem::directory_iterator it(folder, listError), end; !listError && it != end;
          it.increment(listError))
     {
-      const std::filesystem::path name = it->path().filename();
+      const std::string name = pathToUtf8(it->path().filename());
 
-      if (isRegionFileName(name.string()) && !keptFiles.contains(name))
+      if (isRegionFileName(name) && !keptNames.contains(name))
       {
         obsolete.push_back(it->path());
       }
@@ -616,7 +861,7 @@ namespace terrain
     {
       std::error_code removeError;
 
-      if (std::filesystem::remove(file, removeError))
+      if (std::filesystem::remove(file, removeError) && !removeError)
       {
         ++result.regionsRemoved;
       }
@@ -646,9 +891,9 @@ namespace terrain
 
     TerrainVolume::ChunkMap chunks;
 
-    for (const auto& [region, expected] : index.regions)
+    for (const auto& [region, record] : index.regions)
     {
-      if (!decodeRegion(regionFile(folder, region), region, expected, chunks, result.error))
+      if (!decodeRegion(folder / regionFileName(region, record.tag), region, record, chunks, result.error))
       {
         return result;
       }
