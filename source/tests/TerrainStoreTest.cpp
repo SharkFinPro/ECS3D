@@ -187,3 +187,47 @@ TEST(TerrainStore, ReconcileDropsATerrainWhoseRecordIsAnotherType)
 
   EXPECT_EQ(store.find(firstUUID), nullptr);
 }
+
+TEST(TerrainStore, VoxelSizeBoundsAreInclusive)
+{
+  terrain::TerrainStore store;
+
+  EXPECT_NE(store.create(describe(firstUUID, terrain::minVoxelSize)), nullptr);
+  EXPECT_NE(store.create(describe(secondUUID, terrain::maxVoxelSize)), nullptr);
+
+  const float belowMin = std::nextafter(terrain::minVoxelSize, 0.0f);
+  const float aboveMax = std::nextafter(terrain::maxVoxelSize, 1.0e9f);
+  EXPECT_EQ(store.create(describe(thirdUUID, belowMin)), nullptr);
+  EXPECT_EQ(store.create(describe(thirdUUID, aboveMax)), nullptr);
+  EXPECT_EQ(store.create(describe(thirdUUID, std::numeric_limits<float>::denorm_min())), nullptr);
+  EXPECT_EQ(store.terrains().size(), 2u);
+}
+
+TEST(TerrainStore, MaterialNamesMustBeValidUtf8WithoutControlCharacters)
+{
+  const auto createWithName = [](const std::string& name) {
+    terrain::TerrainStore store;
+    auto description = describe(firstUUID);
+    description.palette.push_back({ name, {}, {} });
+
+    return store.create(description) != nullptr;
+  };
+
+  EXPECT_TRUE(createWithName("grass"));
+  EXPECT_TRUE(createWithName("caf\xC3\xA9 \xE2\x82\xAC \xF0\x9F\x8C\xB2"));
+  EXPECT_TRUE(createWithName(""));
+
+  EXPECT_FALSE(createWithName("a\xFF" "b"));
+  EXPECT_FALSE(createWithName("a\x80" "b"));
+  EXPECT_FALSE(createWithName("a\xC3"));
+  EXPECT_FALSE(createWithName("a\xE2\x82"));
+  EXPECT_FALSE(createWithName("\xC3" "a"));
+  EXPECT_FALSE(createWithName("\xC0\xAF"));
+  EXPECT_FALSE(createWithName("\xE0\x80\xAF"));
+  EXPECT_FALSE(createWithName("\xED\xA0\x80"));
+  EXPECT_FALSE(createWithName("\xF4\x90\x80\x80"));
+  EXPECT_FALSE(createWithName("a\x01" "b"));
+  EXPECT_FALSE(createWithName(std::string("a\0b", 3)));
+  EXPECT_FALSE(createWithName("a\x7F" "b"));
+  EXPECT_FALSE(createWithName("a\nb"));
+}

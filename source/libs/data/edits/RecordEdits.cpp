@@ -606,6 +606,11 @@ std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const
     return std::nullopt;
   }
 
+  if (record->type == AssetType::Terrain)
+  {
+    return std::nullopt;
+  }
+
   if (record->type == AssetType::Scene)
   {
     const auto scene = sceneManager.getScene(assetUUID.value());

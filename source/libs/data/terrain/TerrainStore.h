@@ -17,6 +17,7 @@ namespace terrain
   struct TerrainMaterial
   {
     std::string name;
+    // A nil uuid means no texture.
     uuids::uuid albedoTexture;
     uuids::uuid specularTexture;
   };
@@ -26,9 +27,13 @@ namespace terrain
     uuids::uuid uuid;
     float voxelSize = 2.5f;
     std::vector<TerrainMaterial> palette;
+    // The chunk count a snapshot carries so a receiver knows when it holds the whole terrain; the store does not
+    // derive it.
     uint32_t chunkCount = 0;
   };
 
+  inline constexpr float minVoxelSize = 1.0e-3f;
+  inline constexpr float maxVoxelSize = 1000.0f;
   inline constexpr size_t maxPaletteSize = 255;
   inline constexpr size_t maxMaterialNameLength = 256;
 
@@ -43,6 +48,7 @@ namespace terrain
 
     [[nodiscard]] std::shared_ptr<TerrainVolume> find(const uuids::uuid& uuid) const;
 
+    // Valid until the next remove, create or reconcile.
     [[nodiscard]] const TerrainDescription* description(const uuids::uuid& uuid) const;
 
     bool remove(const uuids::uuid& uuid);

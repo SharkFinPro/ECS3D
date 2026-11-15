@@ -7,7 +7,8 @@
 
 namespace {
   constexpr std::array concreteTypes {
-    AssetType::Model, AssetType::Texture, AssetType::Scene, AssetType::Script, AssetType::Prefab
+    AssetType::Model, AssetType::Texture, AssetType::Scene, AssetType::Script, AssetType::Prefab,
+    AssetType::Terrain
   };
 }
 

@@ -48,7 +48,8 @@ asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it
 before state from the replicated view while that view still holds it, and records what comes back; an edit
 nothing faithful can be derived for (a stale view, an op with no matching kind, a creating op with no
 usable uuid) is logged at debug and
-skipped rather than refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
+skipped rather than refused. Adding or removing a terrain asset is not recorded either, because its record does
+not carry the volume and an undo would bring back an empty terrain. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
 and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. A `renameAsset` of a scene

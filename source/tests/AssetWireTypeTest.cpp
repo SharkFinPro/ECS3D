@@ -7,7 +7,8 @@
 
 namespace {
   constexpr std::array knownTypes{
-    AssetType::Model, AssetType::Texture, AssetType::Script, AssetType::Prefab, AssetType::Scene
+    AssetType::Model, AssetType::Texture, AssetType::Script, AssetType::Prefab, AssetType::Scene,
+    AssetType::Terrain
   };
 }
 
@@ -29,6 +30,7 @@ TEST(AssetWireType, WireStringsArePinnedToTheDocumentedNames)
   EXPECT_EQ(edits::assetTypeToWireString(AssetType::Script), "script");
   EXPECT_EQ(edits::assetTypeToWireString(AssetType::Prefab), "prefab");
   EXPECT_EQ(edits::assetTypeToWireString(AssetType::Scene), "scene");
+  EXPECT_EQ(edits::assetTypeToWireString(AssetType::Terrain), "terrain");
 }
 
 TEST(AssetWireType, UnknownTypeHasNoWireStringAndAnUnrecognizedStringIsUnknown)

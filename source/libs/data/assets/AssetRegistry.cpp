@@ -18,7 +18,7 @@ namespace {
 
   bool isCanonicalTerrainRecord(const AssetRecord& record)
   {
-    return record.path == terrainAssetPath(record.uuid) && record.className.empty() && record.body.empty();
+    return !record.uuid.is_nil() && record.path == terrainAssetPath(record.uuid) && record.className.empty() && record.body.empty();
   }
 }
 

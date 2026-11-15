@@ -8,6 +8,9 @@
 #include "scenes/SceneManager.h"
 
 #include <Protocol.h>
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
 #include <nlohmann/json.hpp>
 #include <string>
 
@@ -796,8 +799,60 @@ TEST(AssetRegistry, TerrainRecordWithANonCanonicalPathIsRefused)
                            .body = "{}" });
   EXPECT_EQ(registry.getByUUID(modelUUID), nullptr);
 
+  registry.registerAsset({ .uuid = uuids::uuid{}, .type = AssetType::Terrain,
+                           .path = terrainAssetPath(uuids::uuid{}) });
+  EXPECT_TRUE(registry.getAssets().empty());
+
+  const auto letteredUUID = uuidFrom("abcdefab-cdef-abcd-efab-cdefabcdefab");
+  auto upperPath = terrainAssetPath(letteredUUID);
+  std::transform(upperPath.begin() + 8, upperPath.end(), upperPath.begin() + 8,
+                 [](const unsigned char c) { return std::toupper(c); });
+  ASSERT_NE(upperPath, terrainAssetPath(letteredUUID));
+  registry.registerAsset({ .uuid = letteredUUID, .type = AssetType::Terrain, .path = upperPath });
+  EXPECT_EQ(registry.getByUUID(letteredUUID), nullptr);
+  registry.registerAsset({ .uuid = letteredUUID, .type = AssetType::Terrain, .path = terrainAssetPath(letteredUUID) });
+  EXPECT_NE(registry.getByUUID(letteredUUID), nullptr);
+
   registry.registerAsset({ .uuid = modelUUID, .type = AssetType::Terrain, .path = terrainAssetPath(modelUUID) });
   EXPECT_NE(registry.getByUUID(modelUUID), nullptr);
+}
+
+TEST(AssetRegistry, HostileTerrainEntriesAreRefusedOnJsonLoadAndWireUnpack)
+{
+  const auto entry = [](const std::string& path) {
+    return nlohmann::json{ { "filePath", path }, { "uuid", uuids::to_string(modelUUID) } };
+  };
+  const auto loadJson = [&](const std::string& path) {
+    AssetRegistry registry;
+    registry.loadFromJSON({ { "terrains", nlohmann::json::array({ entry(path) }) } });
+
+    return registry.getByUUID(modelUUID) != nullptr;
+  };
+  const auto unpackWire = [](const std::string& path) {
+    net::Message message(net::MessageType::snapshot);
+    message.write(static_cast<uint32_t>(1));
+    message.write(AssetType::Terrain);
+    message.writeString(uuids::to_string(modelUUID));
+    message.writeString(path);
+    message.writeString("");
+    message.writeString("");
+    message.writeString("");
+    message.write(ScriptKind::Either);
+
+    net::MessageReader reader(message);
+    AssetRegistry registry;
+    registry.unpack(reader);
+
+    return registry.getByUUID(modelUUID) != nullptr;
+  };
+
+  EXPECT_TRUE(loadJson(terrainAssetPath(modelUUID)));
+  EXPECT_TRUE(unpackWire(terrainAssetPath(modelUUID)));
+
+  EXPECT_FALSE(loadJson("terrain/../x"));
+  EXPECT_FALSE(unpackWire("terrain/../x"));
+  EXPECT_FALSE(loadJson("C:/evil/x"));
+  EXPECT_FALSE(unpackWire("C:/evil/x"));
 }
 
 TEST(AssetRegistry, TerrainWireTypeMapsBothWays)

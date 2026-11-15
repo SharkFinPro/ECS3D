@@ -79,6 +79,7 @@ TEST(AssetDragDropPayloadIdTest,SceneIdIsDistinctFromEveryOtherType)
     EXPECT_STRNE(id, assetDragDrop::scene);
   }
 
+  EXPECT_EQ(assetDragDrop::payloadId(AssetType::Terrain), nullptr);
   EXPECT_EQ(assetDragDrop::payloadId(AssetType::Unknown), nullptr);
 }
 
