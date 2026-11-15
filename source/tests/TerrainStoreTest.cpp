@@ -287,3 +287,85 @@ TEST(TerrainStore, ApplyDescriptionRefusesAnUnknownUuidOrAnInvalidDescription)
 
   EXPECT_TRUE(store.applyDescription(describe(firstUUID, 4.0f)));
 }
+
+TEST(TerrainStore, AdoptInstallsTheGivenVolumeAndReplacesAnEntryWithTheSameUuid)
+{
+  terrain::TerrainStore store;
+  const auto original = store.create(describe(firstUUID));
+  ASSERT_NE(original, nullptr);
+
+  auto adopted = std::make_shared<terrain::TerrainVolume>(4.0f);
+  adopted->setChunk({ 0, 0, 0 }, solidChunk());
+
+  auto description = describe(firstUUID, 4.0f);
+  description.palette.push_back({ "rock", {}, {} });
+
+  EXPECT_TRUE(store.adopt(description, adopted));
+  EXPECT_EQ(store.find(firstUUID), adopted);
+  EXPECT_NE(store.find(firstUUID), original);
+  ASSERT_NE(store.description(firstUUID), nullptr);
+  EXPECT_EQ(store.description(firstUUID)->voxelSize, 4.0f);
+  EXPECT_EQ(store.description(firstUUID)->palette.size(), 1u);
+  EXPECT_EQ(store.terrains().size(), 1u);
+
+  EXPECT_TRUE(store.adopt(describe(secondUUID), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  EXPECT_EQ(store.terrains().size(), 2u);
+}
+
+TEST(TerrainStore, AdoptRefusalsLeaveTheOldEntryAlone)
+{
+  terrain::TerrainStore store;
+  const auto original = store.create(describe(firstUUID));
+  ASSERT_NE(original, nullptr);
+
+  EXPECT_FALSE(store.adopt(describe(firstUUID, 0.0f), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  EXPECT_FALSE(store.adopt(describe(firstUUID), nullptr));
+  EXPECT_FALSE(store.adopt(describe(firstUUID, 2.5f), std::make_shared<terrain::TerrainVolume>(3.0f)));
+  EXPECT_FALSE(store.adopt(describe(secondUUID), nullptr));
+
+  EXPECT_EQ(store.find(firstUUID), original);
+  EXPECT_EQ(store.description(firstUUID)->voxelSize, 2.5f);
+  EXPECT_EQ(store.find(secondUUID), nullptr);
+
+  // Positive control: a matching adopt does take effect.
+  const auto good = std::make_shared<terrain::TerrainVolume>(2.5f);
+  EXPECT_TRUE(store.adopt(describe(firstUUID), good));
+  EXPECT_EQ(store.find(firstUUID), good);
+}
+
+TEST(TerrainStore, ResetVolumesGivesEveryTerrainAFreshEmptyVolumeAndKeepsTheDescriptions)
+{
+  terrain::TerrainStore store;
+  auto description = describe(firstUUID, 4.0f);
+  description.palette.push_back({ "grass", secondUUID, thirdUUID });
+  const auto first = store.create(description);
+  const auto second = store.create(describe(secondUUID, 3.0f));
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+
+  first->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+  second->setChunk({ 1, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+  ASSERT_FALSE(first->chunks().empty());
+
+  store.resetVolumes();
+
+  const auto resetFirst = store.find(firstUUID);
+  const auto resetSecond = store.find(secondUUID);
+  ASSERT_NE(resetFirst, nullptr);
+  ASSERT_NE(resetSecond, nullptr);
+  EXPECT_NE(resetFirst, first);
+  EXPECT_NE(resetSecond, second);
+  EXPECT_TRUE(resetFirst->chunks().empty());
+  EXPECT_TRUE(resetSecond->chunks().empty());
+  EXPECT_NEAR(resetFirst->voxelSize(), 4.0f, 1.0e-6f);
+  EXPECT_NEAR(resetSecond->voxelSize(), 3.0f, 1.0e-6f);
+
+  // Positive control: the old volumes still hold their chunks, so the reset replaced them rather than clearing them.
+  EXPECT_FALSE(first->chunks().empty());
+
+  ASSERT_NE(store.description(firstUUID), nullptr);
+  EXPECT_NEAR(store.description(firstUUID)->voxelSize, 4.0f, 1.0e-6f);
+  ASSERT_EQ(store.description(firstUUID)->palette.size(), 1u);
+  EXPECT_EQ(store.description(firstUUID)->palette[0].name, "grass");
+  EXPECT_EQ(store.terrains().size(), 2u);
+}

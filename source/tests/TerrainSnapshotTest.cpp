@@ -351,3 +351,61 @@ TEST(TerrainSnapshot, ATerrainCountOverTheBoundMakesUnpackThrowAndLeavesTheLiveP
 
   receiver.expectUntouched();
 }
+
+TEST(TerrainSnapshot, AProjectLoadResetsTheVolumeOfATerrainItsBlobNamesAgain)
+{
+  Project sender;
+  sender.assetRegistry.registerAsset(terrainRecord(firstUUID));
+  sender.store.create(grassDescription(firstUUID, 4.0f));
+  const auto blob = packed(sender.packer);
+
+  Project receiver;
+  receiver.assetRegistry.registerAsset(terrainRecord(firstUUID));
+  const auto old = receiver.store.create(grassDescription(firstUUID, 4.0f));
+  old->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+
+  receiver.packer.unpack(blob);
+
+  // Positive control: unpack alone keeps the old project's voxels, which is what the reset is for.
+  EXPECT_EQ(receiver.store.find(firstUUID), old);
+  EXPECT_FALSE(old->chunks().empty());
+
+  receiver.store.resetVolumes();
+
+  const auto fresh = receiver.store.find(firstUUID);
+  ASSERT_NE(fresh, nullptr);
+  EXPECT_NE(fresh, old);
+  EXPECT_TRUE(fresh->chunks().empty());
+
+  const auto* description = receiver.store.description(firstUUID);
+  ASSERT_NE(description, nullptr);
+  EXPECT_NEAR(description->voxelSize, 4.0f, 1.0e-6f);
+  ASSERT_EQ(description->palette.size(), 1u);
+  EXPECT_EQ(description->palette[0].name, "grass");
+}
+
+TEST(TerrainSnapshot, AMalformedProjectBlobLeavesTheVolumeChunksInPlaceBecauseTheResetIsNeverReached)
+{
+  GuardedReceiver receiver;
+  const auto volume = receiver.project.store.find(firstUUID);
+  ASSERT_NE(volume, nullptr);
+  volume->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+
+  // The server runs unpack and then resetVolumes in one try block, so a throw skips the reset.
+  try
+  {
+    receiver.project.packer.unpack(withOneTerrain(0.0f, 0));
+    receiver.project.store.resetVolumes();
+    ADD_FAILURE() << "unpack should have thrown";
+  }
+  catch (const std::exception&)
+  {
+  }
+
+  EXPECT_EQ(receiver.project.store.find(firstUUID), volume);
+  EXPECT_FALSE(volume->chunks().empty());
+
+  // Positive control: the reset does replace the volume once it is reached.
+  receiver.project.store.resetVolumes();
+  EXPECT_NE(receiver.project.store.find(firstUUID), volume);
+}

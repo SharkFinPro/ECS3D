@@ -12,6 +12,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <terrain/TerrainBinding.h>
+#include <terrain/TerrainFiles.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -33,6 +34,7 @@
 #include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -133,6 +135,30 @@ void ServerApp::loadStartupProject()
     if (loaded)
     {
       m_terrainStore->reconcile(*m_assetRegistry);
+
+      if (m_projectRoot.empty())
+      {
+        if (std::ranges::any_of(m_assetRegistry->getAssets(),
+                                [](const auto& item) { return item.second.type == AssetType::Terrain; }))
+        {
+          Log::warn(LogCategory::server, "Terrain files cannot be read without a project folder");
+        }
+      }
+      else
+      {
+        const auto report = terrain::loadProjectTerrains(m_projectRoot, *m_assetRegistry, *m_terrainStore);
+        for (const auto& error : report.errors)
+        {
+          Log::warn(LogCategory::server, "Terrain not loaded: " + error);
+        }
+
+        if (report.loaded + report.missing + report.errors.size() > 0)
+        {
+          Log::info(LogCategory::server, "Loaded " + std::to_string(report.loaded) + " terrain(s) from "
+            + pathToUtf8(m_projectRoot) + " (" + std::to_string(report.missing) + " not saved yet)");
+        }
+      }
+
       m_projectPacker->setProjectFingerprint(fingerprintProjectFile(location.projectFile));
     }
 

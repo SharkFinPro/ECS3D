@@ -2,6 +2,7 @@
 #include <ProjectPacker.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <CollisionSystem.h>
@@ -31,6 +32,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     // Same packed shape as a snapshot: unpack clears + rebuilds the AssetRegistry/SceneManager and loads
     // the current scene. ProjectSerializer stays the JSON path for file save/load.
     m_projectPacker->unpack(message);
+    m_terrainStore->resetVolumes();
   }
   catch (const std::exception& e)
   {

@@ -2,6 +2,7 @@
 #include "assets/AssetRegistry.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace terrain
 {
@@ -123,6 +124,18 @@ namespace terrain
     return it != m_terrains.end() ? &it->second.description : nullptr;
   }
 
+  bool TerrainStore::adopt(const TerrainDescription& description, std::shared_ptr<TerrainVolume> volume)
+  {
+    if (!isValidDescription(description) || volume == nullptr || volume->voxelSize() != description.voxelSize)
+    {
+      return false;
+    }
+
+    m_terrains.insert_or_assign(description.uuid, Entry{ description, std::move(volume) });
+
+    return true;
+  }
+
   bool TerrainStore::remove(const uuids::uuid& uuid)
   {
     return m_terrains.erase(uuid) > 0;
@@ -145,6 +158,14 @@ namespace terrain
     entry.description = description;
 
     return true;
+  }
+
+  void TerrainStore::resetVolumes()
+  {
+    for (auto& [uuid, entry] : m_terrains)
+    {
+      entry.volume = std::make_shared<TerrainVolume>(entry.description.voxelSize);
+    }
   }
 
   std::vector<uuids::uuid> TerrainStore::terrains() const
