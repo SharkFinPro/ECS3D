@@ -24,6 +24,24 @@ namespace {
   {
     return terrain::decodeDistance(volume.distanceAtSample({ x, y, z }));
   }
+
+  // Heights in terrain units: the scale below maps a pixel value to the same number.
+  constexpr float pixelScale = 65535.0f;
+
+  std::vector<uint16_t> planePixels(const int width, const int rows, const int perU, const int perV)
+  {
+    std::vector<uint16_t> pixels(static_cast<size_t>(width * rows));
+
+    for (int v = 0; v < rows; ++v)
+    {
+      for (int u = 0; u < width; ++u)
+      {
+        pixels[static_cast<size_t>(v * width + u)] = static_cast<uint16_t>(perU * u + perV * v);
+      }
+    }
+
+    return pixels;
+  }
 }
 
 TEST(TerrainGeneratorsTest, FillFlatMatchesTheAnalyticDistanceInTheBand)
@@ -83,6 +101,8 @@ TEST(TerrainGeneratorsTest, FillFlatRefusesInvalidArguments)
   EXPECT_TRUE(terrain::fillFlat(volume, { 64, 64 }, nan, 20.0f, 4).empty());
   EXPECT_TRUE(terrain::fillFlat(volume, { 64, 64 }, 10.0f, nan, 4).empty());
   EXPECT_TRUE(terrain::fillFlat(volume, { 0, 64 }, 10.0f, 20.0f, 4).empty());
+  EXPECT_TRUE(terrain::fillFlat(volume, { 64, 0 }, 10.0f, 20.0f, 4).empty());
+  EXPECT_TRUE(terrain::fillFlat(volume, { 64, 64 }, 10.0f, -5.0f, 4).empty());
   EXPECT_TRUE(terrain::fillFlat(volume, { 64, 64 }, 10.0f, 20.0f, terrain::reservedMaterial).empty());
   EXPECT_TRUE(terrain::fillFlat(volume, { 1 << 20, 1 << 20 }, 10.0f, 20.0f, 4).empty());
 }
@@ -160,6 +180,15 @@ TEST(TerrainGeneratorsTest, HeightmapRefusesInvalidArguments)
   EXPECT_TRUE(terrain::fillFromHeightmap(volume, { {}, 0, 16 }, 100.0f, 10.0f, 4).empty());
   EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 16 }, -1.0f, 10.0f, 4).empty());
   EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 16 }, 100.0f, 0.0f, 4).empty());
+  EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 16 }, std::numeric_limits<float>::quiet_NaN(), 10.0f, 4)
+                .empty());
+  EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 16 }, std::numeric_limits<float>::infinity(), 10.0f, 4)
+                .empty());
+  EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 16 }, 100.0f, std::numeric_limits<float>::quiet_NaN(),
+                                         4).empty());
+  EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 16 }, 100.0f, 10.0f, terrain::reservedMaterial)
+                .empty());
+  EXPECT_TRUE(terrain::fillFromHeightmap(volume, { pixels, 16, 0 }, 100.0f, 10.0f, 4).empty());
 }
 
 TEST(TerrainGeneratorsTest, GeneratingKeepsSamplesOutsideTheFootprint)
@@ -177,4 +206,117 @@ TEST(TerrainGeneratorsTest, GeneratingKeepsSamplesOutsideTheFootprint)
   EXPECT_EQ(volume.materialAtSample({ 50, 3, 3 }), 7);
   EXPECT_NE(volume.distanceAtSample({ 35, 3, 3 }), 123);
   EXPECT_EQ(volume.materialAtSample({ 35, 3, 3 }), 4);
+}
+
+TEST(TerrainGeneratorsTest, SteepHeightmapLeavesNoJumpAtTheTopOfTheWrittenExtent)
+{
+  const auto pixels = planePixels(48, 32, 5, 0);
+  terrain::TerrainVolume volume(voxel);
+  terrain::commit(volume, terrain::fillFromHeightmap(volume, { pixels, 48, 32 }, pixelScale, 10.0f, 4));
+  ASSERT_FALSE(volume.chunks().empty());
+
+  for (int z = 0; z < 32; z += 5)
+  {
+    for (int x = 0; x < 48; ++x)
+    {
+      for (int y = -32; y < 110; ++y)
+      {
+        EXPECT_LE(std::abs(distanceAt(volume, x, y + 1, z) - distanceAt(volume, x, y, z)), 1.0f + 1e-3f)
+          << x << " " << y << " " << z;
+      }
+    }
+  }
+
+  EXPECT_EQ(volume.distanceAtSample({ 47, 110, 0 }), terrain::airDistance);
+  EXPECT_NEAR(distanceAt(volume, 47, 94, 0), 0.0f, 5e-4f);
+}
+
+TEST(TerrainGeneratorsTest, NonSquareHeightmapCoversItsColumnsAndRows)
+{
+  const auto pixels = planePixels(48, 32, 5, 0);
+  terrain::TerrainVolume volume(voxel);
+  terrain::commit(volume, terrain::fillFromHeightmap(volume, { pixels, 48, 32 }, pixelScale, 10.0f, 4));
+
+  bool sawChunkX0 = false;
+  bool sawChunkX1 = false;
+
+  for (const auto& [coord, chunk] : volume.chunks())
+  {
+    EXPECT_EQ(coord.z, 0);
+    sawChunkX0 = sawChunkX0 || coord.x == 0;
+    sawChunkX1 = sawChunkX1 || coord.x == 1;
+    EXPECT_LE(coord.x, 1);
+  }
+
+  EXPECT_TRUE(sawChunkX0);
+  EXPECT_TRUE(sawChunkX1);
+
+  const float norm = std::sqrt(5.0f);
+  EXPECT_NEAR(distanceAt(volume, 47, 94, 31), 0.0f, 5e-4f);
+  EXPECT_NEAR(distanceAt(volume, 47, 95, 31), 1.0f / norm, 5e-4f);
+  EXPECT_NEAR(distanceAt(volume, 10, 20, 31), 0.0f, 5e-4f);
+  EXPECT_EQ(volume.distanceAtSample({ 10, 20, 32 }), terrain::airDistance);
+}
+
+TEST(TerrainGeneratorsTest, TiltedPlaneMatchesTheAnalyticDistanceInBothDirections)
+{
+  const auto pixels = planePixels(48, 32, 3, 5);
+  terrain::TerrainVolume volume(voxel);
+  terrain::commit(volume, terrain::fillFromHeightmap(volume, { pixels, 48, 32 }, pixelScale, 10.0f, 4));
+
+  const float norm = std::sqrt(1.0f + 1.2f * 1.2f + 2.0f * 2.0f);
+  int checked = 0;
+
+  for (const auto [x, z] : { std::pair{ 20, 15 }, std::pair{ 30, 5 } })
+  {
+    const float height = static_cast<float>(3 * x + 5 * z);
+
+    for (const int offset : { -1, 0, 1 })
+    {
+      const int y = static_cast<int>(height / voxel) + offset;
+      EXPECT_NEAR(distanceAt(volume, x, y, z), (static_cast<float>(y) * voxel - height) / norm / voxel, 5e-4f);
+      ++checked;
+    }
+  }
+
+  EXPECT_EQ(checked, 6);
+}
+
+TEST(TerrainGeneratorsTest, GeneratingPreservesSamplesAboveBelowAndBesideTheFootprint)
+{
+  std::vector<int16_t> distances(terrain::samplesPerChunk, 123);
+  distances[0] = 124;
+
+  terrain::TerrainVolume volume(voxel);
+
+  for (const terrain::ChunkCoord coord : { terrain::ChunkCoord{ 0, 0, 0 }, terrain::ChunkCoord{ 0, -2, 0 } })
+  {
+    volume.setChunk(coord, terrain::TerrainChunk::dense(distances, std::vector<uint8_t>(terrain::samplesPerChunk, 7)));
+  }
+
+  terrain::commit(volume, terrain::fillFlat(volume, { 20, 20 }, 10.0f, 20.0f, 4));
+
+  EXPECT_EQ(volume.distanceAtSample({ 5, 20, 5 }), 123);
+  EXPECT_EQ(volume.distanceAtSample({ 5, 3, 25 }), 123);
+  EXPECT_EQ(volume.distanceAtSample({ 5, -40, 5 }), 123);
+  EXPECT_EQ(volume.materialAtSample({ 5, 3, 25 }), 7);
+  EXPECT_NE(volume.distanceAtSample({ 5, 3, 5 }), 123);
+  EXPECT_EQ(volume.materialAtSample({ 5, 3, 5 }), 4);
+}
+
+TEST(TerrainGeneratorsTest, RegeneratingTheSameTerrainChangesNothing)
+{
+  const auto pixels = planePixels(48, 32, 5, 2);
+  terrain::TerrainVolume flat(voxel);
+  terrain::TerrainVolume mapped(voxel);
+
+  const auto flatEdits = terrain::fillFlat(flat, { 64, 64 }, 10.0f, 20.0f, 4);
+  const auto mappedEdits = terrain::fillFromHeightmap(mapped, { pixels, 48, 32 }, pixelScale, 10.0f, 4);
+  ASSERT_FALSE(flatEdits.empty());
+  ASSERT_FALSE(mappedEdits.empty());
+  terrain::commit(flat, flatEdits);
+  terrain::commit(mapped, mappedEdits);
+
+  EXPECT_TRUE(terrain::fillFlat(flat, { 64, 64 }, 10.0f, 20.0f, 4).empty());
+  EXPECT_TRUE(terrain::fillFromHeightmap(mapped, { pixels, 48, 32 }, pixelScale, 10.0f, 4).empty());
 }

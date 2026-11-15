@@ -17,9 +17,10 @@ namespace terrain
   };
 
   // Both generators write sample columns x in [0, columns) and z in [0, rows), heights in terrain-local units, from
-  // the chunk boundary at or below the lowest surface minus thickness up to the first sample above the band. Every
-  // sample in that box is overwritten, so chunks below the surface collapse to uniform solid; samples outside it are
-  // kept. Both return empty edits for an invalid argument or a box over maxEditChunks.
+  // the chunk boundary at or below the lowest surface minus thickness up to the first sample above the band, which on
+  // a slope lies bandVoxels times the steepest slope-corrected norm above the highest surface. Every sample in that
+  // box is overwritten, so chunks below the surface collapse to uniform solid; samples outside it are kept. Both
+  // return empty edits for an invalid argument or a box over maxEditChunks.
   [[nodiscard]] ChunkEdits fillFlat(const TerrainVolume& volume, glm::ivec2 sizeSamples, float groundHeight,
                                     float thickness, uint8_t material);
 
