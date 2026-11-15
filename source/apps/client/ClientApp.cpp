@@ -7,6 +7,8 @@
 #include <PlayerSlots.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainBinding.h>
+#include <terrain/TerrainStore.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -52,6 +54,7 @@ ClientApp::ClientApp(ConnectOptions options)
     m_host(std::make_shared<ManagedHost>()),
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
+    m_terrainStore(std::make_shared<terrain::TerrainStore>()),
     m_sceneManager(std::make_shared<SceneManager>()),
     m_settings(std::make_unique<SettingsStore>(clientDisplaySettings::defaultFile()))
 {
@@ -63,7 +66,8 @@ ClientApp::ClientApp(ConnectOptions options)
 
   registerDataComponents(*m_componentRegistry);
 
-  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
+  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry,
+                                                  m_terrainStore.get());
 
   createRenderer();
 
@@ -462,6 +466,8 @@ void ClientApp::variableUpdate() const
 {
   {
     ECS3D_PROFILE_SCOPE("Scene prep");
+
+    terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
 
     RenderSystem::setGridVisible(*m_assetCache, false);
 

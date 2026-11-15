@@ -10,6 +10,8 @@
 #include <ProjectPacker.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainBinding.h>
+#include <terrain/TerrainStore.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -45,6 +47,7 @@ ServerApp::ServerApp(LaunchOptions options)
     m_host(std::make_shared<ManagedHost>()),
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
+    m_terrainStore(std::make_shared<terrain::TerrainStore>()),
     m_sceneManager(std::make_shared<SceneManager>()),
     m_lane("server", 512),
     m_previousTime(std::chrono::steady_clock::now())
@@ -63,7 +66,8 @@ ServerApp::ServerApp(LaunchOptions options)
   registerDataComponents(*m_componentRegistry);
 
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
-  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
+  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry,
+                                                  m_terrainStore.get());
   m_collisionSystem = std::make_shared<CollisionSystem>();
   m_netServer = std::make_shared<net::NetServer>(std::make_shared<net::ManagedServerTransport>(m_host));
 
@@ -125,6 +129,7 @@ void ServerApp::loadStartupProject()
     m_projectRoot = location.root;
 
     const bool loaded = m_projectSerializer->load(location.projectFile.string());
+    m_terrainStore->reconcile(*m_assetRegistry);
     if (loaded)
     {
       m_projectPacker->setProjectFingerprint(fingerprintProjectFile(location.projectFile));
@@ -519,6 +524,8 @@ void ServerApp::fixedUpdate(const float dt) const
   {
     return;
   }
+
+  terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
 
   const auto scene = m_sceneManager->getCurrentScene();
 

@@ -11,6 +11,10 @@ the JSON path for file save/load) — sent to the joining connection alone on jo
 everyone after any structural edit; every view rebuilds from it, atomically (a malformed packet leaves
 the current project intact). Per-tick motion goes as a compact binary **stateDelta**
 (uuid + local transform per object; `data/Replication.{h,cpp}`).
+A snapshot ends with the terrain descriptions (uuid, voxel size, chunk count, palette) of every terrain in the
+receiver-side `TerrainStore`; chunk data never rides it. Unpacking reconciles the store with the new asset registry and
+applies each description in place, so the store survives snapshot rebuilds and a terrain keeps its volume unless its
+voxel size changed.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. A third direction exists for `serverLog` alone: server → editor connections
