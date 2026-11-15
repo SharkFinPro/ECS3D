@@ -73,7 +73,7 @@ larger of the object's x and z scale, and its half-height with y. `terrain/` hol
 `namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample `TerrainChunk`s that an edit swaps
 copy-on-write, `encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and
 gradient from it, which `raycast` sphere-traces with absent chunks skipped.
-`TerrainOps` turns an operation into `ChunkEdits` (replacement chunks, null for air) through the shared `editSamples`, which caps an edit at `maxEditChunks`, and `commit` applies them; `fillFlat`/`fillFromHeightmap` generate ground that ends at a chunk boundary.
+`TerrainOps` turns an operation into `ChunkEdits` (replacement chunks, null for air) through the shared `editSamples`, which caps an edit at `maxEditChunks`, and `commit` applies them; `fillFlat`/`fillFromHeightmap` generate ground that ends at a chunk boundary. Brushes (`BrushOp`, add/subtract/smooth/flatten/paint) name their `dirtyBox` before `applyBrush` runs and refuse a radius over `maxBrushRadiusVoxels`, and `pack`/`unpackBrushOp` are their wire form.
 **No Vulkan, no ImGui.**
 
 ## ECS3DRender
