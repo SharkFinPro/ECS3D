@@ -3,7 +3,6 @@
 #include "assets/AssetRegistry.h"
 #include "TerrainFormat.h"
 #include "TerrainTypes.h"
-#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <cstdint>
@@ -74,19 +73,42 @@ namespace terrain
       auto temporary = file;
       temporary += temporarySuffix;
 
+      std::string problem;
+
       {
         std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        out.flush();
 
         if (!out)
         {
-          out.close();
-          std::error_code ignored;
-          std::filesystem::remove(temporary, ignored);
-          error = failure(temporary, "could not write the file");
-          return false;
+          problem = "could not open the temporary file for writing";
         }
+        else
+        {
+          out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+          out.flush();
+
+          if (!out)
+          {
+            problem = "could not write the temporary file";
+          }
+          else
+          {
+            out.close();
+
+            if (out.fail())
+            {
+              problem = "could not close the temporary file";
+            }
+          }
+        }
+      }
+
+      if (!problem.empty())
+      {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        error = failure(temporary, problem);
+        return false;
       }
 
       std::error_code moveError;
@@ -206,9 +228,21 @@ namespace terrain
   {
     TerrainSaveResult result;
 
-    if (root.empty() || description.uuid.is_nil() || !isValidDescription(description))
+    if (root.empty())
     {
-      result.error = "saveTerrain: the root is empty or the description is invalid";
+      result.error = "saveTerrain: the root is empty";
+      return result;
+    }
+
+    if (description.uuid.is_nil())
+    {
+      result.error = "saveTerrain: the description's uuid is nil";
+      return result;
+    }
+
+    if (!isValidDescription(description))
+    {
+      result.error = "saveTerrain: the description is invalid";
       return result;
     }
 
@@ -257,35 +291,53 @@ namespace terrain
       keptNames.insert(name);
 
       const auto old = havePrevious ? previous.regions.find(region) : previous.regions.end();
-      const bool sizeKnown = old != previous.regions.end() && old->second.tag == record.tag;
+      const bool expectationKnown = old != previous.regions.end() && old->second.tag == record.tag;
 
       std::optional<std::vector<uint8_t>> encoded;
       uintmax_t expectedBytes = 0;
+      uint64_t expectedHash = 0;
 
-      if (sizeKnown)
+      if (expectationKnown)
       {
         expectedBytes = old->second.bytes;
+        expectedHash = old->second.fileHash;
       }
       else
       {
         encoded = encodeRegion(regions.at(region));
-        expectedBytes = encoded.has_value() ? encoded->size() : 0;
-      }
-
-      std::error_code sizeError;
-      const uintmax_t onDisk = std::filesystem::file_size(file, sizeError);
-
-      if (sizeError || onDisk != expectedBytes)
-      {
-        if (!encoded.has_value())
-        {
-          encoded = encodeRegion(regions.at(region));
-        }
 
         if (!encoded.has_value())
         {
           result.error = failure(file, "the region could not be encoded");
           return result;
+        }
+
+        expectedBytes = encoded->size();
+        expectedHash = fileFingerprint(*encoded);
+      }
+
+      std::error_code sizeError;
+      const uintmax_t onDisk = std::filesystem::file_size(file, sizeError);
+      bool intact = !sizeError && onDisk == expectedBytes;
+
+      if (intact)
+      {
+        std::vector<uint8_t> existing;
+        std::string ignoredRead;
+        intact = readFile(file, maxRegionFileBytes, existing, ignoredRead) && fileFingerprint(existing) == expectedHash;
+      }
+
+      if (!intact)
+      {
+        if (!encoded.has_value())
+        {
+          encoded = encodeRegion(regions.at(region));
+
+          if (!encoded.has_value())
+          {
+            result.error = failure(file, "the region could not be encoded");
+            return result;
+          }
         }
 
         if (!writeFile(file, *encoded, result.error))
@@ -294,10 +346,12 @@ namespace terrain
         }
 
         expectedBytes = encoded->size();
+        expectedHash = fileFingerprint(*encoded);
         ++result.regionsWritten;
       }
 
       record.bytes = expectedBytes;
+      record.fileHash = expectedHash;
     }
 
     const std::optional<std::string> index = writeIndex(newIndex);
@@ -348,9 +402,15 @@ namespace terrain
   {
     TerrainLoadResult result;
 
-    if (root.empty() || uuid.is_nil())
+    if (root.empty())
     {
-      result.error = "loadTerrain: the root is empty or the uuid is nil";
+      result.error = "loadTerrain: the root is empty";
+      return result;
+    }
+
+    if (uuid.is_nil())
+    {
+      result.error = "loadTerrain: the uuid is nil";
       return result;
     }
 

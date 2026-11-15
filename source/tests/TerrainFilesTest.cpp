@@ -3,6 +3,7 @@
 #include "ProjectPaths.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainFiles.h"
+#include "terrain/TerrainFormat.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
@@ -19,6 +20,7 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -77,6 +79,14 @@ namespace {
   {
     std::ofstream out(file, std::ios::binary | std::ios::trunc);
     out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  }
+
+  void garbleKeepingSize(const std::filesystem::path& file)
+  {
+    auto bytes = readBytes(file);
+    ASSERT_GT(bytes.size(), 40u);
+    bytes[bytes.size() / 2] ^= 0xFF;
+    writeBytes(file, bytes);
   }
 
   void expectErrorMentions(const terrain::TerrainLoadResult& loaded, const char* text)
@@ -322,28 +332,33 @@ TEST_F(TerrainFilesTest, LoadRefusesNilUuidAndEmptyRoot)
 
   EXPECT_TRUE(terrain::loadTerrain(m_root, terrainUuid).description.has_value());
 
-  const auto nil = terrain::loadTerrain(m_root, uuids::uuid());
-  EXPECT_FALSE(nil.description.has_value());
-  EXPECT_FALSE(nil.error.empty());
-
-  const auto empty = terrain::loadTerrain({}, terrainUuid);
-  EXPECT_FALSE(empty.description.has_value());
-  EXPECT_FALSE(empty.error.empty());
+  expectErrorMentions(terrain::loadTerrain(m_root, uuids::uuid()), "uuid is nil");
+  expectErrorMentions(terrain::loadTerrain({}, terrainUuid), "root is empty");
 }
 
-TEST_F(TerrainFilesTest, SaveRefusesNilUuidEmptyRootAndVoxelSizeMismatch)
+TEST_F(TerrainFilesTest, SaveRefusesBadInputsNamingTheCondition)
 {
   const auto volume = makeVolume();
 
   auto nilDescription = makeDescription();
   nilDescription.uuid = uuids::uuid();
-  EXPECT_FALSE(terrain::saveTerrain(m_root, nilDescription, *volume).ok);
+  const auto nil = terrain::saveTerrain(m_root, nilDescription, *volume);
+  EXPECT_FALSE(nil.ok);
+  EXPECT_NE(nil.error.find("uuid is nil"), std::string::npos) << nil.error;
 
-  EXPECT_FALSE(terrain::saveTerrain({}, makeDescription(), *volume).ok);
+  const auto empty = terrain::saveTerrain({}, makeDescription(), *volume);
+  EXPECT_FALSE(empty.ok);
+  EXPECT_NE(empty.error.find("root is empty"), std::string::npos) << empty.error;
+
+  auto invalid = makeDescription();
+  invalid.voxelSize = 0.0f;
+  const auto invalidResult = terrain::saveTerrain(m_root, invalid, *volume);
+  EXPECT_FALSE(invalidResult.ok);
+  EXPECT_NE(invalidResult.error.find("description is invalid"), std::string::npos) << invalidResult.error;
 
   const auto mismatch = terrain::saveTerrain(m_root, makeDescription(1.0f), *volume);
   EXPECT_FALSE(mismatch.ok);
-  EXPECT_FALSE(mismatch.error.empty());
+  EXPECT_NE(mismatch.error.find("voxelSize does not match"), std::string::npos) << mismatch.error;
   EXPECT_FALSE(std::filesystem::exists(folder()));
 
   EXPECT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
@@ -412,11 +427,122 @@ TEST_F(TerrainFilesTest, RegionFileReplacedOutOfBandIsRewrittenOnNextSave)
   EXPECT_EQ(loaded.volume->chunks().size(), 5u);
 }
 
+TEST_F(TerrainFilesTest, SameSizeGarbledRegionFileFailsLoadNamingIt)
+{
+  saveDefault();
+  const auto file = regionFile("r.0.0.0.");
+  const auto size = std::filesystem::file_size(file);
+  garbleKeepingSize(file);
+  ASSERT_EQ(std::filesystem::file_size(file), size);
+
+  expectLoadFails(file);
+}
+
+TEST_F(TerrainFilesTest, FileHashMismatchInTheIndexFailsLoadNamingTheFile)
+{
+  saveDefault();
+  const auto file = regionFile("r.0.0.0.");
+  ASSERT_TRUE(terrain::loadTerrain(m_root, terrainUuid).description.has_value());
+
+  editIndex([](nlohmann::json& json) {
+    for (auto& entry : json["regions"])
+    {
+      if (entry["region"] == nlohmann::json::array({ 0, 0, 0 }))
+      {
+        entry["fileHash"] = "0000000000000000";
+      }
+    }
+  });
+
+  expectLoadFails(file);
+  EXPECT_NE(terrain::loadTerrain(m_root, terrainUuid).error.find("file hash"), std::string::npos);
+}
+
+TEST_F(TerrainFilesTest, SameSizeGarbledRegionFileIsRewrittenOnNextSave)
+{
+  saveDefault();
+  const auto file = regionFile("r.0.0.0.");
+  const auto good = readBytes(file);
+  garbleKeepingSize(file);
+  ASSERT_NE(readBytes(file), good);
+  expectLoadFails(file);
+
+  const auto result = terrain::saveTerrain(m_root, makeDescription(), *makeVolume());
+  ASSERT_TRUE(result.ok) << result.error;
+  EXPECT_EQ(result.regionsWritten, 1u);
+  EXPECT_EQ(readBytes(file), good);
+
+  const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loaded.volume, nullptr) << loaded.error;
+  EXPECT_EQ(loaded.volume->chunks().size(), 5u);
+}
+
+TEST_F(TerrainFilesTest, SaveWithoutThePreviousIndexRewritesOnlyDamagedRegions)
+{
+  const auto volume = makeVolume();
+  ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *volume).ok);
+
+  ASSERT_TRUE(std::filesystem::remove(region("terrain.json")));
+  const auto intact = terrain::saveTerrain(m_root, makeDescription(), *volume);
+  ASSERT_TRUE(intact.ok) << intact.error;
+  EXPECT_EQ(intact.regionsWritten, 0u);
+  EXPECT_EQ(intact.regionsRemoved, 0u);
+  EXPECT_TRUE(std::filesystem::exists(region("terrain.json")));
+
+  ASSERT_TRUE(std::filesystem::remove(region("terrain.json")));
+  garbleKeepingSize(regionFile("r.0.0.0."));
+  const auto damaged = terrain::saveTerrain(m_root, makeDescription(), *volume);
+  ASSERT_TRUE(damaged.ok) << damaged.error;
+  EXPECT_EQ(damaged.regionsWritten, 1u);
+
+  const auto loaded = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loaded.volume, nullptr) << loaded.error;
+  EXPECT_EQ(loaded.volume->chunks().size(), 5u);
+}
+
+TEST_F(TerrainFilesTest, FailedSaveLeavesThePreviousStateAndALaterSaveSucceeds)
+{
+  const auto a = makeVolume();
+  ASSERT_TRUE(terrain::saveTerrain(m_root, makeDescription(), *a).ok);
+
+  const auto b = makeVolume();
+  b->setChunk({ 9, 0, 0 }, denseChunk(99));
+
+  const terrain::ChunkKey changedRegion = terrain::regionOfChunk({ 9, 0, 0 });
+  const terrain::HashByChunk hashes = { { { 9, 0, 0 }, b->chunk({ 9, 0, 0 })->hash() } };
+  const auto blocked = folder() / terrain::regionFileName(changedRegion, terrain::regionTag(hashes));
+  ASSERT_TRUE(std::filesystem::create_directory(blocked));
+
+  const auto failed = terrain::saveTerrain(m_root, makeDescription(), *b);
+  EXPECT_FALSE(failed.ok);
+  EXPECT_NE(failed.error.find(pathToUtf8(blocked)), std::string::npos) << failed.error;
+
+  const auto loadedA = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loadedA.volume, nullptr) << loadedA.error;
+  ASSERT_EQ(loadedA.volume->chunks().size(), a->chunks().size());
+
+  for (const auto& [coord, chunk] : a->chunks())
+  {
+    ASSERT_NE(loadedA.volume->chunk(coord), nullptr);
+    EXPECT_EQ(loadedA.volume->chunk(coord)->hash(), chunk->hash());
+  }
+
+  ASSERT_TRUE(std::filesystem::remove(blocked));
+
+  const auto retried = terrain::saveTerrain(m_root, makeDescription(), *b);
+  ASSERT_TRUE(retried.ok) << retried.error;
+
+  const auto loadedB = terrain::loadTerrain(m_root, terrainUuid);
+  ASSERT_NE(loadedB.volume, nullptr) << loadedB.error;
+  EXPECT_EQ(loadedB.volume->chunk({ 9, 0, 0 })->hash(), b->chunk({ 9, 0, 0 })->hash());
+  EXPECT_EQ(loadedB.volume->chunk({ 0, 0, 0 })->hash(), b->chunk({ 0, 0, 0 })->hash());
+}
+
 TEST_F(TerrainFilesTest, SaveRemovesOwnTemporariesAndKeepsForeignFiles)
 {
   saveDefault();
 
-  const char* removed[] = { "terrain.json.tmp", "r.9.9.9.0123456789abcdef.bin.tmp" };
+  const char* removed[] = { "r.9.9.9.0123456789abcdef.bin.tmp" };
   const char* kept[] = { "notes.bin", "r.notes.bin", "r.1.2.3.xyz.bin", "r.1.2.3.0123456789ABCDEF.bin",
                          "r.1.2.0123456789abcdef.bin", "keep.tmp", "r.1.2.3.0123456789abcdef.bin.bak" };
 
@@ -424,6 +550,8 @@ TEST_F(TerrainFilesTest, SaveRemovesOwnTemporariesAndKeepsForeignFiles)
   {
     writeBytes(region(name), { 7 });
   }
+
+  writeBytes(region("terrain.json.tmp"), { 7 });
 
   for (const char* name : kept)
   {
@@ -438,6 +566,8 @@ TEST_F(TerrainFilesTest, SaveRemovesOwnTemporariesAndKeepsForeignFiles)
   {
     EXPECT_FALSE(std::filesystem::exists(region(name))) << name;
   }
+
+  EXPECT_FALSE(std::filesystem::exists(region("terrain.json.tmp")));
 
   for (const char* name : kept)
   {

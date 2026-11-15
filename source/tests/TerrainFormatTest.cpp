@@ -25,6 +25,8 @@ TEST(TerrainFormatTest, IndexRoundTrips)
     ASSERT_TRUE(parsed.regions.contains(region));
     EXPECT_EQ(parsed.regions.at(region).tag, record.tag);
     EXPECT_EQ(parsed.regions.at(region).bytes, record.bytes);
+    EXPECT_EQ(parsed.regions.at(region).fileHash, record.fileHash);
+    EXPECT_NE(record.fileHash, 0u);
     EXPECT_EQ(parsed.regions.at(region).hashes, record.hashes);
   }
 }
@@ -196,6 +198,25 @@ TEST(TerrainFormatTest, IndexWithABadTagOrHashStringFails)
 
   expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
     regionEntry(json, nlohmann::json::array({ 0, 0, 0 })).erase("tag");
+  }), "malformed");
+}
+
+TEST(TerrainFormatTest, IndexWithABadFileHashFails)
+{
+  const char* bad[] = { "xyz", "0123456789ABCDEF", "0123456789abcde", "+123456789abcdef", "" };
+
+  for (const char* text : bad)
+  {
+    expectIndexRejected(editedIndexBytes([text](nlohmann::json& json) {
+      regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["fileHash"] = text;
+    }), "malformed");
+  }
+
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 })).erase("fileHash");
+  }), "malformed");
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) {
+    regionEntry(json, nlohmann::json::array({ 0, 0, 0 }))["fileHash"] = 5;
   }), "malformed");
 }
 
