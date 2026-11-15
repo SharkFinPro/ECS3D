@@ -70,7 +70,9 @@ namespace terrainFormatFixtures {
     }
 
     record.tag = terrain::regionTag(record.hashes);
-    record.bytes = terrain::encodeRegion(chunks).value().size();
+    const auto bytes = terrain::encodeRegion(chunks).value();
+    record.bytes = bytes.size();
+    record.fileHash = terrain::fileFingerprint(bytes);
     return record;
   }
 
@@ -129,8 +131,10 @@ namespace terrainFormatFixtures {
     EXPECT_NE(error.find(mention), std::string::npos) << error;
   }
 
-  inline void expectRegionRejected(const std::vector<uint8_t>& bytes, const terrain::RegionRecord& record, const char* mention)
+  // The record's file hash is taken from the bytes, so the rejection can only come from what the test damaged.
+  inline void expectRegionRejected(const std::vector<uint8_t>& bytes, terrain::RegionRecord record, const char* mention)
   {
+    record.fileHash = terrain::fileFingerprint(bytes);
     const auto chunks = twoChunks();
     const auto goodBytes = terrain::encodeRegion(chunks).value();
     terrain::TerrainVolume::ChunkMap good;
@@ -201,6 +205,7 @@ namespace terrainFormatFixtures {
     record.hashes = hashes;
     record.tag = terrain::regionTag(hashes);
     record.bytes = bytes.size();
+    record.fileHash = terrain::fileFingerprint(bytes);
 
     terrain::TerrainVolume::ChunkMap decoded;
     std::string error;

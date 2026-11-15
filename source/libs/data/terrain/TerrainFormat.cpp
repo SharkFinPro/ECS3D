@@ -264,7 +264,9 @@ namespace terrain
         if (!entry.is_object() || !entry.contains("region") || !readKey(entry["region"], region) ||
             !entry.contains("tag") || !entry["tag"].is_string() ||
             !hashFromString(entry["tag"].get<std::string>(), record.tag) || !entry.contains("bytes") ||
-            !readByteCount(entry["bytes"], record.bytes) || !entry.contains("chunks") || !entry["chunks"].is_array())
+            !readByteCount(entry["bytes"], record.bytes) || !entry.contains("fileHash") ||
+            !entry["fileHash"].is_string() || !hashFromString(entry["fileHash"].get<std::string>(), record.fileHash) ||
+            !entry.contains("chunks") || !entry["chunks"].is_array())
         {
           what = "a region entry is malformed";
           return false;
@@ -359,6 +361,11 @@ namespace terrain
     return fingerprintBytes(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
   }
 
+  uint64_t fileFingerprint(const std::span<const uint8_t> bytes)
+  {
+    return fingerprintBytes(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+  }
+
   std::string regionFileName(const ChunkKey& region, const uint64_t tag)
   {
     return "r." + std::to_string(region[0]) + "." + std::to_string(region[1]) + "." + std::to_string(region[2]) + "." +
@@ -423,6 +430,12 @@ namespace terrain
     if (bytes.size() != record.bytes)
     {
       error = "the file size disagrees with the index";
+      return false;
+    }
+
+    if (fileFingerprint(bytes) != record.fileHash)
+    {
+      error = "the file hash disagrees with the index";
       return false;
     }
 
@@ -570,6 +583,7 @@ namespace terrain
       json["regions"].push_back({ { "region", region },
                                   { "tag", hashToString(record.tag) },
                                   { "bytes", record.bytes },
+                                  { "fileHash", hashToString(record.fileHash) },
                                   { "chunks", chunkList } });
     }
 

@@ -2,6 +2,23 @@
 
 using namespace terrainFormatFixtures;
 
+TEST(TerrainRegionFormatTest, FileHashMismatchIsRefusedWithItsOwnMessage)
+{
+  const auto chunks = twoChunks();
+  const auto bytes = terrain::encodeRegion(chunks).value();
+  auto record = recordFor(chunks);
+  terrain::TerrainVolume::ChunkMap decoded;
+  std::string error;
+
+  ASSERT_TRUE(terrain::decodeRegion(bytes, { 0, 0, 0 }, record, decoded, error)) << error;
+
+  record.fileHash ^= 1;
+  decoded.clear();
+  EXPECT_FALSE(terrain::decodeRegion(bytes, { 0, 0, 0 }, record, decoded, error));
+  EXPECT_NE(error.find("file hash"), std::string::npos) << error;
+  EXPECT_TRUE(decoded.empty());
+}
+
 TEST(TerrainRegionFormatTest, RegionOfChunkUsesFloorDivision)
 {
   EXPECT_EQ(terrain::regionOfChunk({ 0, 0, 0 }), (terrain::ChunkKey{ 0, 0, 0 }));
