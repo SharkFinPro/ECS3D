@@ -10,6 +10,8 @@
 #include <Protocol.h>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -166,6 +168,30 @@ TEST(TerrainReplication, AForgedHugeEntryCountIsRefused)
 
   EXPECT_FALSE(accepted(rawMessage(terrainUUID, 0xFFFFFFFFu, { validRaw() })));
   EXPECT_FALSE(accepted(rawMessage(terrainUUID, 2, { validRaw() })));
+}
+
+TEST(TerrainReplication, MoreThanTheEntryCapIsRefusedOnUnpackAndThrownOnPack)
+{
+  std::vector<terrain::ChunkEntry> entries;
+  for (size_t i = 0; i < terrain::maxTerrainChunksEntries; ++i)
+  {
+    entries.push_back(terrain::makeChunkEntry({ static_cast<int32_t>(i), 0, 0 }, 1, solidChunk()));
+  }
+
+  const auto atCap = terrain::unpackTerrainChunks(terrain::packTerrainChunks(terrainUUID, entries));
+  ASSERT_TRUE(atCap.has_value());
+  EXPECT_EQ(atCap->entries.size(), terrain::maxTerrainChunksEntries);
+
+  std::vector<RawEntry> raw;
+  for (const auto& entry : entries)
+  {
+    raw.push_back(rawFrom(entry));
+  }
+  raw.push_back(rawFrom(terrain::makeChunkEntry({ -1, 0, 0 }, 1, solidChunk())));
+  EXPECT_FALSE(accepted(rawMessage(raw)));
+
+  entries.push_back(terrain::makeChunkEntry({ -1, 0, 0 }, 1, solidChunk()));
+  EXPECT_THROW(static_cast<void>(terrain::packTerrainChunks(terrainUUID, entries)), std::length_error);
 }
 
 TEST(TerrainReplication, AnEncodedSizeOverTheMaximumIsRefused)

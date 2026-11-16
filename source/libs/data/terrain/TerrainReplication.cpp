@@ -31,6 +31,11 @@ namespace terrain
 
   net::Message packTerrainChunks(const uuids::uuid& terrain, const std::span<const ChunkEntry> entries)
   {
+    if (entries.size() > maxTerrainChunksEntries)
+    {
+      throw std::length_error("Too many terrain chunk entries for one message");
+    }
+
     size_t bytes = terrainChunksHeaderBytes;
     for (const ChunkEntry& entry : entries)
     {
@@ -69,7 +74,8 @@ namespace terrain
       payload.terrain = reader.read<uuids::uuid>();
       const auto count = reader.read<uint32_t>();
 
-      if (payload.terrain.is_nil() || count > reader.remaining() / chunkEntryHeaderBytes)
+      if (payload.terrain.is_nil() || count > maxTerrainChunksEntries ||
+          count > reader.remaining() / chunkEntryHeaderBytes)
       {
         return std::nullopt;
       }

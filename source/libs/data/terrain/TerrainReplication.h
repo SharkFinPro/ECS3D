@@ -35,8 +35,13 @@ namespace terrain
   // uuid, entry count). A sender sizing batches against a byte budget uses these.
   inline constexpr size_t chunkEntryHeaderBytes =
     3 * sizeof(int32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t);
-  inline constexpr size_t terrainChunksHeaderBytes = 16 + sizeof(uint32_t);
+  inline constexpr size_t terrainChunksHeaderBytes = sizeof(uuids::uuid) + sizeof(uint32_t);
 
+  // A small encoded chunk decodes to far more memory, so the count bounds what one message can make a receiver
+  // allocate. A sender splits larger sets across messages.
+  inline constexpr size_t maxTerrainChunksEntries = 1024;
+
+  // Throws std::length_error for more than maxTerrainChunksEntries entries.
   [[nodiscard]] net::Message packTerrainChunks(const uuids::uuid& terrain, std::span<const ChunkEntry> entries);
 
   struct ReceivedChunk
@@ -55,7 +60,7 @@ namespace terrain
   };
 
   // nullopt for any malformed payload: wrong message type, truncated, nil uuid, a count the remaining bytes cannot
-  // hold, a coordinate beyond maxChunkCoord, a size over maxEncodedChunkBytes or past the end, bytes decodeChunk
+  // hold or above maxTerrainChunksEntries, a coordinate beyond maxChunkCoord, a size over maxEncodedChunkBytes or past the end, bytes decodeChunk
   // refuses, a decoded chunk whose hash() differs from the entry's hash, a coordinate repeated in one message,
   // revision 0, or trailing bytes.
   [[nodiscard]] std::optional<TerrainChunksPayload> unpackTerrainChunks(const net::Message& message);

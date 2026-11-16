@@ -2,6 +2,7 @@
 #include "assets/AssetRegistry.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace terrain
@@ -220,14 +221,19 @@ namespace terrain
   {
     const auto it = m_terrains.find(uuid);
 
-    return it != m_terrains.end() ? ++it->second.counter : 0;
+    if (it == m_terrains.end() || it->second.counter == std::numeric_limits<uint32_t>::max())
+    {
+      return 0;
+    }
+
+    return ++it->second.counter;
   }
 
   bool TerrainStore::setChunk(const uuids::uuid& uuid, const ChunkCoord coord,
                               std::shared_ptr<const TerrainChunk> chunk, const uint32_t revision)
   {
     const auto it = m_terrains.find(uuid);
-    if (it == m_terrains.end() || !isValidChunkCoord(coord))
+    if (it == m_terrains.end() || revision == 0 || !isValidChunkCoord(coord))
     {
       return false;
     }
@@ -235,15 +241,7 @@ namespace terrain
     Entry& entry = it->second;
     entry.volume->setChunk(coord, std::move(chunk));
     entry.counter = std::max(entry.counter, revision);
-
-    if (revision == 0)
-    {
-      entry.revisions.erase(coord);
-    }
-    else
-    {
-      entry.revisions[coord] = revision;
-    }
+    entry.revisions[coord] = revision;
 
     return true;
   }

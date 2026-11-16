@@ -68,9 +68,8 @@ enum class MessageType : uint8_t {
   serverStats,   // server -> editor: the server's profiling samples, per-tick durations, traffic and snapshot
                  // records since its previous serverStats to that connection (net::packServerStats /
                  // net::unpackServerStats).
-  terrainChunks  // server -> views: terrain chunk data (the join stream, edit echoes, the restore on Stop);
-                 // editor -> server: the chunk upload that follows loadProject
-                 // (terrain::packTerrainChunks / terrain::unpackTerrainChunks).
+  terrainChunks  // server -> views: terrain chunk data (terrain::packTerrainChunks /
+                 // terrain::unpackTerrainChunks).
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An

@@ -24,8 +24,11 @@ has trailing bytes. The server owns the revision counter (`TerrainStore::nextRev
 records the numbers it is sent (`TerrainStore::setChunk`, `revision`). `applyTerrainChunks` applies an entry only when
 its revision is higher than the one the store holds for that coordinate, so a late or duplicate copy is stale. A
 hash-only entry is accepted only when the held chunk (the air chunk, for an absent coordinate) has that hash and is
-otherwise reported as missing. Revisions describe the volume, so replacing the volume clears them while the counter
-keeps rising.
+otherwise reported as missing. A message carries at most `maxTerrainChunksEntries` entries, so a sender splits larger
+sets and a receiver's decoded memory stays bounded. Revisions describe the volume, so replacing the volume clears
+them while the counter keeps rising; removing a terrain, or reconcile dropping it, forgets both. Every server-side
+change to a terrain volume must go through `TerrainStore::setChunk` (or be followed by `stampAllChunks`) so its
+revisions describe it.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. A third direction exists for `serverLog` alone: server → editor connections
