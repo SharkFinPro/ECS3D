@@ -2,6 +2,7 @@
 #include "assets/AssetRegistry.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace terrain
@@ -105,7 +106,7 @@ namespace terrain
     }
 
     auto volume = std::make_shared<TerrainVolume>(description.voxelSize);
-    m_terrains.emplace(description.uuid, Entry{ description, volume });
+    m_terrains.emplace(description.uuid, Entry{ .description = description, .volume = volume });
 
     return volume;
   }
@@ -131,7 +132,10 @@ namespace terrain
       return false;
     }
 
-    m_terrains.insert_or_assign(description.uuid, Entry{ description, std::move(volume) });
+    Entry& entry = m_terrains[description.uuid];
+    entry.description = description;
+    entry.volume = std::move(volume);
+    entry.revisions.clear();
 
     return true;
   }
@@ -153,6 +157,7 @@ namespace terrain
     if (entry.description.voxelSize != description.voxelSize)
     {
       entry.volume = std::make_shared<TerrainVolume>(description.voxelSize);
+      entry.revisions.clear();
     }
 
     entry.description = description;
@@ -165,6 +170,7 @@ namespace terrain
     for (auto& [uuid, entry] : m_terrains)
     {
       entry.volume = std::make_shared<TerrainVolume>(entry.description.voxelSize);
+      entry.revisions.clear();
     }
   }
 
@@ -196,5 +202,64 @@ namespace terrain
         create({ .uuid = uuid });
       }
     }
+  }
+
+  uint32_t TerrainStore::revision(const uuids::uuid& uuid, const ChunkCoord coord) const
+  {
+    const auto it = m_terrains.find(uuid);
+    if (it == m_terrains.end())
+    {
+      return 0;
+    }
+
+    const auto found = it->second.revisions.find(coord);
+
+    return found != it->second.revisions.end() ? found->second : 0;
+  }
+
+  uint32_t TerrainStore::nextRevision(const uuids::uuid& uuid)
+  {
+    const auto it = m_terrains.find(uuid);
+
+    if (it == m_terrains.end() || it->second.counter == std::numeric_limits<uint32_t>::max())
+    {
+      return 0;
+    }
+
+    return ++it->second.counter;
+  }
+
+  bool TerrainStore::setChunk(const uuids::uuid& uuid, const ChunkCoord coord,
+                              std::shared_ptr<const TerrainChunk> chunk, const uint32_t revision)
+  {
+    const auto it = m_terrains.find(uuid);
+    if (it == m_terrains.end() || revision == 0 || !isValidChunkCoord(coord))
+    {
+      return false;
+    }
+
+    Entry& entry = it->second;
+    entry.volume->setChunk(coord, std::move(chunk));
+    entry.counter = std::max(entry.counter, revision);
+    entry.revisions[coord] = revision;
+
+    return true;
+  }
+
+  uint32_t TerrainStore::stampAllChunks(const uuids::uuid& uuid)
+  {
+    const uint32_t stamp = nextRevision(uuid);
+    if (stamp == 0)
+    {
+      return 0;
+    }
+
+    Entry& entry = m_terrains.find(uuid)->second;
+    for (const auto& [coord, chunk] : entry.volume->chunks())
+    {
+      entry.revisions[coord] = stamp;
+    }
+
+    return stamp;
   }
 }

@@ -369,3 +369,171 @@ TEST(TerrainStore, ResetVolumesGivesEveryTerrainAFreshEmptyVolumeAndKeepsTheDesc
   EXPECT_EQ(store.description(firstUUID)->palette[0].name, "grass");
   EXPECT_EQ(store.terrains().size(), 2u);
 }
+
+namespace {
+  const terrain::ChunkCoord coordA{ 0, 0, 0 };
+  const terrain::ChunkCoord coordB{ 1, 0, 0 };
+}
+
+TEST(TerrainStoreRevisions, NextRevisionIsMonotonicAndZeroForAnUnknownTerrain)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+
+  EXPECT_EQ(store.nextRevision(firstUUID), 1u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 2u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 3u);
+  EXPECT_EQ(store.nextRevision(secondUUID), 0u);
+}
+
+TEST(TerrainStoreRevisions, SetChunkRecordsTheRevisionAndRefusesBadInput)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+
+  EXPECT_EQ(store.revision(firstUUID, coordA), 0u);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 4));
+  EXPECT_EQ(store.revision(firstUUID, coordA), 4u);
+  EXPECT_NE(store.find(firstUUID)->chunk(coordA), nullptr);
+
+  EXPECT_FALSE(store.setChunk(secondUUID, coordA, solidChunk(), 9));
+  EXPECT_EQ(store.revision(secondUUID, coordA), 0u);
+
+  const terrain::ChunkCoord beyond{ terrain::maxChunkCoord + 1, 0, 0 };
+  EXPECT_FALSE(store.setChunk(firstUUID, beyond, solidChunk(), 9));
+  EXPECT_EQ(store.revision(firstUUID, beyond), 0u);
+  EXPECT_EQ(store.find(firstUUID)->chunks().size(), 1u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 5u);
+}
+
+TEST(TerrainStoreRevisions, ErasingAChunkStillRecordsItsRevision)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 2));
+
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, nullptr, 5));
+
+  EXPECT_EQ(store.find(firstUUID)->chunk(coordA), nullptr);
+  EXPECT_EQ(store.revision(firstUUID, coordA), 5u);
+}
+
+TEST(TerrainStoreRevisions, ARevisionAboveTheCounterRaisesIt)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 40));
+  EXPECT_EQ(store.nextRevision(firstUUID), 41u);
+
+  ASSERT_TRUE(store.setChunk(firstUUID, coordB, solidChunk(), 3));
+  EXPECT_EQ(store.nextRevision(firstUUID), 42u);
+}
+
+TEST(TerrainStoreRevisions, StampAllChunksCoversExactlyTheHeldChunks)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  const auto volume = store.find(firstUUID);
+  volume->setChunk(coordA, solidChunk());
+  volume->setChunk(coordB, solidChunk());
+
+  const uint32_t stamp = store.stampAllChunks(firstUUID);
+
+  EXPECT_EQ(stamp, 1u);
+  EXPECT_EQ(store.revision(firstUUID, coordA), stamp);
+  EXPECT_EQ(store.revision(firstUUID, coordB), stamp);
+  EXPECT_EQ(store.revision(firstUUID, { 2, 0, 0 }), 0u);
+  EXPECT_GT(store.nextRevision(firstUUID), stamp);
+  EXPECT_EQ(store.stampAllChunks(secondUUID), 0u);
+}
+
+TEST(TerrainStoreRevisions, ResettingVolumesClearsRevisionsButTheCounterKeepsRising)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 7));
+
+  store.resetVolumes();
+
+  EXPECT_EQ(store.revision(firstUUID, coordA), 0u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 8u);
+}
+
+TEST(TerrainStoreRevisions, ANewVoxelSizeClearsRevisionsButAnUnchangedOneKeepsThem)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID, 2.5f)), nullptr);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 7));
+
+  ASSERT_TRUE(store.applyDescription(describe(firstUUID, 2.5f)));
+  EXPECT_EQ(store.revision(firstUUID, coordA), 7u);
+
+  ASSERT_TRUE(store.applyDescription(describe(firstUUID, 4.0f)));
+  EXPECT_EQ(store.revision(firstUUID, coordA), 0u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 8u);
+}
+
+TEST(TerrainStoreRevisions, AdoptingOverAHeldTerrainClearsRevisionsAndKeepsTheCounter)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 7));
+
+  ASSERT_TRUE(store.adopt(describe(firstUUID), std::make_shared<terrain::TerrainVolume>(2.5f)));
+
+  EXPECT_EQ(store.revision(firstUUID, coordA), 0u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 8u);
+
+  terrain::TerrainStore fresh;
+  ASSERT_TRUE(fresh.adopt(describe(secondUUID), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  EXPECT_EQ(fresh.nextRevision(secondUUID), 1u);
+}
+
+TEST(TerrainStoreRevisions, RemoveAndReconcileForgetTheRevisionsAndTheCounter)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_NE(store.create(describe(secondUUID)), nullptr);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 7));
+  ASSERT_TRUE(store.setChunk(secondUUID, coordA, solidChunk(), 7));
+
+  ASSERT_TRUE(store.remove(firstUUID));
+  EXPECT_EQ(store.revision(firstUUID, coordA), 0u);
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  EXPECT_EQ(store.nextRevision(firstUUID), 1u);
+
+  AssetRegistry empty;
+  store.reconcile(empty);
+  EXPECT_EQ(store.revision(secondUUID, coordA), 0u);
+  EXPECT_EQ(store.nextRevision(secondUUID), 0u);
+}
+
+TEST(TerrainStoreRevisions, TheCounterSaturatesInsteadOfWrapping)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  constexpr uint32_t maximum = std::numeric_limits<uint32_t>::max();
+
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), maximum - 1));
+  EXPECT_EQ(store.nextRevision(firstUUID), maximum);
+
+  EXPECT_EQ(store.nextRevision(firstUUID), 0u);
+  EXPECT_EQ(store.nextRevision(firstUUID), 0u);
+  EXPECT_EQ(store.stampAllChunks(firstUUID), 0u);
+  EXPECT_EQ(store.revision(firstUUID, coordA), maximum - 1);
+}
+
+TEST(TerrainStoreRevisions, SetChunkRefusesRevisionZeroAndRecordsALowerRevisionAsGiven)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 5));
+
+  EXPECT_FALSE(store.setChunk(firstUUID, coordA, nullptr, 0));
+  EXPECT_NE(store.find(firstUUID)->chunk(coordA), nullptr);
+  EXPECT_EQ(store.revision(firstUUID, coordA), 5u);
+
+  ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 2));
+  EXPECT_EQ(store.revision(firstUUID, coordA), 2u);
+}
