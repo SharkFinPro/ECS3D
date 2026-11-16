@@ -1,10 +1,14 @@
 #include "TerrainStreamer.h"
 #include "TerrainReplication.h"
+#include <exception>
 #include <stdexcept>
 #include <utility>
 
 namespace terrain
 {
+  static_assert(streamEntryOverheadBytes == chunkEntryHeaderBytes &&
+                streamMessageOverheadBytes == terrainChunksHeaderBytes);
+
   namespace
   {
     size_t framedSize(const std::vector<StreamedChunk>& batch)
@@ -78,6 +82,7 @@ namespace terrain
     {
       Connection& connection = entry.second;
       connection.plans.erase(terrain);
+      connection.sent = 0;
 
       if (volume && description)
       {
@@ -112,23 +117,39 @@ namespace terrain
   std::vector<StreamFinished> TerrainStreamer::pump(TerrainStore& store, const Send& send,
                                                      const size_t budgetBytesPerConnection)
   {
-    std::vector<StreamFinished> finished;
+    std::exception_ptr error;
 
     for (auto& entry : m_connections)
     {
       Connection& connection = entry.second;
-      pumpConnection(entry.first, connection, store, send, budgetBytesPerConnection);
-
       const bool wasActive = connection.active;
+
+      try
+      {
+        pumpConnection(entry.first, connection, store, send, budgetBytesPerConnection);
+      }
+      catch (...)
+      {
+        if (!error)
+        {
+          error = std::current_exception();
+        }
+      }
+
       refreshActive(connection);
 
-      if (wasActive && !connection.active)
+      if (wasActive && !connection.active && connection.sent > 0)
       {
-        finished.push_back({ entry.first, connection.sent });
+        m_finished.push_back({ entry.first, connection.sent });
       }
     }
 
-    return finished;
+    if (error)
+    {
+      std::rethrow_exception(error);
+    }
+
+    return std::exchange(m_finished, {});
   }
 
   bool TerrainStreamer::streaming(const int32_t connId) const
@@ -189,30 +210,36 @@ namespace terrain
 
       while (!plan.done() && (first || remaining > 0))
       {
-        std::vector<StreamedChunk> batch = plan.next(*volume, remaining, maxTerrainChunksEntries);
+        // Only the connection's first chunk may exceed the budget; a later one waits for the next call.
+        std::vector<StreamedChunk> batch = plan.next(*volume, remaining, maxTerrainChunksEntries, first);
         if (batch.empty())
         {
+          if (!plan.done())
+          {
+            remaining = 0;
+          }
+
           break;
         }
 
         const size_t framed = framedSize(batch);
 
-        // Only the connection's first chunk may exceed the budget; a later one waits for the next call.
-        if (!first && framed > remaining)
+        try
+        {
+          const auto entries = makeEntries(store, it->first, batch);
+          send(connId, packTerrainChunks(it->first, entries));
+          connection.sent += entries.size();
+        }
+        catch (...)
         {
           for (const StreamedChunk& streamed : batch)
           {
             plan.requeue(streamed.coord);
           }
 
-          remaining = 0;
-          break;
+          throw;
         }
 
-        const auto entries = makeEntries(store, it->first, batch);
-        send(connId, packTerrainChunks(it->first, entries));
-
-        connection.sent += entries.size();
         first = false;
         remaining = remaining > framed ? remaining - framed : 0;
       }

@@ -420,3 +420,20 @@ TEST(TerrainStreamPlanTest, AnEntryCapOfZeroStillTakesOneChunk)
   EXPECT_EQ(plan.next(volume, terrain::defaultStreamBudgetBytes, 0).size(), 1u);
   EXPECT_EQ(plan.pending(), 1u);
 }
+
+TEST(TerrainStreamPlanTest, WithoutForceFirstAFirstChunkThatDoesNotFitStaysQueued)
+{
+  terrain::TerrainVolume volume(1.0f);
+  volume.setChunk({ 0, 0, 0 }, noise(1));
+
+  terrain::TerrainStreamPlan plan(volume, originFocus);
+
+  EXPECT_TRUE(plan.next(volume, 1, std::numeric_limits<size_t>::max(), false).empty());
+  EXPECT_EQ(plan.pending(), 1u);
+
+  // Positive controls: forcing the first chunk takes it, and so does a budget it fits in.
+  terrain::TerrainStreamPlan roomy(volume, originFocus);
+  EXPECT_EQ(roomy.next(volume, terrain::defaultStreamBudgetBytes, std::numeric_limits<size_t>::max(), false).size(), 1u);
+  EXPECT_EQ(plan.next(volume, 1).size(), 1u);
+  EXPECT_TRUE(plan.done());
+}

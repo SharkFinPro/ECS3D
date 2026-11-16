@@ -15,6 +15,7 @@
 #include <iterator>
 #include <unordered_map>
 #include <memory>
+#include <stdexcept>
 #include <random>
 #include <utility>
 #include <vector>
@@ -243,10 +244,13 @@ TEST(TerrainStreamerTest, TwoConnectionsStreamIndependently)
   EXPECT_EQ(streamer.pendingChunks(2), 4u);
   EXPECT_EQ(streamer.pendingChunks(1), 3u);
 
-  while (streamer.streaming(1) || streamer.streaming(2))
+  for (int i = 0; i < 10000 && (streamer.streaming(1) || streamer.streaming(2)); ++i)
   {
     streamer.pump(store, recorder.sender(), 1);
   }
+
+  EXPECT_FALSE(streamer.streaming(1));
+  EXPECT_FALSE(streamer.streaming(2));
 
   EXPECT_EQ(chunkTotal(recorder.from(1)), 4u);
   EXPECT_EQ(chunkTotal(recorder.from(2)), 4u);
@@ -367,6 +371,16 @@ TEST(TerrainStreamerTest, RestartAfterResetVolumesEndsTheStream)
   const size_t sent = chunkTotal(recorder.messages);
   streamer.pump(store, recorder.sender());
   EXPECT_EQ(chunkTotal(recorder.messages), sent);
+
+  // The restarted stream still exists: a chunk added now and requeued is streamed.
+  ASSERT_TRUE(store.setChunk(terrainA, { 0, 0, 0 }, solid(3), store.nextRevision(terrainA)));
+  const std::vector<ChunkCoord> coords{ { 0, 0, 0 } };
+  streamer.requeue(terrainA, coords);
+  EXPECT_TRUE(streamer.streaming(1));
+
+  streamer.pump(store, recorder.sender());
+  ASSERT_EQ(chunkTotal(recorder.messages), sent + 1);
+  EXPECT_EQ(recorder.messages.back().payload.entries.front().coord, (ChunkCoord{ 0, 0, 0 }));
 }
 
 TEST(TerrainStreamerTest, RestartStreamsAReplacedVolumeFromItsCurrentChunks)
@@ -595,4 +609,143 @@ TEST(TerrainStreamerTest, AViewStoreEndsUpHoldingTheServersChunks)
     EXPECT_EQ(held->hash(), chunk->hash());
     EXPECT_EQ(view.revision(terrainA, coord), server.revision(terrainA, coord));
   }
+}
+
+TEST(TerrainStreamerTest, AThrowingSendLosesNoChunkAndStillServesTheOtherConnection)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 3);
+
+  terrain::TerrainStreamer streamer;
+  streamer.start(1, store, originFocus);
+  streamer.start(2, store, originFocus);
+
+  Recorder recorder;
+  const auto inner = recorder.sender();
+  int calls = 0;
+  const terrain::TerrainStreamer::Send flaky = [&](const int32_t connId, const net::Message& message)
+  {
+    if (++calls == 1)
+    {
+      throw std::runtime_error("send failed");
+    }
+
+    inner(connId, message);
+  };
+
+  EXPECT_THROW(streamer.pump(store, flaky), std::runtime_error);
+
+  // Connection 1 sent nothing and still holds its chunks; connection 2 was served in the same pump.
+  EXPECT_TRUE(recorder.from(1).empty());
+  EXPECT_EQ(streamer.pendingChunks(1), 3u);
+  EXPECT_TRUE(streamer.streaming(1));
+  EXPECT_EQ(chunkTotal(recorder.from(2)), 3u);
+
+  // Connection 2's finish report from the throwing pump is returned by the next one.
+  std::vector<terrain::StreamFinished> finished = streamer.pump(store, flaky);
+  for (int i = 0; i < 100 && streamer.streaming(1); ++i)
+  {
+    const auto round = streamer.pump(store, flaky);
+    finished.insert(finished.end(), round.begin(), round.end());
+  }
+
+  EXPECT_EQ(chunkTotal(recorder.from(1)), 3u);
+  EXPECT_EQ(chunkTotal(recorder.from(2)), 3u);
+
+  ASSERT_EQ(finished.size(), 2u);
+  EXPECT_EQ(finished[0].connId, 2);
+  EXPECT_EQ(finished[0].chunks, 3u);
+  EXPECT_EQ(finished[1].connId, 1);
+  EXPECT_EQ(finished[1].chunks, 3u);
+}
+
+TEST(TerrainStreamerTest, ARequeueThatRevivesAFinishedStreamReportsOnlyThatRunsCount)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 3);
+
+  terrain::TerrainStreamer streamer;
+  streamer.start(1, store, originFocus);
+
+  Recorder recorder;
+  const auto first = streamer.pump(store, recorder.sender());
+  ASSERT_EQ(first.size(), 1u);
+  ASSERT_EQ(first.front().chunks, 3u);
+
+  const std::vector<ChunkCoord> coords{ { 0, 0, 0 } };
+  streamer.requeue(terrainA, coords);
+
+  const auto second = streamer.pump(store, recorder.sender());
+  ASSERT_EQ(second.size(), 1u);
+  EXPECT_EQ(second.front().chunks, 1u);
+}
+
+TEST(TerrainStreamerTest, ARestartStartsTheSentCountOver)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 4);
+
+  terrain::TerrainStreamer streamer;
+  streamer.start(1, store, originFocus);
+
+  Recorder recorder;
+  ASSERT_TRUE(streamer.pump(store, recorder.sender(), 1).empty());
+  ASSERT_EQ(chunkTotal(recorder.messages), 1u);
+
+  const auto description = *store.description(terrainA);
+  const auto replacement = std::make_shared<terrain::TerrainVolume>(description.voxelSize);
+  replacement->setChunk({ 40, 0, 0 }, solid());
+  replacement->setChunk({ 41, 0, 0 }, solid());
+  ASSERT_TRUE(store.adopt(description, replacement));
+  streamer.restart(terrainA, store, originFocus);
+
+  const auto finished = streamer.pump(store, recorder.sender());
+  ASSERT_EQ(finished.size(), 1u);
+  EXPECT_EQ(finished.front().chunks, 2u);
+}
+
+TEST(TerrainStreamerTest, ARestartToEmptyEndsTheStreamWithoutAReport)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 4);
+
+  terrain::TerrainStreamer streamer;
+  streamer.start(1, store, originFocus);
+
+  Recorder recorder;
+  ASSERT_TRUE(streamer.pump(store, recorder.sender(), 1).empty());
+
+  store.resetVolumes();
+  streamer.restart(terrainA, store, originFocus);
+
+  EXPECT_TRUE(streamer.pump(store, recorder.sender()).empty());
+
+  // Positive control: a stream that sends its chunks does report.
+  terrain::TerrainStore other;
+  addTerrain(other, terrainA, 1);
+  streamer.start(1, other, originFocus);
+  EXPECT_EQ(streamer.pump(other, recorder.sender()).size(), 1u);
+}
+
+TEST(TerrainStreamerTest, AnAbsentCoordinateIsStampedAndSentAsAir)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+
+  terrain::TerrainStreamer streamer;
+  streamer.start(1, store, originFocus);
+
+  const std::vector<ChunkCoord> coords{ { 5, 0, 0 } };
+  streamer.requeue(terrainA, coords);
+  ASSERT_EQ(store.revision(terrainA, coords.front()), 0u);
+
+  Recorder recorder;
+  streamer.pump(store, recorder.sender());
+
+  ASSERT_EQ(chunkTotal(recorder.messages), 1u);
+  const auto& entry = recorder.messages.front().payload.entries.front();
+  EXPECT_EQ(entry.coord, coords.front());
+  EXPECT_GT(entry.revision, 0u);
+  EXPECT_EQ(store.revision(terrainA, coords.front()), entry.revision);
+  EXPECT_EQ(store.find(terrainA)->chunk(coords.front()), nullptr);
 }

@@ -16,7 +16,7 @@
 
 namespace terrain
 {
-  // A connection whose stream just ran out of chunks, with how many it was sent since it last started.
+  // A connection whose stream just ran out of chunks, with how many it was sent since it last became active.
   struct StreamFinished
   {
     int32_t connId = 0;
@@ -28,6 +28,7 @@ namespace terrain
   {
   public:
     using FocusFor = std::function<glm::vec3(const uuids::uuid& terrain, const TerrainDescription& description)>;
+    // Must not call back into the streamer.
     using Send = std::function<void(int32_t connId, const net::Message& message)>;
 
     // Starts a stream of every terrain the store holds to the connection, replacing any stream it already had.
@@ -36,8 +37,10 @@ namespace terrain
     void forget(int32_t connId);
 
     // A terrain's volume was replaced (resetVolumes, adopt, a new voxel size, a project load): restarts that
-    // terrain's stream on every connection that has one, from the current volume. A terrain the store no longer holds
-    // is dropped.
+    // terrain's stream on every connection that has one, from the current volume, and starts each connection's sent
+    // count over. A terrain the store no longer holds is dropped. A restart that leaves nothing to send ends the
+    // stream without a finish report: only pump reports, and only streams that sent chunks since they last became
+    // active.
     void restart(const uuids::uuid& terrain, const TerrainStore& store, const FocusFor& focusFor);
 
     // Chunks changed on the server after they may have been sent: requeues them on every connection that has a
@@ -48,6 +51,11 @@ namespace terrain
     // maxTerrainChunksEntries entries each; a connection's first chunk is sent even when it alone is over the budget,
     // so a stream cannot stall. A chunk whose store revision is 0 is given one before it is sent. Returns the
     // connections whose stream ran out of chunks in this call.
+    //
+    // Each connection is served on its own: when making or sending a batch throws, that batch's chunks go back on the
+    // connection's queue (a later pump sends them again), the other connections are still served, and the first
+    // exception is rethrown once every connection has had its turn so the caller can log it. Finish reports gathered
+    // by a pump that rethrows are returned by the next pump.
     std::vector<StreamFinished> pump(TerrainStore& store, const Send& send,
                                      size_t budgetBytesPerConnection = defaultStreamBudgetBytes);
 
@@ -71,6 +79,7 @@ namespace terrain
                                size_t budgetBytes);
 
     std::map<int32_t, Connection> m_connections;
+    std::vector<StreamFinished> m_finished;
   };
 }
 
