@@ -236,6 +236,7 @@ add_executable(${PROJECT_NAME}
   TerrainSamplingTest.cpp
   TerrainSnapshotTest.cpp
   TerrainStoreTest.cpp
+  TerrainStreamFocusTest.cpp
   TerrainStreamPlanTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp
