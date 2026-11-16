@@ -5,6 +5,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/Terrain.h"
 #include <glm/gtc/quaternion.hpp>
+#include <cmath>
 #include <memory>
 
 namespace terrain
@@ -36,6 +37,12 @@ namespace terrain
 
     const auto transform = owner->getComponent<Transform>(ComponentType::transform);
     const glm::vec3 local = glm::inverse(transform->getOrientation()) * (worldPoint - transform->getPosition());
+
+    // A description is validated, so this only protects other callers from a NaN focus.
+    if (!std::isfinite(voxelSize) || voxelSize <= 0.0f)
+    {
+      return local;
+    }
 
     return local / voxelSize;
   }
