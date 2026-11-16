@@ -73,6 +73,9 @@ larger of the object's x and z scale, and its half-height with y. `terrain/` hol
 `namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample `TerrainChunk`s that an edit swaps
 copy-on-write, `encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and
 gradient from it, which `raycast` sphere-traces with absent chunks skipped.
+`TerrainStreamPlan` is the headless planner for streaming a volume to a joining view: it queues every chunk nearest a
+focus first, `next` takes a batch whose wire-framed size fits a byte budget (the first chunk always goes, so the stream
+cannot stall), and `requeue` sends a coordinate again after an edit, reading the chunk from the volume at `next` time.
 A terrain is an `AssetType::Terrain` record whose path is always `terrainAssetPath(uuid)` (`terrain/<uuid>`;
 `registerAsset` refuses any other, since the path names a folder under the project root). The record never carries
 data: `TerrainStore` holds each terrain's volume and `TerrainDescription` (voxel size, material palette), and
