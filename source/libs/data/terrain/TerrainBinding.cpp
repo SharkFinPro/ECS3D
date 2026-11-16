@@ -32,4 +32,19 @@ namespace terrain
       }
     }
   }
+
+  void invalidateTerrainBounds(const SceneManager& scenes, const uuids::uuid& terrain)
+  {
+    for (const auto& [sceneUUID, scene] : scenes.getScenes())
+    {
+      for (const auto& object : scene->getObjectManager()->getAllObjects())
+      {
+        const auto component = object->getComponent<Terrain>(ComponentType::collider);
+        if (component && component->getTerrainUUID() == terrain)
+        {
+          component->invalidateBounds();
+        }
+      }
+    }
+  }
 }

@@ -240,6 +240,7 @@ add_executable(${PROJECT_NAME}
   TerrainStreamPlanTest.cpp
   TerrainStreamerLifecycleTest.cpp
   TerrainStreamerTest.cpp
+  TerrainViewSyncTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp
   ProjectIdentityCheckTest.cpp
