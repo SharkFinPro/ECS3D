@@ -278,6 +278,7 @@ void ServerApp::run()
   m_previousTime = std::chrono::steady_clock::now();
   m_lastStatsTime = m_previousTime;
   m_lastStatsFeedTime = m_previousTime;
+  m_lastTerrainPumpTime = m_previousTime;
 
   m_lane.bindToThisThread();
   struct LaneUnbinder
@@ -372,10 +373,10 @@ void ServerApp::run()
       }
     }
 
-    // Every loop iteration, like the log: a stopped scene still streams terrain to a joiner.
+    // On wall time, not on ticks: a stopped scene or a paused sim still streams terrain to a joiner.
     {
       ECS3D_PROFILE_SCOPE("Terrain stream");
-      pumpTerrainStreams();
+      pumpTerrainStreams(now);
     }
 
     // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
@@ -432,8 +433,15 @@ terrain::TerrainStreamer::FocusFor ServerApp::terrainFocusFor(const int32_t conn
   };
 }
 
-void ServerApp::pumpTerrainStreams()
+void ServerApp::pumpTerrainStreams(const std::chrono::steady_clock::time_point now)
 {
+  if (now - m_lastTerrainPumpTime < std::chrono::duration<float>(m_fixedUpdateDt))
+  {
+    return;
+  }
+
+  m_lastTerrainPumpTime = now;
+
   try
   {
     const auto finished = m_terrainStreamer.pump(
@@ -444,10 +452,33 @@ void ServerApp::pumpTerrainStreams()
       Log::info(LogCategory::server, "Streamed " + std::to_string(done.chunks) + " terrain chunk(s) to connection "
         + std::to_string(done.connId));
     }
+
+    m_terrainPumpFailing = false;
+    m_terrainPumpFailures = 0;
   }
   catch (const std::exception& e)
   {
-    Log::error(LogCategory::server, std::string("Terrain stream failed: ") + e.what());
+    constexpr auto summaryPeriod = std::chrono::seconds(10);
+
+    if (!m_terrainPumpFailing)
+    {
+      m_terrainPumpFailing = true;
+      m_terrainPumpFailures = 0;
+      m_lastTerrainFailureLog = now;
+      Log::error(LogCategory::server, std::string("Terrain stream failed: ") + e.what());
+      return;
+    }
+
+    ++m_terrainPumpFailures;
+    m_lastTerrainPumpError = e.what();
+
+    if (now - m_lastTerrainFailureLog >= summaryPeriod)
+    {
+      Log::error(LogCategory::server, "Terrain stream failed " + std::to_string(m_terrainPumpFailures)
+        + " more time(s): " + m_lastTerrainPumpError);
+      m_terrainPumpFailures = 0;
+      m_lastTerrainFailureLog = now;
+    }
   }
 }
 

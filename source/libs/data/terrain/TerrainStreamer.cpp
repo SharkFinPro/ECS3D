@@ -71,6 +71,7 @@ namespace terrain
   void TerrainStreamer::forget(const int32_t connId)
   {
     m_connections.erase(connId);
+    std::erase_if(m_finished, [connId](const StreamFinished& finished) { return finished.connId == connId; });
   }
 
   void TerrainStreamer::restart(const uuids::uuid& terrain, const TerrainStore& store, const FocusFor& focusFor)

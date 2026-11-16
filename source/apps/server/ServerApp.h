@@ -109,6 +109,13 @@ private:
   bool m_statsFeedFailing = false;
   std::chrono::steady_clock::time_point m_lastStatsFeedTime;
 
+  std::chrono::steady_clock::time_point m_lastTerrainPumpTime;
+  // A failing pump logs once, then one summary line per period, until a pump succeeds.
+  bool m_terrainPumpFailing = false;
+  size_t m_terrainPumpFailures = 0;
+  std::string m_lastTerrainPumpError;
+  std::chrono::steady_clock::time_point m_lastTerrainFailureLog;
+
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
@@ -216,12 +223,13 @@ private:
   // Drops what script code buffered for replication, for a stop where the objects it names are replaced.
   static void discardScriptBuffers();
 
-  // The point in a terrain's sample space a joiner's stream starts from: its player's position in the current scene,
-  // else the world origin.
-  // The streamer's focus callback for a connection.
+  // The streamer's focus callback for a connection: the point in a terrain's sample space its stream starts from, which
+  // is its player's position in the current scene, else the world origin.
   [[nodiscard]] terrain::TerrainStreamer::FocusFor terrainFocusFor(int32_t connId) const;
 
-  void pumpTerrainStreams();
+  // Pumps the streams when a fixed timestep of wall time has passed since the last pump, so a connection gets its
+  // budget per tick however fast the loop spins.
+  void pumpTerrainStreams(std::chrono::steady_clock::time_point now);
 
   void notifyPlayerJoined(int32_t slot) const;
 

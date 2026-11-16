@@ -3,7 +3,6 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <terrain/TerrainStore.h>
-#include <terrain/TerrainStreamFocus.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>

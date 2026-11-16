@@ -32,18 +32,6 @@ void ServerApp::handleLoadProject(const net::Message& message)
     // Same packed shape as a snapshot: unpack clears + rebuilds the AssetRegistry/SceneManager and loads
     // the current scene. ProjectSerializer stays the JSON path for file save/load.
     m_projectPacker->unpack(message);
-    m_terrainStore->resetVolumes();
-
-    // The volumes are empty now, so every stream ends here; where it started from no longer matters.
-    const terrain::TerrainStreamer::FocusFor origin = [](const uuids::uuid&, const terrain::TerrainDescription&)
-    {
-      return glm::vec3(0.0f);
-    };
-
-    for (const auto& uuid : m_terrainStore->terrains())
-    {
-      m_terrainStreamer.restart(uuid, *m_terrainStore, origin);
-    }
   }
   catch (const std::exception& e)
   {
@@ -60,6 +48,27 @@ void ServerApp::handleLoadProject(const net::Message& message)
     }
 
     return;
+  }
+
+  // The project is in; a failure here leaves terrain behind it, not the scene, so the load still finishes.
+  try
+  {
+    m_terrainStore->resetVolumes();
+
+    // The volumes are empty now, so every stream ends here; where it started from no longer matters.
+    const terrain::TerrainStreamer::FocusFor origin = [](const uuids::uuid&, const terrain::TerrainDescription&)
+    {
+      return glm::vec3(0.0f);
+    };
+
+    for (const auto& uuid : m_terrainStore->terrains())
+    {
+      m_terrainStreamer.restart(uuid, *m_terrainStore, origin);
+    }
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, std::string("Failed to reset terrain after loading the project: ") + e.what());
   }
 
   finishProjectLoad();

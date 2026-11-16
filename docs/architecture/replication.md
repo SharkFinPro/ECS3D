@@ -31,9 +31,11 @@ change to a terrain volume must go through `TerrainStore::setChunk` (or be follo
 revisions describe it.
 The server streams every terrain's chunks to each joining connection after its join snapshot (`TerrainStreamer`,
 `data/terrain/`). The stream starts nearest the joiner's player (its `PlayerController` slot's position, brought into
-the terrain owner's local frame; the world origin without one) and works outward. `ServerApp` pumps it once per `run()`
-loop iteration, even while the scene is stopped: at most 256 KiB per connection, in messages of at most
-`maxTerrainChunksEntries` entries. The server stamps every loaded chunk with a revision after loading terrain files, so
+the terrain owner's local frame; the world origin without one) and works outward. `ServerApp` pumps it at most once per
+fixed timestep of wall time (20 ms), even while the scene is stopped or paused: at most 256 KiB per connection per
+pump, about 12.5 MiB/s, in messages of at most `maxTerrainChunksEntries` entries. A peer that reads slower than
+that eventually reaches the transport's 64 MiB send-queue cap and is dropped; bulk terrain is meant to move onto its
+own paced connection later. The server stamps every loaded chunk with a revision after loading terrain files, so
 a joiner applies them. A project load empties the volumes and restarts every stream, which then ends at once; the
 server logs "Streamed N terrain chunk(s) to connection C" when a connection's stream runs out. A client or editor
 passes each `terrainChunks` message to `TerrainViewSync::apply`: a malformed one is refused with a warning and the

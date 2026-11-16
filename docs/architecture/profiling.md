@@ -80,7 +80,7 @@ ends. It tracks `Server tick` with a 512-entry ring and interns the counters `ti
   the previous summary, so a long interval is not capped by the history.
 - **Scopes:** `Network in`, `Server tick` (each step, including the input-state calls) holding `Scripts`
   (`variableUpdate`, `fixedUpdate`), `Physics`, `Collisions` and `Script events`; `Replication` (`Structural`,
-  `State delta`) at the top level; `Snapshot`, `Log forwarding`, `Script reload check` and `Stats`.
+  `State delta`) at the top level; `Snapshot`, `Terrain stream`, `Log forwarding`, `Script reload check` and `Stats`.
 - **Summary line:** every `--stats-interval` seconds `logStatsIfDue` logs one line built by `StatsSummary.h`. The tick
   figures (average, p50, p95, p99 and max, in milliseconds rounded from microseconds) come from the `Server tick`
   durations pushed since the previous line. The per-sample averages of `Scripts`, `Physics`, `Collisions` and
