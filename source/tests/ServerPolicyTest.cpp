@@ -47,6 +47,7 @@ namespace {
       case net::MessageType::possessSlot:
       case net::MessageType::statsSubscribe:
       case net::MessageType::serverStats:
+      case net::MessageType::terrainChunks:
         return false;
     }
 

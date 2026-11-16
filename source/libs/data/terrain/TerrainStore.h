@@ -72,11 +72,32 @@ namespace terrain
     // Terrain record. Volumes of terrains that stay are kept (same pointer).
     void reconcile(const AssetRegistry& registry);
 
+    // 0 when the terrain is unknown or no revision is held for the coordinate.
+    [[nodiscard]] uint32_t revision(const uuids::uuid& uuid, ChunkCoord coord) const;
+
+    // The server's counter: returns the next revision for the terrain (first call 1), or 0 for an unknown uuid.
+    uint32_t nextRevision(const uuids::uuid& uuid);
+
+    // Sets the chunk (null or air erases it, as TerrainVolume::setChunk does) and records the revision, also for an
+    // erased coordinate so a later lower-revision copy of the old chunk is refused. A revision above the counter
+    // raises it. False, with no change, for an unknown uuid or a coordinate beyond maxChunkCoord.
+    bool setChunk(const uuids::uuid& uuid, ChunkCoord coord, std::shared_ptr<const TerrainChunk> chunk,
+                  uint32_t revision);
+
+    // Gives every chunk the terrain's volume holds one fresh revision from nextRevision and returns it; 0 for an
+    // unknown uuid. The server calls it after loading terrain files so every loaded chunk has a revision above a
+    // view's 0.
+    uint32_t stampAllChunks(const uuids::uuid& uuid);
+
   private:
     struct Entry
     {
       TerrainDescription description;
       std::shared_ptr<TerrainVolume> volume;
+      // Describes the volume, so anything that replaces the volume clears it.
+      std::unordered_map<ChunkCoord, uint32_t> revisions;
+      // Survives a volume replacement so a revision handed out afterward is above every earlier one.
+      uint32_t counter = 0;
     };
 
     std::unordered_map<uuids::uuid, Entry> m_terrains;

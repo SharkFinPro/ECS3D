@@ -16,6 +16,16 @@ sender-side `TerrainStore`; chunk data never rides it. The server reconciles its
 every snapshot it sends. Unpacking reconciles the view's store with the new registry and applies each description in
 place, so the store survives snapshot rebuilds and a terrain keeps its volume unless its voxel size changed. A
 description naming a uuid with no Terrain record is ignored, and a repeated uuid resolves to the last description.
+Chunk data travels in its own `terrainChunks` message (`data/terrain/TerrainReplication.{h,cpp}`): the terrain uuid,
+then per chunk its coordinate, a revision, the chunk's `hash()` and the `encodeChunk` bytes. An entry with no bytes
+is hash-only: it asserts that the receiver already holds the chunk with that hash. `unpackTerrainChunks` refuses a
+payload that is truncated, repeats a coordinate, carries revision 0 or a hash that differs from the decoded chunk, or
+has trailing bytes. The server owns the revision counter (`TerrainStore::nextRevision`, `stampAllChunks`), and a view
+records the numbers it is sent (`TerrainStore::setChunk`, `revision`). `applyTerrainChunks` applies an entry only when
+its revision is higher than the one the store holds for that coordinate, so a late or duplicate copy is stale. A
+hash-only entry is accepted only when the held chunk (the air chunk, for an absent coordinate) has that hash and is
+otherwise reported as missing. Revisions describe the volume, so replacing the volume clears them while the counter
+keeps rising.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. A third direction exists for `serverLog` alone: server → editor connections

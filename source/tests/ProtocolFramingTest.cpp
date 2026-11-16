@@ -347,6 +347,7 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::possessSlot));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::statsSubscribe));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::serverStats));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::terrainChunks));
 }
 
 TEST(ProtocolFraming, EveryMessageTypeIsClassifiedAsExactlyTheDocumentedMutationSet)
