@@ -391,3 +391,32 @@ TEST(TerrainStreamPlanTest, NonFiniteFocusStillQueuesEveryChunk)
   terrain::TerrainStreamPlan infPlan(volume, { inf, -inf, 16.0f });
   EXPECT_EQ(infPlan.pending(), 5u);
 }
+
+TEST(TerrainStreamPlanTest, AnEntryCapEndsABatchBeforeTheBudgetDoes)
+{
+  terrain::TerrainVolume volume;
+
+  for (int32_t x = 0; x < 5; ++x)
+  {
+    volume.setChunk({ x, 0, 0 }, solid());
+  }
+
+  terrain::TerrainStreamPlan capped(volume, originFocus);
+  EXPECT_EQ(capped.next(volume, terrain::defaultStreamBudgetBytes, 2).size(), 2u);
+  EXPECT_EQ(capped.pending(), 3u);
+
+  // Positive control: with no cap the same budget takes all five.
+  terrain::TerrainStreamPlan uncapped(volume, originFocus);
+  EXPECT_EQ(uncapped.next(volume, terrain::defaultStreamBudgetBytes).size(), 5u);
+}
+
+TEST(TerrainStreamPlanTest, AnEntryCapOfZeroStillTakesOneChunk)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid());
+  volume.setChunk({ 1, 0, 0 }, solid());
+
+  terrain::TerrainStreamPlan plan(volume, originFocus);
+  EXPECT_EQ(plan.next(volume, terrain::defaultStreamBudgetBytes, 0).size(), 1u);
+  EXPECT_EQ(plan.pending(), 1u);
+}

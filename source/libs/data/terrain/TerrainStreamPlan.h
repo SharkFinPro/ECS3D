@@ -7,6 +7,7 @@
 #include <glm/vec3.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -41,9 +42,12 @@ namespace terrain
 
     // Takes chunks in order while streamMessageOverheadBytes plus the sum of (streamEntryOverheadBytes + encoded size)
     // stays within budgetBytes. The first chunk is always taken, even alone over the budget, so the stream cannot
-    // stall. Reads each chunk from the volume at this call, so an edit made since it was queued is sent as edited.
+    // stall. Also stops at maxEntries chunks (0 counts as 1), since uniform chunks encode to a few bytes and a byte
+    // budget alone could exceed one message's entry cap. Reads each chunk from the volume at this call, so an edit
+    // made since it was queued is sent as edited.
     [[nodiscard]] std::vector<StreamedChunk> next(const TerrainVolume& volume,
-                                                  size_t budgetBytes = defaultStreamBudgetBytes);
+                                                  size_t budgetBytes = defaultStreamBudgetBytes,
+                                                  size_t maxEntries = std::numeric_limits<size_t>::max());
 
     // Queues the coordinate again (an edit after it was sent, or while pending - no duplicate). Out-of-range
     // coordinates are ignored.
