@@ -8,7 +8,6 @@
 #include <optional>
 #include <set>
 #include <string>
-#include <utility>
 #include <uuid.h>
 #include <vector>
 
@@ -35,19 +34,25 @@ namespace terrain
   class TerrainViewSync
   {
   public:
-    // Called with each snapshot's project load id and fingerprint after it is unpacked. A project different from the
-    // previous snapshot's empties every volume (and with it the revisions, so the new project's chunks apply) and
-    // restarts the completion reports. The first snapshot is not a change. True when it reset.
-    bool observeSnapshot(TerrainStore& store, const uuids::uuid& loadId, uint64_t fingerprint);
+    // Called with each snapshot's project load id after it is unpacked. A load id different from the previous
+    // snapshot's empties every volume (and with it the revisions, so the new project's chunks apply) and restarts the
+    // completion reports. The first snapshot is not a change. True when it reset.
+    bool observeSnapshot(TerrainStore& store, const uuids::uuid& loadId);
+
+    // Forgets the previous load id and every completion report, for a view that reconnects: the next snapshot is a
+    // first snapshot again.
+    void reset();
 
     // Applies a terrainChunks message into the store and invalidates the bounds of the Terrain components bound to
     // that terrain. The log lines are for the caller to write: a refused message, entries the stream never sends
-    // (an unknown terrain, hash-only entries the store could not satisfy) and, once per project, a terrain that now
-    // holds as many chunks as its description's chunkCount.
+    // (an unknown terrain, hash-only entries the store could not satisfy) and a terrain that now holds as many chunks
+    // as its description's chunkCount, once until it falls below that count again.
     ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message);
 
   private:
-    std::optional<std::pair<uuids::uuid, uint64_t>> m_project;
+    void forgetCompletionIfIncomplete(const TerrainStore& store, const uuids::uuid& terrain);
+
+    std::optional<uuids::uuid> m_loadId;
     std::set<uuids::uuid> m_completed;
   };
 }

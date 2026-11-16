@@ -5,12 +5,11 @@
 
 namespace terrain
 {
-  bool TerrainViewSync::observeSnapshot(TerrainStore& store, const uuids::uuid& loadId, const uint64_t fingerprint)
+  bool TerrainViewSync::observeSnapshot(TerrainStore& store, const uuids::uuid& loadId)
   {
-    const std::pair<uuids::uuid, uint64_t> project(loadId, fingerprint);
-    const bool changed = m_project.has_value() && *m_project != project;
+    const bool changed = m_loadId.has_value() && *m_loadId != loadId;
 
-    m_project = project;
+    m_loadId = loadId;
 
     if (changed)
     {
@@ -19,6 +18,12 @@ namespace terrain
     }
 
     return changed;
+  }
+
+  void TerrainViewSync::reset()
+  {
+    m_loadId.reset();
+    m_completed.clear();
   }
 
   ViewApplyOutcome TerrainViewSync::apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message)
@@ -35,6 +40,7 @@ namespace terrain
     }
 
     outcome.terrain = payload->terrain;
+    forgetCompletionIfIncomplete(store, payload->terrain);
     outcome.result = applyTerrainChunks(store, *payload);
     const std::string name = uuids::to_string(payload->terrain);
 
@@ -66,5 +72,16 @@ namespace terrain
     }
 
     return outcome;
+  }
+
+  void TerrainViewSync::forgetCompletionIfIncomplete(const TerrainStore& store, const uuids::uuid& terrain)
+  {
+    const TerrainDescription* description = store.description(terrain);
+    const auto volume = store.find(terrain);
+
+    if (!description || !volume || volume->chunks().size() < description->chunkCount)
+    {
+      m_completed.erase(terrain);
+    }
   }
 }
