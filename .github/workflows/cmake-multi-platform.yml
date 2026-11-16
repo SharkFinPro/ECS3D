@@ -23,7 +23,6 @@ jobs:
       DOTNET_NOLOGO: 1
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
-      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
 
     runs-on: ${{ matrix.os }}
 
@@ -160,15 +159,6 @@ jobs:
         # command here, serially, so first-run setup is done before the parallel publishes start.
         run: dotnet nuget locals all --list
 
-      - name: Set up compiler cache
-        # Every row compiled the whole tree (VulkanEngine, assimp, freetype and the suite) from scratch. ccache keeps
-        # the objects between runs, keyed per matrix row, and a pull request restores what main last saved. The
-        # sloppiness lets precompiled headers hit on gcc and clang.
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
-        with:
-          key: ${{ matrix.os }}-${{ matrix.build_type }}-${{ matrix.c_compiler }}
-          max-size: 600M
-
       - name: Configure CMake
         # Through the configure preset, so that CMakePresets.json is exercised by CI rather than
         # described by it: the generator, the build directory and the build type all come from the file
@@ -178,9 +168,6 @@ jobs:
           cmake --preset ${{ steps.strings.outputs.preset }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          ${{ matrix.os == 'windows-latest' && '-DECS3D_PRECOMPILED_HEADERS=OFF -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded' || '' }}
 
       - name: Build
         # Sanitize and Coverage skip the apps: the check target below builds the headless suite it runs.

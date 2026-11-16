@@ -47,6 +47,11 @@ ImGui's core sources and `editor/ObjectGUIManager.cpp` compile in too, so panel 
 frame (the backends and Vulkan stay out).
 VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
 
+The suite's own translation units compile without optimization in Release (`/Od`, `-O0`; see
+`source/tests/CMakeLists.txt`). They are most of a Release build's compile time, and the code a test runs hot lives in
+the libraries it links, which stay optimized. Code that is header-only and instantiated in a test, such as the terrain
+sampling, therefore runs unoptimized there; a test that needs speed from it should be sized for that.
+
 ## Per-suite registration
 
 Under the sanitize and coverage presets each process pays a large fixed startup cost, which dominates when ~2,200
