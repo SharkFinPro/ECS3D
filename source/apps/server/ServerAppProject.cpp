@@ -12,7 +12,7 @@
 #include <exception>
 #include <string>
 
-void ServerApp::handleLoadProject(const net::Message& message) const
+void ServerApp::handleLoadProject(const net::Message& message)
 {
   // An editor opened a different project: stop the current scripts, swap the project in, restart,
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
@@ -33,6 +33,17 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     // the current scene. ProjectSerializer stays the JSON path for file save/load.
     m_projectPacker->unpack(message);
     m_terrainStore->resetVolumes();
+
+    // The volumes are empty now, so every stream ends here; where it started from no longer matters.
+    const terrain::TerrainStreamer::FocusFor origin = [](const uuids::uuid&, const terrain::TerrainDescription&)
+    {
+      return glm::vec3(0.0f);
+    };
+
+    for (const auto& uuid : m_terrainStore->terrains())
+    {
+      m_terrainStreamer.restart(uuid, *m_terrainStore, origin);
+    }
   }
   catch (const std::exception& e)
   {

@@ -29,6 +29,18 @@ sets and a receiver's decoded memory stays bounded. Revisions describe the volum
 them while the counter keeps rising; removing a terrain, or reconcile dropping it, forgets both. Every server-side
 change to a terrain volume must go through `TerrainStore::setChunk` (or be followed by `stampAllChunks`) so its
 revisions describe it.
+The server streams every terrain's chunks to each joining connection after its join snapshot (`TerrainStreamer`,
+`data/terrain/`). The stream starts nearest the joiner's player (its `PlayerController` slot's position, brought into
+the terrain owner's local frame; the world origin without one) and works outward. `ServerApp` pumps it once per `run()`
+loop iteration, even while the scene is stopped: at most 256 KiB per connection, in messages of at most
+`maxTerrainChunksEntries` entries. The server stamps every loaded chunk with a revision after loading terrain files, so
+a joiner applies them. A project load empties the volumes and restarts every stream, which then ends at once; the
+server logs "Streamed N terrain chunk(s) to connection C" when a connection's stream runs out. A client or editor
+passes each `terrainChunks` message to `TerrainViewSync::apply`: a malformed one is refused with a warning and the
+store is untouched, an applied one invalidates the bounds of the Terrain components bound to that terrain, and the
+view logs "Terrain <uuid> complete: N chunk(s)" once its held count reaches the snapshot's chunk count. After each
+snapshot unpack the view calls `observeSnapshot`, which resets every volume (and so the revisions) when the project
+load id differs from the previous snapshot's; the first snapshot is not a change.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. A third direction exists for `serverLog` alone: server → editor connections

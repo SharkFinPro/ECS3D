@@ -500,6 +500,10 @@ void ClientApp::applyMessage(const net::Message& message)
       handleStateDelta(message);
       break;
 
+    case net::MessageType::terrainChunks:
+      handleTerrainChunks(message);
+      break;
+
     case net::MessageType::editComponent:
       handleEditComponent(message);
       break;
@@ -530,12 +534,23 @@ void ClientApp::handleSnapshot(const net::Message& message)
 
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+  m_terrainSync.observeSnapshot(*m_terrainStore, m_projectPacker->getProjectLoadId());
   m_lastSnapshotBytes = message.size();
 
   const auto scene = m_sceneManager->getCurrentScene();
   Log::info(LogCategory::client, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
     + (scene ? scene->getName() : "<none>") + " ("
     + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
+}
+
+void ClientApp::handleTerrainChunks(const net::Message& message)
+{
+  const auto outcome = m_terrainSync.apply(*m_terrainStore, *m_sceneManager, message);
+
+  for (const auto& line : outcome.log)
+  {
+    Log::write(line.level, LogCategory::client, line.text);
+  }
 }
 
 void ClientApp::handleStateDelta(const net::Message& message) const

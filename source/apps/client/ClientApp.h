@@ -6,6 +6,7 @@
 #include <Replication.h>
 #include <StatsOverlay.h>
 #include <TrafficRates.h>
+#include <terrain/TerrainViewSync.h>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -68,6 +69,7 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
+  terrain::TerrainViewSync m_terrainSync;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectPacker> m_projectPacker;
 
@@ -128,6 +130,8 @@ private:
   void applyMessage(const net::Message& message);
 
   void handleSnapshot(const net::Message& message);
+
+  void handleTerrainChunks(const net::Message& message);
 
   void handleStateDelta(const net::Message& message) const;
 

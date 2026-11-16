@@ -14,6 +14,7 @@
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainFiles.h>
 #include <terrain/TerrainStore.h>
+#include <terrain/TerrainStreamFocus.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
@@ -147,6 +148,13 @@ void ServerApp::loadStartupProject()
       else
       {
         const auto report = terrain::loadProjectTerrains(m_projectRoot, *m_assetRegistry, *m_terrainStore);
+
+        // Gives every loaded chunk a revision above a view's 0, so a joiner applies what it is streamed.
+        for (const auto& uuid : m_terrainStore->terrains())
+        {
+          m_terrainStore->stampAllChunks(uuid);
+        }
+
         for (const auto& error : report.errors)
         {
           Log::warn(LogCategory::server, "Terrain not loaded: " + error);
@@ -364,6 +372,12 @@ void ServerApp::run()
       }
     }
 
+    // Every loop iteration, like the log: a stopped scene still streams terrain to a joiner.
+    {
+      ECS3D_PROFILE_SCOPE("Terrain stream");
+      pumpTerrainStreams();
+    }
+
     // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
     // while the scene is stopped or paused, and an editor watching the Console shouldn't have to wait for
     // the sim to advance to see it.
@@ -395,6 +409,46 @@ void ServerApp::run()
   }
 
   shutDown();
+}
+
+terrain::TerrainStreamer::FocusFor ServerApp::terrainFocusFor(const int32_t connId) const
+{
+  return [this, connId](const uuids::uuid& terrain, const terrain::TerrainDescription& description)
+  {
+    glm::vec3 world(0.0f);
+    const auto scene = m_sceneManager->getCurrentScene();
+
+    if (scene)
+    {
+      if (const auto slot = m_playerSlots.slotOf(connId))
+      {
+        world = terrain::playerPosition(*scene->getObjectManager(), *slot).value_or(world);
+      }
+
+      return terrain::streamFocus(*scene->getObjectManager(), terrain, world, description.voxelSize);
+    }
+
+    return world / description.voxelSize;
+  };
+}
+
+void ServerApp::pumpTerrainStreams()
+{
+  try
+  {
+    const auto finished = m_terrainStreamer.pump(
+      *m_terrainStore, [this](const int32_t connId, const net::Message& message) { m_netServer->sendTo(connId, message); });
+
+    for (const auto& done : finished)
+    {
+      Log::info(LogCategory::server, "Streamed " + std::to_string(done.chunks) + " terrain chunk(s) to connection "
+        + std::to_string(done.connId));
+    }
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, std::string("Terrain stream failed: ") + e.what());
+  }
 }
 
 void ServerApp::logStatsIfDue(const std::chrono::steady_clock::time_point now)

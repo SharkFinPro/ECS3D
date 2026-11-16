@@ -18,6 +18,7 @@
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainViewSync.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
 #include <array>
@@ -138,6 +139,7 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
+  terrain::TerrainViewSync m_terrainSync;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
   std::shared_ptr<ProjectPacker> m_projectPacker;
@@ -325,6 +327,8 @@ private:
   // Not const: clears the undo/redo in-flight gate (see UndoRequestGate.h) as the rebroadcast a request
   // was waiting on.
   void handleSnapshot(const net::Message& message);
+
+  void handleTerrainChunks(const net::Message& message);
 
   void handleStateDelta(const net::Message& message) const;
 

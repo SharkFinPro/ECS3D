@@ -46,6 +46,7 @@ while playing) the same way it already undoes an edited Transform.
   mirror `tools/shapes/library.py`, and a test pins coordinates from both. Also
   registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration,
   only when `--edit` is set — see [logging.md](logging.md).
+  Each `run()` iteration also pumps the terrain join streams (see [replication.md](replication.md)).
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project` (folder or file; both it and `--port` are also passed to the spawned server)/`--console`/`--server-console`
   (opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`/`--windowed`/`--stats`
