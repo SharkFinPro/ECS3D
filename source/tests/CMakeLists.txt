@@ -237,6 +237,7 @@ add_executable(${PROJECT_NAME}
   TerrainSnapshotTest.cpp
   TerrainStoreTest.cpp
   TerrainStreamPlanTest.cpp
+  TerrainStreamerLifecycleTest.cpp
   TerrainStreamerTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp
@@ -325,6 +326,7 @@ add_executable(${PROJECT_NAME}
   PhysicsGenericRestingFixtures.h
   TerrainFilesFixtures.h
   TerrainFormatFixtures.h
+  TerrainStreamerFixtures.h
 
   # The CLR-free pieces of ECS3DNet are compiled in rather than linked: linking the library would pull
   # ManagedHost and the C# transport assembly into a suite that is headless by construction. That is
