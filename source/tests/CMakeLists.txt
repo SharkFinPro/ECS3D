@@ -461,6 +461,14 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/tests
 )
 
+# The suite is hundreds of small translation units, which makes up most of a Release build's compile time, and
+# the code it runs hot lives in the libraries it links, which stay optimized. The tests themselves are compiled
+# without optimization in Release, where the optimizer would otherwise cost about a third of each unit's time.
+target_compile_options(${PROJECT_NAME} PRIVATE
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/Od>
+  $<$<AND:$<CONFIG:Release>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-O0>
+)
+
 # PresetsTest and AgentDocsTest read CMakePresets.json and the agent docs from the repo root, which is
 # CMAKE_SOURCE_DIR since this directory is only added when ECS3D is top-level.
 target_compile_definitions(${PROJECT_NAME} PRIVATE ECS3D_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
