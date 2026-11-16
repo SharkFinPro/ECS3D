@@ -38,7 +38,7 @@ a joiner applies them. A project load empties the volumes and restarts every str
 server logs "Streamed N terrain chunk(s) to connection C" when a connection's stream runs out. A client or editor
 passes each `terrainChunks` message to `TerrainViewSync::apply`: a malformed one is refused with a warning and the
 store is untouched, an applied one invalidates the bounds of the Terrain components bound to that terrain, and the
-view logs "Terrain <uuid> complete: N chunk(s)" once its held count reaches the snapshot's chunk count. After each
+view logs `Terrain <uuid> complete: N chunk(s)` when its held count reaches the snapshot's chunk count. After each
 snapshot unpack the view calls `observeSnapshot`, which resets every volume (and so the revisions) when the project
 load id differs from the previous snapshot's; the first snapshot is not a change.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
