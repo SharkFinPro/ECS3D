@@ -1,5 +1,6 @@
 #include "TerrainStreamPlan.h"
 #include "TerrainCodec.h"
+#include <algorithm>
 #include <cmath>
 #include <tuple>
 #include <utility>
@@ -30,12 +31,15 @@ namespace terrain
     }
   }
 
-  std::vector<StreamedChunk> TerrainStreamPlan::next(const TerrainVolume& volume, const size_t budgetBytes)
+  std::vector<StreamedChunk> TerrainStreamPlan::next(const TerrainVolume& volume, const size_t budgetBytes,
+                                                     const size_t maxEntries, const bool forceFirst)
   {
     std::vector<StreamedChunk> batch;
     size_t used = streamMessageOverheadBytes;
 
-    while (!m_queue.empty())
+    const size_t entryCap = std::max<size_t>(maxEntries, 1);
+
+    while (!m_queue.empty() && batch.size() < entryCap)
     {
       const ChunkCoord coord = m_queue.begin()->coord;
 
@@ -51,7 +55,7 @@ namespace terrain
       const size_t entryBytes = streamEntryOverheadBytes + encoded.size();
 
       // A chunk that does not fit ends the batch rather than letting a smaller, farther one jump the order.
-      if (!batch.empty() && used + entryBytes > budgetBytes)
+      if ((!batch.empty() || !forceFirst) && used + entryBytes > budgetBytes)
       {
         break;
       }
