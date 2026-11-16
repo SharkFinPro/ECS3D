@@ -9,13 +9,14 @@
 #include <cstdint>
 #include <memory>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace terrain
 {
   inline constexpr size_t defaultStreamBudgetBytes = 256 * 1024;
 
-  // Wire framing per chunk entry and per message; they mirror the terrainChunks layout.
+  // These must equal the terrainChunks wire framing: the header of one chunk entry and the header of the message.
   inline constexpr size_t streamEntryOverheadBytes = 28;
   inline constexpr size_t streamMessageOverheadBytes = 20;
 
@@ -65,6 +66,8 @@ namespace terrain
 
     glm::vec3 m_focus;
     std::set<Key> m_queue;
+    // Dedup keys on the coordinate, so it never depends on keyFor giving identical doubles at each call.
+    std::unordered_map<ChunkCoord, Key> m_queued;
   };
 }
 

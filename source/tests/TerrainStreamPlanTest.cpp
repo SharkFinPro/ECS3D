@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <random>
 #include <set>
@@ -189,8 +190,14 @@ TEST(TerrainStreamPlanTest, BudgetSmallerThanOneChunkStillYieldsOneChunkPerCall)
   EXPECT_EQ(tight.next(volume, 1).size(), 1u);
   EXPECT_EQ(tight.pending(), 2u);
 
+  // Positive control: a budget that fits the first two framed chunks yields two.
+  const size_t entry = terrain::streamEntryOverheadBytes + terrain::encodeChunk(*noise(0)).size();
+  const size_t roomyBudget = terrain::streamMessageOverheadBytes + 2 * entry;
+  const size_t expectedRoomy = std::min<size_t>(3, (roomyBudget - terrain::streamMessageOverheadBytes) / entry);
+
   terrain::TerrainStreamPlan roomy(volume, originFocus);
-  EXPECT_EQ(roomy.next(volume, terrain::defaultStreamBudgetBytes).size(), 2u);
+  EXPECT_EQ(roomy.next(volume, roomyBudget).size(), expectedRoomy);
+  EXPECT_GT(expectedRoomy, 1u);
 }
 
 TEST(TerrainStreamPlanTest, ALaterChunkThatDoesNotFitEndsTheBatchWithoutSkippingAhead)
@@ -313,4 +320,74 @@ TEST(TerrainStreamPlanTest, FarCoordinatesOrderWithoutOverflow)
 
   const std::vector<ChunkCoord> expected{ { edge, edge, edge }, { edge - 1, edge, edge }, { -edge, -edge, -edge } };
   EXPECT_EQ(drain(plan, volume), expected);
+}
+
+TEST(TerrainStreamPlanTest, BudgetBoundaryIsInclusive)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid());
+  volume.setChunk({ 1, 0, 0 }, solid());
+
+  const size_t exact = terrain::streamMessageOverheadBytes +
+                       2 * (terrain::streamEntryOverheadBytes + terrain::encodeChunk(*solid()).size());
+
+  terrain::TerrainStreamPlan fits(volume, originFocus);
+  EXPECT_EQ(fits.next(volume, exact).size(), 2u);
+
+  terrain::TerrainStreamPlan shortByOne(volume, originFocus);
+  EXPECT_EQ(shortByOne.next(volume, exact - 1).size(), 1u);
+}
+
+TEST(TerrainStreamPlanTest, RequeueAtMaxChunkCoordIsAccepted)
+{
+  const terrain::TerrainVolume volume;
+  terrain::TerrainStreamPlan plan(volume, originFocus);
+
+  plan.requeue({ terrain::maxChunkCoord, -terrain::maxChunkCoord, terrain::maxChunkCoord });
+  EXPECT_EQ(plan.pending(), 1u);
+
+  plan.requeue({ terrain::maxChunkCoord + 1, 0, 0 });
+  EXPECT_EQ(plan.pending(), 1u);
+}
+
+TEST(TerrainStreamPlanTest, RequeuedNearChunkComesOutBeforePendingFarChunks)
+{
+  terrain::TerrainVolume volume;
+
+  for (int32_t x = 0; x < 5; ++x)
+  {
+    volume.setChunk({ x, 0, 0 }, solid());
+  }
+
+  terrain::TerrainStreamPlan plan(volume, originFocus);
+  const size_t oneChunk = terrain::streamMessageOverheadBytes + terrain::streamEntryOverheadBytes +
+                          terrain::encodeChunk(*solid()).size();
+
+  ASSERT_EQ(plan.next(volume, oneChunk).front().coord.x, 0);
+
+  plan.requeue({ 0, 0, 0 });
+  const auto batch = plan.next(volume, oneChunk);
+  ASSERT_EQ(batch.size(), 1u);
+  EXPECT_EQ(batch.front().coord.x, 0);
+  EXPECT_EQ(plan.next(volume, oneChunk).front().coord.x, 1);
+}
+
+TEST(TerrainStreamPlanTest, NonFiniteFocusStillQueuesEveryChunk)
+{
+  terrain::TerrainVolume volume;
+
+  for (int32_t x = 0; x < 5; ++x)
+  {
+    volume.setChunk({ x, 0, 0 }, solid());
+  }
+
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const float inf = std::numeric_limits<float>::infinity();
+
+  terrain::TerrainStreamPlan nanPlan(volume, { nan, 16.0f, nan });
+  EXPECT_EQ(nanPlan.pending(), 5u);
+  EXPECT_EQ(drain(nanPlan, volume).size(), 5u);
+
+  terrain::TerrainStreamPlan infPlan(volume, { inf, -inf, 16.0f });
+  EXPECT_EQ(infPlan.pending(), 5u);
 }

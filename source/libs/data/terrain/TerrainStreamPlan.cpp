@@ -1,5 +1,6 @@
 #include "TerrainStreamPlan.h"
 #include "TerrainCodec.h"
+#include <cmath>
 #include <tuple>
 #include <utility>
 
@@ -14,9 +15,18 @@ namespace terrain
   TerrainStreamPlan::TerrainStreamPlan(const TerrainVolume& volume, const glm::vec3 focus)
     : m_focus(focus)
   {
+    // A NaN distance makes every key compare equivalent, which would drop all but one chunk from the queue.
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      if (!std::isfinite(m_focus[axis]))
+      {
+        m_focus[axis] = 0.0f;
+      }
+    }
+
     for (const auto& entry : volume.chunks())
     {
-      m_queue.insert(keyFor(entry.first));
+      requeue(entry.first);
     }
   }
 
@@ -33,7 +43,8 @@ namespace terrain
 
       if (!chunk)
       {
-        chunk = TerrainChunk::uniform(airDistance, 0);
+        static const std::shared_ptr<const TerrainChunk> airChunk = TerrainChunk::uniform(airDistance, 0);
+        chunk = airChunk;
       }
 
       std::vector<uint8_t> encoded = encodeChunk(*chunk);
@@ -47,6 +58,7 @@ namespace terrain
 
       used += entryBytes;
       batch.push_back({ coord, std::move(chunk), std::move(encoded) });
+      m_queued.erase(coord);
       m_queue.erase(m_queue.begin());
     }
 
@@ -55,10 +67,14 @@ namespace terrain
 
   void TerrainStreamPlan::requeue(const ChunkCoord coord)
   {
-    if (isValidChunkCoord(coord))
+    if (!isValidChunkCoord(coord) || m_queued.contains(coord))
     {
-      m_queue.insert(keyFor(coord));
+      return;
     }
+
+    const Key key = keyFor(coord);
+    m_queued.emplace(coord, key);
+    m_queue.insert(key);
   }
 
   bool TerrainStreamPlan::done() const
