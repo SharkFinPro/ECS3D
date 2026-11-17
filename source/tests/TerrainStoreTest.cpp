@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -536,4 +537,93 @@ TEST(TerrainStoreRevisions, SetChunkRefusesRevisionZeroAndRecordsALowerRevisionA
 
   ASSERT_TRUE(store.setChunk(firstUUID, coordA, solidChunk(), 2));
   EXPECT_EQ(store.revision(firstUUID, coordA), 2u);
+}
+
+TEST(TerrainStoreExpectations, ExpectChunksRecordsACountAndZeroClearsIt)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  EXPECT_FALSE(store.expectedChunks(firstUUID).has_value());
+
+  EXPECT_TRUE(store.expectChunks(firstUUID, 4));
+  EXPECT_EQ(store.expectedChunks(firstUUID), std::optional<uint32_t>(4));
+
+  EXPECT_TRUE(store.expectChunks(firstUUID, 0));
+  EXPECT_FALSE(store.expectedChunks(firstUUID).has_value());
+
+  EXPECT_TRUE(store.expectChunks(firstUUID, 2));
+  store.clearExpectation(firstUUID);
+  EXPECT_FALSE(store.expectedChunks(firstUUID).has_value());
+}
+
+TEST(TerrainStoreExpectations, AnUnknownTerrainIsRefused)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+
+  EXPECT_FALSE(store.expectChunks(secondUUID, 3));
+  EXPECT_FALSE(store.expectedChunks(secondUUID).has_value());
+  store.clearExpectation(secondUUID);
+
+  EXPECT_TRUE(store.expectChunks(firstUUID, 3));
+}
+
+TEST(TerrainStoreExpectations, ResetVolumesKeepsTheExpectation)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create(describe(firstUUID)), nullptr);
+  ASSERT_TRUE(store.expectChunks(firstUUID, 6));
+
+  store.resetVolumes();
+
+  EXPECT_EQ(store.expectedChunks(firstUUID), std::optional<uint32_t>(6));
+}
+
+TEST(TerrainStoreExpectations, ClearExpectationsForgetsEveryTerrainsExpectation)
+{
+  terrain::TerrainStore store;
+  for (const auto& uuid : { firstUUID, secondUUID })
+  {
+    ASSERT_NE(store.create(describe(uuid)), nullptr);
+    ASSERT_TRUE(store.expectChunks(uuid, 3));
+  }
+
+  ASSERT_EQ(store.expectedChunks(secondUUID), std::optional<uint32_t>(3));
+
+  store.clearExpectations();
+
+  EXPECT_FALSE(store.expectedChunks(firstUUID).has_value());
+  EXPECT_FALSE(store.expectedChunks(secondUUID).has_value());
+  EXPECT_NE(store.find(firstUUID), nullptr);
+}
+
+TEST(TerrainStoreExpectations, RemoveReconcileAndAdoptForgetTheExpectation)
+{
+  AssetRegistry registry;
+  registry.registerAsset(terrainRecord(secondUUID));
+
+  terrain::TerrainStore store;
+  for (const auto& uuid : { firstUUID, secondUUID, thirdUUID })
+  {
+    ASSERT_NE(store.create(describe(uuid)), nullptr);
+    ASSERT_TRUE(store.expectChunks(uuid, 2));
+  }
+
+  ASSERT_TRUE(store.remove(thirdUUID));
+  ASSERT_TRUE(store.adopt(describe(firstUUID, 4.0f), std::make_shared<terrain::TerrainVolume>(4.0f)));
+  EXPECT_FALSE(store.expectedChunks(firstUUID).has_value());
+  EXPECT_EQ(store.expectedChunks(secondUUID), std::optional<uint32_t>(2));
+
+  store.reconcile(registry);
+
+  EXPECT_FALSE(store.expectedChunks(firstUUID).has_value());
+  // The terrain the registry keeps is the positive control: reconcile does not clear what it does not drop.
+  EXPECT_EQ(store.expectedChunks(secondUUID), std::optional<uint32_t>(2));
+
+  ASSERT_NE(store.create(describe(thirdUUID)), nullptr);
+  EXPECT_FALSE(store.expectedChunks(thirdUUID).has_value());
+
+  store.reconcile(AssetRegistry{});
+  ASSERT_NE(store.create(describe(secondUUID)), nullptr);
+  EXPECT_FALSE(store.expectedChunks(secondUUID).has_value());
 }

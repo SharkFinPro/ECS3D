@@ -80,6 +80,22 @@ namespace terrain
   // replaces the chunk. A hash-only entry is accepted (revision recorded, chunk kept) only when the held chunk's hash
   // equals it - an absent coordinate holds the air chunk, so it compares against the air chunk's hash.
   ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload);
+
+  struct UploadApplyResult
+  {
+    bool unknownTerrain = false;
+    // The terrain had no pending expectation: nothing applied.
+    bool notExpected = false;
+    std::vector<ChunkCoord> applied;
+    // True when this message brought the terrain to its expected count; the expectation is cleared.
+    bool completed = false;
+    // Hash-only entries are not an upload; they are ignored and counted.
+    size_t ignoredHashOnly = 0;
+  };
+
+  // The server side of an upload: each full entry is set with store.nextRevision(terrain), ignoring the entry's
+  // revision, so every view that is sent the chunk afterward sees a revision above anything it holds.
+  UploadApplyResult applyTerrainUpload(TerrainStore& store, const TerrainChunksPayload& payload);
 }
 
 #endif //TERRAINREPLICATION_H

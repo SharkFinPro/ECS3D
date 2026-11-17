@@ -30,6 +30,7 @@ namespace {
       case net::MessageType::addAsset:
       case net::MessageType::renameAsset:
       case net::MessageType::removeAsset:
+      case net::MessageType::terrainChunks:
         return true;
 
       case net::MessageType::undefined:
@@ -47,7 +48,6 @@ namespace {
       case net::MessageType::possessSlot:
       case net::MessageType::statsSubscribe:
       case net::MessageType::serverStats:
-      case net::MessageType::terrainChunks:
         return false;
     }
 
@@ -139,7 +139,7 @@ TEST(ServerPolicyTest, MutationSetMatchesIndependentlyStatedExpectation)
     }
   }
 
-  EXPECT_EQ(mutations, 7);
+  EXPECT_EQ(mutations, 8);
 }
 
 TEST(ServerPolicyTest, MutationsPassOnlyOnEditServerFromEditorConnection)
@@ -165,7 +165,7 @@ TEST(ServerPolicyTest, NamedMutationTypes)
   for (const auto type : {net::MessageType::editComponent, net::MessageType::sceneEdit,
                           net::MessageType::sceneControl, net::MessageType::loadProject,
                           net::MessageType::addAsset, net::MessageType::renameAsset,
-                          net::MessageType::removeAsset})
+                          net::MessageType::removeAsset, net::MessageType::terrainChunks})
   {
     EXPECT_TRUE(isMutationAuthorized(type, true, true)) << static_cast<int>(type);
     EXPECT_FALSE(isMutationAuthorized(type, true, false)) << static_cast<int>(type);

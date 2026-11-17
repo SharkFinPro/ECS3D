@@ -409,3 +409,24 @@ TEST(TerrainSnapshot, AMalformedProjectBlobLeavesTheVolumeChunksInPlaceBecauseTh
   receiver.project.store.resetVolumes();
   EXPECT_NE(receiver.project.store.find(firstUUID), volume);
 }
+
+TEST(TerrainSnapshot, ATerrainAwaitingItsUploadPacksTheExpectedChunkCount)
+{
+  Project sender;
+  fillSender(sender);
+  ASSERT_TRUE(sender.store.expectChunks(firstUUID, 5));
+
+  Project receiver;
+  receiver.packer.unpack(packed(sender.packer));
+
+  ASSERT_NE(receiver.store.description(firstUUID), nullptr);
+  EXPECT_EQ(receiver.store.description(firstUUID)->chunkCount, 5u);
+  // A terrain with no expectation still packs the volume's own count.
+  ASSERT_NE(receiver.store.description(secondUUID), nullptr);
+  EXPECT_EQ(receiver.store.description(secondUUID)->chunkCount, 0u);
+
+  sender.store.clearExpectation(firstUUID);
+  Project again;
+  again.packer.unpack(packed(sender.packer));
+  EXPECT_EQ(again.store.description(firstUUID)->chunkCount, 1u);
+}
