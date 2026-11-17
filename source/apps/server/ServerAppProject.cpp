@@ -2,6 +2,7 @@
 #include <ProjectPacker.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainReplication.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -55,6 +56,15 @@ void ServerApp::handleLoadProject(const net::Message& message)
   {
     m_terrainStore->resetVolumes();
 
+    // Every terrain, so a count of 0 also clears an expectation an earlier load left behind.
+    for (const auto& uuid : m_terrainStore->terrains())
+    {
+      if (const auto* description = m_terrainStore->description(uuid))
+      {
+        m_terrainStore->expectChunks(uuid, description->chunkCount);
+      }
+    }
+
     // The volumes are empty now, so every stream ends here; where it started from no longer matters.
     const terrain::TerrainStreamer::FocusFor origin = [](const uuids::uuid&, const terrain::TerrainDescription&)
     {
@@ -72,6 +82,41 @@ void ServerApp::handleLoadProject(const net::Message& message)
   }
 
   finishProjectLoad();
+}
+
+void ServerApp::handleTerrainUpload(const net::Message& message)
+{
+  const auto payload = terrain::unpackTerrainChunks(message);
+  if (!payload)
+  {
+    Log::warn(LogCategory::server, "Refused a malformed terrain upload (" + std::to_string(message.bytes().size())
+      + " bytes).");
+    return;
+  }
+
+  const std::string name = uuids::to_string(payload->terrain);
+  const auto result = terrain::applyTerrainUpload(*m_terrainStore, *payload);
+
+  if (result.unknownTerrain)
+  {
+    Log::warn(LogCategory::server, "Ignored a terrain upload for unknown terrain " + name);
+    return;
+  }
+
+  if (result.notExpected)
+  {
+    Log::warn(LogCategory::server, "Ignored a terrain upload for terrain " + name + ": no upload is expected.");
+    return;
+  }
+
+  m_terrainStreamer.requeue(payload->terrain, result.applied);
+
+  if (result.completed)
+  {
+    const auto volume = m_terrainStore->find(payload->terrain);
+    Log::info(LogCategory::server, "Terrain " + name + " uploaded: " + std::to_string(volume->chunks().size())
+      + " chunk(s)");
+  }
 }
 
 void ServerApp::finishProjectLoad() const

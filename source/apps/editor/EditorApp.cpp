@@ -283,6 +283,7 @@ void EditorApp::setupSaveUI()
   m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
   m_saveUI->setHistoryPositionProvider([this] { return m_playHistory.authoredPosition(); });
   m_saveUI->setProjectRootCallback([this](const std::filesystem::path& root, const bool reopened) {
+    m_projectRoot = root;
     m_assetCache->setProjectRoot(root);
     if (reopened)
     {
@@ -451,6 +452,8 @@ void EditorApp::run()
 
       m_keybindDispatcher->update();
     }
+
+    pumpTerrainUpload();
 
     saveLayoutIfRequested();
 

@@ -207,6 +207,9 @@ private:
 
   void handleLoadProject(const net::Message& message);
 
+  // The editor's terrain chunks for a terrain a loadProject said to expect: sets them and sends them on to every view.
+  void handleTerrainUpload(const net::Message& message);
+
   void finishProjectLoad() const;
 
   // Whether the current scene is running, the only state in which a fixed step does any work.

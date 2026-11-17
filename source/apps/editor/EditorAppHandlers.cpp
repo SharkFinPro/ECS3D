@@ -9,6 +9,8 @@
 #include <SaveUI.h>
 #include <UnsavedChanges.h>
 #include <objects/components/Component.h>
+#include <terrain/TerrainFiles.h>
+#include <terrain/TerrainStore.h>
 #include <NetClient.h>
 #include <Log.h>
 #include <AssetDragDrop.h>
@@ -230,6 +232,30 @@ void EditorApp::onLoadScene(const uuids::uuid& sceneUUID)
   m_netClient->send(message);
 }
 
+void EditorApp::pumpTerrainUpload()
+{
+  if (m_terrainUpload.done() || !m_netClient->isConnected())
+  {
+    return;
+  }
+
+  try
+  {
+    m_terrainUploadSent += m_terrainUpload.pump([this](const net::Message& message) { m_netClient->send(message); });
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::editor, std::string("Terrain upload failed: ") + e.what());
+    m_terrainUpload.clear();
+    return;
+  }
+
+  if (m_terrainUpload.done())
+  {
+    Log::info(LogCategory::editor, "Uploaded " + std::to_string(m_terrainUploadSent) + " terrain chunk(s)");
+  }
+}
+
 void EditorApp::acceptSceneDrop(const float x, const float y, const float width, const float height)
 {
   // A read-only viewer follows the server's scene, the same gate as the asset browser's double-click.
@@ -288,10 +314,39 @@ void EditorApp::onLoadProject()
   m_projectPacker->setProjectFingerprint(0);
   m_projectLoads.expectOwnLoad(loadId);
 
+  // The server resets its terrain on loadProject and expects the chunk counts the packed descriptions carry, so the
+  // project's terrain files load into our store before packing and go up afterward.
+  m_terrainStore->reconcile(*m_assetRegistry);
+  m_terrainStore->resetVolumes();
+
+  if (!m_projectRoot.empty())
+  {
+    const auto report = terrain::loadProjectTerrains(m_projectRoot, *m_assetRegistry, *m_terrainStore);
+
+    for (const auto& error : report.errors)
+    {
+      Log::warn(LogCategory::editor, "Terrain failed to load: " + error);
+    }
+
+    Log::info(LogCategory::editor, "Loaded " + std::to_string(report.loaded) + " terrain(s) for upload");
+  }
+
   net::Message message(net::MessageType::loadProject);
   m_projectPacker->pack(message);
 
   Log::info(LogCategory::editor, "Sending loadProject (" + std::to_string(message.size()) + " bytes) to server.");
 
   m_netClient->send(message);
+
+  // Holds the volumes themselves: our store is reset again when our own snapshot comes back.
+  m_terrainUpload.clear();
+  m_terrainUploadSent = 0;
+
+  for (const auto& uuid : m_terrainStore->terrains())
+  {
+    if (const auto volume = m_terrainStore->find(uuid); volume && !volume->chunks().empty())
+    {
+      m_terrainUpload.add(uuid, volume);
+    }
+  }
 }

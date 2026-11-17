@@ -2,6 +2,7 @@
 #include "ServerPolicy.h"
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainReplication.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -88,6 +89,10 @@ void ServerApp::handleEditorMessage(const net::Message& message)
 
     case net::MessageType::sceneControl:
       handleSceneControl(message);
+      break;
+
+    case net::MessageType::terrainChunks:
+      handleTerrainUpload(message);
       break;
 
     default: break;
@@ -348,6 +353,15 @@ void ServerApp::handleSceneControl(const net::Message& message) const
     {
     }
     return;
+  }
+
+  if (op == net::SceneControlOp::start)
+  {
+    if (const auto reason = terrain::pendingUploadReason(*m_terrainStore))
+    {
+      Log::warn(LogCategory::server, *reason);
+      return;
+    }
   }
 
   const auto scene = m_sceneManager->getCurrentScene();
