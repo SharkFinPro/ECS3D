@@ -256,7 +256,13 @@ void EditorApp::displayPlayControls()
 
   if (gc::iconButton("##play", gc::SecIcon::play, available.play, theme::sceneGreen))
   {
-    if (const auto reason = terrain::incompleteTerrainReason(*m_terrainStore))
+    // Until the server's snapshot of this editor's own project load arrives, the local store still holds the
+    // terrain loaded from disk, so it cannot tell whether the server has the chunks yet.
+    if (m_projectLoads.awaitingOwnLoad())
+    {
+      Log::warn(LogCategory::editor, "Play waits for the server to finish loading the project");
+    }
+    else if (const auto reason = terrain::incompleteTerrainReason(*m_terrainStore))
     {
       Log::warn(LogCategory::editor, *reason);
     }
