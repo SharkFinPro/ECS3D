@@ -32,6 +32,7 @@
 #include <vector>
 #include <chrono>
 #include <Log.h>
+#include <terrain/TerrainStore.h>
 
 namespace {
   // The scene's Camera objects as combo entries; picking one makes it the viewport's camera.
@@ -255,12 +256,19 @@ void EditorApp::displayPlayControls()
 
   if (gc::iconButton("##play", gc::SecIcon::play, available.play, theme::sceneGreen))
   {
-    if (m_playHistory.requestStart())
+    if (const auto reason = terrain::incompleteTerrainReason(*m_terrainStore))
     {
-      clearUndoRedoPending();
+      Log::warn(LogCategory::editor, *reason);
     }
+    else
+    {
+      if (m_playHistory.requestStart())
+      {
+        clearUndoRedoPending();
+      }
 
-    sendSceneControl(net::SceneControlOp::start);
+      sendSceneControl(net::SceneControlOp::start);
+    }
   }
 
   ImGui::SameLine();

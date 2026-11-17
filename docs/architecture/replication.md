@@ -52,7 +52,9 @@ expected count for a terrain still awaiting its upload, so views know their targ
 uploaded chunk with the server's own revision (the entry's is ignored), `requeue` sends the chunks on to every
 connection, including the uploader, and the expectation clears when the terrain holds the expected count ("Terrain
 <uuid> uploaded: N chunk(s)"). Play (`SceneControlOp::start`) is refused while any expectation is pending
-(`pendingUploadReason`). The upload uses the editor's own connection even for a server it spawned on the same machine;
+(`pendingUploadReason`), and the editor refuses Play itself while a terrain holds fewer chunks than its description says
+(`incompleteTerrainReason`), so a refused Play never queues a history swap. The editor pumps the upload at most once
+per 20 ms, the server's fixed step, and a dropped connection stops it: the project must be opened again. The upload uses the editor's own connection even for a server it spawned on the same machine;
 it also serves a remote `--host` editor, so it stays where telling a spawned server the project root would not.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`, and the editor's `terrainChunks` upload) that only a connection authorized as `Role::editor` on an

@@ -28,6 +28,10 @@ void ServerApp::handleLoadProject(const net::Message& message)
     stopScriptsLogged(*scene);
   }
 
+  // Before the unpack, so a failed one cannot leave the previous project's expectations for uuids both share.
+  m_terrainStore->clearExpectations();
+  m_terrainUploadWarned.clear();
+
   try
   {
     // Same packed shape as a snapshot: unpack clears + rebuilds the AssetRegistry/SceneManager and loads
@@ -97,16 +101,21 @@ void ServerApp::handleTerrainUpload(const net::Message& message)
   const std::string name = uuids::to_string(payload->terrain);
   const auto result = terrain::applyTerrainUpload(*m_terrainStore, *payload);
 
-  if (result.unknownTerrain)
+  if (result.unknownTerrain || result.notExpected)
   {
-    Log::warn(LogCategory::server, "Ignored a terrain upload for unknown terrain " + name);
+    if (m_terrainUploadWarned.insert(payload->terrain).second)
+    {
+      Log::warn(LogCategory::server, "Ignored a terrain upload for " + std::string(result.unknownTerrain
+        ? "unknown terrain " + name : "terrain " + name + ": no upload is expected"));
+    }
+
     return;
   }
 
-  if (result.notExpected)
+  if (result.ignoredHashOnly > 0)
   {
-    Log::warn(LogCategory::server, "Ignored a terrain upload for terrain " + name + ": no upload is expected.");
-    return;
+    Log::warn(LogCategory::server, "Terrain " + name + ": ignored " + std::to_string(result.ignoredHashOnly)
+      + " hash-only upload entries");
   }
 
   m_terrainStreamer.requeue(payload->terrain, result.applied);

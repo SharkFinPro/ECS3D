@@ -145,6 +145,7 @@ private:
   // The server resets its terrain on loadProject; the opened project's chunks reach it through this.
   terrain::TerrainUpload m_terrainUpload;
   size_t m_terrainUploadSent = 0;
+  std::chrono::steady_clock::time_point m_lastTerrainUploadPump;
   std::filesystem::path m_projectRoot;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;

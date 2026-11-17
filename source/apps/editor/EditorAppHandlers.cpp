@@ -18,6 +18,7 @@
 #include <imgui_internal.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -215,6 +216,11 @@ void EditorApp::noteRecordedEdit() const
 
 // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
 // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
+namespace {
+  // The server's fixed step, so an upload moves at the rate the server streams.
+  constexpr auto terrainUploadPeriod = std::chrono::milliseconds(20);
+}
+
 void EditorApp::onLoadScene(const uuids::uuid& sceneUUID)
 {
   if (const auto scene = m_sceneManager->getScene(sceneUUID))
@@ -238,6 +244,14 @@ void EditorApp::pumpTerrainUpload()
   {
     return;
   }
+
+  const auto now = std::chrono::steady_clock::now();
+  if (now - m_lastTerrainUploadPump < terrainUploadPeriod)
+  {
+    return;
+  }
+
+  m_lastTerrainUploadPump = now;
 
   try
   {

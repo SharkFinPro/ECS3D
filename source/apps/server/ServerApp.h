@@ -210,6 +210,9 @@ private:
   // The editor's terrain chunks for a terrain a loadProject said to expect: sets them and sends them on to every view.
   void handleTerrainUpload(const net::Message& message);
 
+  // Terrains a stray upload was already warned about in this project load.
+  std::unordered_set<uuids::uuid> m_terrainUploadWarned;
+
   void finishProjectLoad() const;
 
   // Whether the current scene is running, the only state in which a fixed step does any work.

@@ -440,6 +440,13 @@ void EditorApp::run()
         logMessage("Error", editorConnectionLogMessage(m_connectionTracker.state()));
         m_serverEditable = false;
         m_remoteStats.disconnected();
+
+        if (!m_terrainUpload.done())
+        {
+          m_terrainUpload.clear();
+          Log::warn(LogCategory::editor, "The terrain upload stopped because the connection was lost; "
+            "open the project again to upload its terrain.");
+        }
       }
     }
 
