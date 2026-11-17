@@ -148,18 +148,39 @@ TEST(TerrainUpload, TheBudgetLimitsAPumpButTheFirstChunkAlwaysGoes)
   const size_t oneChunk = terrain::streamEntryOverheadBytes + terrain::encodeChunk(*noise(0)).size();
   const size_t budget = terrain::streamMessageOverheadBytes + 2 * oneChunk + oneChunk / 2;
 
-  size_t pumps = 0;
-  while (!upload.done() && pumps < 100)
+  // The budget fits exactly two chunks of this size and not a third.
+  for (int x = 0; x < 6; ++x)
   {
-    const size_t sent = upload.pump(recorder.sender(), budget);
-    EXPECT_GE(sent, 1u);
-    EXPECT_LE(sent, 3u);
-    ++pumps;
+    ASSERT_EQ(terrain::encodeChunk(*noise(static_cast<uint32_t>(x))).size(), terrain::encodeChunk(*noise(0)).size());
   }
 
+  // Five chunks are left after the first pump: two, two, then the last one.
+  EXPECT_EQ(upload.pump(recorder.sender(), budget), 2u);
+  EXPECT_EQ(upload.pump(recorder.sender(), budget), 2u);
+  EXPECT_EQ(upload.pump(recorder.sender(), budget), 1u);
   EXPECT_TRUE(upload.done());
   EXPECT_EQ(recorder.chunkTotal(), 6u);
-  EXPECT_GT(pumps, 1u);
+}
+
+TEST(TerrainUpload, OneBudgetCoversAllTerrainsOfAPump)
+{
+  terrain::TerrainUpload upload;
+  upload.add(terrainA, makeVolume(2));
+  upload.add(terrainB, makeVolume(2));
+
+  const size_t oneChunk = terrain::streamEntryOverheadBytes + terrain::encodeChunk(*noise(0)).size();
+  const size_t budget = terrain::streamMessageOverheadBytes + 2 * oneChunk + oneChunk / 2;
+
+  UploadRecorder recorder;
+  EXPECT_EQ(upload.pump(recorder.sender(), budget), 2u);
+  ASSERT_EQ(recorder.messages.size(), 1u);
+  EXPECT_EQ(recorder.messages[0].payload.terrain, terrainA);
+  EXPECT_EQ(upload.pendingChunks(), 2u);
+
+  EXPECT_EQ(upload.pump(recorder.sender(), budget), 2u);
+  ASSERT_EQ(recorder.messages.size(), 2u);
+  EXPECT_EQ(recorder.messages[1].payload.terrain, terrainB);
+  EXPECT_TRUE(upload.done());
 }
 
 TEST(TerrainUpload, AMessageHoldsAtMostTheEntryCap)
@@ -343,6 +364,77 @@ TEST(TerrainApplyUpload, HashOnlyEntriesAreIgnoredAndCounted)
   EXPECT_EQ(store.revision(terrainA, { 5, 0, 0 }), 0u);
 }
 
+TEST(TerrainApplyUpload, ADuplicateCoordinateAcrossMessagesDoesNotRaiseTheCount)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+  ASSERT_TRUE(store.expectChunks(terrainA, 2));
+
+  EXPECT_FALSE(terrain::applyTerrainUpload(store, fullPayload(terrainA, 1)).completed);
+  const auto again = terrain::applyTerrainUpload(store, fullPayload(terrainA, 1));
+
+  EXPECT_FALSE(again.completed);
+  EXPECT_EQ(store.find(terrainA)->chunks().size(), 1u);
+  EXPECT_EQ(store.expectedChunks(terrainA), std::optional<uint32_t>(2));
+
+  EXPECT_TRUE(terrain::applyTerrainUpload(store, fullPayload(terrainA, 2)).completed);
+}
+
+TEST(TerrainApplyUpload, AnAirEntryErasesAHeldChunkAndLowersTheCount)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+  ASSERT_TRUE(store.expectChunks(terrainA, 2));
+  ASSERT_FALSE(terrain::applyTerrainUpload(store, fullPayload(terrainA, 1)).completed);
+  ASSERT_EQ(store.find(terrainA)->chunks().size(), 1u);
+
+  const auto air = terrain::TerrainChunk::uniform(terrain::airDistance, 0);
+  terrain::TerrainChunksPayload payload;
+  payload.terrain = terrainA;
+  payload.entries.push_back({ { 0, 0, 0 }, 1, air->hash(), air });
+
+  const auto result = terrain::applyTerrainUpload(store, payload);
+
+  EXPECT_EQ(result.applied.size(), 1u);
+  EXPECT_FALSE(result.completed);
+  EXPECT_EQ(store.find(terrainA)->chunks().size(), 0u);
+  EXPECT_EQ(store.expectedChunks(terrainA), std::optional<uint32_t>(2));
+}
+
+TEST(TerrainApplyUpload, AMessageThatOvershootsCompletesAndALaterOneIsNotExpected)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+  ASSERT_TRUE(store.expectChunks(terrainA, 2));
+
+  const auto over = terrain::applyTerrainUpload(store, fullPayload(terrainA, 4));
+  EXPECT_TRUE(over.completed);
+  EXPECT_EQ(store.find(terrainA)->chunks().size(), 4u);
+
+  const auto later = terrain::applyTerrainUpload(store, fullPayload(terrainA, 5));
+  EXPECT_TRUE(later.notExpected);
+  EXPECT_FALSE(later.completed);
+  EXPECT_EQ(store.find(terrainA)->chunks().size(), 4u);
+}
+
+TEST(TerrainApplyUpload, AnInvalidCoordinateNeverBurnsARevision)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+  ASSERT_TRUE(store.expectChunks(terrainA, 5));
+
+  auto payload = fullPayload(terrainA, 1);
+  const auto chunk = noise(3);
+  payload.entries.insert(payload.entries.begin(),
+                         { { terrain::maxChunkCoord + 1, 0, 0 }, 1, chunk->hash(), chunk });
+
+  const auto result = terrain::applyTerrainUpload(store, payload);
+
+  ASSERT_EQ(result.applied.size(), 1u);
+  EXPECT_EQ(store.revision(terrainA, result.applied[0]), 1u);
+  EXPECT_EQ(store.find(terrainA)->chunks().size(), 1u);
+}
+
 TEST(TerrainApplyUpload, AnUploadFromTerrainUploadReproducesTheSendersVolume)
 {
   const auto source = makeVolume(6);
@@ -381,6 +473,30 @@ TEST(TerrainPendingUpload, NothingIsPendingWithoutAnExpectation)
 
   ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
   EXPECT_FALSE(terrain::pendingUploadReason(store).has_value());
+}
+
+TEST(TerrainIncompleteTerrain, NamesTheFirstTerrainHoldingFewerChunksThanItsDescriptionSays)
+{
+  terrain::TerrainStore store;
+  EXPECT_FALSE(terrain::incompleteTerrainReason(store).has_value());
+
+  ASSERT_NE(store.create({ .uuid = terrainB, .chunkCount = 4 }), nullptr);
+  ASSERT_NE(store.create({ .uuid = terrainA, .chunkCount = 2 }), nullptr);
+  store.find(terrainA)->setChunk({ 0, 0, 0 }, solid());
+
+  EXPECT_EQ(terrain::incompleteTerrainReason(store),
+            "Play waits for terrain " + uuids::to_string(terrainA) + ": 1 of 2 chunk(s) received");
+
+  store.find(terrainA)->setChunk({ 1, 0, 0 }, solid());
+  EXPECT_EQ(terrain::incompleteTerrainReason(store),
+            "Play waits for terrain " + uuids::to_string(terrainB) + ": 0 of 4 chunk(s) received");
+
+  for (int x = 0; x < 4; ++x)
+  {
+    store.find(terrainB)->setChunk({ x, 0, 0 }, solid());
+  }
+
+  EXPECT_FALSE(terrain::incompleteTerrainReason(store).has_value());
 }
 
 TEST(TerrainPendingUpload, TheReasonNamesTheFirstShortTerrainAndItsCounts)

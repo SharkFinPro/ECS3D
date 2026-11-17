@@ -293,6 +293,32 @@ namespace terrain
     }
   }
 
+  void TerrainStore::clearExpectations()
+  {
+    for (auto& [uuid, entry] : m_terrains)
+    {
+      entry.expected.reset();
+    }
+  }
+
+  std::optional<std::string> incompleteTerrainReason(const TerrainStore& store)
+  {
+    for (const uuids::uuid& uuid : store.terrains())
+    {
+      const TerrainDescription* description = store.description(uuid);
+      const auto volume = store.find(uuid);
+      const size_t held = volume ? volume->chunks().size() : 0;
+
+      if (description && held < description->chunkCount)
+      {
+        return "Play waits for terrain " + uuids::to_string(uuid) + ": " + std::to_string(held) + " of " +
+               std::to_string(description->chunkCount) + " chunk(s) received";
+      }
+    }
+
+    return std::nullopt;
+  }
+
   std::optional<std::string> pendingUploadReason(const TerrainStore& store)
   {
     for (const uuids::uuid& uuid : store.terrains())

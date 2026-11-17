@@ -196,6 +196,11 @@ namespace terrain
         continue;
       }
 
+      if (!isValidChunkCoord(entry.coord))
+      {
+        continue;
+      }
+
       const uint32_t revision = store.nextRevision(payload.terrain);
       if (revision != 0 && store.setChunk(payload.terrain, entry.coord, entry.chunk, revision))
       {

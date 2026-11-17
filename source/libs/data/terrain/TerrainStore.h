@@ -102,6 +102,8 @@ namespace terrain
 
     void clearExpectation(const uuids::uuid& uuid);
 
+    void clearExpectations();
+
   private:
     struct Entry
     {
@@ -120,6 +122,10 @@ namespace terrain
   // The first terrain (in uuid order) still short of its expected chunk count, as "Play waits for terrain <uuid>: N of
   // M chunk(s) uploaded"; nullopt when no upload is pending.
   [[nodiscard]] std::optional<std::string> pendingUploadReason(const TerrainStore& store);
+
+  // The view side of the same gate: the first terrain (in uuid order) whose volume holds fewer chunks than its
+  // description's chunk count, as "Play waits for terrain <uuid>: N of M chunk(s) received"; nullopt when none does.
+  [[nodiscard]] std::optional<std::string> incompleteTerrainReason(const TerrainStore& store);
 }
 
 #endif //TERRAINSTORE_H
