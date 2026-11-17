@@ -136,6 +136,7 @@ namespace terrain
     entry.description = description;
     entry.volume = std::move(volume);
     entry.revisions.clear();
+    entry.expected.reset();
 
     return true;
   }
@@ -261,5 +262,54 @@ namespace terrain
     }
 
     return stamp;
+  }
+
+  bool TerrainStore::expectChunks(const uuids::uuid& uuid, const uint32_t count)
+  {
+    const auto it = m_terrains.find(uuid);
+    if (it == m_terrains.end())
+    {
+      return false;
+    }
+
+    it->second.expected = count > 0 ? std::optional<uint32_t>(count) : std::nullopt;
+
+    return true;
+  }
+
+  std::optional<uint32_t> TerrainStore::expectedChunks(const uuids::uuid& uuid) const
+  {
+    const auto it = m_terrains.find(uuid);
+
+    return it != m_terrains.end() ? it->second.expected : std::nullopt;
+  }
+
+  void TerrainStore::clearExpectation(const uuids::uuid& uuid)
+  {
+    const auto it = m_terrains.find(uuid);
+    if (it != m_terrains.end())
+    {
+      it->second.expected.reset();
+    }
+  }
+
+  std::optional<std::string> pendingUploadReason(const TerrainStore& store)
+  {
+    for (const uuids::uuid& uuid : store.terrains())
+    {
+      const auto expected = store.expectedChunks(uuid);
+      if (!expected)
+      {
+        continue;
+      }
+
+      const auto volume = store.find(uuid);
+      const size_t held = volume ? volume->chunks().size() : 0;
+
+      return "Play waits for terrain " + uuids::to_string(uuid) + ": " + std::to_string(held) + " of " +
+             std::to_string(*expected) + " chunk(s) uploaded";
+    }
+
+    return std::nullopt;
   }
 }

@@ -74,6 +74,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainStreamer.cpp
   terrain/TerrainStreamer.h
   terrain/TerrainTypes.h
+  terrain/TerrainUpload.cpp
+  terrain/TerrainUpload.h
   terrain/TerrainViewSync.cpp
   terrain/TerrainViewSync.h
   terrain/TerrainVolume.cpp

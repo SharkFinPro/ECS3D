@@ -46,7 +46,7 @@ void ProjectPacker::pack(net::Message& message) const
 
     message.write(uuid);
     message.write(description->voxelSize);
-    message.write(static_cast<uint32_t>(volume->chunks().size()));
+    message.write(m_terrainStore->expectedChunks(uuid).value_or(static_cast<uint32_t>(volume->chunks().size())));
     message.write(static_cast<uint32_t>(description->palette.size()));
     for (const auto& material : description->palette)
     {

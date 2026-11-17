@@ -326,6 +326,7 @@ TEST(ProtocolFraming, IsMutationMessageMatchesTheDocumentedEditorMutationPath)
   EXPECT_TRUE(net::isMutationMessage(net::MessageType::addAsset));
   EXPECT_TRUE(net::isMutationMessage(net::MessageType::renameAsset));
   EXPECT_TRUE(net::isMutationMessage(net::MessageType::removeAsset));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::terrainChunks));
 }
 
 TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
@@ -347,7 +348,6 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::possessSlot));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::statsSubscribe));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::serverStats));
-  EXPECT_FALSE(net::isMutationMessage(net::MessageType::terrainChunks));
 }
 
 TEST(ProtocolFraming, EveryMessageTypeIsClassifiedAsExactlyTheDocumentedMutationSet)
@@ -355,7 +355,7 @@ TEST(ProtocolFraming, EveryMessageTypeIsClassifiedAsExactlyTheDocumentedMutation
   const std::vector<net::MessageType> mutations{
     net::MessageType::editComponent, net::MessageType::sceneEdit, net::MessageType::sceneControl,
     net::MessageType::loadProject, net::MessageType::addAsset, net::MessageType::renameAsset,
-    net::MessageType::removeAsset
+    net::MessageType::removeAsset, net::MessageType::terrainChunks
   };
 
   // Every byte value, not just the named enumerators, so a mutation type appended without updating the set

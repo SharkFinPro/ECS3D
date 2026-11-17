@@ -169,4 +169,46 @@ namespace terrain
 
     return result;
   }
+
+  UploadApplyResult applyTerrainUpload(TerrainStore& store, const TerrainChunksPayload& payload)
+  {
+    UploadApplyResult result;
+
+    const auto volume = store.find(payload.terrain);
+    if (volume == nullptr)
+    {
+      result.unknownTerrain = true;
+      return result;
+    }
+
+    const auto expected = store.expectedChunks(payload.terrain);
+    if (!expected)
+    {
+      result.notExpected = true;
+      return result;
+    }
+
+    for (const ReceivedChunk& entry : payload.entries)
+    {
+      if (!entry.chunk)
+      {
+        ++result.ignoredHashOnly;
+        continue;
+      }
+
+      const uint32_t revision = store.nextRevision(payload.terrain);
+      if (revision != 0 && store.setChunk(payload.terrain, entry.coord, entry.chunk, revision))
+      {
+        result.applied.push_back(entry.coord);
+      }
+    }
+
+    if (volume->chunks().size() >= *expected)
+    {
+      store.clearExpectation(payload.terrain);
+      result.completed = true;
+    }
+
+    return result;
+  }
 }

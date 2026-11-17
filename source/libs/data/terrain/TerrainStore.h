@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <uuid.h>
@@ -92,6 +93,15 @@ namespace terrain
     // view's 0.
     uint32_t stampAllChunks(const uuids::uuid& uuid);
 
+    // The server's record of a terrain whose chunks an editor is uploading. A terrain the store does not hold is
+    // refused; a count of 0 clears the expectation. remove, reconcile and adopt forget it. resetVolumes keeps it: the
+    // server sets expectations after its reset and a later reset must not lose them.
+    bool expectChunks(const uuids::uuid& uuid, uint32_t count);
+
+    [[nodiscard]] std::optional<uint32_t> expectedChunks(const uuids::uuid& uuid) const;
+
+    void clearExpectation(const uuids::uuid& uuid);
+
   private:
     struct Entry
     {
@@ -101,10 +111,15 @@ namespace terrain
       std::unordered_map<ChunkCoord, uint32_t> revisions;
       // Survives a volume replacement so a revision handed out afterward is above every earlier one.
       uint32_t counter = 0;
+      std::optional<uint32_t> expected;
     };
 
     std::unordered_map<uuids::uuid, Entry> m_terrains;
   };
+
+  // The first terrain (in uuid order) still short of its expected chunk count, as "Play waits for terrain <uuid>: N of
+  // M chunk(s) uploaded"; nullopt when no upload is pending.
+  [[nodiscard]] std::optional<std::string> pendingUploadReason(const TerrainStore& store);
 }
 
 #endif //TERRAINSTORE_H
