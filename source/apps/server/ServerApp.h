@@ -8,6 +8,7 @@
 #include "ServerStatsFeed.h"
 #include "StatsSummary.h"
 #include <StatsSubscriptions.h>
+#include <terrain/TerrainStreamer.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
@@ -81,6 +82,9 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
+
+  // The terrain chunks each joined connection is still being sent, pumped once per run() iteration.
+  terrain::TerrainStreamer m_terrainStreamer;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
   std::shared_ptr<ProjectPacker> m_projectPacker;
@@ -104,6 +108,13 @@ private:
   StatsFeedCursor m_statsFeedCursor;
   bool m_statsFeedFailing = false;
   std::chrono::steady_clock::time_point m_lastStatsFeedTime;
+
+  std::chrono::steady_clock::time_point m_lastTerrainPumpTime;
+  // A failing pump logs once, then one summary line per period, until a pump succeeds.
+  bool m_terrainPumpFailing = false;
+  size_t m_terrainPumpFailures = 0;
+  std::string m_lastTerrainPumpError;
+  std::chrono::steady_clock::time_point m_lastTerrainFailureLog;
 
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
@@ -183,7 +194,7 @@ private:
   // send mutations.
   [[nodiscard]] bool isMessageAuthorized(const net::Message& message, int32_t senderId) const;
 
-  void handleEditorMessage(const net::Message& message) const;
+  void handleEditorMessage(const net::Message& message);
 
   void handleJoin(const net::Message& message, int32_t senderId);
 
@@ -194,7 +205,7 @@ private:
   // Hands a just-applied setSceneScriptFields edit to the running instance; any other edit does nothing.
   void pushSceneScriptFields(const SceneAsset& scene, const nlohmann::json& edit) const;
 
-  void handleLoadProject(const net::Message& message) const;
+  void handleLoadProject(const net::Message& message);
 
   void finishProjectLoad() const;
 
@@ -211,6 +222,14 @@ private:
 
   // Drops what script code buffered for replication, for a stop where the objects it names are replaced.
   static void discardScriptBuffers();
+
+  // The streamer's focus callback for a connection: the point in a terrain's sample space its stream starts from, which
+  // is its player's position in the current scene, else the world origin.
+  [[nodiscard]] terrain::TerrainStreamer::FocusFor terrainFocusFor(int32_t connId) const;
+
+  // Pumps the streams when a fixed timestep of wall time has passed since the last pump, so a connection gets its
+  // budget per tick however fast the loop spins.
+  void pumpTerrainStreams(std::chrono::steady_clock::time_point now);
 
   void notifyPlayerJoined(int32_t slot) const;
 

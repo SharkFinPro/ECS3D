@@ -5,6 +5,7 @@
 #include <PlayerSlots.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
@@ -28,6 +29,10 @@ void EditorApp::applyMessage(const net::Message& message)
 
     case net::MessageType::stateDelta:
       handleStateDelta(message);
+      break;
+
+    case net::MessageType::terrainChunks:
+      handleTerrainChunks(message);
       break;
 
     case net::MessageType::editComponent:
@@ -86,6 +91,7 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+  m_terrainSync.observeSnapshot(*m_terrainStore, m_projectPacker->getProjectLoadId());
 
   checkSnapshotProject();
 
@@ -105,6 +111,16 @@ void EditorApp::handleSnapshot(const net::Message& message)
     }
 
     clearEditHistory();
+  }
+}
+
+void EditorApp::handleTerrainChunks(const net::Message& message)
+{
+  const auto outcome = m_terrainSync.apply(*m_terrainStore, *m_sceneManager, message);
+
+  for (const auto& line : outcome.log)
+  {
+    Log::write(line.level, LogCategory::editor, line.text);
   }
 }
 

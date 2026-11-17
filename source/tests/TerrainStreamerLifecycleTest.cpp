@@ -424,3 +424,39 @@ TEST(TerrainStreamerTest, AnAbsentCoordinateIsStampedAndSentAsAir)
   EXPECT_EQ(store.revision(terrainA, coords.front()), entry.revision);
   EXPECT_EQ(store.find(terrainA)->chunk(coords.front()), nullptr);
 }
+
+TEST(TerrainStreamerTest, ForgettingAConnectionDropsItsPendingFinishReport)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 1, false);
+
+  terrain::TerrainStreamer streamer;
+  streamer.start(1, store, originFocus);
+  streamer.start(2, store, originFocus);
+
+  // Connection 1 finishes in this pump, then connection 2's send throws, so the report is held back.
+  Recorder recorder;
+  const auto sender = recorder.sender();
+  const terrain::TerrainStreamer::Send throwingFor2 = [&sender](const int32_t connId, const net::Message& message)
+  {
+    if (connId == 2)
+    {
+      throw std::runtime_error("send failed");
+    }
+
+    sender(connId, message);
+  };
+
+  EXPECT_THROW(streamer.pump(store, throwingFor2), std::runtime_error);
+  ASSERT_EQ(recorder.from(1).size(), 1u);
+
+  streamer.forget(1);
+
+  const auto finished = streamer.pump(store, recorder.sender());
+
+  EXPECT_TRUE(std::ranges::none_of(finished, [](const terrain::StreamFinished& report) { return report.connId == 1; }));
+
+  // Positive control: the connection that was not forgotten is still reported.
+  ASSERT_EQ(finished.size(), 1u);
+  EXPECT_EQ(finished.front().connId, 2);
+}

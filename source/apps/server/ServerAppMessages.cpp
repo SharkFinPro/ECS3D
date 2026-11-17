@@ -2,6 +2,7 @@
 #include "ServerPolicy.h"
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
@@ -57,7 +58,7 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
   }
 }
 
-void ServerApp::handleEditorMessage(const net::Message& message) const
+void ServerApp::handleEditorMessage(const net::Message& message)
 {
   switch (message.getType())
   {
@@ -132,6 +133,8 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   }
 
   sendJoinReply(senderId);
+
+  m_terrainStreamer.start(senderId, *m_terrainStore, terrainFocusFor(senderId));
 }
 
 std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)
@@ -253,6 +256,7 @@ void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t 
 
 void ServerApp::handleDisconnect(const int32_t connId)
 {
+  m_terrainStreamer.forget(connId);
   m_statsSubscriptions.forget(connId);
   m_joinNonces.erase(connId);
   m_slotlessConnections.erase(connId);
