@@ -57,6 +57,13 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
   }
 
   // The project is in; a failure here leaves terrain behind it, not the scene, so the load still finishes.
+  resetTerrainForLoadedProject();
+
+  finishProjectLoad();
+}
+
+void ServerApp::resetTerrainForLoadedProject()
+{
   try
   {
     m_terrainStore->resetVolumes();
@@ -85,8 +92,6 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
   {
     Log::error(LogCategory::server, std::string("Failed to reset terrain after loading the project: ") + e.what());
   }
-
-  finishProjectLoad();
 }
 
 void ServerApp::dropTerrainUploadFrom(const int32_t connId)

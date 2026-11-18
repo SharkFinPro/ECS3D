@@ -207,6 +207,9 @@ private:
 
   void handleLoadProject(const net::Message& message, int32_t senderId);
 
+  // Empties the terrain volumes, expects the loaded project's chunk counts and restarts the streams; logs a failure.
+  void resetTerrainForLoadedProject();
+
   // The uploader of the last project load left before its terrain arrived: nothing will fill the expectations, so
   // they are dropped rather than holding Play for every editor until the next load.
   void dropTerrainUploadFrom(int32_t connId);
