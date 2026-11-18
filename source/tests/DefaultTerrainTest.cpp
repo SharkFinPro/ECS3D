@@ -110,18 +110,6 @@ namespace {
   double DefaultTerrainTest::s_seconds = 0.0;
 }
 
-TEST_F(DefaultTerrainTest, GenerationIsDeterministic)
-{
-  terrain::TerrainVolume again;
-  generateShowcaseTerrain(again);
-
-  EXPECT_FALSE(s_full->chunks().empty());
-  EXPECT_TRUE(sameChunks(*s_full, again));
-
-  // Positive control: the comparison tells different volumes apart.
-  EXPECT_FALSE(sameChunks(*s_full, *s_ground));
-}
-
 TEST_F(DefaultTerrainTest, TheChunkCountStaysWithinWhatEveryJoinStreams)
 {
   EXPECT_GE(s_full->chunks().size(), 300u);
@@ -130,7 +118,10 @@ TEST_F(DefaultTerrainTest, TheChunkCountStaysWithinWhatEveryJoinStreams)
 
 TEST_F(DefaultTerrainTest, GenerationStaysQuick)
 {
-  std::cout << "[ INFO ] showcase generation took " << s_seconds << " s\n";
+#ifndef NDEBUG
+  GTEST_SKIP() << "A Release measurement: Debug, sanitizer and coverage builds skip it";
+#endif
+  std::cout << "[ INFO ] showcase generation took " << s_seconds << " s for " << s_full->chunks().size() << " chunks\n";
   EXPECT_LT(s_seconds, 5.0);
 }
 
@@ -149,14 +140,18 @@ TEST_F(DefaultTerrainTest, TheTunnelIsAirBetweenSolidRockAboveAndBelow)
   EXPECT_TRUE(solidAt(*s_ground, x, showcase::tunnelY - showcase::tunnelRadius - 6, z));
 }
 
-TEST_F(DefaultTerrainTest, TheTunnelOpensOnBothSides)
+TEST_F(DefaultTerrainTest, TheTunnelOpensUnderTheRidgeAtBothEnds)
 {
-  const int x = showcase::tunnelX;
+  // Both ends of the stretch where the ridge stands above the roof.
+  for (const int z : { 132, 188 })
+  {
+    EXPECT_TRUE(airAt(*s_full, showcase::tunnelX, showcase::tunnelY, z)) << z;
+    EXPECT_TRUE(solidAt(*s_ground, showcase::tunnelX, showcase::tunnelY, z)) << z;
+  }
 
-  EXPECT_TRUE(airAt(*s_full, x, showcase::tunnelY, showcase::tunnelStartZ + 2));
-  EXPECT_TRUE(airAt(*s_full, x, showcase::tunnelY, showcase::tunnelEndZ - 2));
-  EXPECT_TRUE(airAt(*s_full, x, showcase::tunnelY, showcase::tunnelStartZ - 10));
-  EXPECT_TRUE(airAt(*s_full, x, showcase::tunnelY, showcase::tunnelEndZ + 10));
+  // Both mouths open onto the ground outside the ridge.
+  EXPECT_TRUE(airAt(*s_full, showcase::tunnelX, showcase::tunnelY, showcase::tunnelStartZ - 12));
+  EXPECT_TRUE(airAt(*s_full, showcase::tunnelX, showcase::tunnelY, showcase::tunnelEndZ + 12));
 }
 
 TEST_F(DefaultTerrainTest, TheArchSpansAnOpeningUnderARockSpan)
@@ -219,7 +214,7 @@ TEST_F(DefaultTerrainTest, TheSurfaceUsesSeveralMaterials)
   EXPECT_EQ(solidSurfaceMaterials(*s_ground).size(), 1u);
 }
 
-TEST_F(DefaultTerrainTest, InstallFillsTheVolumeAndRecordsWhatItHolds)
+TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatItHolds)
 {
   AssetRegistry registry;
   registry.registerAsset(terrainRecord(showcaseUuid));
@@ -233,7 +228,10 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeAndRecordsWhatItHolds)
   installDefaultTerrains(store);
 
   ASSERT_FALSE(volume->chunks().empty());
+
+  // A second, separate generation matches the suite's shared one, and the comparison tells different volumes apart.
   EXPECT_TRUE(sameChunks(*volume, *s_full));
+  EXPECT_FALSE(sameChunks(*volume, *s_ground));
 
   const auto* description = store.description(showcaseUuid);
   ASSERT_NE(description, nullptr);

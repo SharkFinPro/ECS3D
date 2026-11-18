@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <numbers>
 #include <tuple>
 #include <utility>
@@ -103,7 +104,8 @@ float groundAt(const float x, const float z)
                                (1.0f - easeBetween(70.0f, 100.0f, std::abs(z - 160.0f)));
   const float calm =
     (1.0f - tunnelCorridor) *
-    easeBetween(25.0f, 60.0f, distance2D(x, z, static_cast<float>(showcase::archX), static_cast<float>(showcase::archZ))) *
+    easeBetween(25.0f, 60.0f,
+                distance2D(x, z, static_cast<float>(showcase::archX), static_cast<float>(showcase::archZ))) *
     easeBetween(8.0f, 40.0f, distance2D(x, z, 205.0f, static_cast<float>(showcase::overhangZ)));
   const float hillAmplitude = 6.0f + 14.0f * easeBetween(50.0f, 110.0f, std::abs(z - 160.0f));
   float height = static_cast<float>(showcase::groundHeight) + hillAmplitude * fbm(x, z) * calm + ridge;
@@ -231,33 +233,34 @@ void floatIsland(terrain::TerrainVolume& volume)
   }
 }
 
-uint8_t materialFor(const glm::ivec3 sample, const float normalY, const Ground& ground)
+bool inIsland(const float x, const float y, const float z)
 {
-  const float x = static_cast<float>(sample.x);
-  const float y = static_cast<float>(sample.y);
-  const float z = static_cast<float>(sample.z);
+  return y >= 85.0f &&
+         distance2D(x, z, static_cast<float>(showcase::islandX), static_cast<float>(showcase::islandZ)) < 40.0f;
+}
 
-  if (y >= 85.0f &&
-      distance2D(x, z, static_cast<float>(showcase::islandX), static_cast<float>(showcase::islandZ)) < 40.0f)
-  {
-    return normalY > 0.4f ? materialGrass : materialBrown;
-  }
+bool inOverhang(const glm::ivec3 sample)
+{
+  return sample.x < 226 && sample.x > 190 && sample.z > 230 && sample.z < 280 && sample.y >= 60;
+}
 
-  if (sample.x < 226 && sample.x > 190 && sample.z > 230 && sample.z < 280 && y >= 60.0f)
-  {
-    return normalY > 0.6f ? materialGray : materialBrown;
-  }
+bool inArch(const float x, const float y, const float z)
+{
+  return std::abs(x - static_cast<float>(showcase::archX)) <= 32.0f &&
+         std::abs(z - static_cast<float>(showcase::archZ)) <= 14.0f &&
+         y > static_cast<float>(showcase::groundHeight) + 1.0f;
+}
 
-  if (std::abs(x - static_cast<float>(showcase::archX)) <= 32.0f &&
-      std::abs(z - static_cast<float>(showcase::archZ)) <= 14.0f &&
-      y > static_cast<float>(showcase::groundHeight) + 1.0f)
-  {
-    return normalY > 0.6f ? materialGray : materialBrown;
-  }
+uint8_t rockMaterial(const float normalY)
+{
+  return normalY > 0.6f ? materialGray : materialBrown;
+}
 
+uint8_t groundMaterial(const glm::ivec3 sample, const float normalY, const Ground& ground)
+{
   const float height = ground.at(sample.x, sample.z);
 
-  if (height - y > 3.0f || normalY < 0.6f)
+  if (height - static_cast<float>(sample.y) > 3.0f || normalY < 0.6f)
   {
     return materialBrown;
   }
@@ -270,7 +273,26 @@ uint8_t materialFor(const glm::ivec3 sample, const float normalY, const Ground& 
   return height < static_cast<float>(showcase::groundHeight) + 1.0f ? materialSand : materialGrass;
 }
 
-void paintBands(terrain::TerrainVolume& volume, const Ground& ground)
+uint8_t materialFor(const glm::ivec3 sample, const float normalY, const Ground& ground)
+{
+  const float x = static_cast<float>(sample.x);
+  const float y = static_cast<float>(sample.y);
+  const float z = static_cast<float>(sample.z);
+
+  if (inIsland(x, y, z))
+  {
+    return normalY > 0.4f ? materialGrass : materialBrown;
+  }
+
+  if (inOverhang(sample) || inArch(x, y, z))
+  {
+    return rockMaterial(normalY);
+  }
+
+  return groundMaterial(sample, normalY, ground);
+}
+
+std::vector<terrain::ChunkCoord> denseChunks(const terrain::TerrainVolume& volume)
 {
   std::vector<terrain::ChunkCoord> dense;
   for (const auto& [coord, chunk] : volume.chunks())
@@ -286,55 +308,100 @@ void paintBands(terrain::TerrainVolume& volume, const Ground& ground)
     return std::tie(a.x, a.y, a.z) < std::tie(b.x, b.y, b.z);
   });
 
+  return dense;
+}
+
+// One chunk's distances for the slope reads; a neighbor outside the chunk comes from the volume. Reads are clamped
+// to the ground's columns so the outermost samples do not see the world beyond the box as air.
+class SlopeReader
+{
+public:
+  SlopeReader(const terrain::TerrainVolume& volume, const terrain::ChunkCoord coord,
+              const std::vector<int16_t>& distances)
+    : m_volume(volume), m_origin(terrain::chunkOrigin(coord)), m_distances(distances)
+  {}
+
+  [[nodiscard]] float normalY(const glm::ivec3 sample) const
+  {
+    const float gradX = static_cast<float>(distanceAt(sample + glm::ivec3(1, 0, 0)) -
+                                           distanceAt(sample - glm::ivec3(1, 0, 0)));
+    const float gradY = static_cast<float>(distanceAt(sample + glm::ivec3(0, 1, 0)) -
+                                           distanceAt(sample - glm::ivec3(0, 1, 0)));
+    const float gradZ = static_cast<float>(distanceAt(sample + glm::ivec3(0, 0, 1)) -
+                                           distanceAt(sample - glm::ivec3(0, 0, 1)));
+    const float length = std::sqrt(gradX * gradX + gradY * gradY + gradZ * gradZ);
+
+    return length > 0.0f ? gradY / length : 1.0f;
+  }
+
+private:
+  [[nodiscard]] int distanceAt(glm::ivec3 sample) const
+  {
+    sample.x = std::clamp(sample.x, 0, showcase::columns - 1);
+    sample.z = std::clamp(sample.z, 0, showcase::columns - 1);
+    const glm::ivec3 local = sample - m_origin;
+    const bool inside = local.x >= 0 && local.y >= 0 && local.z >= 0 && local.x < terrain::chunkSize &&
+                        local.y < terrain::chunkSize && local.z < terrain::chunkSize;
+
+    return static_cast<int>(inside ? m_distances[static_cast<size_t>(terrain::sampleIndex(local.x, local.y, local.z))]
+                                   : m_volume.distanceAtSample(sample));
+  }
+
+  const terrain::TerrainVolume& m_volume;
+  glm::ivec3 m_origin;
+  const std::vector<int16_t>& m_distances;
+};
+
+bool isSurfaceSample(const int16_t distance)
+{
+  return distance < terrain::airDistance && distance > -terrain::airDistance;
+}
+
+// The chunk repainted, or null when no material changed.
+std::shared_ptr<const terrain::TerrainChunk> paintChunk(const terrain::TerrainVolume& volume,
+                                                        const terrain::ChunkCoord coord, const Ground& ground)
+{
+  const auto source = volume.chunk(coord);
+  const glm::ivec3 origin = terrain::chunkOrigin(coord);
+  const std::vector<int16_t> distances(source->distances().begin(), source->distances().end());
+  std::vector<uint8_t> materials(source->materials().begin(), source->materials().end());
+  const SlopeReader reader(volume, coord, distances);
+  bool changed = false;
+
+  for (int z = 0; z < terrain::chunkSize; ++z)
+  {
+    for (int y = 0; y < terrain::chunkSize; ++y)
+    {
+      for (int x = 0; x < terrain::chunkSize; ++x)
+      {
+        const auto index = static_cast<size_t>(terrain::sampleIndex(x, y, z));
+        if (!isSurfaceSample(distances[index]))
+        {
+          continue;
+        }
+
+        const glm::ivec3 sample = origin + glm::ivec3(x, y, z);
+        const uint8_t material = materialFor(sample, reader.normalY(sample), ground);
+        changed = changed || material != materials[index];
+        materials[index] = material;
+      }
+    }
+  }
+
+  return changed ? terrain::TerrainChunk::dense(distances, std::move(materials)) : nullptr;
+}
+
+void paintBands(terrain::TerrainVolume& volume, const Ground& ground)
+{
   // Every chunk reads the unedited volume, so a sample's slope never sees a neighbor already repainted.
   terrain::ChunkEdits edits;
 
-  for (const auto& coord : dense)
+  for (const auto& coord : denseChunks(volume))
   {
-    const auto source = volume.chunk(coord);
-    const glm::ivec3 origin = terrain::chunkOrigin(coord);
-    std::vector<int16_t> distances(source->distances().begin(), source->distances().end());
-    std::vector<uint8_t> materials(source->materials().begin(), source->materials().end());
-
-    const auto distanceAt = [&](const glm::ivec3 sample)
+    if (auto painted = paintChunk(volume, coord, ground))
     {
-      const glm::ivec3 local = sample - origin;
-      const bool inside = local.x >= 0 && local.y >= 0 && local.z >= 0 && local.x < terrain::chunkSize &&
-                          local.y < terrain::chunkSize && local.z < terrain::chunkSize;
-
-      return static_cast<int>(inside ? distances[static_cast<size_t>(terrain::sampleIndex(local.x, local.y, local.z))]
-                                     : volume.distanceAtSample(sample));
-    };
-
-    for (int z = 0; z < terrain::chunkSize; ++z)
-    {
-      for (int y = 0; y < terrain::chunkSize; ++y)
-      {
-        for (int x = 0; x < terrain::chunkSize; ++x)
-        {
-          const auto index = static_cast<size_t>(terrain::sampleIndex(x, y, z));
-          const int16_t distance = distances[index];
-
-          if (distance >= terrain::airDistance || distance <= -terrain::airDistance)
-          {
-            continue;
-          }
-
-          const glm::ivec3 sample = origin + glm::ivec3(x, y, z);
-          const float gradX = static_cast<float>(distanceAt(sample + glm::ivec3(1, 0, 0)) -
-                                                 distanceAt(sample - glm::ivec3(1, 0, 0)));
-          const float gradY = static_cast<float>(distanceAt(sample + glm::ivec3(0, 1, 0)) -
-                                                 distanceAt(sample - glm::ivec3(0, 1, 0)));
-          const float gradZ = static_cast<float>(distanceAt(sample + glm::ivec3(0, 0, 1)) -
-                                                 distanceAt(sample - glm::ivec3(0, 0, 1)));
-          const float length = std::sqrt(gradX * gradX + gradY * gradY + gradZ * gradZ);
-
-          materials[index] = materialFor(sample, length > 0.0f ? gradY / length : 1.0f, ground);
-        }
-      }
+      edits.emplace_back(coord, std::move(painted));
     }
-
-    edits.emplace_back(coord, terrain::TerrainChunk::dense(std::move(distances), std::move(materials)));
   }
 
   terrain::commit(volume, edits);

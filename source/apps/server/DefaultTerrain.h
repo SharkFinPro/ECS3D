@@ -17,11 +17,12 @@ namespace showcase
   inline constexpr int groundHeight = 40;
 
   // The tunnel runs along z at x = tunnelX through the ridge; its floor is the ground height.
+  // The chain spans where the ridge stands above the roof plus a short run-out, so both mouths open.
   inline constexpr int tunnelX = 160;
   inline constexpr int tunnelY = 49;
   inline constexpr int tunnelRadius = 9;
-  inline constexpr int tunnelStartZ = 95;
-  inline constexpr int tunnelEndZ = 225;
+  inline constexpr int tunnelStartZ = 118;
+  inline constexpr int tunnelEndZ = 202;
 
   // A half ring in the x-y plane at z = archZ, standing on the ground; its opening is centered on archX.
   inline constexpr int archX = 70;

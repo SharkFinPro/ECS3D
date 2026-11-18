@@ -12,10 +12,10 @@ add_executable(${PROJECT_NAME}
   DefaultProject.h
   DefaultProjectParts.h
   DefaultScenes.cpp
-  DefaultTerrain.cpp
-  DefaultTerrain.h
   DefaultShapes.cpp
   DefaultShapes.h
+  DefaultTerrain.cpp
+  DefaultTerrain.h
   DefaultWelcome.cpp
   DefaultWelcome.h
   RestPose.cpp
