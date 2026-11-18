@@ -252,19 +252,51 @@ TEST(TerrainVolumeTest, VoxelSizeIsKeptAndInvalidSizesThrow)
   EXPECT_THROW(makeVolume(std::numeric_limits<float>::infinity()), std::invalid_argument);
 }
 
-TEST(TerrainVolumeTest, RevisionStartsAtZeroAndBumpsOnInsertReplaceAndErase)
+TEST(TerrainVolumeTest, FreshVolumesHaveDifferentRevisions)
+{
+  const terrain::TerrainVolume first;
+  const terrain::TerrainVolume second;
+  EXPECT_NE(first.revision(), second.revision());
+}
+
+TEST(TerrainVolumeTest, RevisionIncreasesOnInsertReplaceAndErase)
 {
   terrain::TerrainVolume volume;
-  EXPECT_EQ(volume.revision(), 0u);
+  uint64_t previous = volume.revision();
 
   volume.setChunk({ 0, 0, 0 }, solid(1));
-  EXPECT_EQ(volume.revision(), 1u);
+  EXPECT_GT(volume.revision(), previous);
+  previous = volume.revision();
 
   volume.setChunk({ 0, 0, 0 }, solid(2));
-  EXPECT_EQ(volume.revision(), 2u);
+  EXPECT_GT(volume.revision(), previous);
+  previous = volume.revision();
 
   volume.setChunk({ 0, 0, 0 }, nullptr);
-  EXPECT_EQ(volume.revision(), 3u);
+  EXPECT_GT(volume.revision(), previous);
+}
+
+TEST(TerrainVolumeTest, ErasingWithAnAirChunkBumpsTheRevision)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid(1));
+  const uint64_t revision = volume.revision();
+
+  volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(terrain::airDistance, 0));
+  EXPECT_NE(volume.revision(), revision);
+  EXPECT_TRUE(volume.chunks().empty());
+}
+
+TEST(TerrainVolumeTest, ReplacedVolumeNeverRepeatsAnEarlierRevision)
+{
+  auto volume = std::make_unique<terrain::TerrainVolume>();
+  volume->setChunk({ 0, 0, 0 }, solid(1));
+  const uint64_t cached = volume->revision();
+
+  volume = std::make_unique<terrain::TerrainVolume>();
+  EXPECT_NE(volume->revision(), cached);
+  volume->setChunk({ 0, 0, 0 }, solid(1));
+  EXPECT_NE(volume->revision(), cached);
 }
 
 TEST(TerrainVolumeTest, RevisionIgnoresNoOps)
@@ -280,7 +312,7 @@ TEST(TerrainVolumeTest, RevisionIgnoresNoOps)
   EXPECT_EQ(volume.revision(), revision);
 
   volume.setChunk({ 1, 0, 0 }, solid(1));
-  EXPECT_EQ(volume.revision(), revision + 1);
+  EXPECT_GT(volume.revision(), revision);
 }
 
 TEST(TerrainVolumeTest, RevisionIsUnchangedByThrowingCalls)
@@ -307,8 +339,9 @@ TEST(TerrainVolumeTest, RestoreChunksBumpsTheRevision)
   terrain::TerrainVolume::ChunkMap map;
   map[{ 0, 0, 0 }] = solid(1);
   volume.restoreChunks(map);
-  EXPECT_EQ(volume.revision(), revision + 1);
+  EXPECT_GT(volume.revision(), revision);
 
+  const uint64_t restored = volume.revision();
   volume.restoreChunks(volume.snapshotChunks());
-  EXPECT_EQ(volume.revision(), revision + 2);
+  EXPECT_GT(volume.revision(), restored);
 }

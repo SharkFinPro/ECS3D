@@ -71,7 +71,7 @@ list's `sceneEdit` op builders and apply). `templates/TemplateManifest`
 points along local +Y, and its `height` is the total height including both caps. Its radius scales with the
 larger of the object's x and z scale, and its half-height with y. `terrain/` holds the sparse signed-distance volume in
 `namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample `TerrainChunk`s that an edit swaps
-copy-on-write, `encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and
+copy-on-write (its `revision()` is unique across all volumes and changes with every edit), `encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and
 gradient from it, which `raycast` sphere-traces with absent chunks skipped.
 `TerrainStreamPlan` is the headless planner for streaming a volume to a joining view: it queues every chunk nearest a
 focus first, `next` takes a batch whose wire-framed size fits a byte budget (the first chunk always goes, so the stream

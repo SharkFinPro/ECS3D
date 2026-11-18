@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -199,6 +200,64 @@ TEST(TerrainFillSurfaceSamplesTest, MatchesTheVolumeAcrossChunkBorders)
   EXPECT_NE(std::ranges::find(distance, -4.0f), distance.end());
   EXPECT_NE(std::ranges::find_if(distance, [](const float value) { return value != 4.0f && value != -4.0f; }),
             distance.end());
+}
+
+TEST(TerrainFillSurfaceSamplesTest, RegionInsideOneDenseChunkAtANonZeroOffset)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 1, -1, 0 }, patterned());
+
+  const SampleBox region{ glm::ivec3(40, -20, 5), glm::ivec3(47, -15, 9) };
+  std::vector<float> distance(sampleCount(region), -123.0f);
+  std::vector<uint8_t> material(sampleCount(region), 99);
+
+  ASSERT_TRUE(terrain::fillSurfaceSamples(volume.chunks(), region, 0, distance, material));
+  expectMatchesVolume(volume, region, distance, material);
+  EXPECT_NE(std::ranges::find_if(distance, [](const float value) { return value != 4.0f; }), distance.end());
+}
+
+TEST(TerrainFillSurfaceSamplesTest, RegionSpanningManyChunksOnOneAxis)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ -1, 0, 0 }, patterned());
+  volume.setChunk({ 0, 0, 0 }, solid(4));
+  volume.setChunk({ 2, 0, 0 }, patterned());
+
+  const SampleBox region{ glm::ivec3(-5, 0, 0), glm::ivec3(70, 2, 2) };
+  std::vector<float> distance(sampleCount(region), -123.0f);
+  std::vector<uint8_t> material(sampleCount(region), 99);
+
+  ASSERT_TRUE(terrain::fillSurfaceSamples(volume.chunks(), region, 0, distance, material));
+  expectMatchesVolume(volume, region, distance, material);
+  EXPECT_NE(std::ranges::find(distance, 4.0f), distance.end());
+  EXPECT_NE(std::ranges::find(distance, -4.0f), distance.end());
+}
+
+TEST(TerrainFillSurfaceSamplesTest, LodOneOverAnAbsentChunkReadsAir)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid(5));
+
+  const SampleBox region{ glm::ivec3(20, 0, 0), glm::ivec3(24, 2, 2) };
+  std::vector<float> distance(sampleCount(region), 0.0f);
+  std::vector<uint8_t> material(sampleCount(region), 99);
+
+  ASSERT_TRUE(terrain::fillSurfaceSamples(volume.chunks(), region, 1, distance, material));
+
+  // Offsets 0..3 read samples 40, 42, 44 and 46, all in the absent chunk (1,0,0).
+  for (const float value : distance)
+  {
+    EXPECT_EQ(value, 4.0f);
+  }
+
+  const SampleBox mixed{ glm::ivec3(14, 0, 0), glm::ivec3(18, 1, 1) };
+  std::vector<float> mixedDistance(sampleCount(mixed), 0.0f);
+  std::vector<uint8_t> mixedMaterial(sampleCount(mixed), 99);
+  ASSERT_TRUE(terrain::fillSurfaceSamples(volume.chunks(), mixed, 1, mixedDistance, mixedMaterial));
+  EXPECT_EQ(mixedDistance[0], -4.0f);
+  EXPECT_EQ(mixedMaterial[0], 5);
+  EXPECT_EQ(mixedDistance[3], 4.0f);
+  EXPECT_EQ(mixedMaterial[3], 0);
 }
 
 TEST(TerrainFillSurfaceSamplesTest, AbsentChunkReadsAsAir)

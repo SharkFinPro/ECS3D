@@ -42,13 +42,14 @@ namespace terrain
 
     [[nodiscard]] size_t byteSize() const;
 
-    // Changes whenever the held chunks change, so a reader can tell cheaply that its snapshot is stale.
+    // Changes whenever the held chunks change and is unique across all volumes, so the revision alone tells a reader
+    // its snapshot is stale, even after the volume object is replaced.
     [[nodiscard]] uint64_t revision() const;
 
   private:
     float m_voxelSize;
     ChunkMap m_chunks;
-    uint64_t m_revision = 0;
+    uint64_t m_revision;
   };
 }
 
