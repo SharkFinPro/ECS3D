@@ -262,6 +262,7 @@ add_executable(${PROJECT_NAME}
   DefaultProjectTest.cpp
   EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
+  DefaultTerrainTest.cpp
   DefaultWelcomePhysicsTest.cpp
   DefaultWelcomeTest.cpp
   ShapeDropTest.cpp
@@ -395,6 +396,7 @@ add_executable(${PROJECT_NAME}
   ../apps/server/DefaultProject.cpp
   ../apps/server/DefaultScenes.cpp
   ../apps/server/DefaultShapes.cpp
+  ../apps/server/DefaultTerrain.cpp
   ../apps/server/DefaultWelcome.cpp
   ../apps/server/RestPose.cpp
   ../apps/server/ShutdownSignal.cpp

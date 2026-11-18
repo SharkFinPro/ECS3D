@@ -60,6 +60,9 @@ inline const std::string drumPrefab = "41980fde-c3d9-4672-87a3-71d80acdc734";
 inline const std::string gemPrefab = "98f4b839-f256-4562-b8ff-266094c98725";
 inline const std::string boulderPrefab = "dca2e8d6-7dab-4706-84f2-61da7ad076f1";
 
+// The built-in project's one terrain, generated in memory at server startup.
+inline const std::string showcaseTerrain = "5b0c7e42-3f1d-4a86-9e27-c4d81a6f2b95";
+
 // A library shape and the hull its prefab, model and collider are built from.
 struct LibraryShape
 {
@@ -117,6 +120,7 @@ struct LibraryShape
 [[nodiscard]] nlohmann::json buildScene2();
 [[nodiscard]] nlohmann::json buildScene3();
 [[nodiscard]] nlohmann::json buildFallingBalls();
+[[nodiscard]] nlohmann::json buildTerrainShowcase();
 
 }
 

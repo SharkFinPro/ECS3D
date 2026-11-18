@@ -23,7 +23,7 @@ window, GPU or server. The CLR-free sources of `ECS3DNet` are compiled straight 
 `net/TrafficCounters.cpp`, `net/RemoteStats.cpp`, `net/ServerStats.cpp` and `net/StatsSubscriptions.cpp` (plain C++), the header-only `net/SnapshotLog.h`, `net/NetServer.cpp` and `net/NetClient.cpp`
 join them because they reach the transport only through an interface,
 which the tests fake; the CLR-backed `Managed*Transport` classes stay out. See the comment in the test
-`CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp`, `RestPose.cpp` and `ShutdownSignal.cpp` are compiled in the same
+`CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultTerrain.cpp`, `DefaultWelcome.cpp`, `RestPose.cpp` and `ShutdownSignal.cpp` are compiled in the same
 way, as is
 `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
 `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), `render/TerrainSurfaceSampling.cpp` (depends only on `ECS3DData` and glm), `editor/GizmoEditSending.cpp` (depends only on `ECS3DData`, `Gizmo.h` and json), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/MissingAssetFallback.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
