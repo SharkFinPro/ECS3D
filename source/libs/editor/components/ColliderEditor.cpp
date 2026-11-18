@@ -5,6 +5,9 @@
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
 #include "../MixedFields.h"
+#include "../TerrainReadout.h"
+#include <GpuAssetCache.h>
+#include <terrain/TerrainStore.h>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
@@ -18,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -359,10 +363,12 @@ namespace {
 
 namespace {
   // The terrain asset is shown as its uuid until the asset registry names terrains.
-  void registerTerrainEditor(ComponentEditor& componentEditor)
+  void registerTerrainEditor(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
+                             const terrain::TerrainStore* terrainStore)
   {
     componentEditor.registerHandler("Terrain",
-      [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
+      [assetCache = std::move(assetCache), terrainStore](const std::shared_ptr<Component>& component,
+                                                          const MixedFields& mixed) -> bool {
       const auto terrain = std::dynamic_pointer_cast<Terrain>(component);
       if (!terrain)
       {
@@ -379,6 +385,25 @@ namespace {
         const std::string terrainName = terrain->getTerrainUUID().is_nil()
           ? "None" : uuids::to_string(terrain->getTerrainUUID());
         ImGui::TextUnformatted(terrainName.c_str());
+
+        const auto volume = terrain->volume();
+        std::optional<size_t> held;
+        if (volume)
+        {
+          held = volume->chunks().size();
+        }
+
+        const terrain::TerrainDescription* description = terrainStore
+          ? terrainStore->description(terrain->getTerrainUUID()) : nullptr;
+        const std::string chunksText = terrain::terrainChunksText(held, description ? description->chunkCount : 0);
+        gc::rowLabel("Chunks");
+        ImGui::TextUnformatted(chunksText.c_str());
+
+        const terrain::TerrainSurfaceStatus surface = assetCache
+          ? assetCache->terrainSurfaceStatus(terrain->getTerrainUUID()) : terrain::TerrainSurfaceStatus{};
+        const std::string surfaceText = terrain::terrainSurfaceText(surface);
+        gc::rowLabel("Surface");
+        ImGui::TextUnformatted(surfaceText.c_str());
 
         bool collisionEnabled = terrain->getCollisionEnabled();
         if (gc::accentCheckbox("Collision", &collisionEnabled, mixed.contains("collisionEnabled")))
@@ -403,10 +428,10 @@ namespace {
 }
 
 void registerColliderEditors(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
-                             const AssetRegistry* assetRegistry)
+                             const AssetRegistry* assetRegistry, const terrain::TerrainStore* terrainStore)
 {
-  registerConvexMeshEditor(componentEditor, std::move(assetCache), assetRegistry);
-  registerTerrainEditor(componentEditor);
+  registerConvexMeshEditor(componentEditor, assetCache, assetRegistry);
+  registerTerrainEditor(componentEditor, std::move(assetCache), terrainStore);
 
   // Keyed by display name (componentTypeToString), since both colliders share a component type and
   // differ only by subType.

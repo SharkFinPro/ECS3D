@@ -542,7 +542,7 @@ void EditorApp::registerEditors() const
   registerRigidBodyEditor(*m_componentEditor);
   registerModelRendererEditor(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerLightRendererEditor(*m_componentEditor);
-  registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get());
+  registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get(), m_terrainStore.get());
   registerScriptEditor(*m_componentEditor, m_assetRegistry.get(), m_assetCache);
   registerPlayerControllerEditor(*m_componentEditor);
   registerCameraEditor(*m_componentEditor);

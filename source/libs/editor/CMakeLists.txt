@@ -56,6 +56,7 @@ add_library(${PROJECT_NAME}
   ProfilerPanel.h
   ProfilerPanelState.h
   ProfilerReadout.h
+  TerrainReadout.h
   SceneScriptsPanel.cpp
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h

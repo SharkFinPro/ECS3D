@@ -27,7 +27,7 @@ built on a stock widget; a residual "Mixed values" line still names the few fiel
 (an asset reference slot, the collider mask popup, a non-numeric script field), and each object's edit still
 goes out and is recorded through the normal single-object path, so undo records one entry per object; Add/Remove
 Component and the name field are left out of this view for now, since wiring them up would mean deciding which
-object they act on) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a
+object they act on) and the Terrain component section also shows read-only `Chunks` (held against the count the snapshot announced) and `Surface` (none, ready, percent pending, growing, or too large to draw) rows, formatted by the headless `TerrainReadout.h` from `GpuAssetCache::terrainSurfaceStatus` and the terrain store; the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a
 display-name rename field (a scene's name field commits once, when editing ends) and a delete button with a
 reference-count warning for the flat file assets (it counts objects whose components or script fields mention the
 uuid, in scenes and prefab bodies, plus scene scripts); the

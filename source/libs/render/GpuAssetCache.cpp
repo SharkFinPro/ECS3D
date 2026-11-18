@@ -558,6 +558,33 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
   return cached.current;
 }
 
+terrain::TerrainSurfaceStatus GpuAssetCache::terrainSurfaceStatus(const uuids::uuid& terrainUUID) const
+{
+  terrain::TerrainSurfaceStatus status;
+
+  const auto it = m_terrainSurfaces.find(terrainUUID);
+  if (it == m_terrainSurfaces.end())
+  {
+    return status;
+  }
+
+  const CachedTerrainSurface& cached = it->second;
+  status.hasSurface = cached.current != nullptr;
+  status.tooLarge = cached.loggedTooLarge && !cached.current;
+  status.growing = cached.replacement != nullptr;
+
+  if (cached.replacement)
+  {
+    status.pending = cached.replacement->pendingFraction();
+  }
+  else if (cached.current)
+  {
+    status.pending = cached.current->pendingFraction();
+  }
+
+  return status;
+}
+
 void GpuAssetCache::trimTerrainSurfaces(const std::unordered_set<uuids::uuid>& drawnTerrains)
 {
   for (auto it = m_terrainSurfaces.begin(); it != m_terrainSurfaces.end();)
