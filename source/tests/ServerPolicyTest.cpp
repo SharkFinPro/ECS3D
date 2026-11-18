@@ -77,9 +77,11 @@ namespace {
 
   [[nodiscard]] SceneControlPlan plan(const bool startScene = false, const bool pauseScene = false,
                                       const bool resetScene = false, const bool startScripts = false,
-                                      const bool stopScripts = false, const bool resetCollisions = false)
+                                      const bool stopScripts = false, const bool resetCollisions = false,
+                                      const bool captureTerrain = false, const bool restoreTerrain = false)
   {
-    return SceneControlPlan{startScene, pauseScene, resetScene, startScripts, stopScripts, resetCollisions};
+    return SceneControlPlan{startScene,   pauseScene,     resetScene,    startScripts,
+                            stopScripts,  resetCollisions, captureTerrain, restoreTerrain};
   }
 }
 
@@ -213,7 +215,7 @@ TEST(ServerPolicyTest, OnlyEditServerForwardsLogToEditors)
 
 TEST(ServerPolicyTest, StartFromStoppedStartsScriptsAndResetsCollisions)
 {
-  EXPECT_EQ(planSceneControl(net::SceneControlOp::start, true), plan(true, false, false, true, false, true));
+  EXPECT_EQ(planSceneControl(net::SceneControlOp::start, true), plan(true, false, false, true, false, true, true));
 }
 
 TEST(ServerPolicyTest, StartFromPausedResumesWithoutTouchingScriptsOrCollisions)
@@ -233,12 +235,32 @@ TEST(ServerPolicyTest, PauseOnAStoppedSceneIsRefused)
 
 TEST(ServerPolicyTest, StopFromRunningStopsScriptsResetsSceneAndCollisions)
 {
-  EXPECT_EQ(planSceneControl(net::SceneControlOp::stop, false), plan(false, false, true, false, true, true));
+  EXPECT_EQ(planSceneControl(net::SceneControlOp::stop, false), plan(false, false, true, false, true, true, false, true));
 }
 
 TEST(ServerPolicyTest, StopFromStoppedDoesNothing)
 {
   EXPECT_EQ(planSceneControl(net::SceneControlOp::stop, true), plan());
+}
+
+TEST(ServerPolicyTest, OnlyAStartFromStoppedCapturesTerrainAndOnlyAStopRestoresIt)
+{
+  EXPECT_TRUE(planSceneControl(net::SceneControlOp::start, true).captureTerrain);
+  EXPECT_FALSE(planSceneControl(net::SceneControlOp::start, false).captureTerrain);
+  EXPECT_FALSE(planSceneControl(net::SceneControlOp::pause, false).captureTerrain);
+  EXPECT_FALSE(planSceneControl(net::SceneControlOp::stop, false).captureTerrain);
+  EXPECT_FALSE(planSceneControl(net::SceneControlOp::start, true).restoreTerrain);
+  EXPECT_FALSE(planSceneControl(net::SceneControlOp::pause, false).restoreTerrain);
+  EXPECT_FALSE(planSceneControl(net::SceneControlOp::stop, true).restoreTerrain);
+  EXPECT_TRUE(planSceneControl(net::SceneControlOp::stop, false).restoreTerrain);
+}
+
+TEST(ServerPolicyTest, SwitchingScenesRestoresTerrainUnlessTheOutgoingSceneWasStopped)
+{
+  static_assert(restoreTerrainOnSceneSwitch(false));
+  static_assert(!restoreTerrainOnSceneSwitch(true));
+  EXPECT_TRUE(restoreTerrainOnSceneSwitch(false));
+  EXPECT_FALSE(restoreTerrainOnSceneSwitch(true));
 }
 
 TEST(ServerPolicyTest, LoadSceneHasNoLifecyclePlan)

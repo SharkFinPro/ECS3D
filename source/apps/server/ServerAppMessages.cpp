@@ -330,7 +330,7 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
   }
 }
 
-void ServerApp::handleSceneControl(const net::Message& message) const
+void ServerApp::handleSceneControl(const net::Message& message)
 {
   net::MessageReader reader(message);
 
@@ -387,12 +387,17 @@ void ServerApp::handleSceneControl(const net::Message& message) const
   broadcastSnapshot(net::SnapshotReason::sceneControl);
 }
 
-void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scene, const bool wasStopped) const
+void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scene, const bool wasStopped)
 {
   const auto plan = planSceneControl(op, wasStopped);
 
   if (plan.startScene)
   {
+    if (plan.captureTerrain)
+    {
+      m_terrainPlaySnapshot.capture(*m_terrainStore);
+    }
+
     m_sceneManager->startScene();
   }
 
@@ -415,6 +420,11 @@ void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scen
   if (plan.resetScene)
   {
     m_sceneManager->resetScene();
+  }
+
+  if (plan.restoreTerrain)
+  {
+    restoreTerrainAfterStop();
   }
 
   // A fresh run or a stop drops contact history so the next tick doesn't fire spurious enter/exit events

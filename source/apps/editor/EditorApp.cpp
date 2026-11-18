@@ -127,7 +127,7 @@ EditorApp::EditorApp(LaunchOptions options)
   {
     const auto location = locateProject(m_options.project);
     m_assetCache->setProjectRoot(location.root);
-    m_projectIdentity.setOwnProject(fingerprintProjectFile(location.projectFile), m_options.launchLocalServer);
+    m_projectIdentity.setOwnProject(fingerprintProject(location.projectFile, location.root), m_options.launchLocalServer);
   }
   m_renderSystem = std::make_shared<RenderSystem>();
 

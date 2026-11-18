@@ -167,7 +167,7 @@ void ServerApp::loadStartupProject()
         }
       }
 
-      m_projectPacker->setProjectFingerprint(fingerprintProjectFile(location.projectFile));
+      m_projectPacker->setProjectFingerprint(fingerprintProject(location.projectFile, location.root));
     }
 
     if (!loaded || !m_sceneManager->getCurrentScene())
