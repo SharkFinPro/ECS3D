@@ -25,6 +25,7 @@ project by the `loadProject` blob. Its own root, used for scripts, stays what `-
 Dialog and drop paths arrive as 8-bit Unicode text (`pathFromUtf8`), and logs use `pathToUtf8`.
 A `--project` server reads each terrain's files from `<root>/terrain/<uuid>/` after the project loads. A
 missing folder is an unsaved terrain and stays empty; an unreadable one is logged and also stays empty. A
-`loadProject` resets every terrain volume to empty, since it names a different project; terrain files are read only
-by a `--project` server at startup.
+`loadProject` resets every terrain volume to empty, since it names a different project; terrain files are read by a
+`--project` server at startup, and for File > Open the editor reads them and uploads the chunks (see
+[replication.md](replication.md)).
 The server compiles `<root>/scripts/**/*.cs` together with the built-in scripts (see [scripting.md](scripting.md)).

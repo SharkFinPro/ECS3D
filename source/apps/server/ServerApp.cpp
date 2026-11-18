@@ -447,10 +447,15 @@ void ServerApp::pumpTerrainStreams(const std::chrono::steady_clock::time_point n
     const auto finished = m_terrainStreamer.pump(
       *m_terrainStore, [this](const int32_t connId, const net::Message& message) { m_netServer->sendTo(connId, message); });
 
-    for (const auto& done : finished)
+    // While an upload is pending its chunks are requeued as they arrive, so streams finish and revive many times;
+    // report only the streams that finish once the terrain is whole.
+    if (!terrain::pendingUploadReason(*m_terrainStore))
     {
-      Log::info(LogCategory::server, "Streamed " + std::to_string(done.chunks) + " terrain chunk(s) to connection "
-        + std::to_string(done.connId));
+      for (const auto& done : finished)
+      {
+        Log::info(LogCategory::server, "Streamed " + std::to_string(done.chunks) + " terrain chunk(s) to connection "
+          + std::to_string(done.connId));
+      }
     }
 
     m_terrainPumpFailing = false;

@@ -15,6 +15,12 @@ public:
     m_pendingOwn = id;
   }
 
+  // True from expectOwnLoad until the snapshot carrying that load arrives: the server has not yet applied it.
+  [[nodiscard]] bool awaitingOwnLoad() const
+  {
+    return m_pendingOwn.has_value();
+  }
+
   // A new connection starts a new baseline.
   void reset()
   {

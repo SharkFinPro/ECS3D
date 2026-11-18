@@ -2,6 +2,7 @@
 #include <ProjectPacker.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainReplication.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -12,7 +13,7 @@
 #include <exception>
 #include <string>
 
-void ServerApp::handleLoadProject(const net::Message& message)
+void ServerApp::handleLoadProject(const net::Message& message, const int32_t senderId)
 {
   // An editor opened a different project: stop the current scripts, swap the project in, restart,
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
@@ -26,6 +27,11 @@ void ServerApp::handleLoadProject(const net::Message& message)
   {
     stopScriptsLogged(*scene);
   }
+
+  // Before the unpack, so a failed one cannot leave the previous project's expectations for uuids both share.
+  m_terrainStore->clearExpectations();
+  m_terrainUploadWarned.clear();
+  m_terrainUploader = senderId;
 
   try
   {
@@ -51,9 +57,25 @@ void ServerApp::handleLoadProject(const net::Message& message)
   }
 
   // The project is in; a failure here leaves terrain behind it, not the scene, so the load still finishes.
+  resetTerrainForLoadedProject();
+
+  finishProjectLoad();
+}
+
+void ServerApp::resetTerrainForLoadedProject()
+{
   try
   {
     m_terrainStore->resetVolumes();
+
+    // Every terrain, so a count of 0 also clears an expectation an earlier load left behind.
+    for (const auto& uuid : m_terrainStore->terrains())
+    {
+      if (const auto* description = m_terrainStore->description(uuid))
+      {
+        m_terrainStore->expectChunks(uuid, description->chunkCount);
+      }
+    }
 
     // The volumes are empty now, so every stream ends here; where it started from no longer matters.
     const terrain::TerrainStreamer::FocusFor origin = [](const uuids::uuid&, const terrain::TerrainDescription&)
@@ -70,8 +92,63 @@ void ServerApp::handleLoadProject(const net::Message& message)
   {
     Log::error(LogCategory::server, std::string("Failed to reset terrain after loading the project: ") + e.what());
   }
+}
 
-  finishProjectLoad();
+void ServerApp::dropTerrainUploadFrom(const int32_t connId)
+{
+  if (m_terrainUploader != connId)
+  {
+    return;
+  }
+
+  m_terrainUploader.reset();
+
+  if (const auto reason = terrain::pendingUploadReason(*m_terrainStore))
+  {
+    m_terrainStore->clearExpectations();
+    Log::warn(LogCategory::server, "The editor uploading the project's terrain disconnected (" + *reason +
+      "); the terrain stays incomplete until a project is opened again.");
+  }
+}
+
+void ServerApp::handleTerrainUpload(const net::Message& message)
+{
+  const auto payload = terrain::unpackTerrainChunks(message);
+  if (!payload)
+  {
+    Log::warn(LogCategory::server, "Refused a malformed terrain upload (" + std::to_string(message.bytes().size())
+      + " bytes).");
+    return;
+  }
+
+  const std::string name = uuids::to_string(payload->terrain);
+  const auto result = terrain::applyTerrainUpload(*m_terrainStore, *payload);
+
+  if (result.unknownTerrain || result.notExpected)
+  {
+    if (m_terrainUploadWarned.insert(payload->terrain).second)
+    {
+      Log::warn(LogCategory::server, "Ignored a terrain upload for " + std::string(result.unknownTerrain
+        ? "unknown terrain " + name : "terrain " + name + ": no upload is expected"));
+    }
+
+    return;
+  }
+
+  if (result.ignoredHashOnly > 0)
+  {
+    Log::warn(LogCategory::server, "Terrain " + name + ": ignored " + std::to_string(result.ignoredHashOnly)
+      + " hash-only upload entries");
+  }
+
+  m_terrainStreamer.requeue(payload->terrain, result.applied);
+
+  if (result.completed)
+  {
+    const auto volume = m_terrainStore->find(payload->terrain);
+    Log::info(LogCategory::server, "Terrain " + name + " uploaded: " + std::to_string(volume->chunks().size())
+      + " chunk(s)");
+  }
 }
 
 void ServerApp::finishProjectLoad() const
