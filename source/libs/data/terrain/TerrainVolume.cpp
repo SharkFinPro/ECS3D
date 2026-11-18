@@ -42,11 +42,21 @@ namespace terrain
 
     if (!chunk || chunk->isAir())
     {
-      m_chunks.erase(coord);
+      if (m_chunks.erase(coord) > 0)
+      {
+        ++m_revision;
+      }
+
       return;
     }
 
-    m_chunks[coord] = std::move(chunk);
+    auto& slot = m_chunks[coord];
+
+    if (slot != chunk)
+    {
+      slot = std::move(chunk);
+      ++m_revision;
+    }
   }
 
   const TerrainVolume::ChunkMap& TerrainVolume::chunks() const
@@ -75,6 +85,7 @@ namespace terrain
     });
 
     m_chunks = std::move(chunks);
+    ++m_revision;
   }
 
   int16_t TerrainVolume::distanceAtSample(const glm::ivec3 sample) const
@@ -119,5 +130,10 @@ namespace terrain
     }
 
     return bytes;
+  }
+
+  uint64_t TerrainVolume::revision() const
+  {
+    return m_revision;
   }
 }

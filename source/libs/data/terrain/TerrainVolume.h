@@ -42,9 +42,13 @@ namespace terrain
 
     [[nodiscard]] size_t byteSize() const;
 
+    // Changes whenever the held chunks change, so a reader can tell cheaply that its snapshot is stale.
+    [[nodiscard]] uint64_t revision() const;
+
   private:
     float m_voxelSize;
     ChunkMap m_chunks;
+    uint64_t m_revision = 0;
   };
 }
 

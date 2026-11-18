@@ -251,3 +251,64 @@ TEST(TerrainVolumeTest, VoxelSizeIsKeptAndInvalidSizesThrow)
   EXPECT_THROW(makeVolume(std::numeric_limits<float>::quiet_NaN()), std::invalid_argument);
   EXPECT_THROW(makeVolume(std::numeric_limits<float>::infinity()), std::invalid_argument);
 }
+
+TEST(TerrainVolumeTest, RevisionStartsAtZeroAndBumpsOnInsertReplaceAndErase)
+{
+  terrain::TerrainVolume volume;
+  EXPECT_EQ(volume.revision(), 0u);
+
+  volume.setChunk({ 0, 0, 0 }, solid(1));
+  EXPECT_EQ(volume.revision(), 1u);
+
+  volume.setChunk({ 0, 0, 0 }, solid(2));
+  EXPECT_EQ(volume.revision(), 2u);
+
+  volume.setChunk({ 0, 0, 0 }, nullptr);
+  EXPECT_EQ(volume.revision(), 3u);
+}
+
+TEST(TerrainVolumeTest, RevisionIgnoresNoOps)
+{
+  terrain::TerrainVolume volume;
+  const auto held = solid(1);
+  volume.setChunk({ 1, 0, 0 }, held);
+  const uint64_t revision = volume.revision();
+
+  volume.setChunk({ 1, 0, 0 }, held);
+  volume.setChunk({ 5, 5, 5 }, nullptr);
+  volume.setChunk({ 5, 5, 5 }, terrain::TerrainChunk::uniform(terrain::airDistance, 0));
+  EXPECT_EQ(volume.revision(), revision);
+
+  volume.setChunk({ 1, 0, 0 }, solid(1));
+  EXPECT_EQ(volume.revision(), revision + 1);
+}
+
+TEST(TerrainVolumeTest, RevisionIsUnchangedByThrowingCalls)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid(1));
+  const uint64_t revision = volume.revision();
+
+  const terrain::ChunkCoord outside{ terrain::maxChunkCoord + 1, 0, 0 };
+  EXPECT_THROW(volume.setChunk(outside, solid(1)), std::out_of_range);
+
+  terrain::TerrainVolume::ChunkMap map;
+  map[outside] = solid(1);
+  EXPECT_THROW(volume.restoreChunks(map), std::out_of_range);
+
+  EXPECT_EQ(volume.revision(), revision);
+}
+
+TEST(TerrainVolumeTest, RestoreChunksBumpsTheRevision)
+{
+  terrain::TerrainVolume volume;
+  const uint64_t revision = volume.revision();
+
+  terrain::TerrainVolume::ChunkMap map;
+  map[{ 0, 0, 0 }] = solid(1);
+  volume.restoreChunks(map);
+  EXPECT_EQ(volume.revision(), revision + 1);
+
+  volume.restoreChunks(volume.snapshotChunks());
+  EXPECT_EQ(volume.revision(), revision + 2);
+}
