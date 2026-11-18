@@ -1,5 +1,7 @@
 #include "GpuAssetCache.h"
 #include "HullGizmoMesh.h"
+#include "TerrainSurfacePlan.h"
+#include "TerrainVolumeSource.h"
 #include <assets/AssetRegistry.h>
 #include <ProjectPaths.h>
 #include <Log.h>
@@ -9,6 +11,8 @@
 #include <VulkanEngine/components/assets/objects/Model.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
+#include <VulkanEngine/components/assets/volume/VolumeSource.h>
+#include <VulkanEngine/components/assets/volume/VolumeSurface.h>
 #include <array>
 #include <cstddef>
 #include <exception>
@@ -369,6 +373,191 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getLightGizmo(const uuids::uui
   return renderObject;
 }
 
+namespace {
+  vke::VolumeRegion toRegion(const terrain::SampleBox& box)
+  {
+    return { box.min, box.max };
+  }
+
+  bool sameBox(const terrain::SampleBox& a, const terrain::SampleBox& b)
+  {
+    return a.min == b.min && a.max == b.max;
+  }
+}
+
+void GpuAssetCache::releaseTerrainSurfaces(CachedTerrainSurface& cached)
+{
+  const auto assetManager = m_renderer->getAssetManager();
+
+  if (cached.current)
+  {
+    assetManager->release(std::move(cached.current));
+  }
+
+  if (cached.replacement)
+  {
+    assetManager->release(std::move(cached.replacement));
+  }
+}
+
+void GpuAssetCache::createTerrainSurface(const uuids::uuid& terrainUUID, CachedTerrainSurface& cached,
+                                         const terrain::SampleBox& bounds, const bool asReplacement)
+{
+  try
+  {
+    auto surface = m_renderer->getAssetManager()->createVolumeSurface(
+      { .cellSize = cached.voxelSize, .chunkCells = terrain::surfaceChunkCells },
+      std::make_shared<const TerrainVolumeSource>(cached.feed, bounds));
+
+    if (asReplacement)
+    {
+      cached.replacement = std::move(surface);
+      cached.replacementBounds = bounds;
+    }
+    else
+    {
+      cached.current = std::move(surface);
+      cached.currentBounds = bounds;
+    }
+  }
+  catch (const std::exception& e)
+  {
+    cached.failedFor = bounds;
+
+    Log::warn(LogCategory::engine, "Could not create the surface for terrain " + uuids::to_string(terrainUUID) +
+      ": " + e.what());
+  }
+}
+
+std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
+  const uuids::uuid& terrainUUID, const std::shared_ptr<const terrain::TerrainVolume>& volume)
+{
+  if (!volume)
+  {
+    return nullptr;
+  }
+
+  auto it = m_terrainSurfaces.find(terrainUUID);
+
+  if (it != m_terrainSurfaces.end() && it->second.voxelSize != volume->voxelSize())
+  {
+    releaseTerrainSurfaces(it->second);
+    m_terrainSurfaces.erase(it);
+    it = m_terrainSurfaces.end();
+  }
+
+  if (it == m_terrainSurfaces.end())
+  {
+    CachedTerrainSurface fresh;
+    fresh.snapshot = std::make_shared<const terrain::TerrainVolume::ChunkMap>(volume->snapshotChunks());
+    fresh.feed = std::make_shared<TerrainSurfaceFeed>(fresh.snapshot);
+    fresh.voxelSize = volume->voxelSize();
+    fresh.revision = volume->revision();
+    fresh.desired = terrain::surfaceBounds(volume->occupiedBounds());
+
+    it = m_terrainSurfaces.emplace(terrainUUID, std::move(fresh)).first;
+  }
+
+  auto& cached = it->second;
+
+  if (cached.revision != volume->revision())
+  {
+    auto next = std::make_shared<const terrain::TerrainVolume::ChunkMap>(volume->snapshotChunks());
+    const auto changed = terrain::changedChunks(*cached.snapshot, *next);
+    const terrain::SampleBox region = terrain::chunkSampleBounds(changed);
+
+    cached.feed->publish(next, [&] {
+      if (region.empty())
+      {
+        return;
+      }
+
+      if (cached.current)
+      {
+        cached.current->invalidate(toRegion(region));
+      }
+
+      if (cached.replacement)
+      {
+        cached.replacement->invalidate(toRegion(region));
+      }
+    });
+
+    cached.snapshot = std::move(next);
+    cached.revision = volume->revision();
+    cached.desired = terrain::surfaceBounds(volume->occupiedBounds());
+  }
+
+  if (cached.failedFor && sameBox(*cached.failedFor, cached.desired))
+  {
+    return cached.current;
+  }
+
+  terrain::SurfaceSlots slots;
+
+  if (cached.current)
+  {
+    slots.current = cached.currentBounds;
+  }
+
+  if (cached.replacement)
+  {
+    slots.replacement = cached.replacementBounds;
+    slots.replacementReady = cached.replacement->pendingFraction() == 0.0f;
+  }
+
+  const terrain::SurfacePlan plan = terrain::planTerrainSurface(cached.desired, slots);
+
+  switch (plan.step)
+  {
+    case terrain::SurfaceStep::createCurrent:
+      createTerrainSurface(terrainUUID, cached, plan.bounds, false);
+      break;
+    case terrain::SurfaceStep::createReplacement:
+      createTerrainSurface(terrainUUID, cached, plan.bounds, true);
+      break;
+    case terrain::SurfaceStep::promote:
+      if (cached.current)
+      {
+        m_renderer->getAssetManager()->release(std::move(cached.current));
+      }
+
+      cached.current = std::move(cached.replacement);
+      cached.currentBounds = cached.replacementBounds;
+      cached.replacement.reset();
+      break;
+    case terrain::SurfaceStep::tooLarge:
+      if (!cached.loggedTooLarge)
+      {
+        cached.loggedTooLarge = true;
+
+        Log::warn(LogCategory::engine, "Terrain " + uuids::to_string(terrainUUID) + " needs " +
+          std::to_string(terrain::surfaceChunkCount(plan.bounds)) + " surface chunks (more than " +
+          std::to_string(terrain::maxSurfaceChunks) + "), so its surface is not drawn or grown");
+      }
+      break;
+    case terrain::SurfaceStep::keep:
+      break;
+  }
+
+  return cached.current;
+}
+
+void GpuAssetCache::trimTerrainSurfaces(const std::unordered_set<uuids::uuid>& drawnTerrains)
+{
+  for (auto it = m_terrainSurfaces.begin(); it != m_terrainSurfaces.end();)
+  {
+    if (drawnTerrains.contains(it->first))
+    {
+      ++it;
+      continue;
+    }
+
+    releaseTerrainSurfaces(it->second);
+    it = m_terrainSurfaces.erase(it);
+  }
+}
+
 void GpuAssetCache::applyPendingReset()
 {
   if (!m_resetPending)
@@ -385,6 +574,13 @@ void GpuAssetCache::applyPendingReset()
     assetManager->release(std::move(entry.second.renderObject));
   }
   m_renderObjects.clear();
+
+  for (auto& entry : m_terrainSurfaces)
+  {
+    releaseTerrainSurfaces(entry.second);
+  }
+  m_terrainSurfaces.clear();
+
   m_missingAssets.clear();
 
   m_models.drain([&assetManager](std::shared_ptr<vke::Model> model) { assetManager->release(std::move(model)); });

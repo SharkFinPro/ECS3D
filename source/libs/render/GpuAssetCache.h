@@ -5,11 +5,14 @@
 #include <array>
 #include "SharedAssetLoads.h"
 #include "TransformPushGate.h"
+#include <terrain/TerrainTypes.h>
+#include <terrain/TerrainVolume.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <objects/components/collisions/ConvexHull.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,9 +24,11 @@ namespace vke {
   class Model;
   class Texture2D;
   class RenderObject;
+  class VolumeSurface;
 }
 
 class AssetRegistry;
+class TerrainSurfaceFeed;
 enum class AssetType;
 
 // Resolves AssetRegistry uuid->path records into vke resources and caches per-owner RenderObjects
@@ -101,7 +106,38 @@ public:
   // assets (m_models/m_textures, keyed by asset uuid rather than owner) are left alone.
   void pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs);
 
+  // The surface drawing a terrain, keyed by terrain uuid (objects naming the same terrain share it). Follows the
+  // volume: changed chunks are published to the surfaces once per call, a terrain that outgrows its surface gets a
+  // larger one built behind it, and a new voxel size starts over (a replaced volume object is just a revision change). Null when there is no
+  // volume, nothing is held yet, or the terrain is too spread out (logged once per terrain).
+  std::shared_ptr<vke::VolumeSurface> getTerrainSurface(const uuids::uuid& terrainUUID,
+                                                        const std::shared_ptr<const terrain::TerrainVolume>& volume);
+
+  // Releases the surfaces of every terrain not in drawnTerrains. RenderSystem calls it once per frame.
+  void trimTerrainSurfaces(const std::unordered_set<uuids::uuid>& drawnTerrains);
+
 private:
+  struct CachedTerrainSurface {
+    std::shared_ptr<TerrainSurfaceFeed> feed;
+    std::shared_ptr<const terrain::TerrainVolume::ChunkMap> snapshot;
+    float voxelSize = 0.0f;
+    uint64_t revision = 0;
+    // surfaceBounds of the occupied box, recomputed only when the revision changes (occupiedBounds walks every chunk).
+    terrain::SampleBox desired;
+    std::shared_ptr<vke::VolumeSurface> current;
+    terrain::SampleBox currentBounds;
+    std::shared_ptr<vke::VolumeSurface> replacement;
+    terrain::SampleBox replacementBounds;
+    bool loggedTooLarge = false;
+    // The desired bounds a failed creation was tried for, so it is not retried (and logged) every frame.
+    std::optional<terrain::SampleBox> failedFor;
+  };
+
+  void releaseTerrainSurfaces(CachedTerrainSurface& cached);
+
+  void createTerrainSurface(const uuids::uuid& terrainUUID, CachedTerrainSurface& cached,
+                            const terrain::SampleBox& bounds, bool asReplacement);
+
   struct CachedRenderObject {
     std::shared_ptr<vke::RenderObject> renderObject;
     uuids::uuid modelUUID;
@@ -171,6 +207,7 @@ private:
   std::unordered_map<uuids::uuid, std::vector<CachedGizmo>> m_colliderGizmos;
   std::unordered_map<uuids::uuid, CachedHullGizmo> m_hullGizmos;
   std::unordered_map<uuids::uuid, std::shared_ptr<vke::RenderObject>> m_lightGizmos;
+  std::unordered_map<uuids::uuid, CachedTerrainSurface> m_terrainSurfaces;
   std::shared_ptr<vke::Model> m_lightGizmoModel;
   std::shared_ptr<vke::Texture2D> m_lightGizmoIcon;
   bool m_lightGizmoAssetsTried = false;

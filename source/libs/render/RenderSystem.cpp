@@ -4,6 +4,7 @@
 #include "CapsuleGizmo.h"
 #include "OutlineColors.h"
 #include "RenderComponents.h"
+#include "TerrainSurfacePlan.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/CameraSelection.h>
@@ -111,6 +112,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
   m_liveObjects.beginFrame();
   m_selectionOutlines.clear();
+  m_drawnTerrains.clear();
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -265,7 +267,26 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       assetCache.dropHullGizmo(uuid);
     }
+
+    if (const auto terrainComponent = components.terrain;
+        terrainComponent && !terrainComponent->getTerrainUUID().is_nil())
+    {
+      if (const auto volume = terrainComponent->volume())
+      {
+        const auto& terrainUUID = terrainComponent->getTerrainUUID();
+
+        if (const auto surface = assetCache.getTerrainSurface(terrainUUID, volume))
+        {
+          renderer->getRenderingManager()->getRenderer3D()->renderVolumeSurface(
+            surface, terrain::terrainModelMatrix(transform->getPosition(), transform->getOrientation()));
+        }
+
+        m_drawnTerrains.insert(terrainUUID);
+      }
+    }
   }
+
+  assetCache.trimTerrainSurfaces(m_drawnTerrains);
 
   // The later submission owns an overlap in the outline mask, so selection outlines go last to win over
   // any collider gizmo outline.

@@ -10,6 +10,7 @@
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
+#include <objects/components/collisions/Terrain.h>
 
 // Non-owning pointers, valid only while the object's components are unchanged: use them within one loop iteration.
 struct RenderComponents {
@@ -20,6 +21,7 @@ struct RenderComponents {
   SphereCollider* sphere = nullptr;
   CapsuleCollider* capsule = nullptr;
   ConvexMeshCollider* convexMesh = nullptr;
+  Terrain* terrain = nullptr;
 };
 
 // One pass over the object's own components instead of a map lookup, shared_ptr copy and dynamic cast per
@@ -56,6 +58,9 @@ struct RenderComponents {
             break;
           case ComponentType::SubComponentType_convexMeshCollider:
             found.convexMesh = static_cast<ConvexMeshCollider*>(component.get());
+            break;
+          case ComponentType::SubComponentType_terrain:
+            found.terrain = static_cast<Terrain*>(component.get());
             break;
           default:
             break;
