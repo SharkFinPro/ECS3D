@@ -44,6 +44,10 @@ namespace terrain
   [[nodiscard]] TerrainSaveResult saveTerrain(const std::filesystem::path& root, const TerrainDescription& description,
                                               const TerrainVolume& volume);
 
+  // The number of chunks the saved index of a terrain names, read from the index alone. Empty when the terrain has no
+  // readable index under root.
+  [[nodiscard]] std::optional<size_t> savedChunkCount(const std::filesystem::path& root, const uuids::uuid& uuid);
+
   struct TerrainLoadReport
   {
     size_t loaded = 0;

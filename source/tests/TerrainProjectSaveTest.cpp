@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -308,4 +310,99 @@ TEST_F(TerrainProjectSaveTest, TheEditorWriterFailsWhenATerrainCannotBeWritten)
 
   // Positive control: a real folder saves.
   EXPECT_TRUE(writeEditorTerrains(root("real"), registry, store));
+}
+
+namespace {
+  std::map<std::string, std::string> folderBytes(const std::filesystem::path& folder)
+  {
+    std::map<std::string, std::string> files;
+
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(folder))
+    {
+      if (entry.is_regular_file())
+      {
+        std::ifstream in(entry.path(), std::ios::binary);
+        files[std::filesystem::relative(entry.path(), folder).generic_string()] =
+          std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+      }
+    }
+
+    return files;
+  }
+}
+
+TEST_F(TerrainProjectSaveTest, AnEmptyVolumeOverSavedChunksKeepsTheFilesAndTheSaveSucceeds)
+{
+  AssetRegistry registry;
+  terrain::TerrainStore store;
+  fillSample(registry, store);
+  const auto target = root("target");
+
+  ASSERT_TRUE(writeEditorTerrains(target, registry, store));
+  const auto denseFolder = terrain::terrainFolder(target, denseUuid);
+  const auto before = folderBytes(denseFolder);
+  ASSERT_GT(before.size(), 1u);
+
+  terrain::TerrainStore reset;
+  reset.reconcile(registry);
+  ASSERT_TRUE(reset.adopt(describe(denseUuid, 2.5f), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  ASSERT_TRUE(reset.adopt(describe(uniformUuid, 4.0f), std::make_shared<terrain::TerrainVolume>(4.0f)));
+
+  EXPECT_TRUE(writeEditorTerrains(target, registry, reset));
+  EXPECT_EQ(folderBytes(denseFolder), before);
+  EXPECT_GT(folderBytes(terrain::terrainFolder(target, uniformUuid)).size(), 1u);
+
+  // Positive control: a volume that holds chunks still overwrites the saved files.
+  auto changed = std::make_shared<terrain::TerrainVolume>(2.5f);
+  changed->setChunk({ 5, 5, 5 }, terrainFilesFixtures::denseChunk(7));
+  ASSERT_TRUE(reset.adopt(describe(denseUuid, 2.5f), changed));
+  EXPECT_TRUE(writeEditorTerrains(target, registry, reset));
+  EXPECT_NE(folderBytes(denseFolder), before);
+  EXPECT_EQ(terrain::savedChunkCount(target, denseUuid), 1u);
+}
+
+TEST_F(TerrainProjectSaveTest, AnEmptyVolumeOverNoFilesWritesAnEmptyTerrain)
+{
+  AssetRegistry registry;
+  terrain::TerrainStore store;
+  registry.registerAsset(terrainRecord(denseUuid));
+  ASSERT_TRUE(store.adopt(describe(denseUuid, 2.5f), std::make_shared<terrain::TerrainVolume>(2.5f)));
+  const auto target = root("target");
+
+  EXPECT_TRUE(writeEditorTerrains(target, registry, store));
+  EXPECT_EQ(terrain::savedChunkCount(target, denseUuid), 0u);
+  EXPECT_TRUE(std::filesystem::exists(terrain::terrainFolder(target, denseUuid) / terrain::indexFileName));
+}
+
+TEST_F(TerrainProjectSaveTest, SavedChunksToKeepNamesOnlyAnEmptyVolumeOverSavedChunks)
+{
+  AssetRegistry registry;
+  terrain::TerrainStore store;
+  fillSample(registry, store);
+  const auto target = root("target");
+  const terrain::TerrainVolume empty(2.5f);
+
+  EXPECT_FALSE(savedChunksToKeep(target, denseUuid, empty).has_value());
+  ASSERT_TRUE(writeEditorTerrains(target, registry, store));
+  EXPECT_EQ(savedChunksToKeep(target, denseUuid, empty), 3u);
+  EXPECT_FALSE(savedChunksToKeep(target, denseUuid, *store.find(denseUuid)).has_value());
+  EXPECT_FALSE(savedChunksToKeep(target, unheldUuid, empty).has_value());
+}
+
+TEST_F(TerrainProjectSaveTest, TheFirstIncompleteTerrainNamesItsCounts)
+{
+  AssetRegistry registry;
+  terrain::TerrainStore store;
+  fillSample(registry, store);
+  EXPECT_FALSE(terrain::firstIncompleteTerrain(store).has_value());
+
+  auto description = *store.description(denseUuid);
+  description.chunkCount = 5;
+  ASSERT_TRUE(store.applyDescription(description));
+
+  const auto incomplete = terrain::firstIncompleteTerrain(store);
+  ASSERT_TRUE(incomplete.has_value());
+  EXPECT_EQ(incomplete->uuid, denseUuid);
+  EXPECT_EQ(incomplete->held, 3u);
+  EXPECT_EQ(incomplete->expected, 5u);
 }

@@ -459,6 +459,38 @@ namespace terrain
     return result;
   }
 
+  std::optional<size_t> savedChunkCount(const std::filesystem::path& root, const uuids::uuid& uuid)
+  {
+    if (root.empty() || uuid.is_nil())
+    {
+      return std::nullopt;
+    }
+
+    try
+    {
+      TerrainIndex index;
+      std::string ignoredError;
+
+      if (!readIndex(terrainFolder(root, uuid) / indexFileName, uuid, index, ignoredError))
+      {
+        return std::nullopt;
+      }
+
+      size_t count = 0;
+
+      for (const auto& [region, record] : index.regions)
+      {
+        count += record.hashes.size();
+      }
+
+      return count;
+    }
+    catch (const std::exception&)
+    {
+      return std::nullopt;
+    }
+  }
+
   TerrainLoadReport loadProjectTerrains(const std::filesystem::path& root, const AssetRegistry& registry,
                                         TerrainStore& store)
   {
