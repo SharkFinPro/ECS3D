@@ -28,6 +28,7 @@
 #include <EditorTheme.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
+#include <TerrainSaving.h>
 #include <AssetReferences.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
@@ -289,6 +290,16 @@ void EditorApp::setupSaveUI()
     {
       m_assetCache->requestAssetReset();
     }
+  });
+  m_saveUI->setContentWriter([this](const std::filesystem::path& root) {
+    // Until the server answers this editor's own project load, the store still holds the previous project's terrain.
+    if (m_projectLoads.awaitingOwnLoad())
+    {
+      Log::error(LogCategory::editor, "Not saving until the server has finished loading the project");
+      return false;
+    }
+
+    return writeEditorTerrains(root, *m_assetRegistry, *m_terrainStore);
   });
   m_saveUI->setStartupProject(m_options.project);
 }

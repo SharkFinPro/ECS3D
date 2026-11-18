@@ -301,7 +301,7 @@ namespace terrain
     }
   }
 
-  std::optional<std::string> incompleteTerrainReason(const TerrainStore& store)
+  std::optional<IncompleteTerrain> firstIncompleteTerrain(const TerrainStore& store)
   {
     for (const uuids::uuid& uuid : store.terrains())
     {
@@ -311,12 +311,23 @@ namespace terrain
 
       if (description && held < description->chunkCount)
       {
-        return "Play waits for terrain " + uuids::to_string(uuid) + ": " + std::to_string(held) + " of " +
-               std::to_string(description->chunkCount) + " chunk(s) received";
+        return IncompleteTerrain{ uuid, held, description->chunkCount };
       }
     }
 
     return std::nullopt;
+  }
+
+  std::optional<std::string> incompleteTerrainReason(const TerrainStore& store)
+  {
+    const std::optional<IncompleteTerrain> incomplete = firstIncompleteTerrain(store);
+    if (!incomplete)
+    {
+      return std::nullopt;
+    }
+
+    return "Play waits for terrain " + uuids::to_string(incomplete->uuid) + ": " + std::to_string(incomplete->held) +
+           " of " + std::to_string(incomplete->expected) + " chunk(s) received";
   }
 
   std::optional<std::string> pendingUploadReason(const TerrainStore& store)

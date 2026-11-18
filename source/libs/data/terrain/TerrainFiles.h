@@ -44,6 +44,10 @@ namespace terrain
   [[nodiscard]] TerrainSaveResult saveTerrain(const std::filesystem::path& root, const TerrainDescription& description,
                                               const TerrainVolume& volume);
 
+  // The number of chunks the saved index of a terrain names, read from the index alone. Empty when the terrain has no
+  // readable index under root.
+  [[nodiscard]] std::optional<size_t> savedChunkCount(const std::filesystem::path& root, const uuids::uuid& uuid);
+
   struct TerrainLoadReport
   {
     size_t loaded = 0;
@@ -59,6 +63,17 @@ namespace terrain
   // saved, or whose files fail to load, keeps the store's empty terrain. Reports failures instead of throwing them.
   [[nodiscard]] TerrainLoadReport loadProjectTerrains(const std::filesystem::path& root,
                                                       const AssetRegistry& registry, TerrainStore& store);
+
+  struct TerrainSaveReport
+  {
+    size_t saved = 0;
+    std::vector<std::string> errors;
+  };
+
+  // Saves every Terrain record's terrain that the store holds into root, in uuid order. A record the store does not
+  // hold is skipped. Reports failures instead of throwing them. Does nothing for an empty root.
+  [[nodiscard]] TerrainSaveReport saveProjectTerrains(const std::filesystem::path& root, const AssetRegistry& registry,
+                                                      const TerrainStore& store);
 }
 
 #endif //TERRAINFILES_H
