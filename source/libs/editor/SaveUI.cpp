@@ -57,6 +57,11 @@ void SaveUI::setProjectRootCallback(ProjectRootCallback callback)
   m_onProjectRoot = std::move(callback);
 }
 
+void SaveUI::setContentWriter(ContentWriter writer)
+{
+  m_contentWriter = std::move(writer);
+}
+
 void SaveUI::setStartupProject(const std::filesystem::path& argument)
 {
   const auto location = locateProject(argument);
@@ -122,7 +127,7 @@ bool SaveUI::save()
     return saveAs();
   }
 
-  if (!writeProject(m_saveFile))
+  if (!writeProject(m_projectRoot, m_saveFile))
   {
     return false;
   }
@@ -172,8 +177,15 @@ bool SaveUI::saveAs()
   return chooseSaveFolder(folder, startIn, defaultName) && saveToFolder(folder);
 }
 
-bool SaveUI::writeProject(const std::filesystem::path& file)
+bool SaveUI::writeProject(const std::filesystem::path& root, const std::filesystem::path& file)
 {
+  if (m_contentWriter && !m_contentWriter(root))
+  {
+    Log::error(LogCategory::editor, "Failed to save project to " + pathToUtf8(file) +
+      ": its content beside the project file could not be written");
+    return false;
+  }
+
   // Serialize the editor's replicated project (kept current by snapshots/deltas) straight to disk.
   if (!m_projectSerializer->save(file))
   {
@@ -222,7 +234,7 @@ bool SaveUI::saveToFolder(const std::filesystem::path& folder)
   }
 
   const auto file = projectFileInFolder(folder);
-  if (!writeProject(file))
+  if (!writeProject(folder, file))
   {
     return false;
   }

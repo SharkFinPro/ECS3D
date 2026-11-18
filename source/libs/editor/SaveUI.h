@@ -37,6 +37,9 @@ public:
   // Called with the project folder (empty for none) when it changes. reopened is true for a project load, which
   // fires it before the load callback even if the folder is the same, and false for a Save As into a new folder.
   using ProjectRootCallback = std::function<void(const std::filesystem::path& root, bool reopened)>;
+  // Writes the project's content that lives beside the project file into root (empty for a project with no
+  // folder) before the project file is written. Returning false fails the save.
+  using ContentWriter = std::function<bool(const std::filesystem::path& root)>;
 
   SaveUI(ProjectSerializer* projectSerializer, std::shared_ptr<vke::VulkanEngine> renderer);
 
@@ -45,6 +48,8 @@ public:
   void setLoadProjectCallback(LoadProjectCallback callback);
 
   void setProjectRootCallback(ProjectRootCallback callback);
+
+  void setContentWriter(ContentWriter writer);
 
   // The project the editor was started on (--project), so Save writes it in place and Save As copies its
   // folder's content. No callback fires; the app has already pointed its asset cache at the root.
@@ -139,6 +144,8 @@ private:
 
   ProjectRootCallback m_onProjectRoot;
 
+  ContentWriter m_contentWriter;
+
   std::filesystem::path m_saveFile;
 
   std::filesystem::path m_projectRoot;
@@ -165,7 +172,7 @@ private:
   [[nodiscard]] static bool chooseSaveFolder(std::filesystem::path& folder, const std::filesystem::path& startIn,
                                              const std::string& defaultName);
 
-  [[nodiscard]] bool writeProject(const std::filesystem::path& file);
+  [[nodiscard]] bool writeProject(const std::filesystem::path& root, const std::filesystem::path& file);
 
   [[nodiscard]] bool saveToFolder(const std::filesystem::path& folder);
 

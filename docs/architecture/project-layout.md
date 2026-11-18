@@ -27,4 +27,9 @@ A `--project` server reads each terrain's files from `<root>/terrain/<uuid>/` af
 missing folder is an unsaved terrain and stays empty; an unreadable one is logged and also stays empty. A
 `loadProject` resets every terrain volume to empty, since it names a different project; terrain files are read only
 by a `--project` server at startup.
+The editor's Save and Save As write each terrain the editor holds into the target folder's `terrain/<uuid>/`
+(`saveProjectTerrains`) before the project file, so a failed terrain write leaves the project file as it was and
+the save unmarked. Save is refused while a terrain holds fewer chunks than its snapshot named, since the files would
+hold a partial terrain. A project with no folder (a legacy `.json`) saves without its terrain and logs a warning.
+A template still saves only through Save As, so no terrain is written into a template folder.
 The server compiles `<root>/scripts/**/*.cs` together with the built-in scripts (see [scripting.md](scripting.md)).

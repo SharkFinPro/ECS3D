@@ -28,6 +28,7 @@
 #include <EditorTheme.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
+#include <TerrainSaving.h>
 #include <AssetReferences.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
@@ -288,6 +289,9 @@ void EditorApp::setupSaveUI()
     {
       m_assetCache->requestAssetReset();
     }
+  });
+  m_saveUI->setContentWriter([this](const std::filesystem::path& root) {
+    return writeEditorTerrains(root, *m_assetRegistry, *m_terrainStore);
   });
   m_saveUI->setStartupProject(m_options.project);
 }

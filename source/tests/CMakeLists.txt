@@ -229,6 +229,7 @@ add_executable(${PROJECT_NAME}
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
   TerrainProjectLoadTest.cpp
+  TerrainProjectSaveTest.cpp
   TerrainRaycastTest.cpp
   TerrainRedistanceTest.cpp
   TerrainRegionFormatTest.cpp
@@ -407,6 +408,9 @@ add_executable(${PROJECT_NAME}
 
   # TransientObject depends only on ECS3DData and json.
   ../libs/editor/TransientObject.cpp
+
+  # The editor's terrain save step depends only on ECS3DData and ECS3DLog.
+  ../libs/editor/TerrainSaving.cpp
 
   # The convex hull rebuild step depends only on ECS3DData, glm and ECS3DLog.
   ../libs/editor/components/ConvexHullRebuild.cpp

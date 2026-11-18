@@ -93,7 +93,9 @@ Scene Status toolbar's icon buttons, which stay drawn and gray out when unavaila
 height floor to fit), `SaveUI`
 (file I/O on the project folder layout, `<folder>/project.ecs3d` beside `assets/` and `scripts/`: Save As picks
 a folder, creates the subfolders, copies the previous folder's `assets/` and `scripts/` when the folder differs,
-and moves the editor's project root there, refusing a folder that already holds another project; Open takes a
+and moves the editor's project root there; every save first runs the app's `ContentWriter` on the target folder,
+which writes the terrain files (`TerrainSaving.h`, see [project-layout.md](project-layout.md)) and fails the save
+when it returns false, refusing a folder that already holds another project; Open takes a
 `.ecs3d` or legacy `.json` file, or a dropped folder, through `locateProject`; a legacy `.json` is saved in
 place until Save As; a template (see Build System's project root) is titled "Untitled (from" plus its name in
 the window title and its Save acts as Save As into a free or empty folder, prefilled under `Documents/ECS3D

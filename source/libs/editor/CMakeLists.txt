@@ -29,6 +29,8 @@ add_library(${PROJECT_NAME}
   DashedBoxLayout.h
   SaveUI.cpp
   SaveUI.h
+  TerrainSaving.cpp
+  TerrainSaving.h
   UnsavedChanges.h
   UndoRequestGate.h
   EditorConnectionState.h

@@ -197,6 +197,22 @@ namespace terrain
       return true;
     }
 
+    std::vector<uuids::uuid> terrainRecords(const AssetRegistry& registry)
+    {
+      std::vector<uuids::uuid> ordered;
+
+      for (const auto& [uuid, record] : registry.getAssets())
+      {
+        if (record.type == AssetType::Terrain)
+        {
+          ordered.push_back(uuid);
+        }
+      }
+
+      std::sort(ordered.begin(), ordered.end());
+      return ordered;
+    }
+
     void removeLeftoverTemporaries(const std::filesystem::path& folder)
     {
       std::vector<std::filesystem::path> leftovers;
@@ -453,19 +469,7 @@ namespace terrain
       return report;
     }
 
-    std::vector<uuids::uuid> ordered;
-
-    for (const auto& [uuid, record] : registry.getAssets())
-    {
-      if (record.type == AssetType::Terrain)
-      {
-        ordered.push_back(uuid);
-      }
-    }
-
-    std::sort(ordered.begin(), ordered.end());
-
-    for (const uuids::uuid& uuid : ordered)
+    for (const uuids::uuid& uuid : terrainRecords(registry))
     {
       try
       {
@@ -502,6 +506,48 @@ namespace terrain
         else
         {
           report.errors.push_back(failure(terrainFolder(root, uuid) / indexFileName, "the terrain was refused"));
+        }
+      }
+      catch (const std::exception& e)
+      {
+        report.errors.push_back(failure(terrainFolder(root, uuid), e.what()));
+      }
+    }
+
+    return report;
+  }
+
+  TerrainSaveReport saveProjectTerrains(const std::filesystem::path& root, const AssetRegistry& registry,
+                                        const TerrainStore& store)
+  {
+    TerrainSaveReport report;
+
+    if (root.empty())
+    {
+      return report;
+    }
+
+    for (const uuids::uuid& uuid : terrainRecords(registry))
+    {
+      const TerrainDescription* description = store.description(uuid);
+      const std::shared_ptr<TerrainVolume> volume = store.find(uuid);
+
+      if (description == nullptr || volume == nullptr)
+      {
+        continue;
+      }
+
+      try
+      {
+        TerrainSaveResult saved = saveTerrain(root, *description, *volume);
+
+        if (saved.ok)
+        {
+          ++report.saved;
+        }
+        else
+        {
+          report.errors.push_back(std::move(saved.error));
         }
       }
       catch (const std::exception& e)
