@@ -419,6 +419,8 @@ void GpuAssetCache::createTerrainSurface(const uuids::uuid& terrainUUID, CachedT
       cached.current = std::move(surface);
       cached.currentBounds = bounds;
     }
+
+    cached.failedFor.reset();
   }
   catch (const std::exception& e)
   {
@@ -485,7 +487,15 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
 
     cached.snapshot = std::move(next);
     cached.revision = volume->revision();
-    cached.desired = terrain::surfaceBounds(volume->occupiedBounds());
+
+    const terrain::SampleBox desired = terrain::surfaceBounds(volume->occupiedBounds());
+
+    if (!sameBox(desired, cached.desired))
+    {
+      cached.desired = desired;
+      cached.failedFor.reset();
+      cached.loggedTooLarge = false;
+    }
   }
 
   if (cached.failedFor && sameBox(*cached.failedFor, cached.desired))
@@ -503,7 +513,12 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
   if (cached.replacement)
   {
     slots.replacement = cached.replacementBounds;
-    slots.replacementReady = cached.replacement->pendingFraction() == 0.0f;
+    slots.replacementPending = cached.replacement->pendingFraction();
+  }
+
+  if (cached.current)
+  {
+    slots.currentPending = cached.current->pendingFraction();
   }
 
   const terrain::SurfacePlan plan = terrain::planTerrainSurface(cached.desired, slots);

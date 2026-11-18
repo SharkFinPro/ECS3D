@@ -108,8 +108,8 @@ public:
 
   // The surface drawing a terrain, keyed by terrain uuid (objects naming the same terrain share it). Follows the
   // volume: changed chunks are published to the surfaces once per call, a terrain that outgrows its surface gets a
-  // larger one built behind it, and a new voxel size starts over (a replaced volume object is just a revision change). Null when there is no
-  // volume, nothing is held yet, or the terrain is too spread out (logged once per terrain).
+  // larger one built behind it, and a new voxel size starts over. Null when there is no volume, nothing is held yet,
+  // or the terrain is too spread out (logged once per terrain).
   std::shared_ptr<vke::VolumeSurface> getTerrainSurface(const uuids::uuid& terrainUUID,
                                                         const std::shared_ptr<const terrain::TerrainVolume>& volume);
 

@@ -115,14 +115,17 @@ it yet). `RenderSystem` gathers each object's render components in one pass over
 headless `RenderComponents.h`, and prunes its per-uuid caches only when the set of drawn uuids changes, which the
 headless `LiveObjectTracker.h` detects with an order-independent signature. A model's render object gets its
 position, scale and rotation pushed only when `Transform::getWorldUpdateID` differs from the last push, which the
-headless `TransformPushGate.h` remembers per cached render object, so a rebuilt render object is always pushed. A `Terrain` component is drawn through the engine's volume surface:
-`GpuAssetCache::getTerrainSurface` keeps one surface per terrain uuid, and the surface reads a `TerrainSurfaceFeed`,
-the chunk snapshot a `TerrainVolumeSource` answers fills from on the engine's worker threads. The feed swaps the
-snapshot and reports the change to the surfaces under one exclusive lock, so no fill sees an edit before its
-`invalidate`; no worker holds the volume itself. Bounds are the occupied chunks plus an air sample, rounded to
-`surfaceBoundsStep`. A terrain that outgrows them gets a larger surface built behind the drawn one, promoted once
-`pendingFraction()` is 0, and one past `maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are
-reported once per frame per terrain. Surfaces are released through the engine's deferred release on a new voxel
-size, a project reset, or when no object draws the terrain. The decisions are the headless
-`TerrainSurfacePlan.h`, and the model matrix has no scale because terrain space is metric. Picking, outlines,
-lighting and shadows wait on the engine. Depends on `ECS3DData` + `VulkanEngine`.
+headless `TransformPushGate.h` remembers per cached render object, so a rebuilt render object is always pushed.
+
+A `Terrain` component is drawn through the engine's volume surface. `GpuAssetCache::getTerrainSurface` keeps one
+surface per terrain uuid, and the surface reads a `TerrainSurfaceFeed` (headless), the chunk snapshot a
+`TerrainVolumeSource` answers fills from on the engine's worker threads. The feed swaps the snapshot and reports the
+change to the surfaces under one exclusive lock, so no fill sees an edit before its `invalidate`; no worker holds the
+volume itself. Bounds are the occupied chunks plus an air sample, rounded to `surfaceBoundsStep`. A terrain that
+outgrows them gets a larger surface built behind the drawn one, promoted as soon as its `pendingFraction()` is no
+higher than the drawn surface's (so a terrain whose chunks change every frame still shows its growth), and one past
+`maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are reported once per frame per terrain.
+Surfaces are released through the engine's deferred release on a new voxel size, a project reset, or when no object
+draws the terrain. The decisions are the headless `TerrainSurfacePlan.h`, and the model matrix has no scale because
+terrain space is metric. Picking, outlines, lighting and shadows wait on the engine. Depends on `ECS3DData` +
+`VulkanEngine`.

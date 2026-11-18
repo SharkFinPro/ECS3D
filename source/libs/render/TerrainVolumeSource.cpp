@@ -1,32 +1,7 @@
 #include "TerrainVolumeSource.h"
 #include "TerrainSurfaceSampling.h"
 #include <algorithm>
-#include <mutex>
 #include <utility>
-
-TerrainSurfaceFeed::TerrainSurfaceFeed(std::shared_ptr<const terrain::TerrainVolume::ChunkMap> snapshot)
-  : m_snapshot(std::move(snapshot))
-{}
-
-std::shared_ptr<const terrain::TerrainVolume::ChunkMap> TerrainSurfaceFeed::snapshot() const
-{
-  const std::shared_lock lock(m_mutex);
-
-  return m_snapshot;
-}
-
-void TerrainSurfaceFeed::publish(std::shared_ptr<const terrain::TerrainVolume::ChunkMap> snapshot,
-                                 const std::function<void()>& report)
-{
-  const std::unique_lock lock(m_mutex);
-
-  m_snapshot = std::move(snapshot);
-
-  if (report)
-  {
-    report();
-  }
-}
 
 TerrainVolumeSource::TerrainVolumeSource(std::shared_ptr<const TerrainSurfaceFeed> feed,
                                          const terrain::SampleBox& bounds)

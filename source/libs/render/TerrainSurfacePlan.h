@@ -15,16 +15,18 @@ namespace terrain
   {
     std::optional<SampleBox> current;
     std::optional<SampleBox> replacement;
-    // The replacement shows everything reported to it (pendingFraction() == 0).
-    bool replacementReady = false;
+    // pendingFraction() of each held surface. The defaults make a replacement count as less complete than the current
+    // surface, so nothing is promoted unless the caller reports otherwise.
+    float currentPending = 0.0f;
+    float replacementPending = 1.0f;
   };
 
   enum class SurfaceStep
   {
     keep,               // nothing to change
-    createCurrent,      // no surface yet: create one with `bounds` and draw it at once, so terrain fills in as it arrives
+    createCurrent,      // no surface yet: create one with `bounds` and draw it at once, so terrain fills in
     createReplacement,  // the terrain outgrew the drawn surface: build one with `bounds`, keep drawing the old one
-    promote,            // the replacement is ready: release the drawn surface, draw the replacement
+    promote,            // the replacement is no less complete than the drawn surface: swap them
     tooLarge            // `bounds` needs more than maxSurfaceChunks: draw what is held, create nothing
   };
 
@@ -34,12 +36,13 @@ namespace terrain
     SampleBox bounds;
   };
 
-  // desired is surfaceBounds(volume.occupiedBounds()). An empty desired box keeps whatever is held. A ready
-  // replacement is promoted before anything else; while a replacement is building, nothing new is created (so a
-  // terrain that keeps growing still shows each finished step).
+  // desired is surfaceBounds(volume.occupiedBounds()). An empty desired box keeps whatever is held. A replacement
+  // that is no less complete than the drawn surface is promoted before anything else, so a terrain whose chunks keep
+  // changing (and keep the replacement pending) still gets its larger surface drawn; while a replacement is
+  // building, nothing new is created.
   [[nodiscard]] inline SurfacePlan planTerrainSurface(const SampleBox& desired, const SurfaceSlots& slots)
   {
-    if (slots.replacement && slots.replacementReady)
+    if (slots.replacement && slots.replacementPending <= slots.currentPending)
     {
       return { SurfaceStep::promote, *slots.replacement };
     }
