@@ -3,10 +3,10 @@
 #include "terrain/TerrainFiles.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
+#include <array>
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
-#include <initializer_list>
 #include <random>
 #include <system_error>
 #include <string>
@@ -144,8 +144,9 @@ TEST_F(ProjectFingerprintFiles, TerrainFolderCreationOrderDoesNotMatter)
   {
     const auto root = m_directory / name;
     std::filesystem::create_directories(root);
-    for (const char* folder : aFirst ? std::initializer_list<const char*>{ "aaaa", "bbbb" }
-                                     : std::initializer_list<const char*>{ "bbbb", "aaaa" })
+    const std::array<const char*, 2> ascendingOrder{ "aaaa", "bbbb" };
+    const std::array<const char*, 2> descendingOrder{ "bbbb", "aaaa" };
+    for (const char* folder : aFirst ? ascendingOrder : descendingOrder)
     {
       std::filesystem::create_directories(root / "terrain" / folder);
       writeFile(root / "terrain" / folder / "terrain.json", std::string("{\"id\":\"") + folder + "\"}");
