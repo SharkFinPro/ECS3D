@@ -56,6 +56,8 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
     return;
   }
 
+  m_terrainPlaySnapshot.clear();
+
   // The project is in; a failure here leaves terrain behind it, not the scene, so the load still finishes.
   resetTerrainForLoadedProject();
 
@@ -91,6 +93,28 @@ void ServerApp::resetTerrainForLoadedProject()
   catch (const std::exception& e)
   {
     Log::error(LogCategory::server, std::string("Failed to reset terrain after loading the project: ") + e.what());
+  }
+}
+
+void ServerApp::restoreTerrainAfterStop()
+{
+  try
+  {
+    size_t total = 0;
+    for (const auto& [uuid, coords] : m_terrainPlaySnapshot.restore(*m_terrainStore))
+    {
+      m_terrainStreamer.requeue(uuid, coords);
+      total += coords.size();
+    }
+
+    if (total > 0)
+    {
+      Log::info(LogCategory::server, "Restored " + std::to_string(total) + " terrain chunk(s) after Stop");
+    }
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, std::string("Failed to restore terrain after Stop: ") + e.what());
   }
 }
 

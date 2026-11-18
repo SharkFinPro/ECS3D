@@ -43,6 +43,11 @@ store is untouched, an applied one invalidates the bounds of the Terrain compone
 view logs `Terrain <uuid> complete: N chunk(s)` when its held count reaches the snapshot's chunk count. After each
 snapshot unpack the view calls `observeSnapshot`, which resets every volume (and so the revisions) when the project
 load id differs from the previous snapshot's; the first snapshot is not a change.
+On Start of a stopped scene the server keeps each terrain's chunk map (`TerrainPlaySnapshot`, a map of pointers; nothing is
+copied). Stop restores it: each coordinate whose chunk pointer differs (changed, added or erased) is set back through
+`TerrainStore::setChunk` with a fresh revision and requeued on every connection's stream, and the server logs
+"Restored N terrain chunk(s) after Stop". A terrain created since Start is left alone, as is one whose voxel size
+changed; a project load drops the snapshot.
 An editor's File > Open (not an editor started with `--project`, whose server reads the files itself) carries the
 project's terrain by upload. `EditorApp::onLoadProject` loads the terrain files into its own store, packs
 `loadProject` with their real chunk counts, then sends the chunks as `terrainChunks` messages (`TerrainUpload`, paced
@@ -187,7 +192,8 @@ A snapshot ends with a project load id: the server mints one at startup and take
 `loadProject`. An editor that sees another editor's load (`ProjectLoadTracker.h`) drops its save file and
 project folder, so the next Save asks for one. The tracker resets on every connect.
 The snapshot then carries a project fingerprint: a 64-bit hash of the project file the server loaded from
-disk (`ProjectFingerprint.h`), zero for the built-in project or one an editor sent.
+disk and the index of each terrain under its root (`fingerprintProject` in `ProjectFingerprint.h`, so different terrain
+is a different project), zero for the built-in project or one an editor sent.
 On the first snapshot of a connection, `ProjectIdentityCheck.h` compares it with the fingerprint of the
 editor's own `--project` file and drops the save target on a mismatch, with a warning.
 This catches `--host` against a server started on another project.

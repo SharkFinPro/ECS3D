@@ -12,4 +12,9 @@
 
 [[nodiscard]] uint64_t fingerprintProjectFile(const std::filesystem::path& projectFile);
 
+// The project file plus each terrain's index (<root>/terrain/<folder>/terrain.json, which records every region and chunk
+// hash), so two projects with the same scenes but different terrain differ. A project with no terrain folder gets exactly
+// fingerprintProjectFile's value. Zero when the project file is empty or unreadable.
+[[nodiscard]] uint64_t fingerprintProject(const std::filesystem::path& projectFile, const std::filesystem::path& root);
+
 #endif //PROJECTFINGERPRINT_H

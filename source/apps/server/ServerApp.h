@@ -8,6 +8,7 @@
 #include "ServerStatsFeed.h"
 #include "StatsSummary.h"
 #include <StatsSubscriptions.h>
+#include <terrain/TerrainPlaySnapshot.h>
 #include <terrain/TerrainStreamer.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
@@ -85,6 +86,8 @@ private:
 
   // The terrain chunks each joined connection is still being sent, pumped once per run() iteration.
   terrain::TerrainStreamer m_terrainStreamer;
+  // The chunk maps from when the scene last started, so Stop can put back what play changed.
+  terrain::TerrainPlaySnapshot m_terrainPlaySnapshot;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
   std::shared_ptr<ProjectPacker> m_projectPacker;
@@ -209,6 +212,8 @@ private:
 
   // Empties the terrain volumes, expects the loaded project's chunk counts and restarts the streams; logs a failure.
   void resetTerrainForLoadedProject();
+  // Puts back the chunks play changed and resends them to every connection; logs the count.
+  void restoreTerrainAfterStop();
 
   // The uploader of the last project load left before its terrain arrived: nothing will fill the expectations, so
   // they are dropped rather than holding Play for every editor until the next load.
@@ -267,9 +272,9 @@ private:
 
   void handleInputState(const net::Message& message, int32_t senderId);
 
-  void handleSceneControl(const net::Message& message) const;
+  void handleSceneControl(const net::Message& message);
 
-  void applySceneControl(net::SceneControlOp op, SceneAsset& scene, bool wasStopped) const;
+  void applySceneControl(net::SceneControlOp op, SceneAsset& scene, bool wasStopped);
 
   void loadScene(const std::string& sceneUUID) const;
 
