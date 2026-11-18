@@ -126,6 +126,10 @@ per gesture, and Rebuild hull is disabled while those keys differ. A model drop 
 the edit, and an edit that leaves the primary unchanged propagates only its disagreeing hull keys. Depends on
 `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`.
 
+The Terrain component section also shows read-only `Chunks` (held against the count the snapshot announced) and
+`Surface` (none, ready, percent pending, growing, too large to draw or to grow) rows, formatted by the headless
+`TerrainReadout.h` from `GpuAssetCache::terrainSurfaceStatus` and the terrain store.
+
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`
 (`EditorLayoutSettings`). It restores the text in the style-setup hook, before the first frame, and saves it when

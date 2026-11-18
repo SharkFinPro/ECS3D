@@ -65,6 +65,17 @@ namespace terrain
     return { slots.current ? SurfaceStep::createReplacement : SurfaceStep::createCurrent, desired };
   }
 
+  // What the inspector shows about a terrain's surface.
+  struct TerrainSurfaceStatus
+  {
+    bool hasSurface = false;
+    // pendingFraction of the drawn surface, or of the replacement while one builds
+    float pending = 0.0f;
+    bool growing = false;
+    // The terrain needs more than maxSurfaceChunks: it is not drawn, or the drawn surface cannot grow.
+    bool tooLarge = false;
+  };
+
   // Terrain space is metric (sample i sits at i * voxelSize), so the owner's scale is not part of the matrix.
   [[nodiscard]] inline glm::mat4 terrainModelMatrix(const glm::vec3& position, const glm::quat& orientation)
   {

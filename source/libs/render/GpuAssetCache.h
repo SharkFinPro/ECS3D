@@ -4,6 +4,7 @@
 #include "MissingAssetFallback.h"
 #include <array>
 #include "SharedAssetLoads.h"
+#include "TerrainSurfacePlan.h"
 #include "TransformPushGate.h"
 #include <terrain/TerrainTypes.h>
 #include <terrain/TerrainVolume.h>
@@ -112,6 +113,9 @@ public:
   // or the terrain is too spread out (logged once per terrain).
   std::shared_ptr<vke::VolumeSurface> getTerrainSurface(const uuids::uuid& terrainUUID,
                                                         const std::shared_ptr<const terrain::TerrainVolume>& volume);
+
+  // A read for the inspector; reflects the last frame's getTerrainSurface.
+  [[nodiscard]] terrain::TerrainSurfaceStatus terrainSurfaceStatus(const uuids::uuid& terrainUUID) const;
 
   // Releases the surfaces of every terrain not in drawnTerrains. RenderSystem calls it once per frame.
   void trimTerrainSurfaces(const std::unordered_set<uuids::uuid>& drawnTerrains);
