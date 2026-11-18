@@ -25,13 +25,16 @@ project by the `loadProject` blob. Its own root, used for scripts, stays what `-
 Dialog and drop paths arrive as 8-bit Unicode text (`pathFromUtf8`), and logs use `pathToUtf8`.
 A `--project` server reads each terrain's files from `<root>/terrain/<uuid>/` after the project loads. A
 missing folder is an unsaved terrain and stays empty; an unreadable one is logged and also stays empty. A
-`loadProject` resets every terrain volume to empty, since it names a different project; terrain files are read only
-by a `--project` server at startup.
+`loadProject` resets every terrain volume to empty, since it names a different project; terrain files are read by a
+`--project` server at startup, and for File > Open the editor reads them and uploads the chunks (see
+[replication.md](replication.md)).
 The editor's Save and Save As write each terrain the editor holds into the target folder's `terrain/<uuid>/`
-(`saveProjectTerrains`) before the project file. A failed terrain write leaves the project file as it was and the
-save unmarked, but terrain files may already have been rewritten when the project file write then fails. A terrain
-whose volume holds no chunks is not saved over files that hold some (`loadProject` empties the volumes), so Save never
-deletes a terrain's saved data; it logs a warning instead. Save is refused while a terrain holds fewer chunks than its snapshot named, since the files would
-hold a partial terrain. A project with no folder (a legacy `.json`) saves without its terrain and logs a warning.
-A template still saves only through Save As, so no terrain is written into a template folder.
+(`saveProjectTerrains`) before the project file. A failed terrain write leaves the project file as it was and the save
+unmarked, but terrain files may already have been rewritten when the project file write then fails. A terrain whose
+volume holds no chunks is not saved over files that hold some (as after a `loadProject` whose upload has not arrived),
+so Save never deletes a terrain's saved data; it logs a warning instead. Save is refused while a terrain holds fewer
+chunks than its snapshot named, since the files would hold a partial terrain. A project with no folder (a legacy
+`.json`) saves without its terrain and logs a warning. A template still saves only through Save As, so no terrain is
+written into a template folder. Save also waits, like Play, until the server has answered the editor's own project
+load, since until then the editor still holds the previous project's terrain.
 The server compiles `<root>/scripts/**/*.cs` together with the built-in scripts (see [scripting.md](scripting.md)).

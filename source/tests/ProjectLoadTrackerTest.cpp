@@ -80,6 +80,20 @@ TEST(ProjectLoadTracker, ResetDropsAPendingOwnLoad)
   EXPECT_TRUE(tracker.observeSnapshot(d));
 }
 
+TEST(ProjectLoadTracker, AwaitingOwnLoadLastsUntilItsSnapshotArrives)
+{
+  ProjectLoadTracker tracker;
+  ASSERT_FALSE(tracker.observeSnapshot(a));
+  EXPECT_FALSE(tracker.awaitingOwnLoad());
+
+  tracker.expectOwnLoad(b);
+  EXPECT_TRUE(tracker.awaitingOwnLoad());
+  EXPECT_FALSE(tracker.observeSnapshot(a));
+  EXPECT_TRUE(tracker.awaitingOwnLoad());
+  EXPECT_FALSE(tracker.observeSnapshot(b));
+  EXPECT_FALSE(tracker.awaitingOwnLoad());
+}
+
 TEST(ProjectLoadTracker, AnOwnLoadBeforeAnySnapshotIsAdoptedWhenItArrives)
 {
   ProjectLoadTracker tracker;

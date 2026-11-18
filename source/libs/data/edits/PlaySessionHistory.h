@@ -13,8 +13,8 @@ namespace edits {
 // were sent, so the swap is made when Start/Stop is requested, not when the status comes back; a status the
 // server reports before it has seen our request is stale and ignored. A start/stop made by another editor
 // is followed from the reported status alone. Accepted limitation: a Start the server never acts on (no
-// current scene) leaves its expectation queued, so edits recorded meanwhile stay on the play history until a
-// Stop or clear().
+// current scene, or an upload the server still waits on) leaves its expectation queued, so edits recorded
+// meanwhile stay on the play history until a Stop or clear().
 class PlaySessionHistory {
 public:
   // What undo/redo act on: the authored history, or the play session's while one runs.

@@ -284,6 +284,7 @@ void EditorApp::setupSaveUI()
   m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
   m_saveUI->setHistoryPositionProvider([this] { return m_playHistory.authoredPosition(); });
   m_saveUI->setProjectRootCallback([this](const std::filesystem::path& root, const bool reopened) {
+    m_projectRoot = root;
     m_assetCache->setProjectRoot(root);
     if (reopened)
     {
@@ -443,6 +444,13 @@ void EditorApp::run()
         logMessage("Error", editorConnectionLogMessage(m_connectionTracker.state()));
         m_serverEditable = false;
         m_remoteStats.disconnected();
+
+        if (!m_terrainUpload.done())
+        {
+          m_terrainUpload.clear();
+          Log::warn(LogCategory::editor, "The terrain upload stopped because the connection was lost; "
+            "open the project again to upload its terrain.");
+        }
       }
     }
 
@@ -455,6 +463,8 @@ void EditorApp::run()
 
       m_keybindDispatcher->update();
     }
+
+    pumpTerrainUpload();
 
     saveLayoutIfRequested();
 

@@ -2,6 +2,7 @@
 #include "ServerPolicy.h"
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainReplication.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -53,12 +54,12 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
       break;
 
     default:
-      handleEditorMessage(message);
+      handleEditorMessage(message, senderId);
       break;
   }
 }
 
-void ServerApp::handleEditorMessage(const net::Message& message)
+void ServerApp::handleEditorMessage(const net::Message& message, const int32_t senderId)
 {
   switch (message.getType())
   {
@@ -71,7 +72,7 @@ void ServerApp::handleEditorMessage(const net::Message& message)
       break;
 
     case net::MessageType::loadProject:
-      handleLoadProject(message);
+      handleLoadProject(message, senderId);
       break;
 
     case net::MessageType::addAsset:
@@ -88,6 +89,10 @@ void ServerApp::handleEditorMessage(const net::Message& message)
 
     case net::MessageType::sceneControl:
       handleSceneControl(message);
+      break;
+
+    case net::MessageType::terrainChunks:
+      handleTerrainUpload(message);
       break;
 
     default: break;
@@ -257,6 +262,7 @@ void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t 
 void ServerApp::handleDisconnect(const int32_t connId)
 {
   m_terrainStreamer.forget(connId);
+  dropTerrainUploadFrom(connId);
   m_statsSubscriptions.forget(connId);
   m_joinNonces.erase(connId);
   m_slotlessConnections.erase(connId);
@@ -348,6 +354,15 @@ void ServerApp::handleSceneControl(const net::Message& message) const
     {
     }
     return;
+  }
+
+  if (op == net::SceneControlOp::start)
+  {
+    if (const auto reason = terrain::pendingUploadReason(*m_terrainStore))
+    {
+      Log::warn(LogCategory::server, *reason);
+      return;
+    }
   }
 
   const auto scene = m_sceneManager->getCurrentScene();

@@ -18,6 +18,7 @@
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainUpload.h>
 #include <terrain/TerrainViewSync.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
@@ -25,6 +26,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -140,6 +142,11 @@ private:
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
   terrain::TerrainViewSync m_terrainSync;
+  // The server resets its terrain on loadProject; the opened project's chunks reach it through this.
+  terrain::TerrainUpload m_terrainUpload;
+  size_t m_terrainUploadSent = 0;
+  std::chrono::steady_clock::time_point m_lastTerrainUploadPump;
+  std::filesystem::path m_projectRoot;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
   std::shared_ptr<ProjectPacker> m_projectPacker;
@@ -329,6 +336,9 @@ private:
   void handleSnapshot(const net::Message& message);
 
   void handleTerrainChunks(const net::Message& message);
+
+  // Sends one frame's share of the opened project's terrain to the server.
+  void pumpTerrainUpload();
 
   void handleStateDelta(const net::Message& message) const;
 

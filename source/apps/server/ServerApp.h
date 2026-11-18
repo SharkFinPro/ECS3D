@@ -194,7 +194,7 @@ private:
   // send mutations.
   [[nodiscard]] bool isMessageAuthorized(const net::Message& message, int32_t senderId) const;
 
-  void handleEditorMessage(const net::Message& message);
+  void handleEditorMessage(const net::Message& message, int32_t senderId);
 
   void handleJoin(const net::Message& message, int32_t senderId);
 
@@ -205,7 +205,23 @@ private:
   // Hands a just-applied setSceneScriptFields edit to the running instance; any other edit does nothing.
   void pushSceneScriptFields(const SceneAsset& scene, const nlohmann::json& edit) const;
 
-  void handleLoadProject(const net::Message& message);
+  void handleLoadProject(const net::Message& message, int32_t senderId);
+
+  // Empties the terrain volumes, expects the loaded project's chunk counts and restarts the streams; logs a failure.
+  void resetTerrainForLoadedProject();
+
+  // The uploader of the last project load left before its terrain arrived: nothing will fill the expectations, so
+  // they are dropped rather than holding Play for every editor until the next load.
+  void dropTerrainUploadFrom(int32_t connId);
+
+  // The connection whose loadProject set the current expectations.
+  std::optional<int32_t> m_terrainUploader;
+
+  // The editor's terrain chunks for a terrain a loadProject said to expect: sets them and sends them on to every view.
+  void handleTerrainUpload(const net::Message& message);
+
+  // Terrains a stray upload was already warned about in this project load.
+  std::unordered_set<uuids::uuid> m_terrainUploadWarned;
 
   void finishProjectLoad() const;
 
