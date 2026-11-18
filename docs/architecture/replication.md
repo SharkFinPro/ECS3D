@@ -50,8 +50,8 @@ mutation message that only the authorized editor may send). The server's `handle
 records each description's chunk count as an expectation (`TerrainStore::expectChunks`); the snapshot packs the
 expected count for a terrain still awaiting its upload, so views know their target. `applyTerrainUpload` sets each
 uploaded chunk with the server's own revision (the entry's is ignored), `requeue` sends the chunks on to every
-connection, including the uploader, and the expectation clears when the terrain holds the expected count ("Terrain
-<uuid> uploaded: N chunk(s)"). Play (`SceneControlOp::start`) is refused while any expectation is pending
+connection, including the uploader, and the expectation clears when the terrain holds the expected count (`Terrain
+<uuid> uploaded: N chunk(s)`). Play (`SceneControlOp::start`) is refused while any expectation is pending
 (`pendingUploadReason`), and the editor refuses Play itself while a terrain holds fewer chunks than its description says
 (`incompleteTerrainReason`) or while the snapshot of its own project load has not come back (`ProjectLoadTracker::awaitingOwnLoad`; until then its store still holds the files it read), so a refused Play never queues a history swap. A load the server refuses never returns that snapshot, so Play waits until the project is opened again. While an upload is pending the server does not log stream finishes, since each uploaded batch revives the streams. The editor pumps the upload at most once
 per 20 ms, the server's fixed step, and a dropped connection stops it: the project must be opened again. The upload uses the editor's own connection even for a server it spawned on the same machine;
