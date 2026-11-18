@@ -54,12 +54,12 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
       break;
 
     default:
-      handleEditorMessage(message);
+      handleEditorMessage(message, senderId);
       break;
   }
 }
 
-void ServerApp::handleEditorMessage(const net::Message& message)
+void ServerApp::handleEditorMessage(const net::Message& message, const int32_t senderId)
 {
   switch (message.getType())
   {
@@ -72,7 +72,7 @@ void ServerApp::handleEditorMessage(const net::Message& message)
       break;
 
     case net::MessageType::loadProject:
-      handleLoadProject(message);
+      handleLoadProject(message, senderId);
       break;
 
     case net::MessageType::addAsset:
@@ -262,6 +262,7 @@ void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t 
 void ServerApp::handleDisconnect(const int32_t connId)
 {
   m_terrainStreamer.forget(connId);
+  dropTerrainUploadFrom(connId);
   m_statsSubscriptions.forget(connId);
   m_joinNonces.erase(connId);
   m_slotlessConnections.erase(connId);

@@ -13,7 +13,7 @@
 #include <exception>
 #include <string>
 
-void ServerApp::handleLoadProject(const net::Message& message)
+void ServerApp::handleLoadProject(const net::Message& message, const int32_t senderId)
 {
   // An editor opened a different project: stop the current scripts, swap the project in, restart,
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
@@ -31,6 +31,7 @@ void ServerApp::handleLoadProject(const net::Message& message)
   // Before the unpack, so a failed one cannot leave the previous project's expectations for uuids both share.
   m_terrainStore->clearExpectations();
   m_terrainUploadWarned.clear();
+  m_terrainUploader = senderId;
 
   try
   {
@@ -86,6 +87,23 @@ void ServerApp::handleLoadProject(const net::Message& message)
   }
 
   finishProjectLoad();
+}
+
+void ServerApp::dropTerrainUploadFrom(const int32_t connId)
+{
+  if (m_terrainUploader != connId)
+  {
+    return;
+  }
+
+  m_terrainUploader.reset();
+
+  if (const auto reason = terrain::pendingUploadReason(*m_terrainStore))
+  {
+    m_terrainStore->clearExpectations();
+    Log::warn(LogCategory::server, "The editor uploading the project's terrain disconnected (" + *reason +
+      "); the terrain stays incomplete until a project is opened again.");
+  }
 }
 
 void ServerApp::handleTerrainUpload(const net::Message& message)

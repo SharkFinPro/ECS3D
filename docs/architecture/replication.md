@@ -44,18 +44,24 @@ view logs `Terrain <uuid> complete: N chunk(s)` when its held count reaches the 
 snapshot unpack the view calls `observeSnapshot`, which resets every volume (and so the revisions) when the project
 load id differs from the previous snapshot's; the first snapshot is not a change.
 An editor's File > Open (not an editor started with `--project`, whose server reads the files itself) carries the
-project's terrain by upload. `EditorApp::onLoadProject` loads the terrain files into its own store, packs `loadProject`
-with their real chunk counts, then sends the chunks as `terrainChunks` messages (`TerrainUpload`, paced like a stream, a
-mutation message that only the authorized editor may send). The server's `handleLoadProject` resets its volumes and
-records each description's chunk count as an expectation (`TerrainStore::expectChunks`); the snapshot packs the
-expected count for a terrain still awaiting its upload, so views know their target. `applyTerrainUpload` sets each
-uploaded chunk with the server's own revision (the entry's is ignored), `requeue` sends the chunks on to every
-connection, including the uploader, and the expectation clears when the terrain holds the expected count (`Terrain
-<uuid> uploaded: N chunk(s)`). Play (`SceneControlOp::start`) is refused while any expectation is pending
-(`pendingUploadReason`), and the editor refuses Play itself while a terrain holds fewer chunks than its description says
-(`incompleteTerrainReason`) or while the snapshot of its own project load has not come back (`ProjectLoadTracker::awaitingOwnLoad`; until then its store still holds the files it read), so a refused Play never queues a history swap. A load the server refuses never returns that snapshot, so Play waits until the project is opened again. While an upload is pending the server does not log stream finishes, since each uploaded batch revives the streams. The editor pumps the upload at most once
-per 20 ms, the server's fixed step, and a dropped connection stops it: the project must be opened again. The upload uses the editor's own connection even for a server it spawned on the same machine;
-it also serves a remote `--host` editor, so it stays where telling a spawned server the project root would not.
+project's terrain by upload. `EditorApp::onLoadProject` loads the terrain files into its own store, packs
+`loadProject` with their real chunk counts, then sends the chunks as `terrainChunks` messages (`TerrainUpload`, paced
+like a stream, a mutation message that only the authorized editor may send). The server's `handleLoadProject` resets
+its volumes and records each description's chunk count as an expectation (`TerrainStore::expectChunks`); the snapshot
+packs the expected count for a terrain still awaiting its upload, so views know their target. `applyTerrainUpload`
+sets each uploaded chunk with the server's own revision (the entry's is ignored), `requeue` sends the chunks on to
+every connection, including the uploader, and the expectation clears when the terrain holds the expected count
+(`Terrain <uuid> uploaded: N chunk(s)`). Play (`SceneControlOp::start`) is refused while any expectation is pending
+(`pendingUploadReason`), and the editor refuses Play itself while a terrain holds fewer chunks than its description
+says (`incompleteTerrainReason`) or while the snapshot of its own project load has not come back
+(`ProjectLoadTracker::awaitingOwnLoad`; until then its store still holds the files it read), so a refused Play never
+queues a history swap. A load the server refuses never returns that snapshot, so Play waits until the project is
+opened again. While an upload is pending the server does not log stream finishes, since each uploaded batch revives
+the streams. The editor pumps the upload at most once per 20 ms, the server's fixed step, and a dropped connection
+stops it: the project must be opened again. On the server side the uploader's disconnect drops the expectations it
+set, so Play is not held for every editor; the terrain stays incomplete until a project is opened again. The upload
+uses the editor's own connection even for a server it spawned on the same machine; it also serves a remote `--host`
+editor, so it stays where telling a spawned server the project root would not.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`, and the editor's `terrainChunks` upload) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. A third direction exists for `serverLog` alone: server → editor connections
