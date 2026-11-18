@@ -2,6 +2,7 @@
 #include "DefaultProjectParts.h"
 #include "DefaultShapes.h"
 #include "DefaultWelcome.h"
+#include <assets/AssetRegistry.h>
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -493,6 +494,13 @@ json prefabAssets()
   });
 }
 
+json terrainAssets()
+{
+  return json::array({
+    { { "filePath", terrainAssetPath(uuids::uuid::from_string(showcaseTerrain).value()) }, { "uuid", showcaseTerrain } }
+  });
+}
+
 json sceneAssets(json welcome)
 {
   return json::array({
@@ -500,7 +508,8 @@ json sceneAssets(json welcome)
     scene("Lights and Players", newUUID(), buildScene1()),
     scene("Ramps", newUUID(), buildScene2()),
     scene("Tower Collapse", newUUID(), buildScene3()),
-    scene("Falling Balls", newUUID(), buildFallingBalls())
+    scene("Falling Balls", newUUID(), buildFallingBalls()),
+    scene("Terrain Showcase", newUUID(), buildTerrainShowcase())
   });
 }
 
@@ -521,6 +530,7 @@ json buildDefaultProject()
       // The same bodies the scenes instantiate, exposed as assets: drag one into the scene from the
       // editor's asset browser, or spawn it from a script with World.spawnPrefab(uuid, position).
       { "prefabs", prefabAssets() },
+      { "terrains", terrainAssets() },
       { "scenes", sceneAssets(std::move(welcome)) }
     }},
     { "currentSceneUUID", welcomeUUID }

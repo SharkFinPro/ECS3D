@@ -19,6 +19,6 @@ full notes are in [docs/architecture/apps.md](../../../docs/architecture/apps.md
 - The log reaches editor connections through a `RemoteLogSink` only on an `--edit` server, since a play server admits
   an editor without a token. `forwardDrainedLog` in `ServerPolicy.h` sets each batch's caps.
 - Which refused edits answer with a resync snapshot is decided in `ServerPolicy.h`.
-- `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp`, `RestPose.cpp` and
+- `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultTerrain.cpp`, `DefaultWelcome.cpp`, `RestPose.cpp` and
   `ShutdownSignal.cpp` compile into the test suite. The shape formulas mirror `tools/shapes/library.py`, and a test pins coordinates from both.
 - Each file in `defaultAssets/` has its source and license in `defaultAssets/LICENSES.md`.

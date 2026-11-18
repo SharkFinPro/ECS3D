@@ -4,6 +4,7 @@
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "DefaultProject.h"
+#include "DefaultProjectParts.h"
 #include "DefaultShapes.h"
 #include "InertiaTensor.h"
 #include "PhysicsSystem.h"
@@ -496,6 +497,50 @@ TEST(DefaultProject, TheShapeLibraryPrefabsAreRegisteredWithStableUuidsAndWeighT
 
   // The unit cube hull weighs what the Block does.
   EXPECT_NEAR(rigidBodyIn(prefabBody(project, "D6")).at("mass").get<float>(), unitBlockMass, 1e-3f);
+}
+
+TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
+{
+  const auto project = buildDefaultProject();
+  const auto& objects = sceneObjects(project, "Terrain Showcase");
+
+  int terrains = 0;
+  int activeCameras = 0;
+  for (const auto& object : objects)
+  {
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type") == "Collider" && component.at("subType") == "Terrain")
+      {
+        EXPECT_EQ(component.at("terrainUUID"), defaultproject::showcaseTerrain);
+        ++terrains;
+      }
+      else if (component.at("type") == "Camera" && component.at("active") == true)
+      {
+        ++activeCameras;
+      }
+    }
+  }
+
+  EXPECT_EQ(terrains, 1);
+  EXPECT_EQ(activeCameras, 1);
+
+  int records = 0;
+  for (const auto& record : project.at("assets").at("terrains"))
+  {
+    if (record.at("uuid") == defaultproject::showcaseTerrain)
+    {
+      EXPECT_EQ(record.at("filePath"), terrainAssetPath(uuids::uuid::from_string(defaultproject::showcaseTerrain).value()));
+      ++records;
+    }
+  }
+
+  EXPECT_EQ(records, 1);
+
+  // Welcome stays the scene the project opens on.
+  const auto& scenes = project.at("assets").at("scenes");
+  EXPECT_EQ(scenes.at(0).at("name"), "Welcome");
+  EXPECT_EQ(project.at("currentSceneUUID"), scenes.at(0).at("uuid"));
 }
 
 TEST(DefaultProject, TheMissingAssetPlaceholdersShipButAreNeverRegistered)

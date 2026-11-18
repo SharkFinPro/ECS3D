@@ -12,6 +12,8 @@ add_executable(${PROJECT_NAME}
   DefaultProject.h
   DefaultProjectParts.h
   DefaultScenes.cpp
+  DefaultTerrain.cpp
+  DefaultTerrain.h
   DefaultShapes.cpp
   DefaultShapes.h
   DefaultWelcome.cpp

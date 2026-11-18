@@ -1,5 +1,6 @@
 #include "ServerApp.h"
 #include "DefaultProject.h"
+#include "DefaultTerrain.h"
 #include "ServerPolicy.h"
 #include "ShutdownSignal.h"
 #include <ComponentRegistry.h>
@@ -126,6 +127,18 @@ void ServerApp::loadStartupProject()
     // code because the procedural scenes can't be a static file on disk.
     m_projectSerializer->deserialize(buildDefaultProject());
     m_terrainStore->reconcile(*m_assetRegistry);
+
+    const auto generationStart = std::chrono::steady_clock::now();
+    installDefaultTerrains(*m_terrainStore);
+    const auto generationMs =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - generationStart).count();
+    size_t chunkCount = 0;
+    for (const auto& uuid : m_terrainStore->terrains())
+    {
+      chunkCount += m_terrainStore->find(uuid)->chunks().size();
+    }
+    Log::info(LogCategory::server, "Generated the built-in terrain: " + std::to_string(chunkCount) + " chunk(s) in "
+      + std::to_string(generationMs) + " ms");
   }
   else
   {
