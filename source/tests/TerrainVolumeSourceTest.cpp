@@ -1,11 +1,17 @@
 #include <gtest/gtest.h>
 
+#include "TerrainSurfaceFeed.h"
+#include "TerrainSurfacePlan.h"
 #include "TerrainSurfaceSampling.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
+#include <glm/gtc/quaternion.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 #include <algorithm>
 #include <cstdint>
 #include <memory>
@@ -379,4 +385,166 @@ TEST(TerrainFillSurfaceSamplesTest, RefusesBadArgumentsWithoutWriting)
 
   EXPECT_TRUE(terrain::fillSurfaceSamples(volume.chunks(), region, 0, distance, material));
   EXPECT_EQ(material[0], 1);
+}
+
+namespace {
+  SampleBox box(const int minimum, const int maximum)
+  {
+    return { glm::ivec3(minimum), glm::ivec3(maximum) };
+  }
+
+  const SampleBox smallBox = box(0, 64);
+  const SampleBox largeBox = box(0, 128);
+}
+
+TEST(TerrainSurfacePlanTest, NothingHeldCreatesTheCurrentSurfaceWithTheDesiredBounds)
+{
+  const auto plan = terrain::planTerrainSurface(smallBox, {});
+
+  EXPECT_EQ(plan.step, terrain::SurfaceStep::createCurrent);
+  EXPECT_EQ(plan.bounds.min, smallBox.min);
+  EXPECT_EQ(plan.bounds.max, smallBox.max);
+}
+
+TEST(TerrainSurfacePlanTest, ACurrentSurfaceThatContainsTheDesiredBoundsKeeps)
+{
+  terrain::SurfaceSlots slots;
+  slots.current = largeBox;
+
+  EXPECT_EQ(terrain::planTerrainSurface(smallBox, slots).step, terrain::SurfaceStep::keep);
+  EXPECT_EQ(terrain::planTerrainSurface(largeBox, slots).step, terrain::SurfaceStep::keep);
+  EXPECT_EQ(terrain::planTerrainSurface(box(0, 129), slots).step, terrain::SurfaceStep::createReplacement);
+}
+
+TEST(TerrainSurfacePlanTest, AnOutgrownCurrentSurfaceBuildsAReplacementWithTheDesiredBounds)
+{
+  terrain::SurfaceSlots slots;
+  slots.current = smallBox;
+
+  const auto plan = terrain::planTerrainSurface(largeBox, slots);
+
+  EXPECT_EQ(plan.step, terrain::SurfaceStep::createReplacement);
+  EXPECT_EQ(plan.bounds.max, largeBox.max);
+}
+
+TEST(TerrainSurfacePlanTest, NothingNewIsCreatedWhileAReplacementBuilds)
+{
+  terrain::SurfaceSlots slots;
+  slots.current = smallBox;
+  slots.replacement = largeBox;
+
+  EXPECT_EQ(terrain::planTerrainSurface(box(0, 256), slots).step, terrain::SurfaceStep::keep);
+
+  slots.replacement.reset();
+  EXPECT_EQ(terrain::planTerrainSurface(box(0, 256), slots).step, terrain::SurfaceStep::createReplacement);
+}
+
+TEST(TerrainSurfacePlanTest, AFinishedReplacementIsPromotedEvenWhenTheTerrainGrewAgain)
+{
+  terrain::SurfaceSlots slots;
+  slots.current = smallBox;
+  slots.replacement = largeBox;
+  slots.replacementPending = 0.0f;
+
+  const auto plan = terrain::planTerrainSurface(box(0, 256), slots);
+
+  EXPECT_EQ(plan.step, terrain::SurfaceStep::promote);
+  EXPECT_EQ(plan.bounds.max, largeBox.max);
+  EXPECT_EQ(terrain::planTerrainSurface({}, slots).step, terrain::SurfaceStep::promote);
+}
+
+TEST(TerrainSurfacePlanTest, AReplacementNoLessCompleteThanTheDrawnSurfaceIsPromoted)
+{
+  terrain::SurfaceSlots slots;
+  slots.current = smallBox;
+  slots.replacement = largeBox;
+
+  slots.currentPending = 0.4f;
+  slots.replacementPending = 0.4f;
+  EXPECT_EQ(terrain::planTerrainSurface(largeBox, slots).step, terrain::SurfaceStep::promote);
+
+  slots.replacementPending = 0.1f;
+  EXPECT_EQ(terrain::planTerrainSurface(largeBox, slots).step, terrain::SurfaceStep::promote);
+
+  slots.replacementPending = 0.5f;
+  EXPECT_EQ(terrain::planTerrainSurface(largeBox, slots).step, terrain::SurfaceStep::keep);
+}
+
+TEST(TerrainSurfacePlanTest, AnEmptyDesiredBoxKeepsWhateverIsHeld)
+{
+  EXPECT_EQ(terrain::planTerrainSurface({}, {}).step, terrain::SurfaceStep::keep);
+
+  terrain::SurfaceSlots slots;
+  slots.current = smallBox;
+
+  EXPECT_EQ(terrain::planTerrainSurface({}, slots).step, terrain::SurfaceStep::keep);
+  EXPECT_EQ(terrain::planTerrainSurface(largeBox, slots).step, terrain::SurfaceStep::createReplacement);
+}
+
+TEST(TerrainSurfacePlanTest, TooManyChunksCreateNothingOnEitherCreatePath)
+{
+  // 1025 cells on an axis is 33 surface chunks; 1024 is 32, so the first box is exactly the cap.
+  const SampleBox atCap = box(0, 1025);
+  const SampleBox overCap{ glm::ivec3(0), glm::ivec3(1026, 1025, 1025) };
+
+  ASSERT_EQ(terrain::surfaceChunkCount(atCap), terrain::maxSurfaceChunks);
+  ASSERT_GT(terrain::surfaceChunkCount(overCap), terrain::maxSurfaceChunks);
+
+  EXPECT_EQ(terrain::planTerrainSurface(atCap, {}).step, terrain::SurfaceStep::createCurrent);
+  EXPECT_EQ(terrain::planTerrainSurface(overCap, {}).step, terrain::SurfaceStep::tooLarge);
+
+  terrain::SurfaceSlots slots;
+  slots.current = smallBox;
+
+  EXPECT_EQ(terrain::planTerrainSurface(atCap, slots).step, terrain::SurfaceStep::createReplacement);
+  EXPECT_EQ(terrain::planTerrainSurface(overCap, slots).step, terrain::SurfaceStep::tooLarge);
+}
+
+TEST(TerrainSurfacePlanTest, ModelMatrixTranslatesAndRotates)
+{
+  const glm::quat quarterTurn = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  const glm::mat4 model = terrain::terrainModelMatrix(glm::vec3(10.0f, 20.0f, 30.0f), quarterTurn);
+
+  const glm::vec3 mapped = glm::vec3(model * glm::vec4(2.0f, 0.0f, 0.0f, 1.0f));
+
+  EXPECT_NEAR(mapped.x, 10.0f, 1e-4f);
+  EXPECT_NEAR(mapped.y, 22.0f, 1e-4f);
+  EXPECT_NEAR(mapped.z, 30.0f, 1e-4f);
+}
+
+TEST(TerrainSurfaceFeedTest, SnapshotReturnsTheConstructorsMap)
+{
+  const auto first = std::make_shared<const terrain::TerrainVolume::ChunkMap>();
+  const TerrainSurfaceFeed feed(first);
+
+  EXPECT_EQ(feed.snapshot(), first);
+}
+
+TEST(TerrainSurfaceFeedTest, PublishSwapsTheSnapshotAndReportsOnce)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid());
+
+  const auto first = std::make_shared<const terrain::TerrainVolume::ChunkMap>();
+  const auto second = std::make_shared<const terrain::TerrainVolume::ChunkMap>(volume.snapshotChunks());
+  TerrainSurfaceFeed feed(first);
+
+  int reports = 0;
+  feed.publish(second, [&reports] { ++reports; });
+
+  EXPECT_EQ(reports, 1);
+  EXPECT_EQ(feed.snapshot(), second);
+  EXPECT_NE(feed.snapshot(), first);
+  EXPECT_EQ(feed.snapshot()->size(), 1u);
+}
+
+TEST(TerrainSurfaceFeedTest, PublishAcceptsAnEmptyReport)
+{
+  const auto first = std::make_shared<const terrain::TerrainVolume::ChunkMap>();
+  const auto second = std::make_shared<const terrain::TerrainVolume::ChunkMap>();
+  TerrainSurfaceFeed feed(first);
+
+  feed.publish(second, {});
+
+  EXPECT_EQ(feed.snapshot(), second);
 }

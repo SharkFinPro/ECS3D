@@ -27,8 +27,12 @@ add_library(${PROJECT_NAME}
   ProfilerCharts.h
   SharedAssetLoads.h
   StatsOverlay.h
+  TerrainSurfaceFeed.h
+  TerrainSurfacePlan.h
   TerrainSurfaceSampling.cpp
   TerrainSurfaceSampling.h
+  TerrainVolumeSource.cpp
+  TerrainVolumeSource.h
   ThumbnailImage.cpp
   ThumbnailImage.h
 )

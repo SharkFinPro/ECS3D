@@ -7,6 +7,7 @@
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <uuid.h>
 
@@ -118,6 +119,9 @@ private:
   LiveObjectTracker m_liveObjects;
 
   std::vector<std::shared_ptr<vke::RenderObject>> m_selectionOutlines;
+
+  // The terrains drawn this frame; kept as a member so the set does not allocate every frame.
+  std::unordered_set<uuids::uuid> m_drawnTerrains;
 };
 
 
