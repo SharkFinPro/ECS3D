@@ -72,6 +72,7 @@ namespace terrain
     // pendingFraction of the drawn surface, or of the replacement while one builds
     float pending = 0.0f;
     bool growing = false;
+    // The terrain needs more than maxSurfaceChunks: it is not drawn, or the drawn surface cannot grow.
     bool tooLarge = false;
   };
 

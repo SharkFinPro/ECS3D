@@ -27,7 +27,7 @@ built on a stock widget; a residual "Mixed values" line still names the few fiel
 (an asset reference slot, the collider mask popup, a non-numeric script field), and each object's edit still
 goes out and is recorded through the normal single-object path, so undo records one entry per object; Add/Remove
 Component and the name field are left out of this view for now, since wiring them up would mean deciding which
-object they act on) and the Terrain component section also shows read-only `Chunks` (held against the count the snapshot announced) and `Surface` (none, ready, percent pending, growing, or too large to draw) rows, formatted by the headless `TerrainReadout.h` from `GpuAssetCache::terrainSurfaceStatus` and the terrain store; the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a
+object they act on) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a
 display-name rename field (a scene's name field commits once, when editing ends) and a delete button with a
 reference-count warning for the flat file assets (it counts objects whose components or script fields mention the
 uuid, in scenes and prefab bodies, plus scene scripts); the
@@ -125,6 +125,10 @@ kilobytes. In a multi-object selection the hull keys `vertices`, `indices` and `
 per gesture, and Rebuild hull is disabled while those keys differ. A model drop on such a selection still sends
 the edit, and an edit that leaves the primary unchanged propagates only its disagreeing hull keys. Depends on
 `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`.
+
+The Terrain component section also shows read-only `Chunks` (held against the count the snapshot announced) and
+`Surface` (none, ready, percent pending, growing, too large to draw or to grow) rows, formatted by the headless
+`TerrainReadout.h` from `GpuAssetCache::terrainSurfaceStatus` and the terrain store.
 
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`

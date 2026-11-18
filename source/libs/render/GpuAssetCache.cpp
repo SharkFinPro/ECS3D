@@ -570,7 +570,7 @@ terrain::TerrainSurfaceStatus GpuAssetCache::terrainSurfaceStatus(const uuids::u
 
   const CachedTerrainSurface& cached = it->second;
   status.hasSurface = cached.current != nullptr;
-  status.tooLarge = cached.loggedTooLarge && !cached.current;
+  status.tooLarge = cached.loggedTooLarge;
   status.growing = cached.replacement != nullptr;
 
   if (cached.replacement)

@@ -20,7 +20,7 @@ namespace terrain
       return "-";
     }
 
-    if (expected == 0)
+    if (expected == 0 || *held > expected)
     {
       return std::to_string(*held);
     }
@@ -31,20 +31,16 @@ namespace terrain
   // "ready" is the only state that shows no percentage, so a nonzero fraction never rounds to 0% or 100%.
   [[nodiscard]] inline std::string terrainSurfaceText(const TerrainSurfaceStatus& status)
   {
-    if (status.tooLarge)
-    {
-      return "too large to draw";
-    }
-
     if (!status.hasSurface)
     {
-      return "none";
+      return status.tooLarge ? "too large to draw" : "none";
     }
 
-    const float pending = std::clamp(status.pending, 0.0f, 1.0f);
+    const std::string suffix = status.tooLarge ? ", too large to grow" : "";
+    const float pending = std::isfinite(status.pending) ? std::clamp(status.pending, 0.0f, 1.0f) : 1.0f;
     if (pending <= 0.0f)
     {
-      return "ready";
+      return "ready" + suffix;
     }
 
     int percent = std::max(static_cast<int>(std::lround(pending * 100.0f)), 1);
@@ -54,7 +50,7 @@ namespace terrain
     }
 
     const std::string pendingText = std::to_string(percent) + "% pending";
-    return status.growing ? "growing, " + pendingText : pendingText;
+    return (status.growing ? "growing, " + pendingText : pendingText) + suffix;
   }
 }
 
