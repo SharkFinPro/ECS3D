@@ -244,6 +244,7 @@ add_executable(${PROJECT_NAME}
   TerrainStreamerTest.cpp
   TerrainUploadTest.cpp
   TerrainViewSyncTest.cpp
+  TerrainVolumeSourceTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp
   ProjectIdentityCheckTest.cpp
@@ -426,6 +427,9 @@ add_executable(${PROJECT_NAME}
   # The view-block helper takes plain numbers and a uuid, so it compiles in without the capture code that
   # needs GLFW.
   ../libs/render/InputView.cpp
+
+  # The terrain surface sampling helpers depend only on ECS3DData headers and glm.
+  ../libs/render/TerrainSurfaceSampling.cpp
 
   # The thumbnail letterbox and PNG encode depend only on the standard library and stb_image_write.
   ../libs/render/ThumbnailImage.cpp
