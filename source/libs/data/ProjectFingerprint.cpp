@@ -1,9 +1,13 @@
 #include "ProjectFingerprint.h"
+#include "ProjectPaths.h"
+#include "terrain/TerrainFiles.h"
+#include "terrain/TerrainFormat.h"
 #include <algorithm>
 #include <fstream>
 #include <iterator>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 uint64_t fingerprintBytes(const std::string_view bytes)
@@ -38,56 +42,72 @@ uint64_t fingerprintProjectFile(const std::filesystem::path& projectFile)
 
 namespace
 {
-  // Fixed so this file needs no terrain headers; terrain/TerrainFormat.h's indexFileName and terrainFolder agree.
-  constexpr const char* terrainFolderName = "terrain";
-  constexpr const char* terrainIndexName = "terrain.json";
-
-  std::string readBytes(const std::filesystem::path& path)
+  bool readBytes(const std::filesystem::path& path, std::string& bytes)
   {
+    std::error_code error;
     std::ifstream file(path, std::ios::binary);
-    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    if (!std::filesystem::is_regular_file(path, error) || !file.is_open())
+    {
+      return false;
+    }
+
+    bytes.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    return true;
   }
 }
 
 uint64_t fingerprintProject(const std::filesystem::path& projectFile, const std::filesystem::path& root)
 {
-  if (projectFile.empty())
+  std::string bytes;
+  if (projectFile.empty() || !readBytes(projectFile, bytes))
   {
     return 0;
   }
 
-  std::ifstream file(projectFile, std::ios::binary);
-  if (!file.is_open())
-  {
-    return 0;
-  }
-
-  std::string bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-
-  std::vector<std::filesystem::path> folders;
-  std::error_code error;
-  if (!root.empty())
-  {
-    for (std::filesystem::directory_iterator it(root / terrainFolderName, error), end; !error && it != end;
-         it.increment(error))
-    {
-      if (it->is_directory(error) && std::filesystem::is_regular_file(it->path() / terrainIndexName, error))
-      {
-        folders.push_back(it->path());
-      }
-    }
-  }
-
-  if (folders.empty())
+  if (root.empty())
   {
     return fingerprintBytes(bytes);
   }
 
-  std::ranges::sort(folders);
-  for (const auto& folder : folders)
+  // The terrain folder is the parent of any terrain's own folder.
+  const auto terrainRoot = terrain::terrainFolder(root, {}).parent_path();
+
+  std::error_code error;
+  if (!std::filesystem::is_directory(terrainRoot, error))
   {
-    bytes += folder.filename().generic_string();
-    bytes += readBytes(folder / terrainIndexName);
+    return fingerprintBytes(bytes);
+  }
+
+  std::vector<std::pair<std::string, std::filesystem::path>> indexes;
+  for (std::filesystem::directory_iterator it(terrainRoot, error), end; !error && it != end; it.increment(error))
+  {
+    const auto index = it->path() / terrain::indexFileName;
+    std::error_code entryError;
+    if (!it->is_directory(entryError) || !std::filesystem::exists(index, entryError))
+    {
+      continue;
+    }
+
+    indexes.emplace_back(pathToUtf8(it->path().filename()), index);
+  }
+
+  // A half-read terrain would fingerprint as a different project; zero makes the identity check skip instead.
+  if (error)
+  {
+    return 0;
+  }
+
+  std::ranges::sort(indexes);
+  for (const auto& [name, index] : indexes)
+  {
+    std::string indexBytes;
+    if (!readBytes(index, indexBytes))
+    {
+      return 0;
+    }
+
+    bytes += name;
+    bytes += indexBytes;
   }
 
   return fingerprintBytes(bytes);

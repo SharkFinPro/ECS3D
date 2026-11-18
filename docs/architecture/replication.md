@@ -43,11 +43,12 @@ store is untouched, an applied one invalidates the bounds of the Terrain compone
 view logs `Terrain <uuid> complete: N chunk(s)` when its held count reaches the snapshot's chunk count. After each
 snapshot unpack the view calls `observeSnapshot`, which resets every volume (and so the revisions) when the project
 load id differs from the previous snapshot's; the first snapshot is not a change.
-On Start of a stopped scene the server keeps each terrain's chunk map (`TerrainPlaySnapshot`, a map of pointers; nothing is
-copied). Stop restores it: each coordinate whose chunk pointer differs (changed, added or erased) is set back through
-`TerrainStore::setChunk` with a fresh revision and requeued on every connection's stream, and the server logs
-"Restored N terrain chunk(s) after Stop". A terrain created since Start is left alone, as is one whose voxel size
-changed; a project load drops the snapshot.
+On Start of a stopped scene the server keeps each terrain's chunk map (`TerrainPlaySnapshot`; the capture copies the map of
+chunk pointers, not chunk data). Stop restores it, and so does a scene switch away from a running or paused scene:
+each coordinate whose chunk pointer differs (changed, added or erased) is set back through `TerrainStore::setChunk`
+with a fresh revision and requeued on every connection's stream, and the server logs "Restored N terrain chunk(s)
+after Stop". A coordinate the exhausted revision counter refuses is logged as not restored. A terrain created since
+Start is left alone, as is one whose voxel size changed; a project load drops the snapshot.
 An editor's File > Open (not an editor started with `--project`, whose server reads the files itself) carries the
 project's terrain by upload. `EditorApp::onLoadProject` loads the terrain files into its own store, packs
 `loadProject` with their real chunk counts, then sends the chunks as `terrainChunks` messages (`TerrainUpload`, paced

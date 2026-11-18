@@ -1,5 +1,6 @@
 #include "TerrainPlaySnapshot.h"
 #include <algorithm>
+#include <utility>
 #include <tuple>
 
 namespace terrain
@@ -27,9 +28,9 @@ namespace terrain
     return m_terrains.empty();
   }
 
-  std::vector<std::pair<uuids::uuid, std::vector<ChunkCoord>>> TerrainPlaySnapshot::restore(TerrainStore& store)
+  TerrainRestoreResult TerrainPlaySnapshot::restore(TerrainStore& store)
   {
-    std::vector<std::pair<uuids::uuid, std::vector<ChunkCoord>>> restored;
+    TerrainRestoreResult result;
 
     for (const auto& [uuid, captured] : m_terrains)
     {
@@ -64,20 +65,28 @@ namespace terrain
         return std::tie(a.x, a.y, a.z) < std::tie(b.x, b.y, b.z);
       });
 
+      std::vector<ChunkCoord> set;
       for (const auto coord : coords)
       {
         const auto found = captured.chunks.find(coord);
-        store.setChunk(uuid, coord, found == captured.chunks.end() ? nullptr : found->second,
-                       store.nextRevision(uuid));
+        if (store.setChunk(uuid, coord, found == captured.chunks.end() ? nullptr : found->second,
+                           store.nextRevision(uuid)))
+        {
+          set.push_back(coord);
+        }
+        else
+        {
+          ++result.failed;
+        }
       }
 
-      if (!coords.empty())
+      if (!set.empty())
       {
-        restored.emplace_back(uuid, std::move(coords));
+        result.terrains.emplace_back(uuid, std::move(set));
       }
     }
 
     m_terrains.clear();
-    return restored;
+    return result;
   }
 }

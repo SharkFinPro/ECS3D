@@ -393,7 +393,7 @@ void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scen
 
   if (plan.startScene)
   {
-    if (wasStopped)
+    if (plan.captureTerrain)
     {
       m_terrainPlaySnapshot.capture(*m_terrainStore);
     }
@@ -420,6 +420,10 @@ void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scen
   if (plan.resetScene)
   {
     m_sceneManager->resetScene();
+  }
+
+  if (plan.restoreTerrain)
+  {
     restoreTerrainAfterStop();
   }
 

@@ -1,4 +1,8 @@
 #include "ProjectFingerprint.h"
+#include "terrain/TerrainChunk.h"
+#include "terrain/TerrainFiles.h"
+#include "terrain/TerrainStore.h"
+#include "terrain/TerrainVolume.h"
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
@@ -163,4 +167,46 @@ TEST_F(ProjectFingerprintFiles, AnEmptyOrMissingProjectFileIsZeroEvenWithTerrain
 
   EXPECT_EQ(fingerprintProject({}, m_directory), 0u);
   EXPECT_EQ(fingerprintProject(scratchFile("absent.ecs3d"), m_directory), 0u);
+}
+
+TEST_F(ProjectFingerprintFiles, ATerrainSavedWithSaveTerrainChangesTheFingerprint)
+{
+  const auto path = scratchFile("saved.ecs3d");
+  writeFile(path, "{}");
+  const auto uuid = uuids::uuid::from_string("11111111-1111-1111-1111-111111111111").value();
+
+  terrain::TerrainVolume volume(2.5f);
+  volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+  ASSERT_TRUE(terrain::saveTerrain(m_directory, { .uuid = uuid }, volume).ok);
+  const auto first = fingerprintProject(path, m_directory);
+  EXPECT_NE(first, fingerprintProjectFile(path));
+
+  volume.setChunk({ 1, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 2));
+  ASSERT_TRUE(terrain::saveTerrain(m_directory, { .uuid = uuid }, volume).ok);
+  EXPECT_NE(fingerprintProject(path, m_directory), first);
+}
+
+TEST_F(ProjectFingerprintFiles, RenamingATerrainFolderChangesTheFingerprint)
+{
+  const auto path = scratchFile("rename.ecs3d");
+  writeFile(path, "{}");
+  const auto folder = m_directory / "terrain" / "aaaa";
+  std::filesystem::create_directories(folder);
+  writeFile(folder / "terrain.json", "{}");
+  const auto before = fingerprintProject(path, m_directory);
+  ASSERT_NE(before, fingerprintProjectFile(path));
+
+  std::filesystem::rename(folder, m_directory / "terrain" / "bbbb");
+  EXPECT_NE(fingerprintProject(path, m_directory), before);
+}
+
+TEST_F(ProjectFingerprintFiles, AnUnreadableTerrainIndexMakesTheProjectUnfingerprintable)
+{
+  const auto path = scratchFile("unreadable.ecs3d");
+  writeFile(path, "{}");
+  ASSERT_NE(fingerprintProject(path, m_directory), 0u);
+
+  std::filesystem::create_directories(m_directory / "terrain" / "aaaa" / "terrain.json");
+  EXPECT_EQ(fingerprintProject(path, m_directory), 0u);
+  EXPECT_NE(fingerprintProjectFile(path), 0u);
 }

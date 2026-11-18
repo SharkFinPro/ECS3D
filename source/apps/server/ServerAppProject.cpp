@@ -1,4 +1,5 @@
 #include "ServerApp.h"
+#include "ServerPolicy.h"
 #include <ProjectPacker.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
@@ -100,8 +101,10 @@ void ServerApp::restoreTerrainAfterStop()
 {
   try
   {
+    const auto result = m_terrainPlaySnapshot.restore(*m_terrainStore);
+
     size_t total = 0;
-    for (const auto& [uuid, coords] : m_terrainPlaySnapshot.restore(*m_terrainStore))
+    for (const auto& [uuid, coords] : result.terrains)
     {
       m_terrainStreamer.requeue(uuid, coords);
       total += coords.size();
@@ -110,6 +113,12 @@ void ServerApp::restoreTerrainAfterStop()
     if (total > 0)
     {
       Log::info(LogCategory::server, "Restored " + std::to_string(total) + " terrain chunk(s) after Stop");
+    }
+
+    if (result.failed > 0)
+    {
+      Log::warn(LogCategory::server,
+                "Could not restore " + std::to_string(result.failed) + " terrain chunk(s): revisions exhausted");
     }
   }
   catch (const std::exception& e)
@@ -216,7 +225,7 @@ void ServerApp::stopScriptsLogged(SceneAsset& scene) const
   discardScriptBuffers();
 }
 
-void ServerApp::loadScene(const std::string& sceneUUID) const
+void ServerApp::loadScene(const std::string& sceneUUID)
 {
   const auto parsed = uuids::uuid::from_string(sceneUUID);
   if (!parsed.has_value())
@@ -236,7 +245,14 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
     stopScriptsLogged(*current);
   }
 
+  const bool wasStopped = m_sceneManager->getSceneStatus() == SceneStatus::stopped;
+
   m_sceneManager->loadScene(scene);
+
+  if (restoreTerrainOnSceneSwitch(wasStopped))
+  {
+    restoreTerrainAfterStop();
+  }
 
   // New scene: contact history from the previous scene is meaningless here.
   m_collisionSystem->reset();

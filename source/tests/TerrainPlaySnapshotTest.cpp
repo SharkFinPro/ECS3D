@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <cstdint>
 #include <memory>
 #include <tuple>
 #include <vector>
@@ -56,7 +57,7 @@ TEST(TerrainPlaySnapshotTest, RestoreReturnsExactlyTheChangedAddedAndErasedCoord
   const uint32_t addedRevision = store.revision(terrainA, { 9, 0, 0 });
   const uint32_t erasedRevision = store.revision(terrainA, { 1, 0, 0 });
 
-  const auto restored = snapshot.restore(store);
+  const auto restored = snapshot.restore(store).terrains;
   ASSERT_EQ(restored.size(), 1u);
   EXPECT_EQ(restored[0].first, terrainA);
   EXPECT_EQ(restored[0].second, (Coords{ { 0, 0, 0 }, { 1, 0, 0 }, { 9, 0, 0 } }));
@@ -71,7 +72,7 @@ TEST(TerrainPlaySnapshotTest, RestoreReturnsExactlyTheChangedAddedAndErasedCoord
   EXPECT_EQ(store.revision(terrainA, { 2, 0, 0 }), untouchedRevision);
 
   EXPECT_TRUE(snapshot.empty());
-  EXPECT_TRUE(snapshot.restore(store).empty());
+  EXPECT_TRUE(snapshot.restore(store).terrains.empty());
 }
 
 TEST(TerrainPlaySnapshotTest, RestoreWithNothingChangedReturnsNothing)
@@ -83,12 +84,12 @@ TEST(TerrainPlaySnapshotTest, RestoreWithNothingChangedReturnsNothing)
   snapshot.capture(store);
   const auto revision = store.revision(terrainA, { 0, 0, 0 });
 
-  EXPECT_TRUE(snapshot.restore(store).empty());
+  EXPECT_TRUE(snapshot.restore(store).terrains.empty());
   EXPECT_EQ(store.revision(terrainA, { 0, 0, 0 }), revision);
 
   snapshot.capture(store);
   ASSERT_TRUE(store.setChunk(terrainA, { 0, 0, 0 }, noise(900), store.nextRevision(terrainA)));
-  EXPECT_FALSE(snapshot.restore(store).empty());
+  EXPECT_FALSE(snapshot.restore(store).terrains.empty());
 }
 
 TEST(TerrainPlaySnapshotTest, ATerrainCreatedAfterCaptureIsLeftAlone)
@@ -103,7 +104,7 @@ TEST(TerrainPlaySnapshotTest, ATerrainCreatedAfterCaptureIsLeftAlone)
   ASSERT_TRUE(store.setChunk(terrainA, { 0, 0, 0 }, noise(900), store.nextRevision(terrainA)));
   ASSERT_TRUE(store.setChunk(terrainB, { 0, 0, 0 }, noise(900), store.nextRevision(terrainB)));
 
-  const auto restored = snapshot.restore(store);
+  const auto restored = snapshot.restore(store).terrains;
   ASSERT_EQ(restored.size(), 1u);
   EXPECT_EQ(restored[0].first, terrainA);
   EXPECT_NE(store.find(terrainB)->chunk({ 0, 0, 0 }), bBefore.at({ 0, 0, 0 }));
@@ -120,7 +121,7 @@ TEST(TerrainPlaySnapshotTest, ARemovedTerrainIsSkippedAndTheOthersStillRestore)
   ASSERT_TRUE(store.setChunk(terrainB, { 0, 0, 0 }, noise(900), store.nextRevision(terrainB)));
   ASSERT_TRUE(store.remove(terrainA));
 
-  const auto restored = snapshot.restore(store);
+  const auto restored = snapshot.restore(store).terrains;
   ASSERT_EQ(restored.size(), 1u);
   EXPECT_EQ(restored[0].first, terrainB);
 }
@@ -140,10 +141,31 @@ TEST(TerrainPlaySnapshotTest, ATerrainWhoseVoxelSizeChangedIsSkipped)
   ASSERT_TRUE(store.setChunk(terrainA, { 0, 0, 0 }, noise(900), store.nextRevision(terrainA)));
   ASSERT_TRUE(store.setChunk(terrainB, { 0, 0, 0 }, noise(900), store.nextRevision(terrainB)));
 
-  const auto restored = snapshot.restore(store);
+  const auto restored = snapshot.restore(store).terrains;
   ASSERT_EQ(restored.size(), 1u);
   EXPECT_EQ(restored[0].first, terrainB);
   EXPECT_EQ(store.find(terrainA)->chunks().size(), 1u);
+}
+
+TEST(TerrainPlaySnapshotTest, ACoordinateTheExhaustedCounterRefusesIsReportedNotReturned)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 3);
+  addTerrain(store, terrainB, 3);
+
+  terrain::TerrainPlaySnapshot snapshot;
+  snapshot.capture(store);
+  ASSERT_TRUE(store.setChunk(terrainA, { 0, 0, 0 }, noise(900), store.nextRevision(terrainA)));
+  ASSERT_TRUE(store.setChunk(terrainA, { 1, 0, 0 }, noise(901), UINT32_MAX));
+  ASSERT_EQ(store.nextRevision(terrainA), 0u);
+  ASSERT_TRUE(store.setChunk(terrainB, { 0, 0, 0 }, noise(900), store.nextRevision(terrainB)));
+
+  const auto result = snapshot.restore(store);
+  EXPECT_EQ(result.failed, 2u);
+  ASSERT_EQ(result.terrains.size(), 1u);
+  EXPECT_EQ(result.terrains[0].first, terrainB);
+  EXPECT_EQ(result.terrains[0].second, (Coords{ { 0, 0, 0 } }));
+  EXPECT_NE(store.find(terrainA)->chunk({ 0, 0, 0 }), nullptr);
 }
 
 TEST(TerrainPlaySnapshotTest, StopRestoresAViewThatWasStreamedTheChangedChunks)
@@ -180,7 +202,8 @@ TEST(TerrainPlaySnapshotTest, StopRestoresAViewThatWasStreamedTheChangedChunks)
   ASSERT_EQ(hashes(view, terrainA), hashes(server, terrainA));
   ASSERT_NE(hashes(view, terrainA), captured);
 
-  for (const auto& [uuid, coords] : snapshot.restore(server))
+  const auto restoredTerrains = snapshot.restore(server);
+  for (const auto& [uuid, coords] : restoredTerrains.terrains)
   {
     streamer.requeue(uuid, coords);
   }

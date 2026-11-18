@@ -149,6 +149,9 @@ struct SceneControlPlan
   bool startScripts = false;
   bool stopScripts = false;
   bool resetCollisions = false;
+  // Start from stopped keeps the terrain chunk maps; a reset puts back what play changed.
+  bool captureTerrain = false;
+  bool restoreTerrain = false;
 
   [[nodiscard]] constexpr bool operator==(const SceneControlPlan&) const noexcept = default;
 };
@@ -165,6 +168,7 @@ struct SceneControlPlan
       plan.startScene = true;
       plan.startScripts = wasStopped;
       plan.resetCollisions = wasStopped;
+      plan.captureTerrain = wasStopped;
       break;
 
     case net::SceneControlOp::pause:
@@ -175,6 +179,7 @@ struct SceneControlPlan
       plan.stopScripts = !wasStopped;
       plan.resetScene = !wasStopped;
       plan.resetCollisions = !wasStopped;
+      plan.restoreTerrain = !wasStopped;
       break;
 
     case net::SceneControlOp::loadScene:
@@ -182,6 +187,12 @@ struct SceneControlPlan
   }
 
   return plan;
+}
+
+// Switching scenes resets the outgoing scene the way Stop does, unless it was already stopped.
+[[nodiscard]] constexpr bool restoreTerrainOnSceneSwitch(const bool wasStopped) noexcept
+{
+  return !wasStopped;
 }
 
 // What the server does with a join. A connection joins once; answering a repeat would rebuild and resend the

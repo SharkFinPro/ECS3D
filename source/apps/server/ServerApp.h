@@ -276,7 +276,7 @@ private:
 
   void applySceneControl(net::SceneControlOp op, SceneAsset& scene, bool wasStopped);
 
-  void loadScene(const std::string& sceneUUID) const;
+  void loadScene(const std::string& sceneUUID);
 
   // Drains m_remoteLogSink (capped, so one storm-sized batch cannot dominate a send) and forwards what
   // comes out to editor connections as a serverLog message. Called once per run() loop iteration rather
