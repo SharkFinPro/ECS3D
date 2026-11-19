@@ -198,8 +198,9 @@ over with `setVolume`, and an edit to it calls `invalidateBounds`. Terrain colli
 keeps it out of every pair and event, and it adds nothing to a body's inertia. Scene queries do hit it while its
 collision is enabled: `SceneQueries::raycast` casts in the terrain's local space with `terrain::raycast`, and
 `overlapSphere` reads `Sampler::metricDistance` at the sphere center. The field saturates at the band, so for a sphere
-wider than the band whose center reads the band, a ray along each local axis within the radius also counts as an
-overlap, an approximation that can miss ground off those axes. Layer masks and `ignoreObject` apply as for any collider.
+whose radius is above 0.75 of the band and whose center reads the band, a ray along each of the six local axis
+directions, as long as the radius, also counts as an overlap. That fallback is axis-only and can miss ground off
+those axes. Layer masks and `ignoreObject` apply as for any collider.
 
 ## Convex mesh collider
 

@@ -290,7 +290,7 @@ namespace {
   }
 
   // Ray vs terrain in the terrain's local space (placed by the owner's position and rotation, never its scale).
-  // Rotation keeps lengths, so the local hit distance is the world distance. dir must be normalized.
+  // Rotation keeps lengths, so the local hit distance is the world distance. The caller passes a normalized dir.
   bool rayTerrain(const Terrain& terrain, const Transform& transform, const glm::vec3& origin, const glm::vec3& dir,
                   const float maxDistance, float& tHit, glm::vec3& normal)
   {
@@ -314,10 +314,14 @@ namespace {
     return true;
   }
 
-  // Whether a sphere overlaps terrain. The distance field saturates at the band, so a center that far from the
-  // ground reads the band width however far the ground really is. Short of the band the reading is trusted; at it, a
-  // sphere wider than the band could still hold ground, so a ray along each local axis that meets the ground within
-  // the radius counts as an overlap, an approximation that can miss ground off those axes.
+  constexpr float saturatedReach = 0.75f;
+  constexpr float maxFallbackReach = 1.0e6f;
+
+  // Whether a sphere overlaps terrain. The distance field saturates at the band, and in a cell whose upper corner is
+  // clamped the reading overshoots, so a saturated reading only proves the ground is about 0.8 of the band away.
+  // Below the band the reading is trusted. At it, a sphere no wider than 0.75 of the band cannot hold ground, while a
+  // wider one casts a ray along each local axis and counts a hit within the radius, an approximation that can miss
+  // ground off those axes.
   bool sphereOverlapsTerrain(const Terrain& terrain, const Transform& transform, const glm::vec3& center,
                              const float radius)
   {
@@ -337,10 +341,13 @@ namespace {
       return distance <= radius;
     }
 
-    if (radius <= bandWidth)
+    if (radius <= saturatedReach * bandWidth)
     {
       return false;
     }
+
+    // raycast rejects a non-finite length, so an unbounded radius reaches as far as a large finite ray.
+    const float reach = std::min(radius, maxFallbackReach);
 
     for (int axis = 0; axis < 3; ++axis)
     {
@@ -348,7 +355,7 @@ namespace {
       {
         glm::vec3 direction(0.0f);
         direction[axis] = sign;
-        if (terrain::raycast(*volume, local, direction, radius))
+        if (terrain::raycast(*volume, local, direction, reach))
         {
           return true;
         }

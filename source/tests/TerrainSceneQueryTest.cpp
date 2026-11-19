@@ -108,6 +108,7 @@ TEST(TerrainSceneQueryTest, TheRayLengthDecidesWhetherItReachesTheGround)
   Hit hit;
   EXPECT_FALSE(castRay(scene, { 30, 50, 30 }, { 0, -1, 0 }, 39.0f, hit));
   EXPECT_TRUE(castRay(scene, { 30, 50, 30 }, { 0, -1, 0 }, 41.0f, hit));
+  EXPECT_EQ(hit.object, ground.object->getUUID());
   EXPECT_NEAR(hit.distance, 40.0f, tolerance);
 }
 
@@ -118,6 +119,7 @@ TEST(TerrainSceneQueryTest, ADirectionThatIsNotNormalizedStillGivesWorldDistance
 
   Hit hit;
   ASSERT_TRUE(castRay(scene, { 30, 50, 30 }, { 0, -5, 0 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, ground.object->getUUID());
   EXPECT_NEAR(hit.distance, 40.0f, tolerance);
 }
 
@@ -222,4 +224,61 @@ TEST(TerrainSceneQueryTest, ATerrainWithoutCollisionIsNotQueried)
   ground.terrain->setCollisionEnabled(false);
   EXPECT_FALSE(castRay(scene, { 30, 50, 30 }, { 0, -1, 0 }, 100.0f, hit));
   EXPECT_TRUE(overlaps(scene, { 30, 12, 30 }, 3.0f).empty());
+}
+
+TEST(TerrainSceneQueryTest, AGroundBetweenSamplePlanesIsOverlappedByASphereOnlyWithinItsRadius)
+{
+  const auto scene = makeScene();
+  auto ground = addGround(scene);
+  terrain::commit(*ground.volume, terrain::fillFlat(*ground.volume, { 64, 64 }, 11.0f, 20.0f, 4));
+
+  // The surface at y = 11 is off the sample planes. A center 7.5 above it reaches it with 7.8 and not with 7.0.
+  const auto reaching = overlaps(scene, { 30, 18.5f, 30 }, 7.8f);
+  ASSERT_EQ(reaching.size(), 1u);
+  EXPECT_EQ(reaching.front(), ground.object->getUUID());
+
+  EXPECT_TRUE(overlaps(scene, { 30, 18.5f, 30 }, 7.0f).empty());
+}
+
+TEST(TerrainSceneQueryTest, ATerrainWithNoVolumeIsHitByNeitherQuery)
+{
+  const auto scene = makeScene();
+  const auto bare = fixtures::addObject(scene, "Bare", glm::vec3(0));
+  bare->addComponent(std::make_shared<Terrain>());
+
+  const auto sphere = fixtures::addObject(scene, "Sphere", { 30, 12, 30 });
+  fixtures::addSphereCollider(sphere, 2.0f);
+
+  Hit hit;
+  ASSERT_TRUE(castRay(scene, { 30, 50, 30 }, { 0, -1, 0 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, sphere->getUUID());
+
+  const auto touching = overlaps(scene, { 30, 12, 30 }, 3.0f);
+  ASSERT_EQ(touching.size(), 1u);
+  EXPECT_EQ(touching.front(), sphere->getUUID());
+}
+
+TEST(TerrainSceneQueryTest, ATerrainWhoseVolumeExpiredIsHitByNeitherQuery)
+{
+  const auto scene = makeScene();
+  auto ground = addGround(scene);
+
+  Hit hit;
+  ASSERT_TRUE(castRay(scene, { 30, 50, 30 }, { 0, -1, 0 }, 100.0f, hit));
+  ASSERT_EQ(overlaps(scene, { 30, 12, 30 }, 3.0f).size(), 1u);
+
+  ground.volume.reset();
+  EXPECT_FALSE(castRay(scene, { 30, 50, 30 }, { 0, -1, 0 }, 100.0f, hit));
+  EXPECT_TRUE(overlaps(scene, { 30, 12, 30 }, 3.0f).empty());
+}
+
+TEST(TerrainSceneQueryTest, ARayStartingInsideSolidGroundHitsAtDistanceZero)
+{
+  const auto scene = makeScene();
+  const auto ground = addGround(scene);
+
+  Hit hit;
+  ASSERT_TRUE(castRay(scene, { 30, 5, 30 }, { 0, -1, 0 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, ground.object->getUUID());
+  EXPECT_NEAR(hit.distance, 0.0f, tolerance);
 }
