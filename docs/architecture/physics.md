@@ -194,8 +194,8 @@ not its convexity: vertex and index counts within the limits, finite vertices, e
 The `Terrain` component (`data/objects/components/collisions/`) is a `Collider` that names terrain data by uuid and
 never is a trigger. Its support is the box around the volume's occupied chunks, placed by the owner's position and
 rotation but not its scale, since terrain space is metric. The volume is not serialized or packed: the app hands it
-over with `setVolume`, and an edit to it calls `invalidateBounds`. It adds nothing to a body's inertia. Scene queries hit it
-while its collision is enabled: `SceneQueries::raycast` casts in the terrain's local space with `terrain::raycast`, and
+over with `setVolume`, and an edit to it calls `invalidateBounds`. It adds nothing to a body's inertia.
+Scene queries hit it while its collision is enabled: `SceneQueries::raycast` casts in the terrain's local space with `terrain::raycast`, and
 `overlapSphere` reads `Sampler::metricDistance` at the sphere center. The field saturates at the band, so for a sphere
 whose radius is above 0.75 of the band and whose center reads the band, a ray along each of the six local axis
 directions, as long as the radius, also counts as an overlap. That fallback is axis-only and can miss ground off
