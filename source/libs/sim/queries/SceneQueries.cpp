@@ -10,8 +10,14 @@
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
+#include <objects/components/collisions/Terrain.h>
+#include <terrain/TerrainRaycast.h>
+#include <terrain/TerrainSampling.h>
+#include <terrain/TerrainTypes.h>
+#include <terrain/TerrainVolume.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -283,9 +289,85 @@ namespace {
     return dot(center - closest, center - closest) <= radius * radius;
   }
 
+  // Ray vs terrain in the terrain's local space (placed by the owner's position and rotation, never its scale).
+  // Rotation keeps lengths, so the local hit distance is the world distance. The caller passes a normalized dir.
+  bool rayTerrain(const Terrain& terrain, const Transform& transform, const glm::vec3& origin, const glm::vec3& dir,
+                  const float maxDistance, float& tHit, glm::vec3& normal)
+  {
+    const auto volume = terrain.volume();
+    if (!volume || !terrain.getCollisionEnabled())
+    {
+      return false;
+    }
+
+    const glm::quat orientation = transform.getOrientation();
+    const glm::quat inverseOrientation = glm::inverse(orientation);
+    const auto hit = terrain::raycast(*volume, inverseOrientation * (origin - transform.getPosition()),
+                                      inverseOrientation * dir, maxDistance);
+    if (!hit)
+    {
+      return false;
+    }
+
+    tHit = hit->distance;
+    normal = orientation * hit->normal;
+    return true;
+  }
+
+  constexpr float saturatedReach = 0.75f;
+  constexpr float maxFallbackReach = 1.0e6f;
+
+  // Whether a sphere overlaps terrain. The distance field saturates at the band, and in a cell whose upper corner is
+  // clamped the reading overshoots, so a saturated reading only proves the ground is about 0.8 of the band away.
+  // Below the band the reading is trusted. At it, a sphere no wider than 0.75 of the band cannot hold ground, while a
+  // wider one casts a ray along each local axis and counts a hit within the radius, an approximation that can miss
+  // ground off those axes.
+  bool sphereOverlapsTerrain(const Terrain& terrain, const Transform& transform, const glm::vec3& center,
+                             const float radius)
+  {
+    const auto volume = terrain.volume();
+    if (!volume || !terrain.getCollisionEnabled())
+    {
+      return false;
+    }
+
+    const glm::vec3 local = glm::inverse(transform.getOrientation()) * (center - transform.getPosition());
+    const float bandWidth = terrain::bandVoxels * volume->voxelSize();
+
+    terrain::Sampler sampler(*volume);
+    const float distance = sampler.metricDistance(local);
+    if (distance < bandWidth)
+    {
+      return distance <= radius;
+    }
+
+    if (radius <= saturatedReach * bandWidth)
+    {
+      return false;
+    }
+
+    // raycast rejects a non-finite length, so an unbounded radius reaches as far as a large finite ray.
+    const float reach = std::min(radius, maxFallbackReach);
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      for (const float sign : { -1.0f, 1.0f })
+      {
+        glm::vec3 direction(0.0f);
+        direction[axis] = sign;
+        if (terrain::raycast(*volume, local, direction, reach))
+        {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   // Ray vs one collider, whatever its shape. The caller has checked the owner has a Transform.
-  bool rayCollider(const std::shared_ptr<Collider>& collider, const glm::vec3& origin, const glm::vec3& dir,
-                   const float maxDistance, float& t, glm::vec3& normal)
+  bool rayCollider(const std::shared_ptr<Collider>& collider, const Transform& transform, const glm::vec3& origin,
+                   const glm::vec3& dir, const float maxDistance, float& t, glm::vec3& normal)
   {
     switch (collider->getColliderType())
     {
@@ -311,14 +393,18 @@ namespace {
                                             maxDistance, t, normal);
       }
       case ColliderType::terrainCollider:
-        break;
+      {
+        const auto terrain = std::dynamic_pointer_cast<Terrain>(collider);
+        return terrain && rayTerrain(*terrain, transform, origin, dir, maxDistance, t, normal);
+      }
     }
 
     return false;
   }
 
   // Whether a sphere overlaps one collider, whatever its shape. The caller has checked the owner has a Transform.
-  bool sphereOverlapsCollider(const std::shared_ptr<Collider>& collider, const glm::vec3& center, const float radius)
+  bool sphereOverlapsCollider(const std::shared_ptr<Collider>& collider, const Transform& transform,
+                              const glm::vec3& center, const float radius)
   {
     switch (collider->getColliderType())
     {
@@ -352,7 +438,10 @@ namespace {
                                                        hull->getHull().indices);
       }
       case ColliderType::terrainCollider:
-        break;
+      {
+        const auto terrain = std::dynamic_pointer_cast<Terrain>(collider);
+        return terrain && sphereOverlapsTerrain(*terrain, transform, center, radius);
+      }
     }
 
     return false;
@@ -437,8 +526,8 @@ bool SceneQueries::raycast(ObjectManager& objectManager,
     // The shapes resolve their world placement through accessors that throw when the object has no
     // Transform. This runs from a script binding on the tick loop, where a native exception would unwind
     // through managed frames.
-    const bool hit = object->getComponent<Transform>(ComponentType::transform)
-      && rayCollider(collider, origin, dir, nearest, t, normal);
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    const bool hit = transform && rayCollider(collider, *transform, origin, dir, nearest, t, normal);
 
     if (hit && t <= nearest)
     {
@@ -475,8 +564,8 @@ void SceneQueries::overlapSphere(ObjectManager& objectManager,
     }
 
     // Guarded like raycast, and for the same reason.
-    const bool overlaps = object->getComponent<Transform>(ComponentType::transform)
-      && sphereOverlapsCollider(collider, center, radius);
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    const bool overlaps = transform && sphereOverlapsCollider(collider, *transform, center, radius);
 
     if (overlaps)
     {
