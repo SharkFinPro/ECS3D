@@ -283,6 +283,9 @@ TEST_F(DefaultTerrainTest, ThePlayerSpawnStandsJustAboveTheGroundSouthOfTheTunne
   EXPECT_GE(gap, 0.0f);
   EXPECT_LE(gap, 3.0f);
 
+  // Open air overhead, so the spawn is not under the ridge or inside the tunnel.
+  EXPECT_FALSE(terrain::raycast(*s_full, spawn - showcase::terrainOrigin(), { 0.0f, 1.0f, 0.0f }, 20.0f).has_value());
+
   // South of the tunnel's south mouth, along its axis.
   const float spawnZVoxel = (spawn.z - showcase::terrainOrigin().z) / showcase::voxelSize;
   EXPECT_LT(spawnZVoxel, static_cast<float>(showcase::tunnelStartZ));
@@ -310,7 +313,6 @@ namespace {
   {
     constexpr float step = 1.0f / 50.0f;
     constexpr int ticks = 150;
-    constexpr float radius = 1.0f;
 
     const auto scene = fixtures::makeScene();
     const auto terrainObject = fixtures::addObject(scene, "Terrain", showcase::terrainOrigin());
@@ -320,12 +322,8 @@ namespace {
     terrainComponent->setCollisionEnabled(collisionEnabled);
 
     const glm::vec3 spawn = showcase::playerSpawn();
-    const auto player = fixtures::addObject(scene, "Player", spawn);
-    fixtures::addSphereCollider(player, radius);
-    const auto body = fixtures::addRigidBody(player);
-    body->setMass(4.18879f);
-    body->setFriction(0.0f);
-    body->setDoGravity(true);
+    const auto player = scene.objectManager->instantiate(defaultproject::player(spawn));
+    const float radius = player->getComponent<SphereCollider>(ComponentType::collider)->getRadius();
 
     const auto groundAt = [&volume, &spawn](const glm::vec3& position)
     {
@@ -365,15 +363,13 @@ namespace {
 TEST_F(DefaultTerrainTest, ThePlayerBodyLandsOnTheGroundAtTheSpawnAndStaysOnIt)
 {
   const auto drop = dropThePlayer(s_full, true);
-  std::cout << "[ INFO ] player: rest gap " << drop.finalHeight << ", lowest gap " << drop.lowestAboveGround
-            << ", last second gap " << drop.lastSecondGap << ", drift " << drop.drift << '\n';
 
   // It has landed: for the whole last second it stays within a tenth of resting on the ground. With no friction
-  // it slides slowly down the gentle slope there (about 5 units in 3 s), so the bound on the drift is loose.
+  // it slides slowly down the gentle slope there, so the bound on the drift only rules out a runaway.
   EXPECT_LT(drop.lastSecondGap, 0.1f);
   EXPECT_GT(drop.lowestAboveGround, -0.05f);
   EXPECT_NEAR(drop.finalHeight, 0.0f, 0.1f);
-  EXPECT_LT(drop.drift, 7.0f);
+  EXPECT_LT(drop.drift, 15.0f);
 
   // Positive control: without the terrain's collision the same body falls far below the spawn's ground.
   const auto open = dropThePlayer(s_full, false);

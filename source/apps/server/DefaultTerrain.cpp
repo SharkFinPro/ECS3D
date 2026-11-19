@@ -1,5 +1,6 @@
 #include "DefaultTerrain.h"
 #include "DefaultProjectParts.h"
+#include <Log.h>
 #include <terrain/TerrainBrush.h>
 #include <terrain/TerrainChunk.h>
 #include <terrain/TerrainGenerators.h>
@@ -441,7 +442,11 @@ void installDefaultTerrains(terrain::TerrainStore& store)
 
   auto description = *current;
   description.voxelSize = showcase::voxelSize;
-  store.applyDescription(description);
+  if (!store.applyDescription(description))
+  {
+    Log::warn(LogCategory::server, "The built-in terrain's voxel size was refused; it was not generated");
+    return;
+  }
 
   const auto volume = store.find(*uuid);
   generateShowcaseTerrain(*volume);

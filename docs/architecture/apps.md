@@ -40,8 +40,10 @@ while playing) the same way it already undoes an edited Transform.
   runtime replaced them. A second signal ends the process at once.
   A `--project` server loads each terrain's files after the project (see [project-layout.md](project-layout.md)).
   Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
-  built-in `DefaultProject` when no `--project` is given. Its Terrain Showcase scene (the landscape centered on the origin at player scale, with a player on the ground south of the tunnel) names a terrain that `DefaultTerrain`
-  generates in memory at startup (never written to files). `DefaultShapes` builds the hulls of its Cylinder
+  built-in `DefaultProject` when no `--project` is given. Its Terrain Showcase scene (the landscape centered on the
+  origin at player scale, 1.5-unit voxels and a 480 x 480 unit (96 m) footprint, with a player on the ground south
+  of the tunnel) names a terrain that `DefaultTerrain` generates in memory at startup (never written to files).
+  `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library
   hulls (D4, D6, D8, D12, D20, Hex Prism, Drum, Gem, Boulder), whose formulas and seeded Boulder generator
   mirror `tools/shapes/library.py`, and a test pins coordinates from both. Also
