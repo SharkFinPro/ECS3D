@@ -8,6 +8,7 @@
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
+#include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/collisions/Terrain.h"
@@ -292,6 +293,45 @@ TEST(TerrainPhysics, ASphereRollsAcrossManyChunkBordersWithoutAKink)
 
   EXPECT_LT(largestChange, 0.005f);
   EXPECT_LT(largestHeading, 0.5f);
+}
+
+TEST(TerrainPhysics, ARollingSphereTravelsAsFarAsOnABoxFloor)
+{
+  auto world = World::flat({ 200, 64 });
+  Ball onTerrain(world, { 28, sphereRadius, 16 });
+
+  // A box floor with its top at y = 0, the surface the terrain has.
+  auto floorScene = fixtures::makeScene();
+  const auto floor = fixtures::addObject(floorScene, "Floor", { 100, -1, 32 }, { 100, 1, 32 });
+  fixtures::addBoxCollider(floor);
+  CollisionSystem floorCollisions;
+  const auto ballObject = fixtures::addObject(floorScene, "Ball", { 28, sphereRadius, 16 });
+  fixtures::addSphereCollider(ballObject, sphereRadius);
+  const auto floorBody = addBody(ballObject, true);
+  floorBody->setMass(1.0f);
+
+  // Fast enough to cross the chunk border at x = 32, and with the same friction as the box.
+  constexpr float speed = 0.9f;
+  onTerrain.body->setVelocity({ speed, 0, 0 });
+  floorBody->setVelocity({ speed, 0, 0 });
+  ASSERT_FLOAT_EQ(onTerrain.body->getFriction(), floorBody->getFriction());
+
+  for (int i = 0; i < 200; ++i)
+  {
+    world.tick();
+    PhysicsSystem::fixedUpdate(*floorScene.objectManager, dt);
+    floorCollisions.fixedUpdate(*floorScene.objectManager, dt);
+  }
+
+  const float onTerrainDistance = onTerrain.position().x - 28.0f;
+  const float onFloorDistance = fixtures::positionOf(ballObject).x - 28.0f;
+
+  // Positive control: it rolled a good way, past the border, and then stopped.
+  EXPECT_GT(onFloorDistance, 4.0f);
+  EXPECT_GT(onTerrain.position().x, 32.0f);
+  EXPECT_NEAR(onTerrainDistance, onFloorDistance, 0.05f * onFloorDistance);
+  EXPECT_LT(glm::length(onTerrain.body->getVelocity()), 1e-3f);
+  EXPECT_LT(glm::length(floorBody->getVelocity()), 1e-3f);
 }
 
 TEST(TerrainPhysics, ACapsuleLyingAlongASlopeComesToRest)
