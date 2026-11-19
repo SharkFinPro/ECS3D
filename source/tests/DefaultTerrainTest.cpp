@@ -1,15 +1,25 @@
 #include <gtest/gtest.h>
 
 #include "DefaultProjectParts.h"
+#include "CollisionSystem.h"
 #include "DefaultTerrain.h"
+#include "PhysicsSystem.h"
+#include "TestScene.h"
 #include "assets/AssetRegistry.h"
+#include "objects/Object.h"
+#include "objects/components/RigidBody.h"
+#include "objects/components/collisions/SphereCollider.h"
+#include "objects/components/collisions/Terrain.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainRaycast.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -85,12 +95,12 @@ namespace {
   protected:
     static void SetUpTestSuite()
     {
-      s_full = std::make_unique<terrain::TerrainVolume>();
+      s_full = std::make_shared<terrain::TerrainVolume>(showcase::voxelSize);
       const auto start = std::chrono::steady_clock::now();
       generateShowcaseTerrain(*s_full);
       s_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 
-      s_ground = std::make_unique<terrain::TerrainVolume>();
+      s_ground = std::make_unique<terrain::TerrainVolume>(showcase::voxelSize);
       generateShowcaseGround(*s_ground);
     }
 
@@ -100,12 +110,12 @@ namespace {
       s_ground.reset();
     }
 
-    static std::unique_ptr<terrain::TerrainVolume> s_full;
+    static std::shared_ptr<terrain::TerrainVolume> s_full;
     static std::unique_ptr<terrain::TerrainVolume> s_ground;
     static double s_seconds;
   };
 
-  std::unique_ptr<terrain::TerrainVolume> DefaultTerrainTest::s_full;
+  std::shared_ptr<terrain::TerrainVolume> DefaultTerrainTest::s_full;
   std::unique_ptr<terrain::TerrainVolume> DefaultTerrainTest::s_ground;
   double DefaultTerrainTest::s_seconds = 0.0;
 }
@@ -221,12 +231,13 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatI
 
   terrain::TerrainStore store;
   store.reconcile(registry);
-  const auto volume = store.find(showcaseUuid);
-  ASSERT_NE(volume, nullptr);
-  ASSERT_TRUE(volume->chunks().empty());
+  ASSERT_TRUE(store.find(showcaseUuid)->chunks().empty());
+  ASSERT_NE(store.description(showcaseUuid)->voxelSize, showcase::voxelSize);
 
   installDefaultTerrains(store);
 
+  const auto volume = store.find(showcaseUuid);
+  ASSERT_NE(volume, nullptr);
   ASSERT_FALSE(volume->chunks().empty());
 
   // A second, separate generation matches the suite's shared one, and the comparison tells different volumes apart.
@@ -236,6 +247,8 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatI
   const auto* description = store.description(showcaseUuid);
   ASSERT_NE(description, nullptr);
   EXPECT_EQ(description->chunkCount, volume->chunks().size());
+  EXPECT_FLOAT_EQ(description->voxelSize, showcase::voxelSize);
+  EXPECT_FLOAT_EQ(volume->voxelSize(), showcase::voxelSize);
   EXPECT_EQ(store.find(showcaseUuid), volume);
   EXPECT_FALSE(terrain::firstIncompleteTerrain(store).has_value());
 
@@ -243,6 +256,125 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatI
   {
     EXPECT_GT(store.revision(showcaseUuid, coord), 0u);
   }
+}
+
+TEST_F(DefaultTerrainTest, TheOriginPutsTheLandscapeCenterAndTheBaseGroundAtTheWorldOrigin)
+{
+  const glm::vec3 origin = showcase::terrainOrigin();
+  const float centerColumn = static_cast<float>(showcase::columns / 2) * showcase::voxelSize;
+
+  EXPECT_NEAR(origin.x + centerColumn, 0.0f, 1e-3f);
+  EXPECT_NEAR(origin.z + centerColumn, 0.0f, 1e-3f);
+  EXPECT_NEAR(origin.y + static_cast<float>(showcase::groundHeight) * showcase::voxelSize, 0.0f, 1e-3f);
+
+  // The tunnel's column is the center column, so the corridor runs through x = 0.
+  EXPECT_EQ(showcase::tunnelX, showcase::columns / 2);
+}
+
+TEST_F(DefaultTerrainTest, ThePlayerSpawnStandsJustAboveTheGroundSouthOfTheTunnel)
+{
+  const glm::vec3 spawn = showcase::playerSpawn();
+  const float bottom = spawn.y - 1.0f;
+
+  const auto hit = terrain::raycast(*s_full, spawn - showcase::terrainOrigin(), { 0.0f, -1.0f, 0.0f }, 100.0f);
+  ASSERT_TRUE(hit.has_value());
+
+  const float gap = bottom - (hit->point.y + showcase::terrainOrigin().y);
+  EXPECT_GE(gap, 0.0f);
+  EXPECT_LE(gap, 3.0f);
+
+  // Open air overhead, so the spawn is not under the ridge or inside the tunnel.
+  EXPECT_FALSE(terrain::raycast(*s_full, spawn - showcase::terrainOrigin(), { 0.0f, 1.0f, 0.0f }, 20.0f).has_value());
+
+  // South of the tunnel's south mouth, along its axis.
+  const float spawnZVoxel = (spawn.z - showcase::terrainOrigin().z) / showcase::voxelSize;
+  EXPECT_LT(spawnZVoxel, static_cast<float>(showcase::tunnelStartZ));
+  EXPECT_NEAR((spawn.x - showcase::terrainOrigin().x) / showcase::voxelSize, static_cast<float>(showcase::tunnelX),
+              1e-3f);
+
+  // Positive control: a ray from far above the ridge lands well higher than the spawn's ground.
+  const auto ridge = terrain::raycast(*s_full, glm::vec3(160.0f, 200.0f, 160.0f) * showcase::voxelSize,
+                                      { 0.0f, -1.0f, 0.0f }, 1000.0f);
+  ASSERT_TRUE(ridge.has_value());
+  EXPECT_GT(ridge->point.y + showcase::terrainOrigin().y, spawn.y + 10.0f);
+}
+
+namespace {
+  struct PlayerDrop {
+    float finalHeight = 0.0f;
+    float lowestAboveGround = 1e9f;
+    float lastSecondGap = 0.0f;
+    float drift = 0.0f;
+    float groundBelow = 0.0f;
+  };
+
+  // The default player's body and collider at the spawn, with no script driving it, over the showcase terrain.
+  PlayerDrop dropThePlayer(const std::shared_ptr<terrain::TerrainVolume>& volume, const bool collisionEnabled)
+  {
+    constexpr float step = 1.0f / 50.0f;
+    constexpr int ticks = 150;
+
+    const auto scene = fixtures::makeScene();
+    const auto terrainObject = fixtures::addObject(scene, "Terrain", showcase::terrainOrigin());
+    const auto terrainComponent = std::make_shared<Terrain>();
+    terrainObject->addComponent(terrainComponent);
+    terrainComponent->setVolume(volume);
+    terrainComponent->setCollisionEnabled(collisionEnabled);
+
+    const glm::vec3 spawn = showcase::playerSpawn();
+    const auto player = scene.objectManager->instantiate(defaultproject::player(spawn));
+    const float radius = player->getComponent<SphereCollider>(ComponentType::collider)->getRadius();
+
+    const auto groundAt = [&volume, &spawn](const glm::vec3& position)
+    {
+      const auto hit = terrain::raycast(*volume, glm::vec3(position.x, spawn.y + 20.0f, position.z) -
+                                        showcase::terrainOrigin(), { 0.0f, -1.0f, 0.0f }, 200.0f);
+      EXPECT_TRUE(hit.has_value());
+
+      return hit ? hit->point.y + showcase::terrainOrigin().y : 0.0f;
+    };
+
+    CollisionSystem collisions;
+    PlayerDrop drop;
+    drop.groundBelow = groundAt(spawn);
+
+    for (int i = 0; i < ticks; ++i)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, step);
+      collisions.fixedUpdate(*scene.objectManager, step);
+
+      const glm::vec3 position = fixtures::positionOf(player);
+      const float gap = position.y - radius - groundAt(position);
+      drop.lowestAboveGround = std::min(drop.lowestAboveGround, gap);
+      drop.drift = std::max(drop.drift, std::hypot(position.x - spawn.x, position.z - spawn.z));
+      if (i >= ticks - 50)
+      {
+        drop.lastSecondGap = std::max(drop.lastSecondGap, std::fabs(gap));
+      }
+    }
+
+    const glm::vec3 position = fixtures::positionOf(player);
+    drop.finalHeight = position.y - radius - groundAt(position);
+
+    return drop;
+  }
+}
+
+TEST_F(DefaultTerrainTest, ThePlayerBodyLandsOnTheGroundAtTheSpawnAndStaysOnIt)
+{
+  const auto drop = dropThePlayer(s_full, true);
+
+  // It has landed: for the whole last second it stays within a tenth of resting on the ground. With no friction
+  // it slides slowly down the gentle slope there, so the bound on the drift only rules out a runaway.
+  EXPECT_LT(drop.lastSecondGap, 0.1f);
+  EXPECT_GT(drop.lowestAboveGround, -0.05f);
+  EXPECT_NEAR(drop.finalHeight, 0.0f, 0.1f);
+  EXPECT_LT(drop.drift, 15.0f);
+
+  // Positive control: without the terrain's collision the same body falls far below the spawn's ground.
+  const auto open = dropThePlayer(s_full, false);
+
+  EXPECT_LT(open.finalHeight, -5.0f);
 }
 
 TEST_F(DefaultTerrainTest, InstallLeavesOtherTerrainsAndAnEmptyStoreAlone)
