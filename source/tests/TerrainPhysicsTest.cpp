@@ -535,3 +535,43 @@ TEST(TerrainPhysics, AMaskThatExcludesTheTerrainLayerGivesNoEventsAndNoResponse)
   EXPECT_FALSE(maskedEvent);
   EXPECT_LT(world.localOf(masked.position()).y, -50.0f);
 }
+
+TEST(TerrainPhysics, ASphereSunkDeepIntoTerrainIsLiftedOutInOneTickAndRests)
+{
+  auto world = World::flat();
+  // 0.3 deep, more than the contact margin of 0.1.
+  Ball ball(world, { 48, sphereRadius - 0.3f, 48 });
+
+  world.tick();
+
+  // Out to within about half the margin of the surface at once, not eased out over many ticks.
+  const float lifted = world.localOf(ball.position()).y;
+  EXPECT_GT(lifted, sphereRadius - 0.06f);
+  EXPECT_LT(lifted, sphereRadius + 0.01f);
+
+  world.run(200);
+
+  EXPECT_NEAR(world.localOf(ball.position()).y, sphereRadius, 3.0f * penetrationSlop);
+  EXPECT_LT(glm::length(ball.body->getVelocity()), 1e-3f);
+}
+
+TEST(TerrainPhysics, DisablingTheTerrainsCollisionMidPlayEndsTheContactAndTheBodyFalls)
+{
+  auto world = World::flat();
+  Ball ball(world, { 48, sphereRadius + 0.5f, 48 });
+  const auto pair = world.pairWith(ball.object);
+
+  world.run(100);
+  ASSERT_NEAR(world.localOf(ball.position()).y, sphereRadius, 0.01f);
+  ASSERT_TRUE(contains(world.collisions.getCollisionStays(), pair));
+
+  world.terrain->setCollisionEnabled(false);
+  world.tick();
+
+  EXPECT_TRUE(contains(world.collisions.getCollisionExits(), pair));
+
+  world.run(5);
+
+  EXPECT_LT(ball.body->getVelocity().y, 0.0f);
+  EXPECT_LT(world.localOf(ball.position()).y, sphereRadius - 0.5f);
+}

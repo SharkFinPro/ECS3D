@@ -17,6 +17,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 #include <span>
@@ -545,4 +546,101 @@ TEST(ContactSweep, AShapeMovingOutFromUnderAnotherIsNotStoppedAsIfItHadSweptThro
   ASSERT_TRUE(through.has_value());
   fixtures::expectNear("normal", through->normal(), { 0, 1, 0 }, 1e-2f);
   EXPECT_NEAR(through->overlap(), -0.05f, 1e-2f);
+}
+
+namespace {
+  // A sphere pressed into the two walls of a gully, as a terrain reports it: one contact per wall, told apart by
+  // their manifold index.
+  struct Gully {
+    fixtures::Scene scene = makeScene();
+    std::shared_ptr<SphereCollider> collider;
+    std::shared_ptr<BoxCollider> ground;
+    std::shared_ptr<Object> ball;
+    std::shared_ptr<RigidBody> body;
+    std::array<ContactPair, 2> pairs;
+
+    Gully()
+    {
+      const auto groundObject = addObject(scene, "Ground", { 0, 0, 0 }, { 5, 1, 5 });
+      ground = fixtures::addBoxCollider(groundObject);
+      ball = addObject(scene, "Ball", { 0, 2, 0 });
+      collider = fixtures::addSphereCollider(ball, 1.0f);
+      body = addBody(ball, false);
+      body->setMass(1.0f);
+
+      const float s = std::sqrt(0.5f);
+      const std::array<glm::vec3, 2> normals{ glm::vec3(s, s, 0), glm::vec3(-s, s, 0) };
+      for (uint32_t i = 0; i < 2; ++i)
+      {
+        pairs[i] = { body.get(), nullptr, collider.get(), ground.get(), {} };
+        pairs[i].manifold = i;
+        pairs[i].contact.minimumTranslationVector = normals[i] * 0.001f;
+        pairs[i].contact.point = glm::vec3(0, 2, 0) - normals[i];
+      }
+    }
+
+    // Solves from a fresh velocity; the cumulative impulses of each manifold come back in manifold order.
+    std::array<float, 2> solve(const ContactSolver::Cache& previous)
+    {
+      transformOf(ball)->setPosition({ 0, 2, 0 });
+      body->setVelocity({ 0.05f, -0.1f, 0 });
+      body->setAngularVelocity(glm::vec3(0));
+      std::vector<ContactSolver::CachedContact> resolved;
+      ContactSolver::solve(pairs, previous, resolved, serverTick);
+
+      std::array<float, 2> impulses{};
+      for (const auto& contact : resolved)
+      {
+        impulses[contact.subIndex] = contact.points[0].normalImpulse;
+      }
+
+      return impulses;
+    }
+
+    // A previous tick's contact for pair, stored under subIndex with the given impulse.
+    ContactSolver::Cache cachedUnder(const std::array<uint32_t, 2>& subIndices, const std::array<float, 2>& impulses)
+    {
+      ContactSolver::Cache cache;
+      for (size_t i = 0; i < 2; ++i)
+      {
+        const auto key = ContactSolver::keyOf(collider.get(), ground.get(), subIndices[i]);
+        const float side = key.first == collider.get() ? 1.0f : -1.0f;
+
+        ContactSolver::CachedContact cached;
+        cached.first = key.first;
+        cached.second = key.second;
+        cached.subIndex = subIndices[i];
+        cached.normal = pairs[i].contact.normal() * side;
+        cached.pointCount = 1;
+        cached.points[0] = { pairs[i].contact.point, impulses[i], glm::vec3(0) };
+        cache.emplace(key, cached);
+      }
+
+      return cache;
+    }
+  };
+}
+
+TEST(ContactSolver, AManifoldFindsItsCachedImpulsesUnderAnotherSubIndexWhenTheWallsSwapOrdinals)
+{
+  Gully gully;
+  const auto cold = gully.solve({});
+
+  // Impulses far from where a solve ends, so a start from them is told from a cold one: wall 0 had carried the
+  // load and wall 1 none.
+  const std::array<float, 2> carried{ 0.05f, 0.0f };
+  const auto sameOrdinals = gully.solve(gully.cachedUnder({ 0, 1 }, carried));
+  const auto swappedOrdinals = gully.solve(gully.cachedUnder({ 1, 0 }, carried));
+
+  // Positive control: the cache is read at all, since starting from it changes the result.
+  EXPECT_GT(std::fabs(sameOrdinals[0] - cold[0]) + std::fabs(sameOrdinals[1] - cold[1]), 1e-4f);
+
+  // Read from the other sub-index, it starts the same solve.
+  EXPECT_NEAR(swappedOrdinals[0], sameOrdinals[0], 1e-6f);
+  EXPECT_NEAR(swappedOrdinals[1], sameOrdinals[1], 1e-6f);
+
+  // Without the entries the solve is the cold one again.
+  const auto again = gully.solve({});
+  EXPECT_NEAR(again[0], cold[0], 1e-6f);
+  EXPECT_NEAR(again[1], cold[1], 1e-6f);
 }

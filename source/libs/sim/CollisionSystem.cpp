@@ -535,7 +535,7 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
       const auto& dynamicEdge = lowerIsTerrain ? other : edge;
       auto& terrain = static_cast<Terrain&>(lowerIsTerrain ? *edge.collider : *other.collider);
 
-      if (dynamicEdge.body == nullptr || isTerrain(*dynamicEdge.collider))
+      if (dynamicEdge.body == nullptr)
       {
         continue;
       }

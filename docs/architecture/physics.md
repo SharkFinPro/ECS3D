@@ -202,18 +202,22 @@ directions, as long as the radius, also counts as an overlap. That fallback is a
 those axes. Layer masks and `ignoreObject` apply as for any collider.
 
 **Edges.** A terrain with collision enabled and a bound volume is a static broad-phase edge, bounded by its
-`getBoundingBox()` like any collider and never carrying a body, so it meets only dynamic bodies. Otherwise it stays out
-of every pair and event (`isInert`).
+`getBoundingBox()` like any collider and never carrying a body, so it meets only dynamic bodies. Otherwise it stays
+out of every pair and event (`isInert`). A terrain object must not carry a `RigidBody`: that is unsupported.
+Collision ignores the body and treats the terrain as static, but `PhysicsSystem` would still integrate it.
 
 **Sweep.** Only the dynamic side of a terrain pair asks: `intersectsTerrain` sets that side's `lowerSees` or
 `higherSees` flag (no witness), and when it does not intersect, `approachesTerrain` with the body's sweep sets
 `approaching`. A terrain never reaches `intersects`, `approaches` or `findContact`. Events come from those flags, so
-enter, stay and exit name the terrain object's uuid. A trigger body gets events and no response, as against any collider.
+enter, stay and exit name the terrain object's uuid. A trigger body gets events and no response, as against any
+collider.
 
 **Solve.** `solveIsland` calls `findTerrainContacts` with the dynamic body's sweep and pushes one `ContactPair` per
 contact: the body and its collider against the terrain with no other body, `manifold` the contact's index. The solver
 caches impulses under `PairKey` with that index as `subIndex` (zero for every other pair), so each wall of a gully keeps
-its own warm start; the normal and point re-validation rejects a stale match when the clusters reorder.
+its own warm start. Contacts are ordered by depth, so near-equal walls can swap ordinals between ticks: when the
+exact sub-index is missing or faces another way, the lookup tries the pair's other sub-indices and takes the best
+facing one. The normal and point re-validation still rejects a stale match.
 `liftOutOfStatic` re-measures a terrain pair with `findTerrainContacts` and keeps the contact whose normal is closest to
 the pair's own, dropping the pair when none is within 15 degrees.
 
@@ -222,8 +226,8 @@ volume safely. The generator reads the terrain's `Transform` position and orient
 nothing, and its body's collider through `CapsuleCollider::getSegment`, `SphereCollider::getPosition` and `getRadius`,
 which lazily rebuild the world shape and the transform pointer. The serial broad-phase `getBoundingBox()` of every edge
 warms those first, since a bounding box recompute goes through the same `worldShape` and transform pointer, so no
-terrain work needs a warm-up of its own. There is no profile scope for terrain: its work runs inside the narrow-phase and
-island regions, where scopes are not allowed.
+terrain work needs a warm-up of its own. There is no profile scope for terrain: its work runs inside the
+narrow-phase and island regions, where scopes are not allowed.
 
 **Not covered yet:** boxes and convex hulls against terrain, bodies that move more than a voxel per tick, and deep
 penetration (a body that starts well inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic
@@ -232,9 +236,9 @@ rule).
 `collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a sphere or capsule
 against a terrain; `CollisionSystem` calls it. It samples in terrain-local space with one
 `terrain::Sampler` per call and returns early when every chunk the shape's swept bounds touch is absent or air.
-Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from the
-distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's distance from
-the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the field's own
+Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from
+the distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's
+distance from the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the field's own
 distance at the center minus the radius (exact on a ridge or dome, where the tangent plane passes under the shape); the
 raw field is used because `metricDistance` overshoots in a crease cell. A sphere also probes from beside its center,
 because one sample blends the two walls of a gully into a single normal; a probe on the same wall (within 15 degrees) as
