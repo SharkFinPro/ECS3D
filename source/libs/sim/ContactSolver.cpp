@@ -417,7 +417,8 @@ namespace {
 
     static void loadCached(Constraint& constraint, const ContactSolver::Cache& previous)
     {
-      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other);
+      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other,
+                                              constraint.pair->manifold);
       const auto found = previous.find(key);
       if (found == previous.end())
       {
@@ -809,12 +810,14 @@ namespace {
 
     [[nodiscard]] static ContactSolver::CachedContact cached(const Constraint& constraint)
     {
-      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other);
+      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other,
+                                              constraint.pair->manifold);
       const float side = key.first == constraint.pair->collider ? 1.0f : -1.0f;
 
       ContactSolver::CachedContact result;
       result.first = key.first;
       result.second = key.second;
+      result.subIndex = key.subIndex;
       result.normal = constraint.normal * side;
       result.rollingImpulse = constraint.rollingImpulse * side;
       result.pointCount = static_cast<std::uint8_t>(constraint.pointCount);
@@ -868,9 +871,10 @@ namespace {
   };
 }
 
-ContactSolver::PairKey ContactSolver::keyOf(const Collider* collider, const Collider* other)
+ContactSolver::PairKey ContactSolver::keyOf(const Collider* collider, const Collider* other, const uint32_t subIndex)
 {
-  return std::less<const Collider*>{}(other, collider) ? PairKey{ other, collider } : PairKey{ collider, other };
+  return std::less<const Collider*>{}(other, collider) ? PairKey{ other, collider, subIndex }
+                                                       : PairKey{ collider, other, subIndex };
 }
 
 void ContactSolver::solve(const std::span<const ContactPair> pairs, const Cache& previous,

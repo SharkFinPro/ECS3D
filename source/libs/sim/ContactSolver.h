@@ -23,6 +23,8 @@ struct ContactPair {
   collisions::Contact contact;
   // The displacement of collider the contact was asked for with, or zero when it was measured as the pair stands.
   glm::vec3 sweep{ 0 };
+  // The ordinal of this contact among the ones a single pair of colliders produces (terrain gives several).
+  uint32_t manifold = 0;
 };
 
 // Resolves the contacts of one island together: every contact point is a constraint on the relative velocity of
@@ -43,6 +45,7 @@ public:
   struct CachedContact {
     const Collider* first = nullptr;
     const Collider* second = nullptr;
+    uint32_t subIndex = 0;
     glm::vec3 normal{ 0 };
     glm::vec3 rollingImpulse{ 0 };
     std::array<CachedPoint, 4> points{};
@@ -52,6 +55,7 @@ public:
   struct PairKey {
     const Collider* first;
     const Collider* second;
+    uint32_t subIndex = 0;
 
     bool operator==(const PairKey&) const = default;
   };
@@ -59,14 +63,15 @@ public:
   struct PairKeyHash {
     [[nodiscard]] size_t operator()(const PairKey& key) const noexcept
     {
-      return std::hash<const Collider*>{}(key.first) * 31 + std::hash<const Collider*>{}(key.second);
+      return (std::hash<const Collider*>{}(key.first) * 31 + std::hash<const Collider*>{}(key.second)) * 31 +
+             key.subIndex;
     }
   };
 
   using Cache = std::unordered_map<PairKey, CachedContact, PairKeyHash>;
 
   // The key a pair is cached under, whichever collider comes first.
-  [[nodiscard]] static PairKey keyOf(const Collider* collider, const Collider* other);
+  [[nodiscard]] static PairKey keyOf(const Collider* collider, const Collider* other, uint32_t subIndex = 0);
 
   // Changes the velocities of the pairs' bodies so no contact closes, with friction, and moves the bodies out of
   // overlap. previous is only read; the impulses this solve ends with are appended to resolved.
