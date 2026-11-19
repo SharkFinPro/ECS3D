@@ -29,6 +29,8 @@ add_library(${PROJECT_NAME}
   collisions/Support.h
   collisions/SupportFaces.cpp
   collisions/SupportFaces.h
+  collisions/TerrainContact.cpp
+  collisions/TerrainContact.h
   queries/HullQueries.cpp
   queries/HullQueries.h
   queries/SceneQueries.cpp
