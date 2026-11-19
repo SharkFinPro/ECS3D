@@ -238,16 +238,16 @@ against a terrain; `CollisionSystem` calls it. It samples in terrain-local space
 `terrain::Sampler` per call and returns early when every chunk the shape's swept bounds touch is absent or air.
 Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from
 the distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's
-distance from the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the field's own
-distance at the center minus the radius (exact on a ridge or dome, where the tangent plane passes under the shape); the
-raw field is used because `metricDistance` overshoots in a crease cell. A sphere also probes from beside its center,
-because one sample blends the two walls of a gully into a single normal; a probe on the same wall (within 15 degrees) as
-one already kept is dropped, since on a convex hilltop its tangent plane would overstate the depth. When the center's
-cell reads a gradient shorter than 0.9 per voxel and the probes found two walls facing each other, the blended center
-candidate is dropped in favor of those walls. Candidates within the contact margin, widened by the part of the sweep
-that closes on the ground (a body moving away gets no speculative contact), are
-clustered by normal (15 degrees, at most `maxTerrainManifolds`), deepest first, and each cluster becomes one `Contact`:
-a sphere reports its deepest point, a capsule up to two spread apart. Contact points sit on the surface. The depths and
+distance from the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the
+field's own distance at the center minus the radius (exact on a ridge or dome, where the tangent plane passes under
+the shape); the raw field is used because `metricDistance` overshoots in a crease cell. A sphere also probes from
+beside its center, because one sample blends the two walls of a gully into a single normal; a probe on the same wall
+(within 15 degrees) as one already kept is dropped, since on a convex hilltop its tangent plane would overstate the
+depth. When the center's cell reads a gradient shorter than 0.9 per voxel and the probes found two walls facing each
+other, the blended center candidate is dropped in favor of those walls. Candidates within the contact margin, widened
+by the part of the sweep that closes on the ground (a body moving away gets no speculative contact), are clustered by
+normal (15 degrees, at most `maxTerrainManifolds`), deepest first, and each cluster becomes one `Contact`: a sphere
+reports its deepest point, a capsule up to two spread apart. Contact points sit on the surface. The depths and
 `advance` follow `findRoundApproach`: `overlap()` is the deepest point's depth, negative while apart, and `depth()` is
 never zero.
 
