@@ -592,12 +592,13 @@ namespace {
   }
 }
 
-TEST(TerrainComponentTest, QueriesSkipATerrainAndStillHitOrdinaryColliders)
+TEST(TerrainComponentTest, QueriesSkipATerrainWithoutCollisionAndStillHitOrdinaryColliders)
 {
   const auto scene = makeScene();
   const auto [terrainObject, comp] = addTerrain(scene);
   const auto volume = volumeWithChunk({ 0, 0, 0 });
   comp->setVolume(volume);
+  comp->setCollisionEnabled(false);
 
   uuids::uuid object;
   float distance = 0.0f;

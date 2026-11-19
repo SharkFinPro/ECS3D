@@ -195,7 +195,11 @@ The `Terrain` component (`data/objects/components/collisions/`) is a `Collider` 
 never is a trigger. Its support is the box around the volume's occupied chunks, placed by the owner's position and
 rotation but not its scale, since terrain space is metric. The volume is not serialized or packed: the app hands it
 over with `setVolume`, and an edit to it calls `invalidateBounds`. Terrain collides with nothing yet: `CollisionSystem`
-keeps it out of every pair and event, scene queries skip it, and it adds nothing to a body's inertia.
+keeps it out of every pair and event, and it adds nothing to a body's inertia. Scene queries do hit it while its
+collision is enabled: `SceneQueries::raycast` casts in the terrain's local space with `terrain::raycast`, and
+`overlapSphere` reads `Sampler::metricDistance` at the sphere center. The field saturates at the band, so for a sphere
+wider than the band whose center reads the band, a ray along each local axis within the radius also counts as an
+overlap, an approximation that can miss ground off those axes. Layer masks and `ignoreObject` apply as for any collider.
 
 ## Convex mesh collider
 
