@@ -16,6 +16,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <cmath>
@@ -29,6 +30,7 @@ namespace {
   using Field = std::function<float(glm::vec3)>;
 
   constexpr float tolerance = 2e-2f;
+  constexpr float tightTolerance = 1e-3f;
   constexpr float centerX = 48.0f;
   constexpr float centerZ = 48.0f;
 
@@ -77,10 +79,31 @@ namespace {
     return [](const glm::vec3 p) { return glm::dot(p, slopeNormal()); };
   }
 
-  // Solid below y = |x - centerX|: a valley whose two walls are 45 degrees.
-  Field valleyGround()
+  // Solid below y = |x - apexX|: a valley whose two walls are 45 degrees.
+  Field valleyGround(const float apexX = centerX)
   {
-    return [](const glm::vec3 p) { return (p.y - std::abs(p.x - centerX)) / std::sqrt(2.0f); };
+    return [apexX](const glm::vec3 p) { return (p.y - std::abs(p.x - apexX)) / std::sqrt(2.0f); };
+  }
+
+  // A solid ball whose top is at y = 0.
+  Field domeGround(const glm::vec3& center, const float radius)
+  {
+    return [center, radius](const glm::vec3 p) { return glm::distance(p, center) - radius; };
+  }
+
+  // The exact distance to the solid wedge below y = -|x - apexX|, whose two faces slope at 45 degrees.
+  Field roofGround(const float apexX)
+  {
+    return [apexX](const glm::vec3 p)
+    {
+      const float root = std::sqrt(0.5f);
+      const glm::vec2 offset(std::abs(p.x - apexX), p.y);
+      const glm::vec2 face(root, -root);
+      const float along = std::max(0.0f, glm::dot(offset, face));
+      const float distance = glm::length(offset - along * face);
+
+      return offset.y < -offset.x ? -distance : distance;
+    };
   }
 
   struct World {
@@ -159,11 +182,11 @@ TEST(TerrainContact, ASphereSinkingIntoFlatGroundReportsOneContactAlongTheSurfac
 
   ASSERT_EQ(contacts.size(), 1u);
   expectNormal(contacts[0], up());
-  EXPECT_NEAR(contacts[0].overlap(), 0.2f, tolerance);
-  EXPECT_NEAR(contacts[0].depth(), 0.2f, tolerance);
+  EXPECT_NEAR(contacts[0].overlap(), 0.2f, tightTolerance);
+  EXPECT_NEAR(contacts[0].depth(), 0.2f, tightTolerance);
   EXPECT_FLOAT_EQ(contacts[0].advance, 0.0f);
   EXPECT_EQ(contacts[0].contactPoints().size(), 1u);
-  EXPECT_NEAR(contacts[0].depthAt(0), 0.2f, tolerance);
+  EXPECT_NEAR(contacts[0].depthAt(0), 0.2f, tightTolerance);
   fixtures::expectNear("point", contacts[0].point, { centerX, 0.0f, centerZ }, tolerance);
 }
 
@@ -172,19 +195,19 @@ TEST(TerrainContact, AHoveringSphereIsReportedOnlyWithinTheMarginOrWhenTheSweepC
   World world(flatGround());
 
   const auto hovering = world.sphereAt({ centerX, 1.05f, centerZ }, 1.0f);
-  const auto near = contactsOf(world, *hovering);
-  ASSERT_EQ(near.size(), 1u);
-  EXPECT_NEAR(near[0].overlap(), -0.05f, tolerance);
-  EXPECT_GT(near[0].depth(), 0.0f);
+  const auto withinMargin = contactsOf(world, *hovering);
+  ASSERT_EQ(withinMargin.size(), 1u);
+  EXPECT_NEAR(withinMargin[0].overlap(), -0.05f, tightTolerance);
+  EXPECT_GT(withinMargin[0].depth(), 0.0f);
 
   const auto high = world.sphereAt({ centerX, 1.3f, centerZ }, 1.0f);
   EXPECT_TRUE(contactsOf(world, *high).empty());
 
   const auto swept = contactsOf(world, *high, { 0, -0.5f, 0 });
   ASSERT_EQ(swept.size(), 1u);
-  EXPECT_NEAR(swept[0].overlap(), -0.3f, tolerance);
-  EXPECT_NEAR(swept[0].advance, 0.5f, tolerance);
-  EXPECT_NEAR(swept[0].depth(), 0.2f, tolerance);
+  EXPECT_NEAR(swept[0].overlap(), -0.3f, tightTolerance);
+  EXPECT_NEAR(swept[0].advance, 0.5f, tightTolerance);
+  EXPECT_NEAR(swept[0].depth(), 0.2f, tightTolerance);
 }
 
 TEST(TerrainContact, ASphereWithNothingBelowItIsApart)
@@ -212,9 +235,9 @@ TEST(TerrainContact, ARotatedTerrainTurnsTheNormalAndKeepsTheDepth)
   fixtures::expectNear("point", contacts[0].point, world.worldOf({ centerX, 0.0f, centerZ }), tolerance);
 }
 
-TEST(TerrainContact, ATranslatedAndRotatedTerrainPlacesTheContactInWorldSpace)
+TEST(TerrainContact, ATranslatedAndTippedTerrainPlacesTheContactInWorldSpace)
 {
-  World world(flatGround(), { 10, 20, 30 }, { 0, 0, 0 });
+  World world(flatGround(), { 10, 20, 30 });
   const auto sphere = world.sphereAt({ centerX, 0.8f, centerZ }, 1.0f);
 
   const auto contacts = contactsOf(world, *sphere);
@@ -224,13 +247,29 @@ TEST(TerrainContact, ATranslatedAndRotatedTerrainPlacesTheContactInWorldSpace)
   EXPECT_NEAR(contacts[0].overlap(), 0.2f, tolerance);
   fixtures::expectNear("point", contacts[0].point, { 10 + centerX, 20.0f, 30 + centerZ }, tolerance);
 
-  World turned(flatGround(), { 10, 20, 30 }, { 0, 90, 0 });
-  const auto turnedContacts = contactsOf(turned, *turned.sphereAt({ centerX, 0.8f, centerZ }, 1.0f));
+  World tipped(flatGround(), { 10, 20, 30 }, { 90, 0, 0 });
+  const auto tippedContacts = contactsOf(tipped, *tipped.sphereAt({ centerX, 0.8f, centerZ }, 1.0f));
 
-  ASSERT_EQ(turnedContacts.size(), 1u);
-  expectNormal(turnedContacts[0], up());
-  EXPECT_NEAR(turnedContacts[0].overlap(), 0.2f, tolerance);
-  fixtures::expectNear("point", turnedContacts[0].point, turned.worldOf({ centerX, 0.0f, centerZ }), tolerance);
+  ASSERT_EQ(tippedContacts.size(), 1u);
+  expectNormal(tippedContacts[0], { 0, 0, 1 });
+  EXPECT_NEAR(tippedContacts[0].overlap(), 0.2f, tolerance);
+  fixtures::expectNear("point", tippedContacts[0].point, tipped.worldOf({ centerX, 0.0f, centerZ }), tolerance);
+}
+
+TEST(TerrainContact, ATerrainInNegativeWorldCoordinatesPlacesTheContactThere)
+{
+  World world(flatGround(), { -100, -20, -100 });
+  const auto sphere = world.sphereAt({ centerX, 0.8f, centerZ }, 1.0f);
+
+  const auto contacts = contactsOf(world, *sphere);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  EXPECT_NEAR(contacts[0].overlap(), 0.2f, tightTolerance);
+  fixtures::expectNear("point", contacts[0].point, { -100 + centerX, -20.0f, -100 + centerZ }, tolerance);
+
+  const auto apart = world.sphereAt({ centerX, 1.3f, centerZ }, 1.0f);
+  EXPECT_TRUE(contactsOf(world, *apart).empty());
 }
 
 TEST(TerrainContact, ASphereOnASlopeGetsTheSlopeNormal)
@@ -243,7 +282,7 @@ TEST(TerrainContact, ASphereOnASlopeGetsTheSlopeNormal)
 
   ASSERT_EQ(contacts.size(), 1u);
   EXPECT_LT(degreesBetween(contacts[0].normal(), slopeNormal()), 1.0f);
-  EXPECT_NEAR(contacts[0].overlap(), 0.2f, tolerance);
+  EXPECT_NEAR(contacts[0].overlap(), 0.2f, tightTolerance);
 }
 
 TEST(TerrainContact, ASphereInAValleyTouchesBothWallsWhereFlatGroundGivesOne)
@@ -269,6 +308,124 @@ TEST(TerrainContact, ASphereInAValleyTouchesBothWallsWhereFlatGroundGivesOne)
   ASSERT_EQ(onFlat.size(), 1u);
   expectNormal(onFlat[0], up());
   EXPECT_NEAR(onFlat[0].overlap(), 0.3f, tolerance);
+}
+
+TEST(TerrainContact, AValleyWhoseApexIsBetweenSamplesStillGivesExactlyTheTwoWalls)
+{
+  const float apexX = 48.37f;
+  const float radius = 1.0f;
+  const float offset = 0.09f;
+  const float depthIntoNearWall = 0.28f;
+  const float height = (radius - depthIntoNearWall) * std::sqrt(2.0f) + offset;
+
+  World world(valleyGround(apexX));
+  const auto sphere = world.sphereAt({ apexX + offset, height, centerZ }, radius);
+
+  const auto contacts = contactsOf(world, *sphere);
+
+  ASSERT_EQ(contacts.size(), 2u);
+  const float root = std::sqrt(0.5f);
+  const bool leftFirst = contacts[0].normal().x < 0.0f;
+  const auto& left = contacts[leftFirst ? 0 : 1];
+  const auto& right = contacts[leftFirst ? 1 : 0];
+  expectNormal(left, { -root, root, 0 });
+  expectNormal(right, { root, root, 0 });
+  EXPECT_NEAR(left.overlap(), depthIntoNearWall, tolerance);
+  EXPECT_NEAR(right.overlap(), depthIntoNearWall - std::sqrt(2.0f) * offset, tolerance);
+}
+
+TEST(TerrainContact, ASphereOnAConvexDomeGetsTheDomeDepthAndNormal)
+{
+  const float domeRadius = 6.0f;
+  const glm::vec3 domeCenter(centerX + 0.3f, -domeRadius, centerZ + 0.2f);
+  World world(domeGround(domeCenter, domeRadius));
+  const glm::vec3 radial = glm::normalize(glm::vec3(0.4f, 1.0f, 0.2f));
+
+  const auto resting = world.sphereAt(domeCenter + radial * (domeRadius + 1.0f - 0.1f), 1.0f);
+  const auto contacts = contactsOf(world, *resting);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  EXPECT_NEAR(contacts[0].overlap(), 0.1f, 0.05f);
+  EXPECT_LT(degreesBetween(contacts[0].normal(), radial), 3.0f);
+
+  const auto hovering = world.sphereAt(domeCenter + radial * (domeRadius + 1.0f + 0.3f), 1.0f);
+  EXPECT_TRUE(contactsOf(world, *hovering).empty());
+}
+
+TEST(TerrainContact, ASphereTouchingASmallDomeIsNotReportedDeeperThanItTouches)
+{
+  const float domeRadius = 3.0f;
+  const float radius = 2.0f;
+  const glm::vec3 domeCenter(centerX + 0.3f, -domeRadius, centerZ + 0.2f);
+  World world(domeGround(domeCenter, domeRadius));
+  const glm::vec3 radial = glm::normalize(glm::vec3(-0.3f, 1.0f, 0.2f));
+
+  const auto touching = world.sphereAt(domeCenter + radial * (domeRadius + radius), radius);
+  const auto contacts = contactsOf(world, *touching);
+
+  ASSERT_FALSE(contacts.empty());
+  for (const auto& contact : contacts)
+  {
+    EXPECT_LT(contact.overlap(), 0.05f);
+  }
+
+  const auto sunk = world.sphereAt(domeCenter + radial * (domeRadius + radius - 0.1f), radius);
+  const auto sunkContacts = contactsOf(world, *sunk);
+  ASSERT_FALSE(sunkContacts.empty());
+  EXPECT_NEAR(sunkContacts[0].overlap(), 0.1f, 0.05f);
+
+  const auto hovering = world.sphereAt(domeCenter + radial * (domeRadius + radius + 0.3f), radius);
+  EXPECT_TRUE(contactsOf(world, *hovering).empty());
+}
+
+TEST(TerrainContact, ASphereOnAFaceOfARoofRidgeGetsTheFaceNormalAndDepth)
+{
+  const float apexX = 48.37f;
+  const float root = std::sqrt(0.5f);
+  const glm::vec3 faceNormal(root, root, 0.0f);
+  World world(roofGround(apexX));
+
+  const auto onFace = [&world, apexX, root, faceNormal](const float alongFace, const float radius, const float depth)
+  {
+    const glm::vec3 surface(apexX + alongFace * root, -alongFace * root, centerZ + 0.2f);
+
+    return world.sphereAt(surface + faceNormal * (radius - depth), radius);
+  };
+
+  const auto farFromApex = contactsOf(world, *onFace(4.0f, 1.0f, 0.1f));
+  ASSERT_EQ(farFromApex.size(), 1u);
+  EXPECT_NEAR(farFromApex[0].overlap(), 0.1f, 0.05f);
+  EXPECT_LT(degreesBetween(farFromApex[0].normal(), faceNormal), 3.0f);
+
+  EXPECT_TRUE(contactsOf(world, *onFace(4.0f, 1.0f, -0.3f)).empty());
+
+  const auto nearApex = contactsOf(world, *onFace(1.5f, 2.0f, 0.0f));
+  ASSERT_FALSE(nearApex.empty());
+  for (const auto& contact : nearApex)
+  {
+    EXPECT_LT(contact.overlap(), 0.05f);
+  }
+  EXPECT_TRUE(contactsOf(world, *onFace(1.5f, 2.0f, -0.3f)).empty());
+}
+
+TEST(TerrainContact, ASphereOfTwoVoxelsRadiusOnFlatGroundIsFound)
+{
+  World world(flatGround());
+
+  const auto contacts = contactsOf(world, *world.sphereAt({ centerX, 1.9f, centerZ }, 2.0f));
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  EXPECT_NEAR(contacts[0].overlap(), 0.1f, tightTolerance);
+}
+
+TEST(TerrainContact, AHugeSweepStillAnswersWithoutWalkingEveryChunkItCovers)
+{
+  World world(flatGround());
+  const glm::vec3 everywhere(1e9f);
+
+  EXPECT_EQ(contactsOf(world, *world.sphereAt({ centerX, 0.8f, centerZ }, 1.0f), everywhere).size(), 1u);
+  EXPECT_TRUE(contactsOf(world, *world.sphereAt({ centerX, 20.0f, centerZ }, 1.0f), everywhere).empty());
 }
 
 TEST(TerrainContact, ASphereOverAChunkBorderMatchesOneInTheMiddleOfAChunk)
@@ -349,6 +506,18 @@ TEST(TerrainContact, IntersectsAndApproachesFollowTheDepthAndTheSweep)
 
   EXPECT_TRUE(collisions::approachesTerrain(*high, *world.terrain, { 0, -0.5f, 0 }));
   EXPECT_FALSE(collisions::approachesTerrain(*high, *world.terrain, glm::vec3(0)));
+}
+
+TEST(TerrainContact, ABodyMovingAwayFromTheGroundGetsNoSpeculativeContact)
+{
+  World world(flatGround());
+  const auto hovering = world.sphereAt({ centerX, 1.3f, centerZ }, 1.0f);
+
+  EXPECT_EQ(contactsOf(world, *hovering, { 0, -0.5f, 0 }).size(), 1u);
+  EXPECT_TRUE(collisions::approachesTerrain(*hovering, *world.terrain, { 0, -0.5f, 0 }));
+
+  EXPECT_TRUE(contactsOf(world, *hovering, { 0, 0.5f, 0 }).empty());
+  EXPECT_FALSE(collisions::approachesTerrain(*hovering, *world.terrain, { 0, 0.5f, 0 }));
 }
 
 TEST(TerrainContact, OnlySpheresAndCapsulesAreHandled)

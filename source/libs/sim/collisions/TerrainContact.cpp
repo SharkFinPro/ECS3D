@@ -10,6 +10,7 @@
 #include "terrain/TerrainSampling.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
@@ -34,6 +35,10 @@ namespace collisions {
     constexpr float depthQuantum = 1e3f;
 
     constexpr float maxSampleCoordinate = 1e7f;
+
+    // A trilinear cell holding a crease reads a gradient shorter than one voxel per voxel, and its normal blends the
+    // two walls.
+    constexpr float reliableGradientLength = 0.9f;
 
     struct RoundShape {
       glm::vec3 start;
@@ -67,6 +72,7 @@ namespace collisions {
     struct Surface {
       glm::vec3 point;
       glm::vec3 normal;
+      float gradientLength;
     };
 
     // World space; distance is how far the collider's surface is from the ground along normal (negative inside).
@@ -79,6 +85,7 @@ namespace collisions {
     struct CorePoint {
       Surface surface;
       glm::vec3 center;
+      float centerDistance;
       TerrainCandidate candidate;
     };
 
@@ -152,20 +159,49 @@ namespace collisions {
                                  glm::ivec3(glm::ceil(toSamples(localHigh))) + 1 };
     }
 
+    // Walks the chunks of the box, or the volume's own chunks when there are fewer, so a huge box costs no more than
+    // the terrain holds.
     [[nodiscard]] bool reachesGround(const Setup& setup, const glm::vec3& sweep)
     {
       const auto box = reachableSamples(setup, sweep);
-      if (!box)
+      if (!box || box->empty())
       {
         return false;
       }
 
-      const auto touched = terrain::chunksTouched(*box);
+      const auto first = terrain::chunkOfSample(box->min);
+      const auto last = terrain::chunkOfSample(box->max - glm::ivec3(1));
+      const auto& volume = *setup.volume;
 
-      return std::ranges::any_of(touched, [&setup](const terrain::ChunkCoord coord)
+      const int64_t inBox = static_cast<int64_t>(last.x - first.x + 1) * static_cast<int64_t>(last.y - first.y + 1) *
+        static_cast<int64_t>(last.z - first.z + 1);
+
+      if (inBox > static_cast<int64_t>(volume.chunks().size()))
       {
-        return chunkHoldsGround(*setup.volume, coord);
-      });
+        return std::ranges::any_of(volume.chunks(), [&first, &last](const auto& entry)
+        {
+          const auto& coord = entry.first;
+
+          return coord.x >= first.x && coord.x <= last.x && coord.y >= first.y && coord.y <= last.y &&
+            coord.z >= first.z && coord.z <= last.z && entry.second && !entry.second->isAir();
+        });
+      }
+
+      for (int32_t z = first.z; z <= last.z; ++z)
+      {
+        for (int32_t y = first.y; y <= last.y; ++y)
+        {
+          for (int32_t x = first.x; x <= last.x; ++x)
+          {
+            if (chunkHoldsGround(volume, { x, y, z }))
+            {
+              return true;
+            }
+          }
+        }
+      }
+
+      return false;
     }
 
     [[nodiscard]] std::optional<Setup> prepare(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
@@ -214,13 +250,20 @@ namespace collisions {
 
       point -= normal * sampler.metricDistance(point);
 
-      return Surface{ point, normal };
+      return Surface{ point, normal, length };
     }
 
-    [[nodiscard]] TerrainCandidate measure(const Setup& setup, const Surface& surface, const glm::vec3& center)
+    // The tangent plane at the surface point is the exact distance on a concave wall but passes under the shape on a
+    // ridge or dome, so the field's own distance at the center bounds it from below. The raw field is used rather than
+    // metricDistance, which overshoots in a crease cell.
+    [[nodiscard]] TerrainCandidate measure(const Setup& setup, const Surface& surface, const glm::vec3& center,
+                                           const float centerDistance)
     {
+      const float radius = setup.shape.radius;
+      const float planeDistance = glm::dot(center - surface.point, surface.normal) - radius;
+
       return { setup.frame.pointToWorld(surface.point), setup.frame.rotation * surface.normal,
-               glm::dot(center - surface.point, surface.normal) - setup.shape.radius };
+               std::max(planeDistance, centerDistance - radius) };
     }
 
     [[nodiscard]] std::vector<glm::vec3> queryPoints(const RoundShape& shape, const float voxelSize)
@@ -252,7 +295,8 @@ namespace collisions {
         const auto center = setup.frame.toLocal(world);
         if (const auto surface = findSurface(sampler, center))
         {
-          cores.push_back({ *surface, center, measure(setup, *surface, center) });
+          const float centerDistance = sampler.distance(center) * setup.volume->voxelSize();
+          cores.push_back({ *surface, center, centerDistance, measure(setup, *surface, center, centerDistance) });
         }
       }
 
@@ -261,7 +305,7 @@ namespace collisions {
 
     [[nodiscard]] bool reachesAlong(const TerrainCandidate& candidate, const glm::vec3& sweep)
     {
-      return candidate.distance < contactMargin + std::abs(glm::dot(sweep, candidate.normal));
+      return candidate.distance < contactMargin + std::max(glm::dot(sweep, -candidate.normal), 0.0f);
     }
 
     [[nodiscard]] bool sameWall(const glm::vec3& first, const glm::vec3& second)
@@ -294,7 +338,7 @@ namespace collisions {
           continue;
         }
 
-        const auto candidate = measure(setup, *surface, core.center);
+        const auto candidate = measure(setup, *surface, core.center, core.centerDistance);
         const bool seen = sameWall(candidate.normal, core.candidate.normal) ||
           std::ranges::any_of(kept, [&candidate](const TerrainCandidate& other)
           {
@@ -308,6 +352,18 @@ namespace collisions {
       }
 
       return kept;
+    }
+
+    // Whether two walls face each other, each in front of the other's plane.
+    [[nodiscard]] bool formsGully(const std::vector<TerrainCandidate>& walls, const float slack)
+    {
+      return std::ranges::any_of(walls, [&walls, slack](const TerrainCandidate& wall)
+      {
+        return std::ranges::any_of(walls, [&wall, slack](const TerrainCandidate& other)
+        {
+          return glm::dot(other.point - wall.point, wall.normal) > slack;
+        });
+      });
     }
 
     [[nodiscard]] std::vector<TerrainCandidate> gatherCandidates(const Setup& setup, terrain::Sampler& sampler,
@@ -327,6 +383,16 @@ namespace collisions {
       if (setup.shape.sphere && !cores.empty())
       {
         const auto probes = wallProbes(setup, sampler, cores.front(), sweep);
+
+        // The core of a sphere over a gully apex between samples is a normal blended from both walls and is deeper
+        // than either, so the walls the probes found replace it.
+        const float voxelSize = setup.volume->voxelSize();
+        if (cores.front().surface.gradientLength * voxelSize < reliableGradientLength &&
+            formsGully(probes, 0.1f * voxelSize))
+        {
+          candidates.clear();
+        }
+
         candidates.insert(candidates.end(), probes.begin(), probes.end());
       }
 
