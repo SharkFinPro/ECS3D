@@ -197,6 +197,19 @@ rotation but not its scale, since terrain space is metric. The volume is not ser
 over with `setVolume`, and an edit to it calls `invalidateBounds`. Terrain collides with nothing yet: `CollisionSystem`
 keeps it out of every pair and event, scene queries skip it, and it adds nothing to a body's inertia.
 
+`collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a sphere or capsule
+against a terrain; the `CollisionSystem` does not call it yet. It samples in terrain-local space with one
+`terrain::Sampler` per call and returns early when every chunk the shape's swept bounds touch is absent or air.
+Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from the
+distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's distance from
+the ground. A sphere also probes from beside its center, because one sample blends the two walls of a gully into a
+single normal; a probe on the same wall (within 15 degrees) as one already kept is dropped, since on a convex hilltop its
+tangent plane would overstate the depth. Candidates within the contact margin, widened by the sweep along the normal, are
+clustered by normal (15 degrees, at most `maxTerrainManifolds`), deepest first, and each cluster becomes one `Contact`:
+a sphere reports its deepest point, a capsule up to two spread apart. Contact points sit on the surface. The depths and
+`advance` follow `findRoundApproach`: `overlap()` is the deepest point's depth, negative while apart, and `depth()` is
+never zero.
+
 ## Convex mesh collider
 
 The `ConvexMeshCollider` component (`data/objects/components/collisions/`) holds its
