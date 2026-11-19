@@ -3,6 +3,7 @@
 #include "PhysicsSystem.h"
 #include "collisions/FaceManifold.h"
 #include "collisions/NarrowPhase.h"
+#include "collisions/TerrainContact.h"
 #include <ProfileScope.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
@@ -10,6 +11,7 @@
 #include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/Terrain.h>
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
@@ -22,10 +24,47 @@
 #include <utility>
 
 namespace {
-  // A terrain takes part in no pair, so it never becomes a broad-phase edge: no bounds, sort, scan or event.
-  bool isInert(const Collider& collider)
+  bool isTerrain(const Collider& collider)
   {
     return collider.getColliderType() == ColliderType::terrainCollider;
+  }
+
+  // A terrain with collision off or no volume to collide with takes part in no pair, so it never becomes a
+  // broad-phase edge: no bounds, sort, scan or event.
+  bool isInert(const Collider& collider)
+  {
+    if (!isTerrain(collider))
+    {
+      return false;
+    }
+
+    const auto& terrain = static_cast<const Terrain&>(collider);
+
+    return !terrain.getCollisionEnabled() || terrain.volume() == nullptr;
+  }
+
+  // The terrain contact whose normal is closest to the pair's own, which is the same contact after the body moved
+  // unless it is gone (nothing left, or only ground facing another way).
+  std::optional<collisions::Contact> remeasureAgainstTerrain(const ContactPair& pair)
+  {
+    constexpr float sameContactCosine = 0.9659258f;
+
+    const auto contacts = collisions::findTerrainContacts(*pair.collider, static_cast<Terrain&>(*pair.other),
+                                                          pair.sweep);
+    const auto normal = pair.contact.normal();
+
+    std::optional<collisions::Contact> best;
+    float bestCosine = sameContactCosine;
+    for (const auto& contact : contacts)
+    {
+      if (const float cosine = glm::dot(contact.normal(), normal); cosine >= bestCosine)
+      {
+        bestCosine = cosine;
+        best = contact;
+      }
+    }
+
+    return best;
   }
 
   // Colliders that belong to one body never touch each other: they move together, and a response between
@@ -69,7 +108,9 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
           continue;
         }
 
-        m_collisionEdges.push_back({ object, collider, 0.0f, object->getComponent<RigidBody>(ComponentType::rigidBody) });
+        // Terrain is static whatever else its object carries.
+        auto body = isTerrain(*collider) ? nullptr : object->getComponent<RigidBody>(ComponentType::rigidBody);
+        m_collisionEdges.push_back({ object, collider, 0.0f, std::move(body) });
       }
     }
   }
@@ -314,7 +355,8 @@ void CollisionSystem::resolveInIslands(const float dt)
   {
     for (const auto& contact : island)
     {
-      m_contactCache.insert_or_assign(ContactSolver::PairKey{ contact.first, contact.second }, contact);
+      const ContactSolver::PairKey key{ contact.first, contact.second, contact.subIndex };
+      m_contactCache.insert_or_assign(key, contact);
     }
   }
 
@@ -338,6 +380,23 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
     const auto& first = m_collisionEdges[lowerFirst ? ref.lower : hit.other];
     const auto& second = m_collisionEdges[lowerFirst ? hit.other : ref.lower];
     const auto& witness = hit.lowerSees ? hit.lowerWitness : hit.higherWitness;
+
+    if (isTerrain(*first.collider) || isTerrain(*second.collider))
+    {
+      // Static terrain gives several contacts, each from the dynamic collider's point of view.
+      const bool terrainFirst = isTerrain(*first.collider);
+      const auto& dynamicEdge = terrainFirst ? second : first;
+      auto& terrain = static_cast<Terrain&>(terrainFirst ? *first.collider : *second.collider);
+
+      const auto contacts = collisions::findTerrainContacts(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+      for (size_t i = 0; i < contacts.size(); ++i)
+      {
+        pairs.push_back({ dynamicEdge.body.get(), nullptr, dynamicEdge.collider.get(), &terrain, contacts[i],
+                          dynamicEdge.sweep, static_cast<uint32_t>(i) });
+      }
+
+      continue;
+    }
 
     // A pair that only touches passes the overlap test but has no depth to report, so it too is asked for as
     // the pair it becomes once this tick's motion presses it together.
@@ -467,9 +526,36 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
       continue;
     }
 
+    SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
+
+    if (isTerrain(*edge.collider) || isTerrain(*other.collider))
+    {
+      // Only the dynamic side asks, and the terrain is never handed to the shape-pair narrow phase.
+      const bool lowerIsTerrain = isTerrain(*edge.collider);
+      const auto& dynamicEdge = lowerIsTerrain ? other : edge;
+      auto& terrain = static_cast<Terrain&>(lowerIsTerrain ? *edge.collider : *other.collider);
+
+      if (dynamicEdge.body == nullptr)
+      {
+        continue;
+      }
+
+      const bool touching = collisions::intersectsTerrain(*dynamicEdge.collider, terrain);
+      hit.lowerSees = !lowerIsTerrain && touching;
+      hit.higherSees = lowerIsTerrain && touching;
+      hit.approaching = !touching && !isTriggerPair(*edge.collider, *other.collider) &&
+                        collisions::approachesTerrain(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+
+      if (touching || hit.approaching)
+      {
+        hits.push_back(std::move(hit));
+      }
+
+      continue;
+    }
+
     // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
     // keeps its own answer.
-    SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
     hit.lowerSees = selfDynamic && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
     hit.higherSees = box.dynamic && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
 
@@ -555,7 +641,8 @@ void CollisionSystem::liftOutOfStatic(std::vector<ContactPair>& pairs)
       }
 
       // Asked the way it was found, so a pair that was about to meet is still stopped where it meets.
-      const auto contact = pairs[i].sweep == glm::vec3(0)
+      const auto contact = isTerrain(*pairs[i].other) ? remeasureAgainstTerrain(pairs[i])
+                           : pairs[i].sweep == glm::vec3(0)
                              ? collisions::findContact(*pairs[i].collider, *pairs[i].other)
                              : collisions::findContact(*pairs[i].collider, *pairs[i].other, pairs[i].sweep);
       if (contact)

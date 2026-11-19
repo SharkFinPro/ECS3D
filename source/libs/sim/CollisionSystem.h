@@ -105,6 +105,9 @@ public:
   [[nodiscard]] const std::vector<CollisionPair>& getCollisionStays() const { return m_stays; }
   [[nodiscard]] const std::vector<CollisionPair>& getCollisionExits() const { return m_exits; }
 
+  // The impulses the last tick's solve ended with, which the next tick starts from.
+  [[nodiscard]] const ContactSolver::Cache& getContactCache() const { return m_contactCache; }
+
   // Clear the recorded pair history + event lists. Call on a scene start/stop/switch so contacts from a
   // previous run don't leak into the next run's first diff as spurious enter/exit events.
   void reset();

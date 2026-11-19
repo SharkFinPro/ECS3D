@@ -189,34 +189,65 @@ back to the box of its scale.
 not its convexity: vertex and index counts within the limits, finite vertices, every index naming a vertex.
 `makeUnitCubeHull` is the default hull for a collider.
 
-## Terrain collider
+## Terrain
 
 The `Terrain` component (`data/objects/components/collisions/`) is a `Collider` that names terrain data by uuid and
 never is a trigger. Its support is the box around the volume's occupied chunks, placed by the owner's position and
 rotation but not its scale, since terrain space is metric. The volume is not serialized or packed: the app hands it
-over with `setVolume`, and an edit to it calls `invalidateBounds`. Terrain collides with nothing yet: `CollisionSystem`
-keeps it out of every pair and event, and it adds nothing to a body's inertia. Scene queries do hit it while its
-collision is enabled: `SceneQueries::raycast` casts in the terrain's local space with `terrain::raycast`, and
+over with `setVolume`, and an edit to it calls `invalidateBounds`. It adds nothing to a body's inertia.
+Scene queries hit it while its collision is enabled: `SceneQueries::raycast` casts in the terrain's local space with `terrain::raycast`, and
 `overlapSphere` reads `Sampler::metricDistance` at the sphere center. The field saturates at the band, so for a sphere
 whose radius is above 0.75 of the band and whose center reads the band, a ray along each of the six local axis
 directions, as long as the radius, also counts as an overlap. That fallback is axis-only and can miss ground off
 those axes. Layer masks and `ignoreObject` apply as for any collider.
 
+**Edges.** A terrain with collision enabled and a bound volume is a static broad-phase edge, bounded by its
+`getBoundingBox()` like any collider and never carrying a body, so it meets only dynamic bodies. Otherwise it stays
+out of every pair and event (`isInert`). A terrain object must not carry a `RigidBody`: that is unsupported.
+Collision ignores the body and treats the terrain as static, but `PhysicsSystem` would still integrate it.
+
+**Sweep.** Only the dynamic side of a terrain pair asks: `intersectsTerrain` sets that side's `lowerSees` or
+`higherSees` flag (no witness), and when it does not intersect, `approachesTerrain` with the body's sweep sets
+`approaching`. A terrain never reaches `intersects`, `approaches` or `findContact`. Events come from those flags, so
+enter, stay and exit name the terrain object's uuid. A trigger body gets events and no response, as against any
+collider.
+
+**Solve.** `solveIsland` calls `findTerrainContacts` with the dynamic body's sweep and pushes one `ContactPair` per
+contact: the body and its collider against the terrain with no other body, `manifold` the contact's index. The solver
+caches impulses under `PairKey` with that index as `subIndex` (zero for every other pair), so each wall of a gully keeps
+its own warm start. Contacts are ordered by depth, so near-equal walls can swap ordinals between ticks: when the
+exact sub-index is missing or faces another way, the lookup tries the pair's other sub-indices and takes the best
+facing one. The normal and point re-validation still rejects a stale match.
+`liftOutOfStatic` re-measures a terrain pair with `findTerrainContacts` and keeps the contact whose normal is closest to
+the pair's own, dropping the pair when none is within 15 degrees.
+
+**Threads.** Chunks are immutable and the `Sampler` is a stack local, so the narrow phase and the island solve read the
+volume safely. The generator reads the terrain's `Transform` position and orientation, which are computed and cache
+nothing, and its body's collider through `CapsuleCollider::getSegment`, `SphereCollider::getPosition` and `getRadius`,
+which lazily rebuild the world shape and the transform pointer. The serial broad-phase `getBoundingBox()` of every edge
+warms those first, since a bounding box recompute goes through the same `worldShape` and transform pointer, so no
+terrain work needs a warm-up of its own. There is no profile scope for terrain: its work runs inside the
+narrow-phase and island regions, where scopes are not allowed.
+
+**Not covered yet:** boxes and convex hulls against terrain, bodies that move more than a voxel per tick, and deep
+penetration (a body that starts well inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic
+rule).
+
 `collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a sphere or capsule
-against a terrain; the `CollisionSystem` does not call it yet. It samples in terrain-local space with one
+against a terrain; `CollisionSystem` calls it. It samples in terrain-local space with one
 `terrain::Sampler` per call and returns early when every chunk the shape's swept bounds touch is absent or air.
-Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from the
-distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's distance from
-the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the field's own
-distance at the center minus the radius (exact on a ridge or dome, where the tangent plane passes under the shape); the
-raw field is used because `metricDistance` overshoots in a crease cell. A sphere also probes from beside its center,
-because one sample blends the two walls of a gully into a single normal; a probe on the same wall (within 15 degrees) as
-one already kept is dropped, since on a convex hilltop its tangent plane would overstate the depth. When the center's
-cell reads a gradient shorter than 0.9 per voxel and the probes found two walls facing each other, the blended center
-candidate is dropped in favor of those walls. Candidates within the contact margin, widened by the part of the sweep
-that closes on the ground (a body moving away gets no speculative contact), are
-clustered by normal (15 degrees, at most `maxTerrainManifolds`), deepest first, and each cluster becomes one `Contact`:
-a sphere reports its deepest point, a capsule up to two spread apart. Contact points sit on the surface. The depths and
+Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from
+the distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's
+distance from the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the
+field's own distance at the center minus the radius (exact on a ridge or dome, where the tangent plane passes under
+the shape); the raw field is used because `metricDistance` overshoots in a crease cell. A sphere also probes from
+beside its center, because one sample blends the two walls of a gully into a single normal; a probe on the same wall
+(within 15 degrees) as one already kept is dropped, since on a convex hilltop its tangent plane would overstate the
+depth. When the center's cell reads a gradient shorter than 0.9 per voxel and the probes found two walls facing each
+other, the blended center candidate is dropped in favor of those walls. Candidates within the contact margin, widened
+by the part of the sweep that closes on the ground (a body moving away gets no speculative contact), are clustered by
+normal (15 degrees, at most `maxTerrainManifolds`), deepest first, and each cluster becomes one `Contact`: a sphere
+reports its deepest point, a capsule up to two spread apart. Contact points sit on the surface. The depths and
 `advance` follow `findRoundApproach`: `overlap()` is the deepest point's depth, negative while apart, and `depth()` is
 never zero.
 

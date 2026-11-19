@@ -1,6 +1,7 @@
 #include "ContactSolver.h"
 #include "ComponentAccess.h"
 #include "PhysicsSystem.h"
+#include "collisions/TerrainContact.h"
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <objects/components/RigidBody.h>
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <utility>
 
 namespace {
   // Each pass hands load one contact further through a stack, and the impulses carried over from the last tick
@@ -415,22 +417,62 @@ namespace {
       m_constraints.push_back(constraint);
     }
 
+    // The cached contact of this pair's own sub-index when it still faces the same way. A terrain orders its
+    // contacts by depth, so near-equal walls can swap ordinals between ticks: then the pair's other sub-indices
+    // are tried and the best facing one is taken.
+    [[nodiscard]] static const ContactSolver::CachedContact* matchingCached(
+      const Constraint& constraint, const ContactSolver::Cache& previous)
+    {
+      const auto* pair = constraint.pair;
+      const auto facing = [&](const uint32_t subIndex) -> std::pair<const ContactSolver::CachedContact*, float>
+      {
+        const auto found = previous.find(ContactSolver::keyOf(pair->collider, pair->other, subIndex));
+        if (found == previous.end())
+        {
+          return { nullptr, -1.0f };
+        }
+
+        const float side = found->second.first == pair->collider ? 1.0f : -1.0f;
+
+        return { &found->second, glm::dot(found->second.normal * side, constraint.normal) };
+      };
+
+      const auto exact = facing(pair->manifold);
+      if (exact.first && exact.second >= cachedNormalCosine)
+      {
+        return exact.first;
+      }
+
+      const ContactSolver::CachedContact* best = nullptr;
+      float bestCosine = cachedNormalCosine;
+      for (uint32_t subIndex = 0; subIndex < collisions::maxTerrainManifolds; ++subIndex)
+      {
+        if (subIndex == pair->manifold)
+        {
+          continue;
+        }
+
+        if (const auto [candidate, cosine] = facing(subIndex); candidate && cosine >= bestCosine)
+        {
+          best = candidate;
+          bestCosine = cosine;
+        }
+      }
+
+      return best;
+    }
+
     static void loadCached(Constraint& constraint, const ContactSolver::Cache& previous)
     {
-      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other);
-      const auto found = previous.find(key);
-      if (found == previous.end())
+      const auto* match = matchingCached(constraint, previous);
+      if (!match)
       {
         return;
       }
 
       // The cached impulses are on the cached pair's first collider, which may be this pair's second.
-      const auto& cached = found->second;
+      const auto& cached = *match;
       const float side = cached.first == constraint.pair->collider ? 1.0f : -1.0f;
-      if (glm::dot(cached.normal * side, constraint.normal) < cachedNormalCosine)
-      {
-        return;
-      }
 
       constraint.rollingImpulse = cached.rollingImpulse * side;
 
@@ -809,12 +851,14 @@ namespace {
 
     [[nodiscard]] static ContactSolver::CachedContact cached(const Constraint& constraint)
     {
-      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other);
+      const auto key = ContactSolver::keyOf(constraint.pair->collider, constraint.pair->other,
+                                            constraint.pair->manifold);
       const float side = key.first == constraint.pair->collider ? 1.0f : -1.0f;
 
       ContactSolver::CachedContact result;
       result.first = key.first;
       result.second = key.second;
+      result.subIndex = key.subIndex;
       result.normal = constraint.normal * side;
       result.rollingImpulse = constraint.rollingImpulse * side;
       result.pointCount = static_cast<std::uint8_t>(constraint.pointCount);
@@ -868,9 +912,10 @@ namespace {
   };
 }
 
-ContactSolver::PairKey ContactSolver::keyOf(const Collider* collider, const Collider* other)
+ContactSolver::PairKey ContactSolver::keyOf(const Collider* collider, const Collider* other, const uint32_t subIndex)
 {
-  return std::less<const Collider*>{}(other, collider) ? PairKey{ other, collider } : PairKey{ collider, other };
+  return std::less<const Collider*>{}(other, collider) ? PairKey{ other, collider, subIndex }
+                                                       : PairKey{ collider, other, subIndex };
 }
 
 void ContactSolver::solve(const std::span<const ContactPair> pairs, const Cache& previous,
