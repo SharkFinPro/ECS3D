@@ -6,6 +6,7 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/collisions/Collider.h"
+#include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/collisions/Terrain.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
@@ -162,4 +163,170 @@ TEST(TerrainBinding, ARemovedVolumeWithNoReferencesLeftResetsTheBoundsOnTheNextB
   const auto settled = terrain->getGeometryRevision();
   terrain::bindTerrainVolumes(store, world.sceneManager);
   EXPECT_EQ(terrain->getGeometryRevision(), settled);
+}
+
+TEST(TerrainBinding, BindsTheTerrainAmongObjectsWithOtherColliders)
+{
+  World world;
+  terrain::TerrainStore store;
+  const auto volume = store.create({ .uuid = terrainUUID });
+  ASSERT_NE(volume, nullptr);
+
+  const auto sphereObject = std::make_shared<Object>("Sphere");
+  const auto sphere = std::make_shared<SphereCollider>();
+  sphereObject->addComponent(sphere);
+  world.other->getObjectManager()->addObject(sphereObject);
+
+  world.other->getObjectManager()->addObject(std::make_shared<Object>("Bare"));
+
+  const auto terrain = world.addTerrainChild(terrainUUID);
+  terrain::bindTerrainVolumes(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), volume);
+  EXPECT_EQ(sphereObject->getComponent<SphereCollider>(ComponentType::collider), sphere);
+}
+
+TEST(TerrainBinder, BindsATerrainAddedAfterTheFirstBind)
+{
+  World world;
+  terrain::TerrainStore store;
+  const auto volume = store.create({ .uuid = terrainUUID });
+  ASSERT_NE(volume, nullptr);
+
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+
+  const auto terrain = world.addTerrainChild(terrainUUID);
+  binder.bind(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), volume);
+}
+
+TEST(TerrainBinder, BindsATerrainAddedToAnObjectAlreadyInTheScene)
+{
+  World world;
+  terrain::TerrainStore store;
+  const auto volume = store.create({ .uuid = terrainUUID });
+  ASSERT_NE(volume, nullptr);
+
+  const auto object = std::make_shared<Object>("Ground");
+  world.other->getObjectManager()->addObject(object);
+
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+
+  const auto terrain = std::make_shared<Terrain>();
+  terrain->setTerrainUUID(terrainUUID);
+  object->addComponent(terrain);
+  binder.bind(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), volume);
+}
+
+TEST(TerrainBinder, FollowsAUUIDChangeOnACachedTerrain)
+{
+  World world;
+  terrain::TerrainStore store;
+  const auto first = store.create({ .uuid = terrainUUID });
+  const auto second = store.create({ .uuid = missingUUID });
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+
+  const auto terrain = world.addTerrainChild(terrainUUID);
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+  ASSERT_EQ(terrain->volume(), first);
+
+  terrain->setTerrainUUID(missingUUID);
+  binder.bind(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), second);
+}
+
+TEST(TerrainBinder, FollowsAStoreChangeOnACachedTerrain)
+{
+  World world;
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainUUID }), nullptr);
+
+  const auto terrain = world.addTerrainChild(terrainUUID);
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+  ASSERT_NE(terrain->volume(), nullptr);
+
+  ASSERT_TRUE(store.remove(terrainUUID));
+  binder.bind(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), nullptr);
+  EXPECT_FALSE(terrain->volumeExpired());
+}
+
+TEST(TerrainBinder, BindsATerrainInASceneAddedAfterTheFirstBind)
+{
+  World world;
+  terrain::TerrainStore store;
+  const auto volume = store.create({ .uuid = terrainUUID });
+  ASSERT_NE(volume, nullptr);
+
+  // Built before the first bind, so only the new scene tells the binder to look again.
+  const auto late = std::make_shared<SceneAsset>(uuidFrom("cccccccc-cccc-cccc-cccc-cccccccccccc"), "Late",
+                                                 world.componentRegistry);
+  const auto object = std::make_shared<Object>("Ground");
+  const auto terrain = std::make_shared<Terrain>();
+  terrain->setTerrainUUID(terrainUUID);
+  object->addComponent(terrain);
+  late->getObjectManager()->addObject(object);
+
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+  EXPECT_EQ(terrain->volume(), nullptr);
+
+  world.sceneManager.addScene(late);
+  binder.bind(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), volume);
+}
+
+TEST(TerrainBinder, DropsATerrainRemovedFromItsObject)
+{
+  World world;
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainUUID }), nullptr);
+
+  const auto terrain = world.addTerrainChild(terrainUUID);
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+
+  terrain->getOwner()->removeComponent(terrain);
+  terrain->setVolume({});
+  binder.bind(store, world.sceneManager);
+
+  EXPECT_EQ(terrain->volume(), nullptr);
+}
+
+TEST(ObjectManagerStructureRevision, AdvancesOnObjectAndColliderChangesOnly)
+{
+  World world;
+  const auto& objects = world.other->getObjectManager();
+
+  auto before = ObjectManager::structureRevision();
+  const auto object = std::make_shared<Object>("Thing");
+  objects->addObject(object);
+  EXPECT_NE(ObjectManager::structureRevision(), before);
+
+  before = ObjectManager::structureRevision();
+  const auto sphere = std::make_shared<SphereCollider>();
+  object->addComponent(sphere);
+  EXPECT_NE(ObjectManager::structureRevision(), before);
+
+  before = ObjectManager::structureRevision();
+  object->removeComponent(sphere);
+  EXPECT_NE(ObjectManager::structureRevision(), before);
+
+  terrain::TerrainStore store;
+  terrain::TerrainBinder binder;
+  binder.bind(store, world.sceneManager);
+  before = ObjectManager::structureRevision();
+  binder.bind(store, world.sceneManager);
+  EXPECT_EQ(ObjectManager::structureRevision(), before);
 }

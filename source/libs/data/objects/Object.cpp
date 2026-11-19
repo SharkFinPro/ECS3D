@@ -2,6 +2,7 @@
 #include "../ComponentRegistry.h"
 #include "components/Component.h"
 #include "components/Transform.h"
+#include "ObjectManager.h"
 #include "components/Script.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
@@ -130,6 +131,10 @@ void Object::addComponent(const std::shared_ptr<Component>& component)
   {
     refreshChildWorldStamps();
   }
+  else if (component->getType() == ComponentType::collider)
+  {
+    ObjectManager::noteStructureChange();
+  }
 
   // Added to an object that is already running: without this its ComponentVariables stay backed by the
   // authored value, so a runtime write would be saved into the scene as if it had been authored.
@@ -170,6 +175,10 @@ void Object::removeComponent(const std::shared_ptr<Component>& componentToRemove
     if (component->getType() == ComponentType::transform)
     {
       refreshChildWorldStamps();
+    }
+    else if (component->getType() == ComponentType::collider)
+    {
+      ObjectManager::noteStructureChange();
     }
   }
 

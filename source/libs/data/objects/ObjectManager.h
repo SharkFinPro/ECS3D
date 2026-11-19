@@ -3,6 +3,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <random>
 #include <unordered_map>
@@ -24,6 +25,11 @@ public:
   [[nodiscard]] std::shared_ptr<ComponentRegistry> getComponentRegistry() const;
 
   [[nodiscard]] uuids::uuid createUUID();
+
+  // Process-wide: advances whenever any manager's object list changes or any object gains or loses a collider,
+  // so a cache over colliders found by a scan can tell when to scan again. Never repeats a value.
+  [[nodiscard]] static uint64_t structureRevision();
+  static void noteStructureChange();
 
   // Registers the object, wiring it to this manager and to its parent. Starts it too while the scene is
   // running, so an object added mid-run is live rather than inert - a stopped component reads and writes

@@ -18,6 +18,7 @@
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainBinding.h>
 #include <terrain/TerrainUpload.h>
 #include <terrain/TerrainViewSync.h>
 #include <uuid.h>
@@ -141,6 +142,7 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
+  std::shared_ptr<terrain::TerrainBinder> m_terrainBinder;
   terrain::TerrainViewSync m_terrainSync;
   // The server resets its terrain on loadProject; the opened project's chunks reach it through this.
   terrain::TerrainUpload m_terrainUpload;

@@ -52,6 +52,7 @@ ServerApp::ServerApp(LaunchOptions options)
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
     m_terrainStore(std::make_shared<terrain::TerrainStore>()),
+    m_terrainBinder(std::make_shared<terrain::TerrainBinder>()),
     m_sceneManager(std::make_shared<SceneManager>()),
     m_lane("server", 512),
     m_previousTime(std::chrono::steady_clock::now())
@@ -588,7 +589,7 @@ void ServerApp::pollScriptChangesWhileStopped(const float dt) const
 
 void ServerApp::startSceneScripts(SceneAsset& scene) const
 {
-  terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
+  m_terrainBinder->bind(*m_terrainStore, *m_sceneManager);
 
   m_scriptSystem->start(scene);
 
@@ -652,7 +653,7 @@ void ServerApp::notifyObjectEvents(const std::vector<uuids::uuid>& spawned,
 
 void ServerApp::fixedUpdate(const float dt) const
 {
-  terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
+  m_terrainBinder->bind(*m_terrainStore, *m_sceneManager);
 
   if (!sceneRunning())
   {

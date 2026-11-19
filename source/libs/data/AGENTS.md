@@ -19,6 +19,8 @@ Related design notes: [replication.md](../../../docs/architecture/replication.md
 - A component that refuses a payload throws `RefusedPayload` (`Component.h`) before it assigns anything.
 - `Transform`'s world getters compose `parentWorld * local`, with the Euler mapping in `RotationConvention.h` that every
   system shares. Collider caches key on `Transform::getWorldUpdateID`.
+- A change to `ObjectManager`'s object list or to an object's collider slot calls
+  `ObjectManager::noteStructureChange()`, or `TerrainBinder` keeps a stale cache.
 - Recursion into a wire or JSON object tree stops at `maxObjectDepth` (`objects/Object.h`).
 - A user preference belongs in `ECS3DSettings`, not in a scene, a prefab or a snapshot.
 - Terrain chunks are immutable: there is no mutable accessor, and an edit builds new chunks and swaps pointers in the
