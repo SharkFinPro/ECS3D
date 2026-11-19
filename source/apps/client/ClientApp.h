@@ -6,6 +6,7 @@
 #include <Replication.h>
 #include <StatsOverlay.h>
 #include <TrafficRates.h>
+#include <terrain/TerrainBinding.h>
 #include <terrain/TerrainViewSync.h>
 #include <cstdint>
 #include <memory>
@@ -69,6 +70,7 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
+  std::shared_ptr<terrain::TerrainBinder> m_terrainBinder;
   terrain::TerrainViewSync m_terrainSync;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectPacker> m_projectPacker;

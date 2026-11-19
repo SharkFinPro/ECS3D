@@ -8,6 +8,7 @@
 #include "ServerStatsFeed.h"
 #include "StatsSummary.h"
 #include <StatsSubscriptions.h>
+#include <terrain/TerrainBinding.h>
 #include <terrain/TerrainPlaySnapshot.h>
 #include <terrain/TerrainStreamer.h>
 #include <nlohmann/json_fwd.hpp>
@@ -83,6 +84,7 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<terrain::TerrainStore> m_terrainStore;
+  std::shared_ptr<terrain::TerrainBinder> m_terrainBinder;
 
   // The terrain chunks each joined connection is still being sent, pumped once per run() iteration.
   terrain::TerrainStreamer m_terrainStreamer;

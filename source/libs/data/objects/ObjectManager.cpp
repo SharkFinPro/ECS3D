@@ -7,6 +7,7 @@
 #include <Protocol.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <functional>
 #include <stdexcept>
 
@@ -21,6 +22,21 @@ ObjectManager::ObjectManager(std::shared_ptr<ComponentRegistry> componentRegistr
     }()),
     m_uuidGenerator(m_rng)
 {}
+
+namespace
+{
+  std::atomic<uint64_t> g_structureRevision{1};
+}
+
+uint64_t ObjectManager::structureRevision()
+{
+  return g_structureRevision.load(std::memory_order_relaxed);
+}
+
+void ObjectManager::noteStructureChange()
+{
+  g_structureRevision.fetch_add(1, std::memory_order_relaxed);
+}
 
 std::shared_ptr<ComponentRegistry> ObjectManager::getComponentRegistry() const
 {
@@ -61,6 +77,7 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   }
 
   m_allObjects.push_back(object);
+  noteStructureChange();
 
   if (object->getParent() == nullptr)
   {
@@ -113,6 +130,8 @@ void ObjectManager::flushPendingAdditions()
       m_objects.push_back(object);
     }
   }
+
+  noteStructureChange();
 }
 
 void ObjectManager::addObjectToRoot(const std::shared_ptr<Object>& object)
@@ -358,6 +377,7 @@ void ObjectManager::restoreFromJSON(const nlohmann::json& objectsData)
   m_allObjects.clear();
   m_objectsToRemove.clear();
   m_pendingAdditions.clear();
+  noteStructureChange();
 
   for (const auto& objectData : objectsData)
   {
@@ -381,6 +401,7 @@ void ObjectManager::unpack(net::MessageReader& messageReader)
   m_allObjects.clear();
   m_objectsToRemove.clear();
   m_pendingAdditions.clear();
+  noteStructureChange();
 
   const uint32_t objectCount = messageReader.read<uint32_t>();
 
@@ -467,6 +488,7 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
     // object naturally drops out.)
 
     std::erase(m_allObjects, object);
+    noteStructureChange();
   }
 
   m_objectsToRemove.clear();
@@ -485,6 +507,7 @@ std::shared_ptr<Object> ObjectManager::restoreSubtree(const nlohmann::json& body
   const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
 
   m_allObjects.push_back(root);
+  noteStructureChange();
 
   if (parent)
   {
@@ -552,6 +575,7 @@ void ObjectManager::eraseSubtree(const std::shared_ptr<Object>& object)
 
   std::erase(m_allObjects, object);
   std::erase(m_objects, object);
+  noteStructureChange();
 
   // A queued removal would otherwise outlive the discard and be reparented back into the scene by the
   // next deletion pass.

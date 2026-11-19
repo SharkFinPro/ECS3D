@@ -85,6 +85,7 @@ EditorApp::EditorApp(LaunchOptions options)
     m_componentRegistry(std::make_shared<ComponentRegistry>()),
     m_assetRegistry(std::make_shared<AssetRegistry>()),
     m_terrainStore(std::make_shared<terrain::TerrainStore>()),
+    m_terrainBinder(std::make_shared<terrain::TerrainBinder>()),
     m_sceneManager(std::make_shared<SceneManager>())
 {
   // Boot the CLR from the net transport's runtimeconfig (the editor only needs the socket assembly;
@@ -597,7 +598,7 @@ void EditorApp::variableUpdate()
   {
     ECS3D_PROFILE_SCOPE("Scene prep");
 
-    terrain::bindTerrainVolumes(*m_terrainStore, *m_sceneManager);
+    m_terrainBinder->bind(*m_terrainStore, *m_sceneManager);
 
     if (objectManager)
     {
