@@ -8,7 +8,6 @@
 #include <terrain/TerrainTypes.h>
 #include <terrain/TerrainVolume.h>
 #include <glm/common.hpp>
-#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -407,26 +406,6 @@ void paintBands(terrain::TerrainVolume& volume, const Ground& ground)
   terrain::commit(volume, edits);
 }
 
-json showcaseCamera()
-{
-  // Looks from beyond the south-west corner, high up, at the middle of the terrain.
-  constexpr float span = static_cast<float>(showcase::columns) * 2.5f;
-  const glm::vec3 target(span * 0.5f, 120.0f, span * 0.5f);
-  const glm::vec3 position(-200.0f, 450.0f, -150.0f);
-
-  return makeObject("Main Camera", json::array({
-    transform(position),
-    {
-      { "type", "Camera" },
-      { "direction", vec(glm::normalize(target - position)) },
-      { "fov", 45.0 },
-      { "nearPlane", 0.1 },
-      { "farPlane", 3000.0 },
-      { "active", true }
-    }
-  }));
-}
-
 }
 
 void generateShowcaseGround(terrain::TerrainVolume& volume)
@@ -454,16 +433,19 @@ void installDefaultTerrains(terrain::TerrainStore& store)
     return;
   }
 
-  const auto volume = store.find(*uuid);
   const auto* current = store.description(*uuid);
-  if (!volume || !current)
+  if (!current)
   {
     return;
   }
 
+  auto description = *current;
+  description.voxelSize = showcase::voxelSize;
+  store.applyDescription(description);
+
+  const auto volume = store.find(*uuid);
   generateShowcaseTerrain(*volume);
 
-  auto description = *current;
   description.chunkCount = static_cast<uint32_t>(volume->chunks().size());
   store.applyDescription(description);
   store.stampAllChunks(*uuid);
@@ -475,7 +457,7 @@ json buildTerrainShowcase()
 {
   return json::array({
     makeObject("Terrain", json::array({
-      transform(glm::vec3(0)),
+      transform(showcase::terrainOrigin()),
       {
         { "type", "Collider" },
         { "subType", "Terrain" },
@@ -488,8 +470,8 @@ json buildTerrainShowcase()
         { "mask", 0xFFFFFFFFu }
       }
     })),
-    showcaseCamera(),
-    light({ 400.0f, 600.0f, 400.0f }, { 1.0f, 1.0f, 1.0f }, 0.35f, 0.8f, 0.4f)
+    player(showcase::playerSpawn(), 0, glm::vec3(0.0f, 0.0f, 1.0f)),
+    light({ 0.0f, 300.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 0.35f, 0.8f, 0.4f)
   });
 }
 

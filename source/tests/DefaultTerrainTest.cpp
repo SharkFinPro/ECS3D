@@ -4,6 +4,7 @@
 #include "DefaultTerrain.h"
 #include "assets/AssetRegistry.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainRaycast.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
@@ -85,12 +86,12 @@ namespace {
   protected:
     static void SetUpTestSuite()
     {
-      s_full = std::make_unique<terrain::TerrainVolume>();
+      s_full = std::make_unique<terrain::TerrainVolume>(showcase::voxelSize);
       const auto start = std::chrono::steady_clock::now();
       generateShowcaseTerrain(*s_full);
       s_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 
-      s_ground = std::make_unique<terrain::TerrainVolume>();
+      s_ground = std::make_unique<terrain::TerrainVolume>(showcase::voxelSize);
       generateShowcaseGround(*s_ground);
     }
 
@@ -221,12 +222,13 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatI
 
   terrain::TerrainStore store;
   store.reconcile(registry);
-  const auto volume = store.find(showcaseUuid);
-  ASSERT_NE(volume, nullptr);
-  ASSERT_TRUE(volume->chunks().empty());
+  ASSERT_TRUE(store.find(showcaseUuid)->chunks().empty());
+  ASSERT_NE(store.description(showcaseUuid)->voxelSize, showcase::voxelSize);
 
   installDefaultTerrains(store);
 
+  const auto volume = store.find(showcaseUuid);
+  ASSERT_NE(volume, nullptr);
   ASSERT_FALSE(volume->chunks().empty());
 
   // A second, separate generation matches the suite's shared one, and the comparison tells different volumes apart.
@@ -236,6 +238,8 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatI
   const auto* description = store.description(showcaseUuid);
   ASSERT_NE(description, nullptr);
   EXPECT_EQ(description->chunkCount, volume->chunks().size());
+  EXPECT_FLOAT_EQ(description->voxelSize, showcase::voxelSize);
+  EXPECT_FLOAT_EQ(volume->voxelSize(), showcase::voxelSize);
   EXPECT_EQ(store.find(showcaseUuid), volume);
   EXPECT_FALSE(terrain::firstIncompleteTerrain(store).has_value());
 
@@ -243,6 +247,44 @@ TEST_F(DefaultTerrainTest, InstallFillsTheVolumeDeterministicallyAndRecordsWhatI
   {
     EXPECT_GT(store.revision(showcaseUuid, coord), 0u);
   }
+}
+
+TEST_F(DefaultTerrainTest, TheOriginPutsTheLandscapeCenterAndTheBaseGroundAtTheWorldOrigin)
+{
+  const glm::vec3 origin = showcase::terrainOrigin();
+  const float centerColumn = static_cast<float>(showcase::columns / 2) * showcase::voxelSize;
+
+  EXPECT_NEAR(origin.x + centerColumn, 0.0f, 1e-3f);
+  EXPECT_NEAR(origin.z + centerColumn, 0.0f, 1e-3f);
+  EXPECT_NEAR(origin.y + static_cast<float>(showcase::groundHeight) * showcase::voxelSize, 0.0f, 1e-3f);
+
+  // The tunnel's column is the center column, so the corridor runs through x = 0.
+  EXPECT_EQ(showcase::tunnelX, showcase::columns / 2);
+}
+
+TEST_F(DefaultTerrainTest, ThePlayerSpawnStandsJustAboveTheGroundSouthOfTheTunnel)
+{
+  const glm::vec3 spawn = showcase::playerSpawn();
+  const float bottom = spawn.y - 1.0f;
+
+  const auto hit = terrain::raycast(*s_full, spawn - showcase::terrainOrigin(), { 0.0f, -1.0f, 0.0f }, 100.0f);
+  ASSERT_TRUE(hit.has_value());
+
+  const float gap = bottom - (hit->point.y + showcase::terrainOrigin().y);
+  EXPECT_GE(gap, 0.0f);
+  EXPECT_LE(gap, 3.0f);
+
+  // South of the tunnel's south mouth, along its axis.
+  const float spawnZVoxel = (spawn.z - showcase::terrainOrigin().z) / showcase::voxelSize;
+  EXPECT_LT(spawnZVoxel, static_cast<float>(showcase::tunnelStartZ));
+  EXPECT_NEAR((spawn.x - showcase::terrainOrigin().x) / showcase::voxelSize, static_cast<float>(showcase::tunnelX),
+              1e-3f);
+
+  // Positive control: a ray from far above the ridge lands well higher than the spawn's ground.
+  const auto ridge = terrain::raycast(*s_full, glm::vec3(160.0f, 200.0f, 160.0f) * showcase::voxelSize,
+                                      { 0.0f, -1.0f, 0.0f }, 1000.0f);
+  ASSERT_TRUE(ridge.has_value());
+  EXPECT_GT(ridge->point.y + showcase::terrainOrigin().y, spawn.y + 10.0f);
 }
 
 TEST_F(DefaultTerrainTest, InstallLeavesOtherTerrainsAndAnEmptyStoreAlone)

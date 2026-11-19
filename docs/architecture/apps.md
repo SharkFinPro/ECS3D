@@ -40,7 +40,7 @@ while playing) the same way it already undoes an edited Transform.
   runtime replaced them. A second signal ends the process at once.
   A `--project` server loads each terrain's files after the project (see [project-layout.md](project-layout.md)).
   Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
-  built-in `DefaultProject` when no `--project` is given. Its Terrain Showcase scene names a terrain that `DefaultTerrain`
+  built-in `DefaultProject` when no `--project` is given. Its Terrain Showcase scene (the landscape centered on the origin at player scale, with a player on the ground south of the tunnel) names a terrain that `DefaultTerrain`
   generates in memory at startup (never written to files). `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library
   hulls (D4, D6, D8, D12, D20, Hex Prism, Drum, Gem, Boulder), whose formulas and seeded Boulder generator

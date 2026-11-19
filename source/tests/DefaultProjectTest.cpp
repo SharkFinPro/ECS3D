@@ -6,6 +6,7 @@
 #include "DefaultProject.h"
 #include "DefaultProjectParts.h"
 #include "DefaultShapes.h"
+#include "DefaultTerrain.h"
 #include "InertiaTensor.h"
 #include "PhysicsSystem.h"
 #include "ProjectSerializer.h"
@@ -506,6 +507,7 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
 
   int terrains = 0;
   int activeCameras = 0;
+  int players = 0;
   for (const auto& object : objects)
   {
     for (const auto& component : object.at("components"))
@@ -514,6 +516,28 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
       {
         EXPECT_EQ(component.at("terrainUUID"), defaultproject::showcaseTerrain);
         ++terrains;
+
+        const auto byType = componentsByType(object);
+        const auto& position = byType.at("Transform").at("position");
+        const auto expected = showcase::terrainOrigin();
+        EXPECT_FLOAT_EQ(position.at(0).get<float>(), expected.x);
+        EXPECT_FLOAT_EQ(position.at(1).get<float>(), expected.y);
+        EXPECT_FLOAT_EQ(position.at(2).get<float>(), expected.z);
+      }
+      else if (component.at("type") == "PlayerController")
+      {
+        EXPECT_EQ(component.at("playerSlot"), 0);
+        ++players;
+
+        const auto byType = componentsByType(object);
+        const auto& position = byType.at("Transform").at("position");
+        const auto spawn = showcase::playerSpawn();
+        EXPECT_FLOAT_EQ(position.at(0).get<float>(), spawn.x);
+        EXPECT_FLOAT_EQ(position.at(1).get<float>(), spawn.y);
+        EXPECT_FLOAT_EQ(position.at(2).get<float>(), spawn.z);
+
+        const auto& direction = byType.at("Camera").at("direction");
+        EXPECT_NEAR(direction.at(2).get<float>(), 1.0f, 1e-5f);
       }
       else if (component.at("type") == "Camera" && component.at("active") == true)
       {
@@ -523,6 +547,7 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
   }
 
   EXPECT_EQ(terrains, 1);
+  EXPECT_EQ(players, 1);
   EXPECT_EQ(activeCameras, 1);
 
   int records = 0;

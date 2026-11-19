@@ -1,6 +1,8 @@
 #ifndef DEFAULTTERRAIN_H
 #define DEFAULTTERRAIN_H
 
+#include <glm/vec3.hpp>
+
 namespace terrain
 {
   class TerrainStore;
@@ -9,12 +11,16 @@ namespace terrain
 
 // The built-in Terrain Showcase: a rolling landscape with a tunnel through a ridge, a natural arch, an overhanging
 // cliff and a floating island, features a heightmap cannot hold. Positions are sample coordinates (voxels), so they
-// hold for any voxel size.
+// hold for any voxel size. The scene centers the landscape on the world origin, puts the base ground at y = 0 and
+// stands a player on the flat ground south of the tunnel.
 namespace showcase
 {
   inline constexpr int columns = 320;
 
   inline constexpr int groundHeight = 40;
+
+  // World units per voxel: 0.3 m at the engine's 5 units per meter.
+  inline constexpr float voxelSize = 1.5f;
 
   // The tunnel runs along z at x = tunnelX through the ridge; its floor is the ground height.
   // The chain spans where the ridge stands above the roof plus a short run-out, so both mouths open.
@@ -38,6 +44,21 @@ namespace showcase
   inline constexpr int islandX = 70;
   inline constexpr int islandY = 108;
   inline constexpr int islandZ = 250;
+
+  // The Terrain object's position: the landscape is centered over the origin in x and z, and the base ground level
+  // (also the tunnel floor) is at world y = 0.
+  [[nodiscard]] inline glm::vec3 terrainOrigin()
+  {
+    const float half = static_cast<float>(columns) * voxelSize * 0.5f;
+
+    return { -half, -static_cast<float>(groundHeight) * voxelSize, -half };
+  }
+
+  // Where the scene's player stands, on the flat ground south of the tunnel and facing it.
+  [[nodiscard]] inline glm::vec3 playerSpawn()
+  {
+    return { 0.0f, 3.0f, -100.0f };
+  }
 }
 
 // The ground only: the heightmap pass, with no carved or added features and no material bands.
