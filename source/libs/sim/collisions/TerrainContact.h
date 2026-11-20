@@ -14,6 +14,8 @@ namespace collisions {
 
   // Contacts of collider against terrain, each from collider's point of view (the normal pushes it out of the
   // ground). sweep is collider's displacement over the coming tick (zero for "as it stands"). Empty when apart.
+  // A sweep longer than a voxel is sphere traced to where the collider first nears the ground, and a query point
+  // deeper than the distance band is stepped back out of the ground against the sweep (up when there is none).
   // Spheres, capsules, boxes and convex hulls are handled; any other collider, a terrain without a volume and a
   // terrain with collision disabled give nothing. A sphere or capsule radius must stay below the distance band (about
   // 3.5 voxels): past it the center reads saturated with no gradient and the contact is silently lost. A box or hull

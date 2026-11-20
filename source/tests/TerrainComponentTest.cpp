@@ -15,6 +15,7 @@
 #include "objects/components/collisions/Terrain.h"
 #include "queries/SceneQueries.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
 #include <Protocol.h>
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include <uuid.h>
 
@@ -45,6 +47,31 @@ namespace {
   {
     auto volume = std::make_shared<terrain::TerrainVolume>(voxelSize);
     volume->setChunk(coord, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+
+    return volume;
+  }
+
+  // Ground up to sample height 8 in the one chunk, so its surface is at y = 15: a body at y = 15.5 rests half a unit
+  // into it, near enough to be touched but not deep.
+  std::shared_ptr<terrain::TerrainVolume> volumeWithLowGround()
+  {
+    auto volume = std::make_shared<terrain::TerrainVolume>(voxelSize);
+
+    std::vector<int16_t> distances(terrain::samplesPerChunk);
+    for (int z = 0; z < terrain::chunkSize; ++z)
+    {
+      for (int y = 0; y < terrain::chunkSize; ++y)
+      {
+        for (int x = 0; x < terrain::chunkSize; ++x)
+        {
+          distances[static_cast<size_t>(terrain::sampleIndex(x, y, z))] =
+            terrain::encodeDistance(y < 8 ? -terrain::bandVoxels : terrain::bandVoxels);
+        }
+      }
+    }
+    volume->setChunk({ 0, 0, 0 },
+                     terrain::TerrainChunk::dense(std::move(distances),
+                                                  std::vector<uint8_t>(terrain::samplesPerChunk, 1)));
 
     return volume;
   }
@@ -462,11 +489,11 @@ namespace {
     const auto scene = makeScene();
 
     const auto [terrainObject, comp] = addTerrain(scene);
-    const auto volume = volumeWithChunk({ 0, 0, 0 });
+    const auto volume = volumeWithLowGround();
     comp->setVolume(volume);
     comp->setCollisionEnabled(terrainCollisionEnabled);
 
-    const auto mover = fixtures::addObject(scene, "Mover", { 30, 30, 30 });
+    const auto mover = fixtures::addObject(scene, "Mover", { 30, 15.5f, 30 });
     fixtures::addBoxCollider(mover);
     fixtures::addRigidBody(mover);
 
@@ -494,28 +521,32 @@ namespace {
   }
 }
 
-TEST(TerrainComponentTest, ABodyInsideATerrainsBoundsProducesNoContact)
+TEST(TerrainComponentTest, ABodyTouchingATerrainPairsWithItAndIsPushedOutOnlyWhileItsCollisionIsEnabled)
 {
-  for (const bool enabled : { true, false })
-  {
-    const auto run = runCollision(enabled);
+  const auto enabled = runCollision(true);
 
-    EXPECT_TRUE(run.controlPaired);
-    EXPECT_FALSE(run.terrainPaired);
-    fixtures::expectNear(run.moverPosition, { 30, 30, 30 }, tolerance);
-  }
+  EXPECT_TRUE(enabled.controlPaired);
+  EXPECT_TRUE(enabled.terrainPaired);
+  EXPECT_GT(enabled.moverPosition.y, 15.8f);
+
+  const auto disabled = runCollision(false);
+
+  EXPECT_TRUE(disabled.controlPaired);
+  EXPECT_FALSE(disabled.terrainPaired);
+  fixtures::expectNear(disabled.moverPosition, { 30, 15.5f, 30 }, tolerance);
 }
 
-TEST(TerrainComponentTest, ATerrainIsNeverAPairAcrossTicksWhileOrdinaryPairsAre)
+TEST(TerrainComponentTest, ATerrainIsAPairWithATouchingBodyAcrossTicksUntilItsCollisionIsDisabled)
 {
   const auto scene = makeScene();
 
   const auto [terrainObject, comp] = addTerrain(scene);
-  const auto volume = volumeWithChunk({ 0, 0, 0 });
+  const auto volume = volumeWithLowGround();
   comp->setVolume(volume);
 
-  const auto inside = fixtures::addObject(scene, "Inside", { 30, 30, 30 });
-  fixtures::addBoxCollider(inside);
+  // A trigger takes no response, so it stays where it is and the pair persists.
+  const auto inside = fixtures::addObject(scene, "Inside", { 30, 15.5f, 30 });
+  fixtures::addBoxCollider(inside)->setIsTrigger(true);
   fixtures::addRigidBody(inside);
 
   const auto controlMover = fixtures::addObject(scene, "ControlMover", { 300, 0, 0 });
@@ -545,15 +576,21 @@ TEST(TerrainComponentTest, ATerrainIsNeverAPairAcrossTicksWhileOrdinaryPairsAre)
 
   collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), controlPair));
-  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionEnters()));
+  EXPECT_TRUE(touchesTerrain(collisionSystem.getCollisionEnters()));
   EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionStays()));
   EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionExits()));
 
   collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(contains(collisionSystem.getCollisionStays(), controlPair));
   EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionEnters()));
-  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionStays()));
+  EXPECT_TRUE(touchesTerrain(collisionSystem.getCollisionStays()));
   EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionExits()));
+
+  comp->setCollisionEnabled(false);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
+  EXPECT_TRUE(touchesTerrain(collisionSystem.getCollisionExits()));
+  EXPECT_FALSE(touchesTerrain(collisionSystem.getCollisionStays()));
+  EXPECT_TRUE(contains(collisionSystem.getCollisionStays(), controlPair));
 }
 
 TEST(TerrainComponentTest, ATerrainObjectWithARigidBodyDoesNotBreakTheTick)

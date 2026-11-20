@@ -8,6 +8,7 @@
 #include "objects/components/collisions/Terrain.h"
 #include "objects/components/collisions/WorldFace.h"
 #include "terrain/TerrainSampling.h"
+#include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
@@ -79,11 +80,11 @@ namespace collisions::detail {
       return a.y != b.y ? a.y < b.y : a.z < b.z;
     }
 
-    [[nodiscard]] Geometry boxGeometry(BoxCollider& box)
+    [[nodiscard]] std::vector<glm::vec3> boxCorners(BoxCollider& box)
     {
       const auto& frame = box.getWorldFrame();
 
-      Geometry geometry;
+      std::vector<glm::vec3> corners;
       for (int mask = 0; mask < 8; ++mask)
       {
         glm::vec3 corner = frame.center;
@@ -93,8 +94,16 @@ namespace collisions::detail {
           corner += frame.axes[axis] * (sign * frame.halfExtents[axis]);
         }
 
-        geometry.vertices.push_back(corner);
+        corners.push_back(corner);
       }
+
+      return corners;
+    }
+
+    [[nodiscard]] Geometry boxGeometry(BoxCollider& box)
+    {
+      Geometry geometry;
+      geometry.vertices = boxCorners(box);
 
       for (int mask = 0; mask < 8; ++mask)
       {
@@ -237,11 +246,11 @@ namespace collisions::detail {
     }
 
     [[nodiscard]] std::vector<Group> groupsOf(const Geometry& geometry, const TerrainGround& ground,
-                                              terrain::Sampler& sampler)
+                                              terrain::Sampler& sampler, const glm::vec3& offset)
     {
-      const auto rankAt = [&ground, &sampler](const glm::vec3& world)
+      const auto rankAt = [&ground, &sampler, &offset](const glm::vec3& world)
       {
-        return std::round(sampler.distance(ground.frame.toLocal(world)) * rankQuantum);
+        return std::round(sampler.distance(ground.frame.toLocal(world + offset)) * rankQuantum);
       };
 
       std::vector<Group> groups;
@@ -334,25 +343,36 @@ namespace collisions::detail {
       return points;
     }
 
-    // Measures each query point against the ground that is near enough to touch this tick. A point with no usable
-    // gradient (far in air, or deeper than the band) is skipped.
+    // Measures each query point, taken offset along from where it is, against the ground that is near enough to touch
+    // with what is left of the sweep. A point far in air has no usable gradient and is skipped; one deeper than the
+    // band is stepped out of the ground against the sweep.
     [[nodiscard]] std::vector<TerrainCandidate> measuredPoints(Collider& collider, const TerrainGround& ground,
-                                                               terrain::Sampler& sampler, const glm::vec3& sweep)
+                                                               terrain::Sampler& sampler, const glm::vec3& sweep,
+                                                               const glm::vec3& offset)
     {
       const float voxelSize = ground.volume->voxelSize();
       const float reject = contactMargin + glm::length(sweep) + voxelSize;
+      const auto backward = stepBackDirection(ground.frame, sweep);
 
       std::vector<TerrainCandidate> candidates;
-      for (const auto& world : polytopeQueryPoints(collider, ground, sampler))
+      for (const auto& placed : polytopeQueryPoints(collider, ground, sampler, offset))
       {
+        const auto world = placed + offset;
         const auto local = ground.frame.toLocal(world);
-        const float raw = sampler.distance(local) * voxelSize;
+        float raw = sampler.distance(local) * voxelSize;
         if (raw > reject)
         {
           continue;
         }
 
-        if (const auto surface = findSurface(sampler, local))
+        auto surface = findSurface(sampler, local);
+        if (!surface)
+        {
+          surface = findDeepSurface(sampler, local, backward, voxelSize, raw);
+          raw = unknownDepth;
+        }
+
+        if (surface)
         {
           auto candidate = measureCandidate(ground.frame, *surface, local, raw, 0.0f);
           candidate.point = world;
@@ -361,6 +381,49 @@ namespace collisions::detail {
       }
 
       return candidates;
+    }
+
+    // How far along sweep the collider first comes near the ground: its bounding sphere (the center of its bounds,
+    // out to its furthest vertex) is traced, or, when that is too big to see the ground through the band, each vertex
+    // as a point and the earliest taken. Nothing is done for a sweep of a voxel or less.
+    [[nodiscard]] float traceFraction(Collider& collider, const TerrainGround& ground, terrain::Sampler& sampler,
+                                      const glm::vec3& sweep)
+    {
+      const float voxelSize = ground.volume->voxelSize();
+      if (!(glm::length(sweep) > voxelSize))
+      {
+        return 0.0f;
+      }
+
+      const auto& bounds = collider.getBoundingBox();
+      const glm::vec3 center(0.5f * (bounds.minX + bounds.maxX), 0.5f * (bounds.minY + bounds.maxY),
+                             0.5f * (bounds.minZ + bounds.maxZ));
+
+      const auto vertices = collider.getColliderType() == ColliderType::boxCollider
+                              ? boxCorners(static_cast<BoxCollider&>(collider))
+                              : static_cast<ConvexMeshCollider&>(collider).getWorldVertices();
+
+      float radius = 0.0f;
+      for (const auto& vertex : vertices)
+      {
+        radius = std::max(radius, glm::distance(center, vertex));
+      }
+
+      if (radius < 0.5f * terrain::bandVoxels * voxelSize)
+      {
+        return reachAlongSweep(sampler, ground.frame, center, radius, sweep, voxelSize).value_or(0.0f);
+      }
+
+      std::optional<float> earliest;
+      for (const auto& vertex : vertices)
+      {
+        if (const auto reached = reachAlongSweep(sampler, ground.frame, vertex, 0.0f, sweep, voxelSize))
+        {
+          earliest = std::min(earliest.value_or(1.0f), *reached);
+        }
+      }
+
+      return earliest.value_or(0.0f);
     }
 
     [[nodiscard]] std::optional<TerrainGround> groundWithin(Collider& collider, Terrain& terrain,
@@ -396,11 +459,11 @@ namespace collisions::detail {
   // Built on every call from the collider's own world caches: generating the points is cheap next to sampling them,
   // and a cache on the collider would be written by several threads in the parallel narrow phase.
   std::vector<glm::vec3> polytopeQueryPoints(Collider& collider, const TerrainGround& ground,
-                                             terrain::Sampler& sampler)
+                                             terrain::Sampler& sampler, const glm::vec3& offset)
   {
     const auto geometry = geometryOf(collider);
 
-    return cappedPoints(geometry, groupsOf(geometry, ground, sampler), ground.volume->voxelSize());
+    return cappedPoints(geometry, groupsOf(geometry, ground, sampler, offset), ground.volume->voxelSize());
   }
 
   std::vector<Contact> findPolytopeTerrainContacts(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
@@ -413,19 +476,32 @@ namespace collisions::detail {
 
     terrain::Sampler sampler(*ground->volume);
 
+    // The collider is taken to where it first nears the ground; the contacts are then moved back to where it is.
+    const bool longSweep = glm::length(sweep) > ground->volume->voxelSize();
+    const float fraction = traceFraction(collider, *ground, sampler, sweep);
+
+    const auto offset = sweep * fraction;
+    const auto remaining = sweep - offset;
+
     std::vector<TerrainCandidate> reaching;
-    for (const auto& candidate : measuredPoints(collider, *ground, sampler, sweep))
+    for (const auto& candidate : measuredPoints(collider, *ground, sampler, remaining, offset))
     {
-      if (reachesAlong(candidate, sweep))
+      if (reachesAlong(candidate, remaining))
       {
         reaching.push_back(candidate);
       }
     }
 
     std::vector<Contact> contacts;
-    for (const auto& cluster : clusterByWall(std::move(reaching)))
+    for (auto& cluster : clusterByWall(std::move(reaching)))
     {
-      contacts.push_back(makeTerrainContact(cluster, polytopeManifoldPoints, sweep));
+      if (longSweep)
+      {
+        trimToNearest(cluster, 0.5f * ground->volume->voxelSize());
+      }
+
+      contacts.push_back(makeTerrainContact(cluster, polytopeManifoldPoints, remaining));
+      shiftTracedContact(contacts.back(), sweep, fraction);
     }
 
     return contacts;
@@ -441,7 +517,7 @@ namespace collisions::detail {
 
     terrain::Sampler sampler(*ground->volume);
 
-    return std::ranges::any_of(measuredPoints(collider, *ground, sampler, glm::vec3(0)),
+    return std::ranges::any_of(measuredPoints(collider, *ground, sampler, glm::vec3(0), glm::vec3(0)),
                                [](const TerrainCandidate& candidate)
     {
       return candidate.distance < 0.0f;
