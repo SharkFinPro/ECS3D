@@ -307,6 +307,8 @@ same roll as on the ramp), five-box stacks on rolling terrain, downward raycasts
 and fill under a resting box, boxes over 20 voxels wide on a ridge and across a gully, a hull dropped point down into a
 dimple, and the cost of 200 resting boxes against the same boxes on a box floor. A flat box's four corners at equal
 depth are in `TerrainContactTest.cpp`.
+The gate failed on a five-box stack on a lattice-aligned dome crest (`DISABLED_AFiveBoxStackOnALatticeAlignedDomeCrestStandsFor60Seconds`)
+and on the cost target (about 1.9 times the box-floor baseline).
 
 ## Convex mesh collider
 
