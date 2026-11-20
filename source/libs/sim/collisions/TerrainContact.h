@@ -21,7 +21,8 @@ namespace collisions {
   //
   // Reads the collider's world shape (CapsuleCollider::worldShape through getSegment and getRadius, a sphere's
   // transform, a box's world frame, a hull's world vertices and faces), which caches lazily, so a caller on several
-  // threads must warm the collider first (collisions::warmContactCaches for a box or hull); the terrain side only reads.
+  // threads must warm the collider first (collisions::warmContactCaches for a box or hull); the terrain side only
+  // reads.
   [[nodiscard]] std::vector<Contact> findTerrainContacts(Collider& collider, Terrain& terrain, const glm::vec3& sweep);
 
   // Whether any query point is inside the ground now (distance < 0).

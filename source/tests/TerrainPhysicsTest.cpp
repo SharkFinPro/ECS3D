@@ -636,3 +636,41 @@ TEST(TerrainPhysics, AConvexHullDroppedOnFlatTerrainRestsOnTheSurface)
 
   EXPECT_LT(dropSolid(open, true, 3.0f).restHeight, -50.0f);
 }
+
+TEST(TerrainPhysics, ABoxOnATwentyDegreeSlopeComesToRest)
+{
+  constexpr float degrees = 20.0f;
+  const float rise = std::tan(glm::radians(degrees));
+  const glm::vec3 normal(-std::sin(glm::radians(degrees)), std::cos(glm::radians(degrees)), 0.0f);
+  const glm::vec3 start = glm::vec3(48, 48.0f * rise, 48) + normal * 1.5f;
+
+  const auto settleBox = [&](const float friction)
+  {
+    auto world = World::field(slopeGround(degrees));
+    const auto object = fixtures::addObject(world.scene, "Crate", world.worldOf(start));
+    fixtures::transformOf(object)->setRotation({ 0, 0, degrees });
+    fixtures::addBoxCollider(object);
+    const auto body = addBody(object, true);
+    body->setMass(1.0f);
+    body->setFriction(friction);
+
+    world.run(300);
+    const auto middle = fixtures::positionOf(object);
+    float drift = 0.0f;
+    for (int i = 0; i < 300; ++i)
+    {
+      world.tick();
+      drift = std::max(drift, glm::distance(fixtures::positionOf(object), middle));
+    }
+
+    return std::pair(drift, fixtures::positionOf(object));
+  };
+
+  const auto [drift, rest] = settleBox(0.6f);
+
+  EXPECT_LT(drift, 0.003f);
+  EXPECT_NEAR(glm::dot(rest - glm::vec3(48, 48.0f * rise, 48), normal), 1.0f, 3.0f * penetrationSlop);
+
+  // Positive control: without friction the same box slides down the slope.
+  EXPECT_GT(settleBox(0.0f).first, 1.0f);
+}

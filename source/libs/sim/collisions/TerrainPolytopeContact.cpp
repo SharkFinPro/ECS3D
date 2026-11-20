@@ -41,7 +41,12 @@ namespace collisions::detail {
       std::vector<glm::vec3> vertices;
       std::vector<Edge> edges;
       std::vector<WorldFace> ownedFaces;
-      std::span<const WorldFace> faces;
+      const std::vector<WorldFace>* sharedFaces = nullptr;
+
+      [[nodiscard]] std::span<const WorldFace> faces() const
+      {
+        return sharedFaces != nullptr ? std::span<const WorldFace>(*sharedFaces) : std::span<const WorldFace>(ownedFaces);
+      }
     };
 
     struct FaceGrid {
@@ -103,7 +108,6 @@ namespace collisions::detail {
       }
 
       geometry.ownedFaces = supportFacesOf(box);
-      geometry.faces = geometry.ownedFaces;
 
       return geometry;
     }
@@ -112,10 +116,10 @@ namespace collisions::detail {
     {
       Geometry geometry;
       geometry.vertices = hull.getWorldVertices();
-      geometry.faces = hullSupportFaces(hull);
+      geometry.sharedFaces = &hullSupportFaces(hull);
 
       // Each edge borders two faces and runs opposite ways in them, so it is kept where it runs "forward".
-      for (const auto& face : geometry.faces)
+      for (const auto& face : geometry.faces())
       {
         for (size_t i = 0; i < face.corners.size(); ++i)
         {
@@ -245,7 +249,7 @@ namespace collisions::detail {
         groups.push_back({ &edge, nullptr, rankAt(0.5f * (edge.first + edge.second)) });
       }
 
-      for (const auto& face : geometry.faces)
+      for (const auto& face : geometry.faces())
       {
         if (face.corners.size() >= 3)
         {
@@ -287,7 +291,8 @@ namespace collisions::detail {
       std::vector<float> spacings(groups.size(), voxelSize);
       if (full > budget)
       {
-        // The nearest groups first keep the density they can, and each later one keeps room for a point.
+        // The nearest groups first keep the density they can. Later groups are reserved a point each, but never more
+        // than half of what is left, so the nearest group is never starved; groups past the budget get none.
         std::vector<size_t> order(groups.size());
         for (size_t i = 0; i < order.size(); ++i)
         {
@@ -304,7 +309,8 @@ namespace collisions::detail {
         for (size_t rank = 0; rank < order.size(); ++rank)
         {
           const size_t later = order.size() - rank - 1;
-          const size_t allowance = budget > used + later ? budget - used - later : 0;
+          const size_t left = budget - used;
+          const size_t allowance = left - std::min(later, left / 2);
           const size_t index = order[rank];
 
           spacings[index] = spacingFor(groups[index], voxelSize, allowance);

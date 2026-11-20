@@ -561,6 +561,19 @@ TEST(TerrainContact, ATerrainAsTheCollidingColliderGivesNothing)
   EXPECT_FALSE(collisions::intersectsTerrain(*world.terrain, *world.terrain));
 }
 
+TEST(TerrainContact, AHullWithNoUsableDataIsRefusedAndTheColliderKeepsItsCube)
+{
+  World world(flatGround());
+  const auto hull = world.hullAt({ centerX, 0.98f, centerZ }, octahedron());
+
+  EXPECT_FALSE(hull->setHull(ConvexHull{}));
+  EXPECT_EQ(hull->getHull().vertices.size(), 6u);
+  EXPECT_EQ(contactsOf(world, *hull).size(), 1u);
+
+  const auto far = world.hullAt({ centerX, 20.0f, centerZ }, octahedron());
+  EXPECT_TRUE(contactsOf(world, *far).empty());
+}
+
 TEST(TerrainContact, ATerrainWithCollisionOffOrNoVolumeGivesNothing)
 {
   World world(flatGround());
@@ -769,11 +782,12 @@ TEST(TerrainContact, TheQueryPointsOfALargeBoxStayWithinTheCapAndKeepTheNearestF
   const auto medium = world.boxAt({ centerX, 10.0f, centerZ }, glm::vec3(10));
   const auto mediumPoints = collisions::detail::polytopeQueryPoints(*medium, *ground, sampler);
   EXPECT_LE(mediumPoints.size(), collisions::detail::maxTerrainQueryPoints);
-  const auto onBottom = std::ranges::count_if(mediumPoints, [](const glm::vec3& point)
+  const auto onBottomInterior = std::ranges::count_if(mediumPoints, [](const glm::vec3& point)
   {
-    return std::abs(point.y) < tightTolerance;
+    return std::abs(point.y) < tightTolerance && std::abs(point.x - centerX) < 9.9f &&
+      std::abs(point.z - centerZ) < 9.9f;
   });
-  EXPECT_GE(onBottom, 20 * 20);
+  EXPECT_EQ(onBottomInterior, 20 * 20);
 
   const auto huge = world.boxAt({ centerX, 30.0f, centerZ }, glm::vec3(30));
   const auto hugePoints = collisions::detail::polytopeQueryPoints(*huge, *ground, sampler);
@@ -785,4 +799,42 @@ TEST(TerrainContact, TheQueryPointsOfALargeBoxStayWithinTheCapAndKeepTheNearestF
   ASSERT_EQ(contacts.size(), 1u);
   expectNormal(contacts[0], up());
   expectCornersOfFlatBox(contacts[0], centerX, 0.0f, centerZ, 30.0f);
+}
+
+TEST(TerrainContact, AFinelyTessellatedHullKeepsTheInteriorOfItsBottomFaceWhereTheGroupsOutnumberTheBudget)
+{
+  constexpr int sides = 120;
+  constexpr float radius = 5.0f;
+  std::vector<glm::vec3> points;
+  for (int i = 0; i < sides; ++i)
+  {
+    const float angle = glm::radians(360.0f * static_cast<float>(i) / static_cast<float>(sides));
+    for (const float y : { -1.0f, 1.0f })
+    {
+      points.emplace_back(radius * std::cos(angle), y, radius * std::sin(angle));
+    }
+  }
+
+  const auto built = buildConvexHull(points);
+  ASSERT_TRUE(built.has_value());
+
+  World world(flatGround());
+  const auto ground = collisions::detail::prepareGround(*world.terrain);
+  ASSERT_TRUE(ground.has_value());
+  terrain::Sampler sampler(*world.volume);
+  const auto prism = world.hullAt({ centerX, 1.0f, centerZ }, *built);
+
+  const auto queryPoints = collisions::detail::polytopeQueryPoints(*prism, *ground, sampler);
+
+  EXPECT_LE(queryPoints.size(), collisions::detail::maxTerrainQueryPoints);
+  const auto bottomInterior = std::ranges::count_if(queryPoints, [](const glm::vec3& point)
+  {
+    return std::abs(point.y) < tightTolerance && std::hypot(point.x - centerX, point.z - centerZ) < radius - 0.6f;
+  });
+  EXPECT_GE(bottomInterior, 50);
+
+  const auto contacts = contactsOf(world, *prism);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
 }

@@ -213,8 +213,10 @@ namespace collisions {
         return std::nullopt;
       }
 
-      const auto low = glm::min(glm::min(shape->start, shape->end), glm::min(shape->start + sweep, shape->end + sweep));
-      const auto high = glm::max(glm::max(shape->start, shape->end), glm::max(shape->start + sweep, shape->end + sweep));
+      const auto low = glm::min(glm::min(shape->start, shape->end),
+                                glm::min(shape->start + sweep, shape->end + sweep));
+      const auto high = glm::max(glm::max(shape->start, shape->end),
+                                 glm::max(shape->start + sweep, shape->end + sweep));
       const float reach = shape->radius + contactMargin + ground->volume->voxelSize();
 
       if (!detail::reachesGround(*ground, low, high, reach))

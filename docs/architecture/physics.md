@@ -231,13 +231,13 @@ the edges the same serial loop calls `collisions::warmContactCaches` on every dy
 vertices are already current from the bounding box. There is no profile scope for terrain: its work runs inside the
 narrow-phase and island regions, where scopes are not allowed.
 
-**Not covered yet:** bodies that move more than a voxel per tick, and deep penetration (a body that starts well inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic
-rule).
+**Not covered yet:** bodies that move more than a voxel per tick, and deep penetration (a body that starts well
+inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic rule).
 
-`collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a sphere or capsule
+`collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a collider
 against a terrain; `CollisionSystem` calls it. It samples in terrain-local space with one
 `terrain::Sampler` per call and returns early when every chunk the shape's swept bounds touch is absent or air.
-Query points are the sphere center or capsule core points at most a voxel apart. Each one's surface is estimated from
+A sphere or capsule is queried at its center or core points at most a voxel apart. Each one's surface is estimated from
 the distance and gradient, then refined once at the estimate, giving a normal, a surface point and the shape's
 distance from the ground. That distance is the larger of the tangent-plane distance (exact on a concave wall) and the
 field's own distance at the center minus the radius (exact on a ridge or dome, where the tangent plane passes under
