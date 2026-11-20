@@ -31,6 +31,8 @@ add_library(${PROJECT_NAME}
   collisions/SupportFaces.h
   collisions/TerrainContact.cpp
   collisions/TerrainContact.h
+  collisions/TerrainContactInternal.h
+  collisions/TerrainPolytopeContact.cpp
   queries/HullQueries.cpp
   queries/HullQueries.h
   queries/SceneQueries.cpp

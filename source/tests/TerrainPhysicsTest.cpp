@@ -4,6 +4,7 @@
 #include "ContactSolver.h"
 #include "PhysicsSystem.h"
 #include "PhysicsTestHelpers.h"
+#include "ConvexMeshFixtures.h"
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
@@ -209,9 +210,8 @@ namespace {
     float lowest = 0.0f;
   };
 
-  Drop dropOnto(World& world, const glm::vec3& startLocal)
+  Drop settle(World& world, const std::shared_ptr<Object>& object)
   {
-    Ball ball(world, startLocal);
     Drop drop;
     drop.lowest = 1e9f;
     float latest = 0.0f;
@@ -221,7 +221,7 @@ namespace {
     for (int i = 0; i < ticks; ++i)
     {
       world.tick();
-      const float height = world.localOf(ball.position()).y;
+      const float height = world.localOf(fixtures::positionOf(object)).y;
       drop.lowest = std::min(drop.lowest, height);
       if (i == 100)
       {
@@ -236,6 +236,35 @@ namespace {
     drop.restHeight = latest;
 
     return drop;
+  }
+
+  Drop dropOnto(World& world, const glm::vec3& startLocal)
+  {
+    Ball ball(world, startLocal);
+
+    return settle(world, ball.object);
+  }
+
+  // A unit box, or the tetrahedron hull standing on its base, whose lowest point is one unit below its origin.
+  Drop dropSolid(World& world, const bool hull, const float startHeight)
+  {
+    const auto object = fixtures::addObject(world.scene, "Solid", world.worldOf({ 48, startHeight, 48 }));
+    if (hull)
+    {
+      const auto collider = std::make_shared<ConvexMeshCollider>();
+      EXPECT_TRUE(collider->setHull(convexFixtures::tetrahedron()));
+      object->addComponent(collider);
+    }
+    else
+    {
+      fixtures::addBoxCollider(object);
+    }
+
+    const auto body = addBody(object, true);
+    body->setMass(1.0f);
+    body->setFriction(0.5f);
+
+    return settle(world, object);
   }
 }
 
@@ -574,4 +603,36 @@ TEST(TerrainPhysics, DisablingTheTerrainsCollisionMidPlayEndsTheContactAndTheBod
 
   EXPECT_LT(ball.body->getVelocity().y, 0.0f);
   EXPECT_LT(world.localOf(ball.position()).y, sphereRadius - 0.5f);
+}
+
+TEST(TerrainPhysics, ABoxDroppedOnFlatTerrainRestsOnTheSurface)
+{
+  auto world = World::flat();
+
+  const auto drop = dropSolid(world, false, 3.0f);
+
+  EXPECT_NEAR(drop.restHeight, 1.0f, 3.0f * penetrationSlop);
+  EXPECT_LT(drop.drift, 0.005f);
+  EXPECT_GT(drop.lowest, 1.0f - 5.0f * penetrationSlop);
+
+  auto open = World::flat();
+  open.terrain->setCollisionEnabled(false);
+
+  EXPECT_LT(dropSolid(open, false, 3.0f).restHeight, -50.0f);
+}
+
+TEST(TerrainPhysics, AConvexHullDroppedOnFlatTerrainRestsOnTheSurface)
+{
+  auto world = World::flat();
+
+  const auto drop = dropSolid(world, true, 3.0f);
+
+  EXPECT_NEAR(drop.restHeight, 1.0f, 3.0f * penetrationSlop);
+  EXPECT_LT(drop.drift, 0.005f);
+  EXPECT_GT(drop.lowest, 1.0f - 5.0f * penetrationSlop);
+
+  auto open = World::flat();
+  open.terrain->setCollisionEnabled(false);
+
+  EXPECT_LT(dropSolid(open, true, 3.0f).restHeight, -50.0f);
 }

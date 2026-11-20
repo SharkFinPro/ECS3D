@@ -1,6 +1,7 @@
 #include "TerrainContact.h"
 #include "FaceManifold.h"
 #include "ManifoldInternal.h"
+#include "TerrainContactInternal.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/CapsuleCollider.h"
@@ -47,39 +48,13 @@ namespace collisions {
       bool sphere;
     };
 
-    struct Frame {
-      glm::vec3 origin;
-      glm::quat rotation;
-      glm::quat inverse;
+    using detail::findSurface;
+    using detail::reachesAlong;
+    using Surface = detail::TerrainSurface;
+    using detail::TerrainCandidate;
 
-      [[nodiscard]] glm::vec3 toLocal(const glm::vec3& world) const
-      {
-        return inverse * (world - origin);
-      }
-
-      [[nodiscard]] glm::vec3 pointToWorld(const glm::vec3& local) const
-      {
-        return origin + rotation * local;
-      }
-    };
-
-    struct Setup {
-      std::shared_ptr<const terrain::TerrainVolume> volume;
-      Frame frame;
+    struct Setup : detail::TerrainGround {
       RoundShape shape;
-    };
-
-    struct Surface {
-      glm::vec3 point;
-      glm::vec3 normal;
-      float gradientLength;
-    };
-
-    // World space; distance is how far the collider's surface is from the ground along normal (negative inside).
-    struct TerrainCandidate {
-      glm::vec3 point;
-      glm::vec3 normal;
-      float distance;
     };
 
     struct CorePoint {
@@ -123,15 +98,12 @@ namespace collisions {
       return chunk && !chunk->isAir();
     }
 
-    // The samples of the terrain-local box the shape can reach this tick.
-    [[nodiscard]] std::optional<terrain::SampleBox> reachableSamples(const Setup& setup, const glm::vec3& sweep)
+    // The samples of the terrain-local box that the world-space box from low to high can reach.
+    [[nodiscard]] std::optional<terrain::SampleBox> reachableSamples(const detail::TerrainGround& ground,
+                                                                     const glm::vec3& low, const glm::vec3& high,
+                                                                     const float reach)
     {
-      const auto& shape = setup.shape;
-      const float voxelSize = setup.volume->voxelSize();
-      const float reach = shape.radius + contactMargin + voxelSize;
-
-      const auto low = glm::min(glm::min(shape.start, shape.end), glm::min(shape.start + sweep, shape.end + sweep));
-      const auto high = glm::max(glm::max(shape.start, shape.end), glm::max(shape.start + sweep, shape.end + sweep));
+      const float voxelSize = ground.volume->voxelSize();
 
       glm::vec3 localLow(std::numeric_limits<float>::max());
       glm::vec3 localHigh(std::numeric_limits<float>::lowest());
@@ -140,7 +112,7 @@ namespace collisions {
         const glm::vec3 world((corner & 1) != 0 ? high.x + reach : low.x - reach,
                               (corner & 2) != 0 ? high.y + reach : low.y - reach,
                               (corner & 4) != 0 ? high.z + reach : low.z - reach);
-        const auto local = setup.frame.toLocal(world);
+        const auto local = ground.frame.toLocal(world);
         localLow = glm::min(localLow, local);
         localHigh = glm::max(localHigh, local);
       }
@@ -158,12 +130,14 @@ namespace collisions {
       return terrain::SampleBox{ glm::ivec3(glm::floor(toSamples(localLow))),
                                  glm::ivec3(glm::ceil(toSamples(localHigh))) + 1 };
     }
+  }
 
+  namespace detail {
     // Walks the chunks of the box, or the volume's own chunks when there are fewer, so a huge box costs no more than
     // the terrain holds.
-    [[nodiscard]] bool reachesGround(const Setup& setup, const glm::vec3& sweep)
+    bool reachesGround(const TerrainGround& ground, const glm::vec3& low, const glm::vec3& high, const float reach)
     {
-      const auto box = reachableSamples(setup, sweep);
+      const auto box = reachableSamples(ground, low, high, reach);
       if (!box || box->empty())
       {
         return false;
@@ -171,7 +145,7 @@ namespace collisions {
 
       const auto first = terrain::chunkOfSample(box->min);
       const auto last = terrain::chunkOfSample(box->max - glm::ivec3(1));
-      const auto& volume = *setup.volume;
+      const auto& volume = *ground.volume;
 
       const int64_t inBox = static_cast<int64_t>(last.x - first.x + 1) * static_cast<int64_t>(last.y - first.y + 1) *
         static_cast<int64_t>(last.z - first.z + 1);
@@ -204,10 +178,9 @@ namespace collisions {
       return false;
     }
 
-    [[nodiscard]] std::optional<Setup> prepare(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
+    std::optional<TerrainGround> prepareGround(Terrain& terrain)
     {
-      const auto shape = roundShapeOf(collider);
-      if (!shape || !terrain.getCollisionEnabled() || terrain.getOwner() == nullptr)
+      if (!terrain.getCollisionEnabled() || terrain.getOwner() == nullptr)
       {
         return std::nullopt;
       }
@@ -220,19 +193,43 @@ namespace collisions {
       }
 
       const auto rotation = transform->getOrientation();
-      Setup setup{ std::move(volume), { transform->getPosition(), rotation, glm::inverse(rotation) }, *shape };
 
-      if (!reachesGround(setup, sweep))
+      return TerrainGround{ std::move(volume), { transform->getPosition(), rotation, glm::inverse(rotation) } };
+    }
+  }
+
+  namespace {
+    [[nodiscard]] std::optional<Setup> prepare(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
+    {
+      const auto shape = roundShapeOf(collider);
+      if (!shape)
       {
         return std::nullopt;
       }
 
-      return setup;
-    }
+      auto ground = detail::prepareGround(terrain);
+      if (!ground)
+      {
+        return std::nullopt;
+      }
 
+      const auto low = glm::min(glm::min(shape->start, shape->end), glm::min(shape->start + sweep, shape->end + sweep));
+      const auto high = glm::max(glm::max(shape->start, shape->end), glm::max(shape->start + sweep, shape->end + sweep));
+      const float reach = shape->radius + contactMargin + ground->volume->voxelSize();
+
+      if (!detail::reachesGround(*ground, low, high, reach))
+      {
+        return std::nullopt;
+      }
+
+      return Setup{ std::move(*ground), *shape };
+    }
+  }
+
+  namespace detail {
     // The ground surface nearest from, refined once: the first estimate runs along the gradient at from, the second
     // along the gradient at that estimate.
-    [[nodiscard]] std::optional<Surface> findSurface(terrain::Sampler& sampler, const glm::vec3& from)
+    std::optional<TerrainSurface> findSurface(terrain::Sampler& sampler, const glm::vec3& from)
     {
       const auto gradient = sampler.gradient(from);
       const float length = glm::length(gradient);
@@ -250,20 +247,32 @@ namespace collisions {
 
       point -= normal * sampler.metricDistance(point);
 
-      return Surface{ point, normal, length };
+      return TerrainSurface{ point, normal, length };
     }
 
     // The tangent plane at the surface point is the exact distance on a concave wall but passes under the shape on a
     // ridge or dome, so the field's own distance at the center bounds it from below. The raw field is used rather than
     // metricDistance, which overshoots in a crease cell.
+    TerrainCandidate measureCandidate(const TerrainFrame& frame, const TerrainSurface& surface,
+                                      const glm::vec3& center, const float centerDistance, const float radius)
+    {
+      const float planeDistance = glm::dot(center - surface.point, surface.normal) - radius;
+
+      return { frame.pointToWorld(surface.point), frame.rotation * surface.normal,
+               std::max(planeDistance, centerDistance - radius) };
+    }
+
+    bool reachesAlong(const TerrainCandidate& candidate, const glm::vec3& sweep)
+    {
+      return candidate.distance < contactMargin + std::max(glm::dot(sweep, -candidate.normal), 0.0f);
+    }
+  }
+
+  namespace {
     [[nodiscard]] TerrainCandidate measure(const Setup& setup, const Surface& surface, const glm::vec3& center,
                                            const float centerDistance)
     {
-      const float radius = setup.shape.radius;
-      const float planeDistance = glm::dot(center - surface.point, surface.normal) - radius;
-
-      return { setup.frame.pointToWorld(surface.point), setup.frame.rotation * surface.normal,
-               std::max(planeDistance, centerDistance - radius) };
+      return detail::measureCandidate(setup.frame, surface, center, centerDistance, setup.shape.radius);
     }
 
     [[nodiscard]] std::vector<glm::vec3> queryPoints(const RoundShape& shape, const float voxelSize)
@@ -301,11 +310,6 @@ namespace collisions {
       }
 
       return cores;
-    }
-
-    [[nodiscard]] bool reachesAlong(const TerrainCandidate& candidate, const glm::vec3& sweep)
-    {
-      return candidate.distance < contactMargin + std::max(glm::dot(sweep, -candidate.normal), 0.0f);
     }
 
     [[nodiscard]] bool sameWall(const glm::vec3& first, const glm::vec3& second)
@@ -403,18 +407,20 @@ namespace collisions {
     {
       return std::round(distance * depthQuantum);
     }
+  }
 
-    [[nodiscard]] std::vector<Cluster> clusterByWall(std::vector<TerrainCandidate> candidates)
+  namespace detail {
+    std::vector<TerrainCluster> clusterByWall(std::vector<TerrainCandidate> candidates)
     {
       std::ranges::stable_sort(candidates, [](const TerrainCandidate& a, const TerrainCandidate& b)
       {
         return quantized(a.distance) < quantized(b.distance);
       });
 
-      std::vector<Cluster> clusters;
+      std::vector<TerrainCluster> clusters;
       for (const auto& candidate : candidates)
       {
-        const auto home = std::ranges::find_if(clusters, [&candidate](const Cluster& cluster)
+        const auto home = std::ranges::find_if(clusters, [&candidate](const TerrainCluster& cluster)
         {
           return sameWall(cluster.front().normal, candidate.normal);
         });
@@ -431,10 +437,12 @@ namespace collisions {
 
       return clusters;
     }
+  }
 
-    // At most two points: the deepest, then the one furthest from it, so a capsule lying on the ground rests on both
-    // ends and an upright one on a single point.
-    [[nodiscard]] std::vector<TerrainPoint> capsulePoints(const Cluster& cluster)
+  namespace {
+    // At most maxPoints: the deepest, then each time the one furthest from those chosen, so a capsule lying on the
+    // ground rests on both ends, an upright one on a single point and a box on its corners.
+    [[nodiscard]] std::vector<TerrainPoint> spreadPoints(const Cluster& cluster, const size_t maxPoints)
     {
       std::vector<detail::Candidate> candidates;
       candidates.reserve(cluster.size());
@@ -444,7 +452,7 @@ namespace collisions {
       }
 
       std::vector<TerrainPoint> points;
-      for (const auto& chosen : detail::spreadOut(candidates, 2))
+      for (const auto& chosen : detail::spreadOut(candidates, maxPoints))
       {
         const bool repeated = std::ranges::any_of(points, [&chosen](const TerrainPoint& other)
         {
@@ -464,10 +472,14 @@ namespace collisions {
       return points;
     }
 
-    [[nodiscard]] Contact makeContact(const Cluster& cluster, const bool capsule, const glm::vec3& sweep)
+  }
+
+  namespace detail {
+    Contact makeTerrainContact(const TerrainCluster& cluster, const size_t maxPoints, const glm::vec3& sweep)
     {
       const auto& seed = cluster.front();
-      const auto points = capsule ? capsulePoints(cluster) : std::vector<TerrainPoint>{ { seed.point, -seed.distance } };
+      const auto points = maxPoints > 1 ? spreadPoints(cluster, maxPoints)
+                                        : std::vector<TerrainPoint>{ { seed.point, -seed.distance } };
 
       float overlap = points.front().depth;
       for (const auto& point : points)
@@ -500,6 +512,11 @@ namespace collisions {
 
   std::vector<Contact> findTerrainContacts(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
   {
+    if (detail::isPolytopeCollider(collider))
+    {
+      return detail::findPolytopeTerrainContacts(collider, terrain, sweep);
+    }
+
     const auto setup = prepare(collider, terrain, sweep);
     if (!setup)
     {
@@ -509,9 +526,9 @@ namespace collisions {
     terrain::Sampler sampler(*setup->volume);
 
     std::vector<Contact> contacts;
-    for (const auto& cluster : clusterByWall(gatherCandidates(*setup, sampler, sweep)))
+    for (const auto& cluster : detail::clusterByWall(gatherCandidates(*setup, sampler, sweep)))
     {
-      contacts.push_back(makeContact(cluster, !setup->shape.sphere, sweep));
+      contacts.push_back(detail::makeTerrainContact(cluster, setup->shape.sphere ? 1 : 2, sweep));
     }
 
     return contacts;
@@ -519,6 +536,11 @@ namespace collisions {
 
   bool intersectsTerrain(Collider& collider, Terrain& terrain)
   {
+    if (detail::isPolytopeCollider(collider))
+    {
+      return detail::polytopeIntersectsTerrain(collider, terrain);
+    }
+
     const auto setup = prepare(collider, terrain, glm::vec3(0));
     if (!setup)
     {

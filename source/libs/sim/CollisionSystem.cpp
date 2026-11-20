@@ -145,9 +145,20 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     ECS3D_PROFILE_SCOPE("Broad phase");
 
+    // The terrain contact generator reads a body's box frame or hull faces from the parallel narrow phase, which
+    // the bounding box does not fill.
+    const bool terrainPresent = std::ranges::any_of(m_collisionEdges, [](const CollisionEdge& edge)
+    {
+      return isTerrain(*edge.collider);
+    });
+
     for (auto& edge : m_collisionEdges)
     {
       edge.bounds = edge.collider->getBoundingBox();
+      if (terrainPresent && edge.body)
+      {
+        collisions::warmContactCaches(*edge.collider);
+      }
       edge.sweep = edge.body ? edge.body->getVelocity() : glm::vec3(0);
       edge.bounds.minX += std::min(edge.sweep.x, 0.0f);
       edge.bounds.maxX += std::max(edge.sweep.x, 0.0f);

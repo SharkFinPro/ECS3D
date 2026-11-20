@@ -225,12 +225,13 @@ the pair's own, dropping the pair when none is within 15 degrees.
 volume safely. The generator reads the terrain's `Transform` position and orientation, which are computed and cache
 nothing, and its body's collider through `CapsuleCollider::getSegment`, `SphereCollider::getPosition` and `getRadius`,
 which lazily rebuild the world shape and the transform pointer. The serial broad-phase `getBoundingBox()` of every edge
-warms those first, since a bounding box recompute goes through the same `worldShape` and transform pointer, so no
-terrain work needs a warm-up of its own. There is no profile scope for terrain: its work runs inside the
+warms those first, since a bounding box recompute goes through the same `worldShape` and transform pointer. It does not
+fill a box's `getWorldFrame` or a hull's `hullSupportFaces`, which the polytope path reads, so while a terrain is among
+the edges the same serial loop calls `collisions::warmContactCaches` on every dynamic edge's collider. A hull's world
+vertices are already current from the bounding box. There is no profile scope for terrain: its work runs inside the
 narrow-phase and island regions, where scopes are not allowed.
 
-**Not covered yet:** boxes and convex hulls against terrain, bodies that move more than a voxel per tick, and deep
-penetration (a body that starts well inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic
+**Not covered yet:** bodies that move more than a voxel per tick, and deep penetration (a body that starts well inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic
 rule).
 
 `collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a sphere or capsule
@@ -250,6 +251,21 @@ normal (15 degrees, at most `maxTerrainManifolds`), deepest first, and each clus
 reports its deepest point, a capsule up to two spread apart. Contact points sit on the surface. The depths and
 `advance` follow `findRoundApproach`: `overlap()` is the deepest point's depth, negative while apart, and `depth()` is
 never zero.
+
+A box or convex hull takes the polytope path (`collisions/TerrainPolytopeContact.cpp`, sharing the terrain frame,
+surface refinement, clustering and contact builder with the above through `TerrainContactInternal.h`). Its early-out
+uses the collider's bounding box, widened by the sweep, the margin and a voxel. Query points have radius zero: every
+vertex, then points along each edge and over each face (`hullSupportFaces` polygons for a hull, six rectangles for a box)
+no more than a voxel apart, with face points on cell centers kept when inside the polygon. They are built on every call
+from the collider's world caches, not cached on the collider, since a lazy cache would be written by several threads in
+the narrow phase. The total is capped at `maxTerrainQueryPoints` (512) with the vertices always kept: edges and faces
+are ranked by the raw field distance at their middle, nearest first, and each in turn takes the finest spacing (steps
+of 25 percent over a voxel) that leaves room for the groups after it, so a face lying on the ground keeps its full grid
+while it fits. A point whose raw distance is beyond the margin, the sweep's length and a voxel is skipped, and so is
+one with no usable gradient. The rest are measured like a sphere of radius zero and clustered by normal as above; a
+cluster is reduced with `detail::spreadOut` on quantized depths to at most four points, so a box lying flat reports its
+four bottom corners as one contact. The points are the collider's own surface points, as `referenceFaceManifold`
+reports for a box on a static box, and their depths are positive inside the ground and negative while short of it.
 
 The shape's radius must stay below the distance band, about 3.5 voxels: a larger one reads a saturated center with no
 gradient and loses its contact, and larger shapes are later work. The collider's world shape caches lazily, so a caller
