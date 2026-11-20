@@ -165,6 +165,16 @@ namespace {
     }
   };
 
+  // The same ground moved sideways, which puts its features at another place against the voxel lattice.
+  Field shifted(const Field& field, const float by)
+  {
+    return [field, by](const glm::vec3 p) { return field({ p.x - by, p.y, p.z - by }); };
+  }
+
+  // A shift of 0.37 voxel puts a feature off the lattice; 0.5 voxel puts it in the middle of a cell.
+  constexpr float offLattice = 0.37f * voxel;
+  constexpr float midCell = 0.5f * voxel;
+
   Rolling rollingTerrain()
   {
     return { 1.5f, 80.0f };
@@ -205,6 +215,36 @@ namespace {
         default:
           return 0.0f;
       }
+    }
+
+    // The points that give away a turn: a box's corners, a capsule's ends, a hull's vertices, and a mark on a sphere.
+    [[nodiscard]] std::vector<glm::vec3> extremes() const
+    {
+      const glm::quat turn = orientation();
+      std::vector<glm::vec3> result;
+      if (shape == Shape::sphere)
+      {
+        result = { position(), position() + turn * glm::vec3(sphereRadius, 0, 0) };
+      }
+      else if (shape == Shape::box)
+      {
+        for (const float sx : { -1.0f, 1.0f })
+        {
+          for (const float sy : { -1.0f, 1.0f })
+          {
+            for (const float sz : { -1.0f, 1.0f })
+            {
+              result.push_back(position() + turn * (halfExtents * glm::vec3(sx, sy, sz)));
+            }
+          }
+        }
+      }
+      else
+      {
+        result = points();
+      }
+
+      return result;
     }
 
     // Each of the body's extreme points in world space, and for a box a fine grid over its bottom face too: over a
@@ -381,12 +421,8 @@ namespace {
                    const Body* grounded = nullptr)
   {
     const int total = (settleSeconds + static_cast<int>(seconds)) * ticksPerSecond;
-    const auto track = [&body]
-    {
-      return std::pair(body.position(), body.position() + body.orientation() * glm::vec3(0.5f, 0.5f, 0.5f));
-    };
-
-    std::vector<std::pair<glm::vec3, glm::vec3>> trail;
+    using Pose = std::vector<glm::vec3>;
+    std::vector<Pose> trail;
     trail.reserve(static_cast<size_t>(total));
     Rest rest;
     rest.deepest = -std::numeric_limits<float>::max();
@@ -395,7 +431,7 @@ namespace {
     for (int i = 0; i < total; ++i)
     {
       world.tickOnce();
-      trail.push_back(track());
+      trail.push_back(body.extremes());
       const float depth = world.depth(grounded ? *grounded : body, distance);
       rest.deepestEver = std::max(rest.deepestEver, depth);
       if (i >= settleSeconds * ticksPerSecond)
@@ -404,9 +440,15 @@ namespace {
       }
     }
 
-    const auto far = [](const auto& a, const auto& b)
+    const auto far = [](const Pose& a, const Pose& b)
     {
-      return std::max(glm::distance(a.first, b.first), glm::distance(a.second, b.second));
+      float largest = 0.0f;
+      for (size_t k = 0; k < a.size(); ++k)
+      {
+        largest = std::max(largest, glm::distance(a[k], b[k]));
+      }
+
+      return largest;
     };
 
     const auto& reference = trail[static_cast<size_t>(settleSeconds * ticksPerSecond - 1)];
@@ -568,10 +610,11 @@ TEST(TerrainResting, ACapsuleLyingAcrossATwentyDegreeSlopeBehavesAsOnABoxRamp)
 }
 
 namespace {
-  // Five boxes stacked upright at the given spot of the ground. The stacking tests hold the box at the top of a stack to
-  // 0.02 units.
-  void standFiveBoxes(const Field& field, const glm::vec2& at, const std::string& name)
+  // Five boxes stacked upright at the given spot of the ground, with their depth measured in the sampled field the contacts
+  // come from. The stacking tests hold the box at the top of a stack to 0.02 units.
+  void standFiveBoxes(const glm::vec2& at, const float shift, const std::string& name)
   {
+    const Field field = shifted(rollingTerrain().field(), shift);
     constexpr float tolerance = 0.02f;
     constexpr float gap = 0.002f;
 
@@ -581,7 +624,7 @@ namespace {
       for (int i = 0; i < 5; ++i)
       {
         const float rise = rollingTerrain().height(at.x, at.y) + 1.0f + (2.0f + gap) * static_cast<float>(i);
-        stack.push_back(addBody(world, Shape::box, { at.x, rise, at.y }, glm::vec3(0), 0.5f));
+        stack.push_back(addBody(world, Shape::box, { at.x + shift, rise, at.y + shift }, glm::vec3(0), 0.5f));
       }
 
       return stack;
@@ -589,7 +632,9 @@ namespace {
 
     World world(field);
     const auto stack = build(world);
-    const Rest rest = measureRest(world, stack.back(), observeSeconds, &stack.front());
+    terrain::Sampler sampler(*world.volume);
+    const Field sampled = [&sampler](const glm::vec3 p) { return sampler.metricDistance(p); };
+    const Rest rest = measureRest(world, stack.back(), sampled, observeSeconds, &stack.front());
     report(name, rest);
 
     EXPECT_LE(rest.settleTime, static_cast<float>(settleSeconds));
@@ -611,20 +656,37 @@ namespace {
 TEST(TerrainResting, AFiveBoxStackInATroughOfRollingTerrainStandsFor60Seconds)
 {
   // At the bottom of a trough a box rests on its four corners.
-  standFiveBoxes(rollingTerrain().field(), { 60.0f, 20.0f }, "stack in a trough");
+  standFiveBoxes({ 60.0f, 20.0f }, 0.0f, "stack in a trough");
+}
+
+// Fails with the sampled-field generator: the top box drifts 0.034 units over 60 s and is still moving after 54 s.
+TEST(TerrainResting, DISABLED_AFiveBoxStackInATroughOffTheLatticeStandsFor60Seconds)
+{
+  standFiveBoxes({ 60.0f, 20.0f }, offLattice, "stack in a trough, off the lattice");
 }
 
 TEST(TerrainResting, AFiveBoxStackOnTheFlankOfRollingTerrainStandsFor60Seconds)
 {
   // A 6.7 degree slope, with the stack upright on it.
-  standFiveBoxes(rollingTerrain().field(), { 80.0f, 100.0f }, "stack on a flank");
+  standFiveBoxes({ 80.0f, 100.0f }, 0.0f, "stack on a flank");
+}
+
+// Fails with the sampled-field generator: the top box drifts 0.027 units over 60 s and is still moving after 19 s.
+TEST(TerrainResting, DISABLED_AFiveBoxStackOnTheFlankOffTheLatticeStandsFor60Seconds)
+{
+  standFiveBoxes({ 80.0f, 100.0f }, offLattice, "stack on a flank, off the lattice");
+}
+
+TEST(TerrainResting, AFiveBoxStackOnAMidCellDomeCrestStandsFor60Seconds)
+{
+  standFiveBoxes({ 100.0f, 100.0f }, midCell, "stack on a mid-cell dome crest");
 }
 
 // The gate scene that fails with the sampled-field generator: drift is about 0.48 units over 60 s, since the crest normal
 // is tilted about 0.95 degrees by the one-sided trilinear gradient at a cell corner. It passes at a mid-cell crest.
 TEST(TerrainResting, DISABLED_AFiveBoxStackOnALatticeAlignedDomeCrestStandsFor60Seconds)
 {
-  standFiveBoxes(rollingTerrain().field(), { 100.0f, 100.0f }, "stack on a dome crest");
+  standFiveBoxes({ 100.0f, 100.0f }, 0.0f, "stack on a dome crest");
 }
 
 TEST(TerrainResting, DownwardRaycastsOverRollingTerrainAgreeWithTheSampledSurface)
@@ -685,6 +747,7 @@ TEST(TerrainResting, DownwardRaycastsOverRollingTerrainAgreeWithTheSampledSurfac
 
   EXPECT_EQ(hits, rays);
   EXPECT_LT(worst, 0.05f * voxel);
+  EXPECT_LT(worstAnalytic, 0.05f * voxel);
   // Positive control: the surface is not flat, so agreeing with it means something.
   EXPECT_GT(highest - lowest, 5.0f);
 
@@ -738,19 +801,20 @@ TEST(TerrainResting, DiggingAwayTheGroundUnderARestingBoxLetsItFallToTheNewFloor
   constexpr float craterRadius = 5.0f * voxel;
   editUnder(world, terrain::BrushOp::Kind::subtract, { center, 0.0f, center }, craterRadius);
 
-  world.run(3);
+  world.tickOnce();
   const float fell = box.body->getVelocity().y;
+  world.run(2);
   const float above = box.position().y;
   world.run(2 * ticksPerSecond);
 
   terrain::Sampler sampler(*world.volume);
   const float gap = gapAbove(world, box, sampler);
   const float depth = world.depth(box, [&sampler](const glm::vec3 p) { return sampler.metricDistance(p); });
-  std::cout << "[gate] dig under a box: velocity after 3 ticks " << fell << ", landed at " << box.position().y
+  std::cout << "[gate] dig under a box: velocity after 1 tick " << fell << ", landed at " << box.position().y
             << " (floor " << -craterRadius << "), gap " << gap / penetrationSlop << " slop, depth "
             << depth / penetrationSlop << " slop, speed " << glm::length(box.body->getVelocity()) / tick << "\n";
 
-  EXPECT_LT(fell, -0.02f);
+  EXPECT_LT(fell, -0.01f);
   EXPECT_LT(above, 1.0f);
   EXPECT_LT(box.position().y, -craterRadius + 3.0f);
   EXPECT_GT(box.position().y, -craterRadius);
@@ -815,12 +879,14 @@ TEST(TerrainResting, FillingGroundUpIntoARestingBoxPushesItOutOntoTheNewSurface)
 
 namespace {
   // A box more than 20 voxels wide in x, dropped half a unit onto the feature with its middle the given distance off it.
-  void restWideBox(const Field& field, const float surfaceHeight, const float offset, const std::string& name)
+  void restWideBox(const Field& ground, const float surfaceHeight, const float offset, const float shift,
+                   const std::string& name)
   {
+    const Field field = shifted(ground, shift);
     constexpr float halfWidth = 26.0f;
     static_assert(2.0f * halfWidth / voxel > 20.0f);
 
-    const glm::vec3 start(center + offset, surfaceHeight + 1.5f, center);
+    const glm::vec3 start(center + offset + shift, surfaceHeight + 1.5f, center + shift);
     const glm::vec3 size(halfWidth, 1.0f, 15.0f);
 
     World world(field);
@@ -844,26 +910,38 @@ namespace {
 
 TEST(TerrainResting, AWideBoxBalancedOnARidgeRestsWithoutSinkingIntoIt)
 {
-  restWideBox(roofGround(10.0f), 0.0f, 0.0f, "wide box centered on a ridge");
+  restWideBox(roofGround(10.0f), 0.0f, 0.0f, 0.0f, "wide box centered on a ridge");
+}
+
+// Fails with the sampled-field generator: it settles after 3.86 s, drifts 0.049 units, and its face sinks 0.2 units into
+// the analytic ridge.
+TEST(TerrainResting, DISABLED_AWideBoxBalancedOnARidgeOffTheLatticeRestsWithoutSinkingIntoIt)
+{
+  restWideBox(roofGround(10.0f), 0.0f, 0.0f, offLattice, "wide box centered on a ridge, off the lattice");
 }
 
 TEST(TerrainResting, AWideBoxOffCenterOnARidgeTipsOntoOneFaceAndRests)
 {
-  restWideBox(roofGround(10.0f), 0.0f, 8.0f, "wide box off a ridge");
+  restWideBox(roofGround(10.0f), 0.0f, 8.0f, 0.0f, "wide box off a ridge");
 }
 
 TEST(TerrainResting, AWideBoxAcrossAGullyRestsOnItsWalls)
 {
   // The walls are 45 degrees, so a box 52 units wide wedges at y = 26 where the gully is as wide as it.
-  restWideBox(valleyGround(), 26.0f, 0.0f, "wide box across a gully");
+  restWideBox(valleyGround(), 26.0f, 0.0f, 0.0f, "wide box across a gully");
+}
+
+TEST(TerrainResting, AWideBoxAcrossAGullyOffTheLatticeRestsOnItsWalls)
+{
+  restWideBox(valleyGround(), 26.0f, 0.0f, offLattice, "wide box across a gully, off the lattice");
 }
 
 TEST(TerrainResting, AWideBoxOffCenterAcrossAGullySettlesOnItsWalls)
 {
-  restWideBox(valleyGround(), 26.0f, 6.0f, "wide box off a gully");
+  restWideBox(valleyGround(), 26.0f, 6.0f, 0.0f, "wide box off a gully");
 }
 
-TEST(TerrainResting, AHullStandingPointDownInADimpleSettlesAndRests)
+TEST(TerrainResting, AHullDroppedPointDownIntoADimpleSettlesInTheDimple)
 {
   constexpr float radius = 5.0f * voxel;
   constexpr float reach = 2.0f;
@@ -878,10 +956,14 @@ TEST(TerrainResting, AHullStandingPointDownInADimpleSettlesAndRests)
   const Rest rest = measureRest(world, hull);
   report("hull point down in a dimple", rest);
 
+  const float tilt = glm::degrees(std::acos(std::clamp((hull.orientation() * glm::vec3(0, 1, 0)).y, -1.0f, 1.0f)));
+  std::cout << "[gate] hull in a dimple: final tilt " << tilt << " degrees\n";
+
   EXPECT_LE(rest.settleTime, static_cast<float>(settleSeconds));
   EXPECT_LT(rest.drift, millimeter);
   EXPECT_LT(rest.deepest, 5.0f * penetrationSlop);
   // A body balanced on one vertex is unstable, so it topples onto an edge and rests there in the bowl.
+  EXPECT_GT(tilt, 10.0f);
   EXPECT_GT(hull.position().y, -radius);
   EXPECT_LT(hull.position().y, -radius + reach);
   EXPECT_LT(glm::distance(glm::vec2(hull.position().x, hull.position().z), glm::vec2(center)), 0.25f * radius);
@@ -943,7 +1025,9 @@ namespace {
   }
 }
 
-TEST(TerrainResting, TwoHundredBoxesAtRestOnTerrainCostAboutAsMuchAsOnABoxFloor)
+// Release builds compile only this suite's own sources without optimization (source/tests/CMakeLists.txt); the simulation
+// library that does the timed work stays optimized.
+TEST(TerrainResting, TheCostOfTwoHundredRestingBoxesIsMeasuredAgainstABoxFloor)
 {
   World onTerrain(flatGround());
   const auto terrainBoxes = layBoxes(onTerrain);
