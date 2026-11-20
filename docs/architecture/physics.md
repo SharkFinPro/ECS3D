@@ -300,6 +300,14 @@ gradient and loses its contact, and larger shapes are later work. The collider's
 on several threads warms the collider first; the terrain side only reads. The early-out walks only as many chunks as the
 box or the volume holds, whichever is fewer.
 
+`TerrainRestingTest.cpp` is the quality gate for all of the above: it runs at the server tick on a 2.5 unit voxel, with
+the solver and the generator as they are, and prints each scene's measured numbers. It covers a box, hull, capsule and
+sphere on a 20 degree slope (the sphere and the capsule lying across it roll on a box ramp too, so their gate is the
+same roll as on the ramp), five-box stacks on rolling terrain, downward raycasts against the sampled surface, a brush dig
+and fill under a resting box, boxes over 20 voxels wide on a ridge and across a gully, a hull dropped point down into a
+dimple, and the cost of 200 resting boxes against the same boxes on a box floor. A flat box's four corners at equal
+depth are in `TerrainContactTest.cpp`.
+
 ## Convex mesh collider
 
 The `ConvexMeshCollider` component (`data/objects/components/collisions/`) holds its
