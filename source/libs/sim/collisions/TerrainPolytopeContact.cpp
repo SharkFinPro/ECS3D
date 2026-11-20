@@ -45,7 +45,8 @@ namespace collisions::detail {
 
       [[nodiscard]] std::span<const WorldFace> faces() const
       {
-        return sharedFaces != nullptr ? std::span<const WorldFace>(*sharedFaces) : std::span<const WorldFace>(ownedFaces);
+        return sharedFaces != nullptr ? std::span<const WorldFace>(*sharedFaces)
+                                      : std::span<const WorldFace>(ownedFaces);
       }
     };
 
