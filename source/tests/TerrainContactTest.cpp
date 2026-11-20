@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include "ConvexMeshFixtures.h"
 #include "TestScene.h"
 #include "collisions/TerrainContact.h"
+#include "collisions/TerrainContactInternal.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
@@ -10,6 +12,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/collisions/Terrain.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainSampling.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
@@ -145,7 +148,34 @@ namespace {
 
       return fixtures::addCapsuleCollider(object, radius, height);
     }
+
+    std::shared_ptr<BoxCollider> boxAt(const glm::vec3& local, const glm::vec3& halfExtents,
+                                       const glm::vec3& rotation = glm::vec3(0))
+    {
+      const auto object = fixtures::addObject(scene, "Box", worldOf(local), halfExtents);
+      fixtures::transformOf(object)->setRotation(rotation);
+
+      return fixtures::addBoxCollider(object);
+    }
+
+    std::shared_ptr<ConvexMeshCollider> hullAt(const glm::vec3& local, const ConvexHull& hull)
+    {
+      const auto object = fixtures::addObject(scene, "Hull", worldOf(local));
+      const auto collider = std::make_shared<ConvexMeshCollider>();
+      EXPECT_TRUE(collider->setHull(hull));
+      object->addComponent(collider);
+
+      return collider;
+    }
   };
+
+  ConvexHull octahedron()
+  {
+    const std::vector<glm::vec3> points{ { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 },
+                                         { 0, 0, -1 } };
+
+    return *buildConvexHull(points);
+  }
 
   std::vector<collisions::Contact> contactsOf(World& world, Collider& collider,
                                               const glm::vec3& sweep = glm::vec3(0))
@@ -520,25 +550,28 @@ TEST(TerrainContact, ABodyMovingAwayFromTheGroundGetsNoSpeculativeContact)
   EXPECT_FALSE(collisions::approachesTerrain(*hovering, *world.terrain, { 0, 0.5f, 0 }));
 }
 
-TEST(TerrainContact, OnlySpheresAndCapsulesAreHandled)
+TEST(TerrainContact, ATerrainAsTheCollidingColliderGivesNothing)
 {
   World world(flatGround());
   const glm::vec3 spot(centerX, 0.4f, centerZ);
 
   EXPECT_EQ(contactsOf(world, *world.sphereAt(spot, 1.0f)).size(), 1u);
 
-  const auto boxObject = fixtures::addObject(world.scene, "Box", world.worldOf(spot));
-  const auto box = fixtures::addBoxCollider(boxObject);
-  EXPECT_TRUE(contactsOf(world, *box).empty());
-  EXPECT_FALSE(collisions::intersectsTerrain(*box, *world.terrain));
-  EXPECT_FALSE(collisions::approachesTerrain(*box, *world.terrain, { 0, -1, 0 }));
-
-  const auto hullObject = fixtures::addObject(world.scene, "Hull", world.worldOf(spot));
-  const auto hull = std::make_shared<ConvexMeshCollider>();
-  hullObject->addComponent(hull);
-  EXPECT_TRUE(contactsOf(world, *hull).empty());
-
   EXPECT_TRUE(contactsOf(world, *world.terrain).empty());
+  EXPECT_FALSE(collisions::intersectsTerrain(*world.terrain, *world.terrain));
+}
+
+TEST(TerrainContact, AHullWithNoUsableDataIsRefusedAndTheColliderKeepsItsCube)
+{
+  World world(flatGround());
+  const auto hull = world.hullAt({ centerX, 0.98f, centerZ }, octahedron());
+
+  EXPECT_FALSE(hull->setHull(ConvexHull{}));
+  EXPECT_EQ(hull->getHull().vertices.size(), 6u);
+  EXPECT_EQ(contactsOf(world, *hull).size(), 1u);
+
+  const auto far = world.hullAt({ centerX, 20.0f, centerZ }, octahedron());
+  EXPECT_TRUE(contactsOf(world, *far).empty());
 }
 
 TEST(TerrainContact, ATerrainWithCollisionOffOrNoVolumeGivesNothing)
@@ -559,4 +592,249 @@ TEST(TerrainContact, ATerrainWithCollisionOffOrNoVolumeGivesNothing)
 
   world.terrain->setVolume(std::weak_ptr<const terrain::TerrainVolume>());
   EXPECT_TRUE(contactsOf(world, *sphere).empty());
+}
+
+namespace {
+  void expectCornersOfFlatBox(const collisions::Contact& contact, const float x, const float y, const float z,
+                              const float half)
+  {
+    ASSERT_EQ(contact.pointCount, 4u);
+
+    for (const float dx : { -half, half })
+    {
+      for (const float dz : { -half, half })
+      {
+        const glm::vec3 corner(x + dx, y, z + dz);
+        const auto points = contact.contactPoints();
+
+        EXPECT_TRUE(std::ranges::any_of(points, [&corner](const glm::vec3& point)
+        {
+          return glm::distance(point, corner) < tolerance;
+        })) << "no contact point at the corner " << corner.x << ", " << corner.z;
+      }
+    }
+  }
+}
+
+TEST(TerrainContact, ABoxLyingFlatOnFlatGroundReportsOneContactOnItsFourBottomCorners)
+{
+  World world(flatGround());
+  const auto box = world.boxAt({ centerX, 1.0f, centerZ }, glm::vec3(1));
+
+  const auto contacts = contactsOf(world, *box);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  expectCornersOfFlatBox(contacts[0], centerX, 0.0f, centerZ, 1.0f);
+  for (size_t i = 0; i < contacts[0].pointCount; ++i)
+  {
+    EXPECT_NEAR(contacts[0].depthAt(i), 0.0f, tightTolerance);
+  }
+
+  const auto sunk = world.boxAt({ centerX + 10.0f, 0.95f, centerZ }, glm::vec3(1));
+  const auto sunkContacts = contactsOf(world, *sunk);
+
+  ASSERT_EQ(sunkContacts.size(), 1u);
+  expectCornersOfFlatBox(sunkContacts[0], centerX + 10.0f, -0.05f, centerZ, 1.0f);
+  EXPECT_NEAR(sunkContacts[0].overlap(), 0.05f, tightTolerance);
+  for (size_t i = 0; i < sunkContacts[0].pointCount; ++i)
+  {
+    EXPECT_NEAR(sunkContacts[0].depthAt(i), 0.05f, tightTolerance);
+  }
+}
+
+TEST(TerrainContact, ABoxTiltedOntoItsLowerEdgeReportsOneContactAlongThatEdge)
+{
+  World world(flatGround());
+  const float root = std::sqrt(2.0f);
+  const auto box = world.boxAt({ centerX, root - 0.02f, centerZ }, glm::vec3(1), { 0, 0, 45 });
+
+  const auto contacts = contactsOf(world, *box);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  ASSERT_GE(contacts[0].contactPoints().size(), 2u);
+  for (const auto& point : contacts[0].contactPoints())
+  {
+    EXPECT_NEAR(point.x, centerX, tolerance);
+    EXPECT_NEAR(point.y, -0.02f, tolerance);
+    EXPECT_LE(std::abs(point.z - centerZ), 1.0f + tolerance);
+  }
+
+  float widest = 0.0f;
+  for (const auto& point : contacts[0].contactPoints())
+  {
+    widest = std::max(widest, std::abs(point.z - centerZ));
+  }
+  EXPECT_NEAR(widest, 1.0f, tolerance);
+}
+
+TEST(TerrainContact, AWideBoxOverARidgeIsFoundByItsFacePointsWhereItsEdgesAndCornersMissIt)
+{
+  const float halfWidth = 10.0f;
+  const float boxX = centerX - 0.5f;
+
+  World ridge(roofGround(centerX));
+  const auto box = ridge.boxAt({ boxX, 1.02f, centerZ }, { halfWidth, 1.0f, halfWidth });
+
+  const auto contacts = contactsOf(ridge, *box);
+
+  ASSERT_FALSE(contacts.empty());
+  for (const auto& contact : contacts)
+  {
+    for (const auto& point : contact.contactPoints())
+    {
+      EXPECT_NEAR(point.x, centerX, tolerance);
+      EXPECT_NEAR(point.y, 0.02f, tolerance);
+      EXPECT_LT(std::abs(point.z - centerZ), halfWidth - 0.1f);
+    }
+  }
+
+  // Positive control: with the apex under the box's edge, the vertices and edge points reach it.
+  World edgeRidge(roofGround(centerX));
+  const auto edgeBox = edgeRidge.boxAt({ centerX - halfWidth, 1.02f, centerZ }, { halfWidth, 1.0f, halfWidth });
+  const auto edgeContacts = contactsOf(edgeRidge, *edgeBox);
+
+  ASSERT_FALSE(edgeContacts.empty());
+  for (const auto& point : edgeContacts[0].contactPoints())
+  {
+    EXPECT_NEAR(point.x, centerX, tolerance);
+  }
+}
+
+TEST(TerrainContact, ABoxStraddlingAValleyTouchesBothWalls)
+{
+  World valley(valleyGround());
+  const auto box = valley.boxAt({ centerX, 1.95f, centerZ }, glm::vec3(1));
+
+  const auto contacts = contactsOf(valley, *box);
+
+  ASSERT_EQ(contacts.size(), 2u);
+  const float root = std::sqrt(0.5f);
+  const glm::vec3 leftWall(root, root, 0.0f);
+  const glm::vec3 rightWall(-root, root, 0.0f);
+  const bool leftFirst = contacts[0].normal().x > 0.0f;
+  EXPECT_LT(degreesBetween(contacts[leftFirst ? 0 : 1].normal(), leftWall), 15.0f);
+  EXPECT_LT(degreesBetween(contacts[leftFirst ? 1 : 0].normal(), rightWall), 15.0f);
+  EXPECT_NEAR(contacts[0].overlap(), 0.05f / std::sqrt(2.0f), tolerance);
+
+  // Positive control: lifted clear of both walls it touches neither.
+  const auto lifted = valley.boxAt({ centerX, 2.5f, centerZ }, glm::vec3(1));
+  EXPECT_TRUE(contactsOf(valley, *lifted).empty());
+}
+
+TEST(TerrainContact, AHullStandingOnOneVertexTouchesTheGroundThere)
+{
+  World world(flatGround());
+  const auto hull = world.hullAt({ centerX, 0.98f, centerZ }, octahedron());
+
+  const auto contacts = contactsOf(world, *hull);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  EXPECT_EQ(contacts[0].contactPoints().size(), 1u);
+  fixtures::expectNear("point", contacts[0].point, { centerX, -0.02f, centerZ }, tolerance);
+  EXPECT_NEAR(contacts[0].overlap(), 0.02f, tightTolerance);
+
+  const auto high = world.hullAt({ centerX + 10.0f, 3.0f, centerZ }, octahedron());
+  EXPECT_TRUE(contactsOf(world, *high).empty());
+}
+
+TEST(TerrainContact, ABoxFarAboveTheGroundGivesNothingUntilItIsLowered)
+{
+  World world(flatGround());
+
+  EXPECT_TRUE(contactsOf(world, *world.boxAt({ centerX, 10.0f, centerZ }, glm::vec3(1))).empty());
+  EXPECT_TRUE(contactsOf(world, *world.boxAt({ 200.0f, 1.0f, centerZ }, glm::vec3(1))).empty());
+  EXPECT_TRUE(contactsOf(world, *world.boxAt({ centerX, 45.0f, centerZ }, glm::vec3(1))).empty());
+
+  EXPECT_EQ(contactsOf(world, *world.boxAt({ centerX, 1.05f, centerZ }, glm::vec3(1))).size(), 1u);
+}
+
+TEST(TerrainContact, ABoxIntersectsAndApproachesTheGroundOnlyAsItShould)
+{
+  World world(flatGround());
+  const auto sunk = world.boxAt({ centerX, 0.9f, centerZ }, glm::vec3(1));
+  const auto hovering = world.boxAt({ centerX + 10.0f, 1.5f, centerZ }, glm::vec3(1));
+
+  EXPECT_TRUE(collisions::intersectsTerrain(*sunk, *world.terrain));
+  EXPECT_FALSE(collisions::intersectsTerrain(*hovering, *world.terrain));
+
+  EXPECT_TRUE(collisions::approachesTerrain(*hovering, *world.terrain, { 0, -1, 0 }));
+  EXPECT_FALSE(collisions::approachesTerrain(*hovering, *world.terrain, { 0, 1, 0 }));
+  EXPECT_FALSE(collisions::approachesTerrain(*hovering, *world.terrain, glm::vec3(0)));
+
+  world.terrain->setCollisionEnabled(false);
+  EXPECT_FALSE(collisions::intersectsTerrain(*sunk, *world.terrain));
+  EXPECT_TRUE(contactsOf(world, *sunk).empty());
+}
+
+TEST(TerrainContact, TheQueryPointsOfALargeBoxStayWithinTheCapAndKeepTheNearestFaceDense)
+{
+  World world(flatGround());
+  const auto ground = collisions::detail::prepareGround(*world.terrain);
+  ASSERT_TRUE(ground.has_value());
+  terrain::Sampler sampler(*world.volume);
+
+  const auto small = world.boxAt({ centerX, 1.0f, centerZ }, glm::vec3(1));
+  EXPECT_EQ(collisions::detail::polytopeQueryPoints(*small, *ground, sampler).size(), 8u + 12u + 6u * 4u);
+
+  const auto medium = world.boxAt({ centerX, 10.0f, centerZ }, glm::vec3(10));
+  const auto mediumPoints = collisions::detail::polytopeQueryPoints(*medium, *ground, sampler);
+  EXPECT_LE(mediumPoints.size(), collisions::detail::maxTerrainQueryPoints);
+  const auto onBottomInterior = std::ranges::count_if(mediumPoints, [](const glm::vec3& point)
+  {
+    return std::abs(point.y) < tightTolerance && std::abs(point.x - centerX) < 9.9f &&
+      std::abs(point.z - centerZ) < 9.9f;
+  });
+  EXPECT_EQ(onBottomInterior, 20 * 20);
+
+  const auto huge = world.boxAt({ centerX, 30.0f, centerZ }, glm::vec3(30));
+  const auto hugePoints = collisions::detail::polytopeQueryPoints(*huge, *ground, sampler);
+  EXPECT_LE(hugePoints.size(), collisions::detail::maxTerrainQueryPoints);
+  EXPECT_GT(hugePoints.size(), 8u);
+
+  const auto contacts = contactsOf(world, *huge);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  expectCornersOfFlatBox(contacts[0], centerX, 0.0f, centerZ, 30.0f);
+}
+
+TEST(TerrainContact, AFinelyTessellatedHullKeepsTheInteriorOfItsBottomFaceWhereTheGroupsOutnumberTheBudget)
+{
+  constexpr int sides = 120;
+  constexpr float radius = 5.0f;
+  std::vector<glm::vec3> points;
+  for (int i = 0; i < sides; ++i)
+  {
+    const float angle = glm::radians(360.0f * static_cast<float>(i) / static_cast<float>(sides));
+    for (const float y : { -1.0f, 1.0f })
+    {
+      points.emplace_back(radius * std::cos(angle), y, radius * std::sin(angle));
+    }
+  }
+
+  const auto built = buildConvexHull(points);
+  ASSERT_TRUE(built.has_value());
+
+  World world(flatGround());
+  const auto ground = collisions::detail::prepareGround(*world.terrain);
+  ASSERT_TRUE(ground.has_value());
+  terrain::Sampler sampler(*world.volume);
+  const auto prism = world.hullAt({ centerX, 1.0f, centerZ }, *built);
+
+  const auto queryPoints = collisions::detail::polytopeQueryPoints(*prism, *ground, sampler);
+
+  EXPECT_LE(queryPoints.size(), collisions::detail::maxTerrainQueryPoints);
+  const auto bottomInterior = std::ranges::count_if(queryPoints, [](const glm::vec3& point)
+  {
+    return std::abs(point.y) < tightTolerance && std::hypot(point.x - centerX, point.z - centerZ) < radius - 0.6f;
+  });
+  EXPECT_GE(bottomInterior, 50);
+
+  const auto contacts = contactsOf(world, *prism);
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
 }

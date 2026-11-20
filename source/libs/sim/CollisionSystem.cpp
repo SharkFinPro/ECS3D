@@ -160,6 +160,28 @@ void CollisionSystem::checkCollisions(const float dt)
       edge.mask = edge.collider->getMask();
     }
 
+    // The terrain contact generator reads a body's box frame or hull faces from the parallel narrow phase, and the
+    // bounding box does not fill them. The sweep pairs a body only with edges its swept bounds overlap, so only the
+    // bodies overlapping a terrain need warming.
+    for (const auto& terrainEdge : m_collisionEdges)
+    {
+      if (!isTerrain(*terrainEdge.collider))
+      {
+        continue;
+      }
+
+      const auto& ground = terrainEdge.bounds;
+      for (auto& edge : m_collisionEdges)
+      {
+        const auto& box = edge.bounds;
+        if (edge.body && box.maxX >= ground.minX && box.minX <= ground.maxX && box.maxY >= ground.minY &&
+            box.minY <= ground.maxY && box.maxZ >= ground.minZ && box.minZ <= ground.maxZ)
+        {
+          collisions::warmContactCaches(*edge.collider);
+        }
+      }
+    }
+
     std::ranges::sort(m_collisionEdges, [](const CollisionEdge& a, const CollisionEdge& b)
     {
       return a.position < b.position;
