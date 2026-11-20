@@ -933,8 +933,11 @@ TEST(TerrainContact, ADeepBodyStepsBackAlongItsSweepAndUpWhenItHasNone)
   const auto sphere = world.sphereAt({ centerX + 7.0f, 16.0f, centerZ }, 1.0f);
   const auto box = world.boxAt({ centerX + 7.0f, 16.0f, centerZ + 20.0f }, glm::vec3(1));
 
-  // Without a sweep it steps up, and the wall's whole column is ground, so the sphere finds no way out.
-  EXPECT_TRUE(contactsOf(world, *sphere).empty());
+  // Without a sweep it steps up, and the wall's column is ground to the volume's top, where the chunks end.
+  const auto upContacts = contactsOf(world, *sphere);
+  ASSERT_EQ(upContacts.size(), 1u);
+  expectNormal(upContacts[0], up());
+  EXPECT_NEAR(upContacts[0].overlap(), 63.5f - 16.0f + 1.0f, tolerance);
 
   const auto sphereContacts = contactsOf(world, *sphere, { 1, 0, 0 });
   ASSERT_EQ(sphereContacts.size(), 1u);
@@ -945,4 +948,21 @@ TEST(TerrainContact, ADeepBodyStepsBackAlongItsSweepAndUpWhenItHasNone)
   ASSERT_EQ(boxContacts.size(), 1u);
   expectNormal(boxContacts[0], { -1, 0, 0 });
   EXPECT_NEAR(boxContacts[0].overlap(), 8.0f, tolerance);
+}
+
+TEST(TerrainContact, TheWayOutThroughTheEdgeOfTheVolumeDoesNotDependOnWhereTheStepsLand)
+{
+  World world(wallGround());
+
+  // The top of the volume is at y = 64, so the surface is half a voxel below it however the steps fall.
+  for (const float height : { 16.0f, 16.3f, 16.5f, 16.8f })
+  {
+    const auto sphere = world.sphereAt({ centerX + 7.0f, height, centerZ }, 1.0f);
+
+    const auto contacts = contactsOf(world, *sphere);
+
+    ASSERT_EQ(contacts.size(), 1u) << height;
+    expectNormal(contacts[0], up());
+    EXPECT_NEAR(height + contacts[0].overlap(), 63.5f + 1.0f, tolerance) << height;
+  }
 }

@@ -85,12 +85,16 @@ namespace collisions::detail {
   [[nodiscard]] glm::vec3 stepBackDirection(const TerrainFrame& frame, const glm::vec3& sweep);
 
   // The surface found by stepping from, a point that reads deeper than the band, a voxel at a time along backward
-  // until the field has a gradient again. Nothing when from is not that deep or no surface lies within 64 voxels.
+  // until the field has a gradient again, or leaves the ground (a reading at or above zero, which is also what an
+  // absent chunk gives), where the zero crossing is bisected. Nothing when rawDistance, the field distance at from in
+  // local units, is not that deep, or no surface lies within 64 voxels.
   [[nodiscard]] std::optional<TerrainSurface> findDeepSurface(terrain::Sampler& sampler, const glm::vec3& from,
-                                                              const glm::vec3& backward, float voxelSize);
+                                                              const glm::vec3& backward, float voxelSize,
+                                                              float rawDistance);
 
   // How far along sweep, as a fraction, a sphere at center first comes within the contact margin of the ground,
-  // found by sphere tracing. Nothing when sweep is no longer than a voxel, or the sphere never gets there.
+  // found by sphere tracing. Nothing when sweep is no longer than a voxel, or the sphere never gets there. When the
+  // step cap runs out first, the fraction travelled so far.
   [[nodiscard]] std::optional<float> reachAlongSweep(terrain::Sampler& sampler, const TerrainFrame& frame,
                                                      const glm::vec3& center, float radius, const glm::vec3& sweep,
                                                      float voxelSize);

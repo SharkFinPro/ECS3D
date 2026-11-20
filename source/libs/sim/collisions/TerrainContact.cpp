@@ -45,6 +45,8 @@ namespace collisions {
     // The least a trace advances in one step, in voxels, so grazing the ground still makes progress.
     constexpr float minTraceStep = 0.1f;
 
+    constexpr int bisectionSteps = 24;
+
     // A trilinear cell holding a crease reads a gradient shorter than one voxel per voxel, and its normal blends the
     // two walls.
     constexpr float reliableGradientLength = 0.9f;
@@ -286,20 +288,38 @@ namespace collisions {
     }
 
     std::optional<TerrainSurface> findDeepSurface(terrain::Sampler& sampler, const glm::vec3& from,
-                                                  const glm::vec3& backward, const float voxelSize)
+                                                  const glm::vec3& backward, const float voxelSize,
+                                                  const float rawDistance)
     {
-      if (!(sampler.distance(from) <= -deepVoxels))
+      if (!(rawDistance <= -deepVoxels * voxelSize))
       {
         return std::nullopt;
       }
 
+      // Where the step lands depends on the lattice, so a step that jumps from saturated inside to a reading at or
+      // above zero bisects for the crossing instead of depending on whether it landed mid-cell.
+      auto inside = from;
       for (int step = 1; step <= maxDeepSteps; ++step)
       {
         const auto point = from + backward * (static_cast<float>(step) * voxelSize);
         const float raw = sampler.distance(point);
-        if (raw >= deepVoxels)
+        if (raw >= 0.0f)
         {
-          return std::nullopt;
+          auto low = inside;
+          auto high = point;
+          for (int i = 0; i < bisectionSteps; ++i)
+          {
+            const auto middle = 0.5f * (low + high);
+            (sampler.distance(middle) < 0.0f ? low : high) = middle;
+          }
+
+          const auto crossing = 0.5f * (low + high);
+          const auto gradient = sampler.gradient(crossing);
+          const float length = glm::length(gradient);
+          const bool usable = length >= terrain::minGradientLength;
+
+          return TerrainSurface{ crossing, usable ? gradient / length : backward,
+                                 usable ? length : 1.0f / voxelSize };
         }
 
         if (raw > -deepVoxels)
@@ -309,6 +329,8 @@ namespace collisions {
             return surface;
           }
         }
+
+        inside = point;
       }
 
       return std::nullopt;
@@ -328,6 +350,7 @@ namespace collisions {
 
       const auto start = frame.toLocal(center);
       const auto direction = local / length;
+      const float minStep = std::min(minTraceStep * voxelSize, 0.5f * contactMargin);
 
       float travelled = 0.0f;
       for (int i = 0; i < maxTraceSteps; ++i)
@@ -341,14 +364,13 @@ namespace collisions {
 
         if (travelled >= length)
         {
-          break;
+          return std::nullopt;
         }
 
-        travelled = std::min(travelled + std::max(clearance - 0.5f * contactMargin, minTraceStep * voxelSize),
-                             length);
+        travelled = std::min(travelled + std::max(clearance - 0.5f * contactMargin, minStep), length);
       }
 
-      return std::nullopt;
+      return travelled / length;
     }
 
     void trimToNearest(TerrainCluster& cluster, const float slack)
@@ -422,7 +444,7 @@ namespace collisions {
         float centerDistance = sampler.distance(center) * voxelSize;
         if (!surface)
         {
-          surface = detail::findDeepSurface(sampler, center, backward, voxelSize);
+          surface = detail::findDeepSurface(sampler, center, backward, voxelSize, centerDistance);
           centerDistance = detail::unknownDepth;
         }
 
@@ -651,13 +673,16 @@ namespace collisions {
     // The shape is taken to where it first nears the ground; the contacts are then moved back to where it is.
     float fraction = 1.0f;
     bool traced = false;
-    for (const auto& world : queryPoints(setup->shape, setup->volume->voxelSize()))
+    if (glm::length(sweep) > setup->volume->voxelSize())
     {
-      if (const auto reached = detail::reachAlongSweep(sampler, setup->frame, world, setup->shape.radius, sweep,
-                                                       setup->volume->voxelSize()))
+      for (const auto& world : queryPoints(setup->shape, setup->volume->voxelSize()))
       {
-        fraction = std::min(fraction, *reached);
-        traced = true;
+        if (const auto reached = detail::reachAlongSweep(sampler, setup->frame, world, setup->shape.radius, sweep,
+                                                         setup->volume->voxelSize()))
+        {
+          fraction = std::min(fraction, *reached);
+          traced = true;
+        }
       }
     }
 
@@ -677,9 +702,9 @@ namespace collisions {
     std::vector<Contact> contacts;
     for (auto& cluster : detail::clusterByWall(gatherCandidates(shifted, sampler, remaining)))
     {
-      if (fraction > 0.0f)
+      if (glm::length(sweep) > setup->volume->voxelSize())
       {
-        detail::trimToNearest(cluster, setup->volume->voxelSize());
+        detail::trimToNearest(cluster, 0.5f * setup->volume->voxelSize());
       }
 
       contacts.push_back(detail::makeTerrainContact(cluster, setup->shape.sphere ? 1 : 2, remaining));

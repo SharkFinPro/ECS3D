@@ -712,8 +712,7 @@ TEST(TerrainPhysics, ABoxFiredAtAThinWallStopsAtItsFace)
   body->setMass(1.0f);
   body->setVelocity({ fastSpeed, 0, 0 });
 
-  // The solver turns a box that hits this hard a little, so its reach is measured rather than its center, and the
-  // corner that leads sinks a hundredth of a unit before it is pushed out.
+  // A box may turn a little, so its reach is measured rather than its center.
   float reach = 0.0f;
   float farthest = 0.0f;
   for (int i = 0; i < 12; ++i)
@@ -724,7 +723,7 @@ TEST(TerrainPhysics, ABoxFiredAtAThinWallStopsAtItsFace)
   }
 
   EXPECT_GT(farthest, 55.5f);
-  EXPECT_LT(reach, 57.5f + 0.02f);
+  EXPECT_LT(reach, 57.5f + 5.0f * penetrationSlop);
 }
 
 TEST(TerrainPhysics, ASphereFiredAtAHillsideNeverEndsATickInsideIt)
@@ -772,4 +771,60 @@ TEST(TerrainPhysics, ASphereAndABoxPlacedDeepInTheGroundAreLiftedOutAndRest)
   EXPECT_NEAR(world.localOf(fixtures::positionOf(object)).y, 1.0f, 3.0f * penetrationSlop);
   EXPECT_LT(glm::length(ball.body->getVelocity()), 1e-3f);
   EXPECT_LT(glm::length(body->getVelocity()), 1e-3f);
+}
+
+TEST(TerrainPhysics, ALargeBoxFiredAtAThinWallStopsAtItsFace)
+{
+  auto world = World::field(slabGround());
+  const auto object = fixtures::addObject(world.scene, "Crate", world.worldOf({ -5, 16, 48 }), glm::vec3(3));
+  const auto collider = fixtures::addBoxCollider(object);
+  const auto body = addBody(object, false);
+  body->setMass(1.0f);
+  body->setVelocity({ fastSpeed, 0, 0 });
+
+  // Its bounding sphere is wider than the distance band, so only its vertices can see the ground coming.
+  float reach = 0.0f;
+  float farthest = 0.0f;
+  for (int i = 0; i < 12; ++i)
+  {
+    world.tick();
+    reach = std::max(reach, collider->getBoundingBox().maxX);
+    farthest = std::max(farthest, world.localOf(fixtures::positionOf(object)).x);
+  }
+
+  EXPECT_GT(farthest, 53.0f);
+  EXPECT_LT(reach, 57.5f + 5.0f * penetrationSlop);
+}
+
+TEST(TerrainPhysics, ASphereDeepInARotatedTerrainIsLiftedAlongItsOwnUp)
+{
+  auto world = World::flat({ 96, 96 }, glm::vec3(0), { 0, 0, 90 });
+  Ball ball(world, { 30, -6, 48 });
+  ball.body->setDoGravity(false);
+
+  world.run(4);
+
+  const auto local = world.localOf(ball.position());
+  EXPECT_GT(local.y, sphereRadius - 0.1f);
+  EXPECT_LT(local.y, sphereRadius + 0.1f);
+  EXPECT_NEAR(local.x, 30.0f, 0.1f);
+  EXPECT_NEAR(local.z, 48.0f, 0.1f);
+}
+
+TEST(TerrainPhysics, ASphereFiredAtAThinWallOfARotatedTerrainStopsAtItsFace)
+{
+  auto world = World::field(slabGround(), glm::vec3(0), { 0, 0, 90 });
+  Ball ball(world, { 0, 16, 48 });
+  ball.body->setDoGravity(false);
+  ball.body->setVelocity(world.worldOf({ fastSpeed, 0, 0 }) - world.worldOf(glm::vec3(0)));
+
+  float farthest = 0.0f;
+  for (int i = 0; i < 12; ++i)
+  {
+    world.tick();
+    farthest = std::max(farthest, world.localOf(ball.position()).x);
+  }
+
+  EXPECT_GT(farthest, 56.5f - 0.05f);
+  EXPECT_LT(farthest, 56.5f + 5.0f * penetrationSlop);
 }

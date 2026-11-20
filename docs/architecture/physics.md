@@ -278,18 +278,22 @@ that reaches nothing leaves the query as it was. The contacts are then made as i
 `depth()` is unchanged, `advance` grows by `t` times the sweep's closing speed along the normal and every point depth
 shrinks by the same, so `overlap()` is the whole gap and the solver lets the body travel exactly to the surface. The
 points move back by the distance travelled, which keeps their arms about the collider's center as they were where it
-touched (left at the touch, a sphere's far-off point would give the solver a long lever arm). Each cluster is trimmed to
-the members within a voxel of its nearest, since with a long sweep every vertex of a box reaches the ground but only the
-leading ones are about to touch.
+touched (left at the touch, a sphere's far-off point would give the solver a long lever arm). With a sweep longer than a
+voxel, each cluster is trimmed to the members within half a voxel of its nearest, since every vertex of a box then
+reaches the ground but only the leading ones are about to touch, and a manifold that took a trailing one would turn the
+body. A box or hull whose bounding sphere is wider than half the band sees no ground through it, so each of its vertices
+is traced as a point and the earliest taken. If the step cap runs out the fraction reached is used rather than none.
 
 **Deep penetration.** A query point whose raw distance is at or below -3.9 voxels reads saturated inside the ground,
 with no gradient. `findDeepSurface` steps it back a voxel at a time (at most 64) against the sweep, or up in terrain
 space when there is none, until the field leaves saturation, then finds the surface there. The contact is measured
 from the original point against that surface, so its depth is the stepped distance plus the depth where the band was
-found, with the raw field taken as unknown. Sphere, capsule, box and hull points all take it, and `intersectsTerrain`
-sees it. `liftOutOfStatic` then lifts the body, and its re-measure finds the contact again because the lift ends within
-half a margin of the surface. The step ends in nothing when it leaves the volume's chunks, which read as air, so a
-point deep in a column that reaches the volume's edge takes the edge as the way out.
+found, with the raw field taken as unknown. A step that jumps from saturated inside to a reading at or above zero
+(which an absent chunk gives, as +4) bisects between the last inside point and that one for the zero crossing and takes
+the field gradient there as the normal, or the step direction when the gradient is unusable, so where the steps land on
+the lattice does not change the answer: a point deep in a column that reaches the volume's edge takes the edge as the
+way out. Sphere, capsule, box and hull points all take it, and `intersectsTerrain` sees it. `liftOutOfStatic` then
+lifts the body, and its re-measure finds the contact again because the lift ends within half a margin of the surface.
 
 The shape's radius must stay below the distance band, about 3.5 voxels: a larger one reads a saturated center with no
 gradient and loses its contact, and larger shapes are later work. The collider's world shape caches lazily, so a caller

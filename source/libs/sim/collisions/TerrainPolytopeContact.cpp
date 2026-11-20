@@ -8,6 +8,7 @@
 #include "objects/components/collisions/Terrain.h"
 #include "objects/components/collisions/WorldFace.h"
 #include "terrain/TerrainSampling.h"
+#include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
@@ -367,7 +368,7 @@ namespace collisions::detail {
         auto surface = findSurface(sampler, local);
         if (!surface)
         {
-          surface = findDeepSurface(sampler, local, backward, voxelSize);
+          surface = findDeepSurface(sampler, local, backward, voxelSize, raw);
           raw = unknownDepth;
         }
 
@@ -382,9 +383,18 @@ namespace collisions::detail {
       return candidates;
     }
 
-    // The center of the collider's bounds and the distance from it to its furthest vertex.
-    [[nodiscard]] std::pair<glm::vec3, float> boundingSphereOf(Collider& collider)
+    // How far along sweep the collider first comes near the ground: its bounding sphere (the center of its bounds,
+    // out to its furthest vertex) is traced, or, when that is too big to see the ground through the band, each vertex
+    // as a point and the earliest taken. Nothing is done for a sweep of a voxel or less.
+    [[nodiscard]] float traceFraction(Collider& collider, const TerrainGround& ground, terrain::Sampler& sampler,
+                                      const glm::vec3& sweep)
     {
+      const float voxelSize = ground.volume->voxelSize();
+      if (!(glm::length(sweep) > voxelSize))
+      {
+        return 0.0f;
+      }
+
       const auto& bounds = collider.getBoundingBox();
       const glm::vec3 center(0.5f * (bounds.minX + bounds.maxX), 0.5f * (bounds.minY + bounds.maxY),
                              0.5f * (bounds.minZ + bounds.maxZ));
@@ -399,7 +409,21 @@ namespace collisions::detail {
         radius = std::max(radius, glm::distance(center, vertex));
       }
 
-      return { center, radius };
+      if (radius < 0.5f * terrain::bandVoxels * voxelSize)
+      {
+        return reachAlongSweep(sampler, ground.frame, center, radius, sweep, voxelSize).value_or(0.0f);
+      }
+
+      std::optional<float> earliest;
+      for (const auto& vertex : vertices)
+      {
+        if (const auto reached = reachAlongSweep(sampler, ground.frame, vertex, 0.0f, sweep, voxelSize))
+        {
+          earliest = std::min(earliest.value_or(1.0f), *reached);
+        }
+      }
+
+      return earliest.value_or(0.0f);
     }
 
     [[nodiscard]] std::optional<TerrainGround> groundWithin(Collider& collider, Terrain& terrain,
@@ -452,15 +476,9 @@ namespace collisions::detail {
 
     terrain::Sampler sampler(*ground->volume);
 
-    // The collider is taken to where its bounding sphere first nears the ground; the contacts are then moved back to
-    // where it is.
-    float fraction = 0.0f;
-    const auto [center, radius] = boundingSphereOf(collider);
-    if (const auto reached = reachAlongSweep(sampler, ground->frame, center, radius, sweep,
-                                             ground->volume->voxelSize()))
-    {
-      fraction = *reached;
-    }
+    // The collider is taken to where it first nears the ground; the contacts are then moved back to where it is.
+    const bool longSweep = glm::length(sweep) > ground->volume->voxelSize();
+    const float fraction = traceFraction(collider, *ground, sampler, sweep);
 
     const auto offset = sweep * fraction;
     const auto remaining = sweep - offset;
@@ -477,9 +495,9 @@ namespace collisions::detail {
     std::vector<Contact> contacts;
     for (auto& cluster : clusterByWall(std::move(reaching)))
     {
-      if (fraction > 0.0f)
+      if (longSweep)
       {
-        trimToNearest(cluster, ground->volume->voxelSize());
+        trimToNearest(cluster, 0.5f * ground->volume->voxelSize());
       }
 
       contacts.push_back(makeTerrainContact(cluster, polytopeManifoldPoints, remaining));
