@@ -15,6 +15,7 @@
 #include "objects/components/collisions/Terrain.h"
 #include "queries/SceneQueries.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
 #include <Protocol.h>
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include <uuid.h>
 
@@ -45,6 +47,31 @@ namespace {
   {
     auto volume = std::make_shared<terrain::TerrainVolume>(voxelSize);
     volume->setChunk(coord, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+
+    return volume;
+  }
+
+  // Ground up to sample height 8 in the one chunk, so a body at y = 30 is inside the terrain's bounds but clear of the
+  // ground, which a body deep inside it would not be.
+  std::shared_ptr<terrain::TerrainVolume> volumeWithLowGround()
+  {
+    auto volume = std::make_shared<terrain::TerrainVolume>(voxelSize);
+
+    std::vector<int16_t> distances(terrain::samplesPerChunk);
+    for (int z = 0; z < terrain::chunkSize; ++z)
+    {
+      for (int y = 0; y < terrain::chunkSize; ++y)
+      {
+        for (int x = 0; x < terrain::chunkSize; ++x)
+        {
+          distances[static_cast<size_t>(terrain::sampleIndex(x, y, z))] =
+            terrain::encodeDistance(y < 8 ? -terrain::bandVoxels : terrain::bandVoxels);
+        }
+      }
+    }
+    volume->setChunk({ 0, 0, 0 },
+                     terrain::TerrainChunk::dense(std::move(distances),
+                                                  std::vector<uint8_t>(terrain::samplesPerChunk, 1)));
 
     return volume;
   }
@@ -462,7 +489,7 @@ namespace {
     const auto scene = makeScene();
 
     const auto [terrainObject, comp] = addTerrain(scene);
-    const auto volume = volumeWithChunk({ 0, 0, 0 });
+    const auto volume = volumeWithLowGround();
     comp->setVolume(volume);
     comp->setCollisionEnabled(terrainCollisionEnabled);
 
@@ -511,7 +538,7 @@ TEST(TerrainComponentTest, ATerrainIsNeverAPairAcrossTicksWhileOrdinaryPairsAre)
   const auto scene = makeScene();
 
   const auto [terrainObject, comp] = addTerrain(scene);
-  const auto volume = volumeWithChunk({ 0, 0, 0 });
+  const auto volume = volumeWithLowGround();
   comp->setVolume(volume);
 
   const auto inside = fixtures::addObject(scene, "Inside", { 30, 30, 30 });

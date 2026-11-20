@@ -22,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace collisions {
   namespace {
@@ -36,6 +37,13 @@ namespace collisions {
     constexpr float depthQuantum = 1e3f;
 
     constexpr float maxSampleCoordinate = 1e7f;
+
+    constexpr int maxDeepSteps = 64;
+
+    constexpr int maxTraceSteps = 256;
+
+    // The least a trace advances in one step, in voxels, so grazing the ground still makes progress.
+    constexpr float minTraceStep = 0.1f;
 
     // A trilinear cell holding a crease reads a gradient shorter than one voxel per voxel, and its normal blends the
     // two walls.
@@ -268,6 +276,109 @@ namespace collisions {
     {
       return candidate.distance < contactMargin + std::max(glm::dot(sweep, -candidate.normal), 0.0f);
     }
+
+    glm::vec3 stepBackDirection(const TerrainFrame& frame, const glm::vec3& sweep)
+    {
+      const auto local = frame.inverse * sweep;
+      const float length = glm::length(local);
+
+      return length > 1e-6f ? -local / length : glm::vec3(0, 1, 0);
+    }
+
+    std::optional<TerrainSurface> findDeepSurface(terrain::Sampler& sampler, const glm::vec3& from,
+                                                  const glm::vec3& backward, const float voxelSize)
+    {
+      if (!(sampler.distance(from) <= -deepVoxels))
+      {
+        return std::nullopt;
+      }
+
+      for (int step = 1; step <= maxDeepSteps; ++step)
+      {
+        const auto point = from + backward * (static_cast<float>(step) * voxelSize);
+        const float raw = sampler.distance(point);
+        if (raw >= deepVoxels)
+        {
+          return std::nullopt;
+        }
+
+        if (raw > -deepVoxels)
+        {
+          if (const auto surface = findSurface(sampler, point))
+          {
+            return surface;
+          }
+        }
+      }
+
+      return std::nullopt;
+    }
+
+    // The step is the sphere's clearance less half the margin, so the trace settles inside the margin rather than
+    // on its edge. The raw distance caps the metric one, which overshoots where the band's edge clamps the corners.
+    std::optional<float> reachAlongSweep(terrain::Sampler& sampler, const TerrainFrame& frame, const glm::vec3& center,
+                                         const float radius, const glm::vec3& sweep, const float voxelSize)
+    {
+      const auto local = frame.inverse * sweep;
+      const float length = glm::length(local);
+      if (!std::isfinite(length) || !(length > voxelSize))
+      {
+        return std::nullopt;
+      }
+
+      const auto start = frame.toLocal(center);
+      const auto direction = local / length;
+
+      float travelled = 0.0f;
+      for (int i = 0; i < maxTraceSteps; ++i)
+      {
+        const auto at = start + direction * travelled;
+        const float clearance = std::min(sampler.metricDistance(at), sampler.distance(at) * voxelSize) - radius;
+        if (clearance <= contactMargin)
+        {
+          return travelled / length;
+        }
+
+        if (travelled >= length)
+        {
+          break;
+        }
+
+        travelled = std::min(travelled + std::max(clearance - 0.5f * contactMargin, minTraceStep * voxelSize),
+                             length);
+      }
+
+      return std::nullopt;
+    }
+
+    void trimToNearest(TerrainCluster& cluster, const float slack)
+    {
+      const auto nearest = std::ranges::min_element(cluster, [](const TerrainCandidate& a, const TerrainCandidate& b)
+      {
+        return a.distance < b.distance;
+      });
+      const float limit = nearest->distance + slack;
+
+      std::erase_if(cluster, [limit](const TerrainCandidate& member)
+      {
+        return member.distance > limit;
+      });
+    }
+
+    void shiftTracedContact(Contact& contact, const glm::vec3& sweep, const float fraction)
+    {
+      const float closed = fraction * std::max(glm::dot(sweep, -contact.normal()), 0.0f);
+      const auto travelled = sweep * fraction;
+
+      // The points move back with the collider so their arms about its center are as they were where it touched.
+      contact.advance += closed;
+      contact.point -= travelled;
+      for (size_t i = 0; i < contact.pointCount; ++i)
+      {
+        contact.depths[i] -= closed;
+        contact.points[i] -= travelled;
+      }
+    }
   }
 
   namespace {
@@ -297,16 +408,26 @@ namespace collisions {
       return points;
     }
 
-    [[nodiscard]] std::vector<CorePoint> probeCore(const Setup& setup, terrain::Sampler& sampler)
+    [[nodiscard]] std::vector<CorePoint> probeCore(const Setup& setup, terrain::Sampler& sampler,
+                                                   const glm::vec3& sweep)
     {
       std::vector<CorePoint> cores;
+      const float voxelSize = setup.volume->voxelSize();
+      const auto backward = detail::stepBackDirection(setup.frame, sweep);
 
-      for (const auto& world : queryPoints(setup.shape, setup.volume->voxelSize()))
+      for (const auto& world : queryPoints(setup.shape, voxelSize))
       {
         const auto center = setup.frame.toLocal(world);
-        if (const auto surface = findSurface(sampler, center))
+        auto surface = findSurface(sampler, center);
+        float centerDistance = sampler.distance(center) * voxelSize;
+        if (!surface)
         {
-          const float centerDistance = sampler.distance(center) * setup.volume->voxelSize();
+          surface = detail::findDeepSurface(sampler, center, backward, voxelSize);
+          centerDistance = detail::unknownDepth;
+        }
+
+        if (surface)
+        {
           cores.push_back({ *surface, center, centerDistance, measure(setup, *surface, center, centerDistance) });
         }
       }
@@ -375,7 +496,7 @@ namespace collisions {
     [[nodiscard]] std::vector<TerrainCandidate> gatherCandidates(const Setup& setup, terrain::Sampler& sampler,
                                                                  const glm::vec3& sweep)
     {
-      const auto cores = probeCore(setup, sampler);
+      const auto cores = probeCore(setup, sampler, sweep);
 
       std::vector<TerrainCandidate> candidates;
       for (const auto& core : cores)
@@ -527,10 +648,42 @@ namespace collisions {
 
     terrain::Sampler sampler(*setup->volume);
 
-    std::vector<Contact> contacts;
-    for (const auto& cluster : detail::clusterByWall(gatherCandidates(*setup, sampler, sweep)))
+    // The shape is taken to where it first nears the ground; the contacts are then moved back to where it is.
+    float fraction = 1.0f;
+    bool traced = false;
+    for (const auto& world : queryPoints(setup->shape, setup->volume->voxelSize()))
     {
-      contacts.push_back(detail::makeTerrainContact(cluster, setup->shape.sphere ? 1 : 2, sweep));
+      if (const auto reached = detail::reachAlongSweep(sampler, setup->frame, world, setup->shape.radius, sweep,
+                                                       setup->volume->voxelSize()))
+      {
+        fraction = std::min(fraction, *reached);
+        traced = true;
+      }
+    }
+
+    auto shifted = *setup;
+    auto remaining = sweep;
+    if (traced && fraction > 0.0f)
+    {
+      shifted.shape.start += sweep * fraction;
+      shifted.shape.end += sweep * fraction;
+      remaining = sweep * (1.0f - fraction);
+    }
+    else
+    {
+      fraction = 0.0f;
+    }
+
+    std::vector<Contact> contacts;
+    for (auto& cluster : detail::clusterByWall(gatherCandidates(shifted, sampler, remaining)))
+    {
+      if (fraction > 0.0f)
+      {
+        detail::trimToNearest(cluster, setup->volume->voxelSize());
+      }
+
+      contacts.push_back(detail::makeTerrainContact(cluster, setup->shape.sphere ? 1 : 2, remaining));
+      detail::shiftTracedContact(contacts.back(), sweep, fraction);
     }
 
     return contacts;
@@ -551,7 +704,7 @@ namespace collisions {
 
     terrain::Sampler sampler(*setup->volume);
 
-    return std::ranges::any_of(probeCore(*setup, sampler), [](const CorePoint& core)
+    return std::ranges::any_of(probeCore(*setup, sampler, glm::vec3(0)), [](const CorePoint& core)
     {
       return core.candidate.distance < 0.0f;
     });

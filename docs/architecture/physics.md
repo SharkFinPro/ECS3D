@@ -231,8 +231,8 @@ the edges the same serial loop calls `collisions::warmContactCaches` on every dy
 vertices are already current from the bounding box. There is no profile scope for terrain: its work runs inside the
 narrow-phase and island regions, where scopes are not allowed.
 
-**Not covered yet:** bodies that move more than a voxel per tick, and deep penetration (a body that starts well
-inside the ground is not lifted out by anything but `liftOutOfStatic`'s generic rule).
+**Not covered yet:** a sphere or capsule whose radius is above the band (see below), and a box or hull whose own
+bounding sphere is larger than the band, which the sweep trace treats as touching from the start.
 
 `collisions::findTerrainContacts` (`sim/collisions/TerrainContact.h`) is the contact generator for a collider
 against a terrain; `CollisionSystem` calls it. It samples in terrain-local space with one
@@ -266,6 +266,30 @@ one with no usable gradient. The rest are measured like a sphere of radius zero 
 cluster is reduced with `detail::spreadOut` on quantized depths to at most four points, so a box lying flat reports its
 four bottom corners as one contact. The points are the collider's own surface points, as `referenceFaceManifold`
 reports for a box on a static box, and their depths are positive inside the ground and negative while short of it.
+
+**Fast bodies.** Past the band the field is flat and has no gradient, so a body whose sweep is longer than a voxel
+could start in saturated air and end past or inside the ground with no contact reported. `reachAlongSweep` sphere
+traces first: a sphere or capsule traces each core point with its radius, a box or hull its bounding sphere (the
+center of its bounds, the distance to its furthest vertex). Each step is the clearance (the smaller of the metric and
+raw distance, minus the radius) less half the contact margin, at least a tenth of a voxel, capped at 256 steps, until
+the clearance is within `contactMargin` or the sweep is used up; a sweep of a voxel or less is not traced, and a trace
+that reaches nothing leaves the query as it was. The contacts are then made as if the collider stood at that fraction
+`t` of the sweep, with the rest of the sweep, and `shiftTracedContact` re-expresses them where the collider really is:
+`depth()` is unchanged, `advance` grows by `t` times the sweep's closing speed along the normal and every point depth
+shrinks by the same, so `overlap()` is the whole gap and the solver lets the body travel exactly to the surface. The
+points move back by the distance travelled, which keeps their arms about the collider's center as they were where it
+touched (left at the touch, a sphere's far-off point would give the solver a long lever arm). Each cluster is trimmed to
+the members within a voxel of its nearest, since with a long sweep every vertex of a box reaches the ground but only the
+leading ones are about to touch.
+
+**Deep penetration.** A query point whose raw distance is at or below -3.9 voxels reads saturated inside the ground,
+with no gradient. `findDeepSurface` steps it back a voxel at a time (at most 64) against the sweep, or up in terrain
+space when there is none, until the field leaves saturation, then finds the surface there. The contact is measured
+from the original point against that surface, so its depth is the stepped distance plus the depth where the band was
+found, with the raw field taken as unknown. Sphere, capsule, box and hull points all take it, and `intersectsTerrain`
+sees it. `liftOutOfStatic` then lifts the body, and its re-measure finds the contact again because the lift ends within
+half a margin of the surface. The step ends in nothing when it leaves the volume's chunks, which read as air, so a
+point deep in a column that reaches the volume's edge takes the edge as the way out.
 
 The shape's radius must stay below the distance band, about 3.5 voxels: a larger one reads a saturated center with no
 gradient and loses its contact, and larger shapes are later work. The collider's world shape caches lazily, so a caller

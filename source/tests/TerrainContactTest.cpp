@@ -94,6 +94,12 @@ namespace {
     return [center, radius](const glm::vec3 p) { return glm::distance(p, center) - radius; };
   }
 
+  // Solid for x > centerX: a vertical wall facing -x.
+  Field wallGround()
+  {
+    return [](const glm::vec3 p) { return centerX - p.x; };
+  }
+
   // The exact distance to the solid wedge below y = -|x - apexX|, whose two faces slope at 45 degrees.
   Field roofGround(const float apexX)
   {
@@ -837,4 +843,106 @@ TEST(TerrainContact, AFinelyTessellatedHullKeepsTheInteriorOfItsBottomFaceWhereT
 
   ASSERT_EQ(contacts.size(), 1u);
   expectNormal(contacts[0], up());
+}
+
+TEST(TerrainContact, ASphereSweptFarThroughAirReportsTheGroundItWillReach)
+{
+  World world(flatGround());
+  const auto sphere = world.sphereAt({ centerX, 21.0f, centerZ }, 1.0f);
+
+  const auto contacts = contactsOf(world, *sphere, { 0, -30, 0 });
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  EXPECT_NEAR(contacts[0].overlap(), -20.0f, tolerance);
+  EXPECT_NEAR(contacts[0].advance, 30.0f, tolerance);
+  EXPECT_NEAR(contacts[0].depth(), 10.0f, tolerance);
+  // On the sphere's side of the ground, one radius below its center, so the arm about the center is as it will be.
+  fixtures::expectNear("point", contacts[0].point, { centerX, 20.0f, centerZ }, 0.1f);
+
+  // Positive control: a sweep of one voxel reaches nothing, as before.
+  EXPECT_TRUE(contactsOf(world, *sphere, { 0, -1, 0 }).empty());
+  EXPECT_FALSE(collisions::approachesTerrain(*sphere, *world.terrain, { 0, -1, 0 }));
+  EXPECT_TRUE(collisions::approachesTerrain(*sphere, *world.terrain, { 0, -30, 0 }));
+}
+
+TEST(TerrainContact, ABoxSweptFarThroughAirReportsTheGroundItWillReach)
+{
+  World world(flatGround());
+  const auto box = world.boxAt({ centerX, 21.0f, centerZ }, glm::vec3(1));
+
+  const auto contacts = contactsOf(world, *box, { 0, -30, 0 });
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], up());
+  EXPECT_NEAR(contacts[0].overlap(), -20.0f, tolerance);
+  EXPECT_NEAR(contacts[0].advance, 30.0f, tolerance);
+  EXPECT_NEAR(contacts[0].depth(), 10.0f, tolerance);
+  ASSERT_GE(contacts[0].contactPoints().size(), 2u);
+  EXPECT_NEAR(contacts[0].depthAt(0), -20.0f, tolerance);
+  for (size_t i = 1; i < contacts[0].contactPoints().size(); ++i)
+  {
+    EXPECT_LE(contacts[0].depthAt(i), -20.0f + tolerance);
+    EXPECT_GT(contacts[0].depthAt(i), -22.0f);
+  }
+
+  EXPECT_TRUE(contactsOf(world, *box, { 0, -1, 0 }).empty());
+}
+
+TEST(TerrainContact, ASweptBodyAimedAtAWallStopsAtItsFace)
+{
+  World world(wallGround());
+  const auto sphere = world.sphereAt({ 10.0f, 16.0f, centerZ }, 1.0f);
+
+  const auto contacts = contactsOf(world, *sphere, { 40, 0, 0 });
+
+  ASSERT_EQ(contacts.size(), 1u);
+  expectNormal(contacts[0], { -1, 0, 0 });
+  EXPECT_NEAR(contacts[0].overlap(), -(centerX - 10.0f - 1.0f), tolerance);
+
+  // Positive control: swept parallel to the wall it never reaches it.
+  EXPECT_TRUE(contactsOf(world, *sphere, { 0, 0, 40 }).empty());
+}
+
+TEST(TerrainContact, ASphereAndABoxDeepInsideFlatGroundAreLiftedToTheSurface)
+{
+  World world(flatGround());
+  const auto sphere = world.sphereAt({ centerX, -6.0f, centerZ }, 1.0f);
+  const auto box = world.boxAt({ centerX + 10.0f, -6.0f, centerZ }, glm::vec3(1));
+
+  const auto sphereContacts = contactsOf(world, *sphere);
+  ASSERT_EQ(sphereContacts.size(), 1u);
+  expectNormal(sphereContacts[0], up());
+  EXPECT_NEAR(sphereContacts[0].overlap(), 7.0f, tolerance);
+
+  const auto boxContacts = contactsOf(world, *box);
+  ASSERT_EQ(boxContacts.size(), 1u);
+  expectNormal(boxContacts[0], up());
+  EXPECT_NEAR(boxContacts[0].overlap(), 7.0f, tolerance);
+
+  EXPECT_TRUE(collisions::intersectsTerrain(*sphere, *world.terrain));
+  EXPECT_TRUE(collisions::intersectsTerrain(*box, *world.terrain));
+
+  // Positive control: just inside the band the same shapes are found without any stepping.
+  EXPECT_NEAR(contactsOf(world, *world.sphereAt({ centerX, 0.0f, centerZ }, 1.0f))[0].overlap(), 1.0f, tolerance);
+}
+
+TEST(TerrainContact, ADeepBodyStepsBackAlongItsSweepAndUpWhenItHasNone)
+{
+  World world(wallGround());
+  const auto sphere = world.sphereAt({ centerX + 7.0f, 16.0f, centerZ }, 1.0f);
+  const auto box = world.boxAt({ centerX + 7.0f, 16.0f, centerZ + 20.0f }, glm::vec3(1));
+
+  // Without a sweep it steps up, and the wall's whole column is ground, so the sphere finds no way out.
+  EXPECT_TRUE(contactsOf(world, *sphere).empty());
+
+  const auto sphereContacts = contactsOf(world, *sphere, { 1, 0, 0 });
+  ASSERT_EQ(sphereContacts.size(), 1u);
+  expectNormal(sphereContacts[0], { -1, 0, 0 });
+  EXPECT_NEAR(sphereContacts[0].overlap(), 8.0f, tolerance);
+
+  const auto boxContacts = contactsOf(world, *box, { 1, 0, 0 });
+  ASSERT_EQ(boxContacts.size(), 1u);
+  expectNormal(boxContacts[0], { -1, 0, 0 });
+  EXPECT_NEAR(boxContacts[0].overlap(), 8.0f, tolerance);
 }
