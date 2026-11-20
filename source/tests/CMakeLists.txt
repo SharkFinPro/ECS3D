@@ -226,6 +226,7 @@ add_executable(${PROJECT_NAME}
   TerrainFileRecoveryTest.cpp
   TerrainFilesTest.cpp
   TerrainFormatTest.cpp
+  TerrainGateTest.cpp
   TerrainGeneratorsTest.cpp
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
@@ -237,6 +238,7 @@ add_executable(${PROJECT_NAME}
   TerrainReadoutTest.cpp
   TerrainRedistanceTest.cpp
   TerrainRegionFormatTest.cpp
+  TerrainRestingFixtures.h
   TerrainRestingTest.cpp
   TerrainReplicationTest.cpp
   TerrainSamplingTest.cpp
