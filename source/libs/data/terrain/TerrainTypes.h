@@ -89,6 +89,17 @@ namespace terrain
     return { coord.x * chunkSize, coord.y * chunkSize, coord.z * chunkSize };
   }
 
+  // The four sides of a terrain's occupied box that a surface can leave open, as bits of a mask.
+  enum TerrainSide : uint8_t
+  {
+    minX = 1,
+    maxX = 2,
+    minZ = 4,
+    maxZ = 8
+  };
+
+  inline constexpr uint8_t allSides = minX | maxX | minZ | maxZ;
+
   // max is exclusive.
   struct SampleBox
   {

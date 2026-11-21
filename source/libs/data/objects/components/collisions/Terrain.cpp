@@ -35,6 +35,30 @@ namespace {
     return it->get<bool>();
   }
 
+  void requireSides(const uint8_t sides)
+  {
+    if ((sides & ~terrain::allSides) != 0)
+    {
+      throw RefusedPayload("Terrain: openSides has bits outside the four sides");
+    }
+  }
+
+  [[nodiscard]] uint8_t readSides(const nlohmann::json& data, const char* key)
+  {
+    const auto it = data.find(key);
+    if (it == data.end())
+    {
+      return 0;
+    }
+
+    if (!it->is_number_integer() || it->get<int64_t>() < 0 || it->get<int64_t>() > terrain::allSides)
+    {
+      throw RefusedPayload(std::string("Terrain: ") + key + " is not a mask of the four sides");
+    }
+
+    return static_cast<uint8_t>(it->get<int64_t>());
+  }
+
   [[nodiscard]] uint32_t readUnsigned(const nlohmann::json& data, const char* key, const uint32_t fallback)
   {
     const auto it = data.find(key);
@@ -121,6 +145,16 @@ void Terrain::setCastShadows(const bool castShadows)
   m_castShadows = castShadows;
 }
 
+uint8_t Terrain::getOpenSides() const
+{
+  return m_openSides;
+}
+
+void Terrain::setOpenSides(const uint8_t openSides)
+{
+  m_openSides = openSides & terrain::allSides;
+}
+
 void Terrain::setVolume(std::weak_ptr<const terrain::TerrainVolume> volume)
 {
   m_volumeBound = volume.use_count() > 0;
@@ -151,6 +185,7 @@ nlohmann::json Terrain::serialize()
     { "terrainUUID", m_terrainUUID.is_nil() ? "" : uuids::to_string(m_terrainUUID) },
     { "collisionEnabled", m_collisionEnabled },
     { "castShadows", m_castShadows },
+    { "openSides", m_openSides },
     { "renderCollider", m_renderCollider },
     { "isTrigger", m_isTrigger },
     { "layer", m_layer },
@@ -169,6 +204,7 @@ void Terrain::loadFromJSON(const nlohmann::json& componentData)
   data.terrainUUID = readTerrainUUID(componentData);
   data.collisionEnabled = readBool(componentData, "collisionEnabled", true);
   data.castShadows = readBool(componentData, "castShadows", true);
+  data.openSides = readSides(componentData, "openSides");
   data.renderCollider = readBool(componentData, "renderCollider", false);
   data.layer = readUnsigned(componentData, "layer", 0u);
   data.mask = readUnsigned(componentData, "mask", 0xFFFFFFFFu);
@@ -255,6 +291,7 @@ void Terrain::pack(net::Message& message) const
   message.write(m_terrainUUID);
   message.write(m_collisionEnabled);
   message.write(m_castShadows);
+  message.write(m_openSides);
   message.write(m_isTrigger);
   message.write(m_layer);
   message.write(m_mask);
@@ -267,6 +304,8 @@ void Terrain::unpack(net::MessageReader& messageReader)
   data.terrainUUID = messageReader.read<uuids::uuid>();
   data.collisionEnabled = messageReader.read<bool>();
   data.castShadows = messageReader.read<bool>();
+  data.openSides = messageReader.read<uint8_t>();
+  requireSides(data.openSides);
   const bool isTrigger = messageReader.read<bool>();
   data.layer = messageReader.read<uint32_t>();
   data.mask = messageReader.read<uint32_t>();
@@ -286,6 +325,7 @@ void Terrain::assign(const Data& data)
   m_terrainUUID = data.terrainUUID;
   m_collisionEnabled = data.collisionEnabled;
   m_castShadows = data.castShadows;
+  m_openSides = data.openSides;
   m_renderCollider = data.renderCollider;
   setLayer(data.layer);
   m_mask = data.mask;

@@ -112,6 +112,59 @@ namespace terrain
     return bounds;
   }
 
+  SampleBox openSurfaceBounds(const SampleBox& occupied, const uint8_t sides)
+  {
+    if (occupied.empty())
+    {
+      return {};
+    }
+
+    SampleBox bounds = surfaceBounds(occupied);
+
+    if ((sides & minX) != 0)
+    {
+      bounds.min.x = occupied.min.x + 1;
+    }
+
+    if ((sides & maxX) != 0)
+    {
+      bounds.max.x = occupied.max.x - 1;
+    }
+
+    if ((sides & minZ) != 0)
+    {
+      bounds.min.z = occupied.min.z + 1;
+    }
+
+    if ((sides & maxZ) != 0)
+    {
+      bounds.max.z = occupied.max.z - 1;
+    }
+
+    return bounds.empty() || bounds.max.x - bounds.min.x < 2 || bounds.max.z - bounds.min.z < 2 ? SampleBox{} : bounds;
+  }
+
+  SampleBox openSampleBounds(const SampleBox& meshed, const uint8_t sides)
+  {
+    if (meshed.empty())
+    {
+      return meshed;
+    }
+
+    SampleBox samples = meshed;
+    samples.min.x -= (sides & minX) != 0 ? 1 : 0;
+    samples.max.x += (sides & maxX) != 0 ? 1 : 0;
+    samples.min.z -= (sides & minZ) != 0 ? 1 : 0;
+    samples.max.z += (sides & maxZ) != 0 ? 1 : 0;
+
+    return samples;
+  }
+
+  SampleBox desiredSurfaceBounds(const SampleBox& occupied, const uint8_t sides)
+  {
+    return sides == 0 ? surfaceBounds(occupied) : openSurfaceBounds(occupied, sides);
+  }
+
   bool containsBox(const SampleBox& outer, const SampleBox& inner)
   {
     if (inner.empty())

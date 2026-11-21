@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -101,8 +102,8 @@ struct LibraryShape
 [[nodiscard]] nlohmann::json modelRenderer(const std::string& model, const std::string& texture,
                                            const std::string& specular);
 
-// The collider of a Terrain object: collision and shadows on, naming the terrain asset.
-[[nodiscard]] nlohmann::json terrainCollider(const std::string& terrainUUID);
+// The collider of a Terrain object: collision and shadows on, naming the terrain asset; no open sides unless a mask of terrain::TerrainSide bits asks.
+[[nodiscard]] nlohmann::json terrainCollider(const std::string& terrainUUID, uint8_t openSides = 0);
 
 [[nodiscard]] nlohmann::json makeObject(const std::string& name, nlohmann::json components,
                                         nlohmann::json scripts = nlohmann::json::array());

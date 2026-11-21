@@ -2,6 +2,7 @@
 
 #include "DefaultTerrainTiles.h"
 #include "DefaultTerrainTilesFixture.h"
+#include "TerrainSurfaceSampling.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainRaycast.h"
 #include "terrain/TerrainTypes.h"
@@ -23,6 +24,7 @@ using basintest::DefaultTerrainTilesTest;
 using basintest::Seam;
 using basintest::Tiles;
 using basintest::lastColumn;
+using basintest::overlapColumns;
 using basintest::tileIndex;
 
 namespace {
@@ -65,7 +67,7 @@ namespace {
     return std::max(tiles[seam.a()]->occupiedBounds().max.y, tiles[seam.b()]->occupiedBounds().max.y);
   }
 
-  // How many samples of the shared edge differ between the two tiles of a seam.
+  // How many samples of the three shared columns (the seam and its two aprons) differ between the two tiles of a seam.
   int seamMismatches(const Tiles& tiles, const Seam& seam)
   {
     const auto& a = *tiles[seam.a()];
@@ -73,22 +75,28 @@ namespace {
     const int top = topSample(tiles, seam);
 
     int mismatches = 0;
-    for (int along = 0; along <= lastColumn; ++along)
+    for (int shared = 0; shared < overlapColumns; ++shared)
     {
-      for (int y = a.occupiedBounds().min.y; y < top; ++y)
+      const int inA = basin::tileStride + shared;
+
+      for (int along = 0; along <= lastColumn; ++along)
       {
-        const int16_t ours = seam.east ? a.distanceAtSample({ lastColumn, y, along })
-                                       : a.distanceAtSample({ along, y, lastColumn });
-        const int16_t theirs = seam.east ? b.distanceAtSample({ 0, y, along })
-                                         : b.distanceAtSample({ along, y, 0 });
-        mismatches += ours != theirs ? 1 : 0;
+        for (int y = a.occupiedBounds().min.y; y < top; ++y)
+        {
+          const int16_t ours = seam.east ? a.distanceAtSample({ inA, y, along })
+                                         : a.distanceAtSample({ along, y, inA });
+          const int16_t theirs = seam.east ? b.distanceAtSample({ shared, y, along })
+                                           : b.distanceAtSample({ along, y, shared });
+          mismatches += ours != theirs ? 1 : 0;
+        }
       }
     }
 
     return mismatches;
   }
 
-  // The ground a ray straight down finds on the seam from each tile, and from one voxel inside the first tile.
+  // The ground a ray straight down finds on the seam column from each tile (a's second to last column is b's second),
+  // and from one voxel inside the first tile.
   struct SeamRays
   {
     std::optional<float> ours;
@@ -98,16 +106,59 @@ namespace {
 
   SeamRays raysAt(const Tiles& tiles, const Seam& seam, const float along)
   {
-    const float edge = static_cast<float>(lastColumn);
+    const float seamInA = static_cast<float>(basin::tileStride + 1);
     const auto& a = *tiles[seam.a()];
     const auto& b = *tiles[seam.b()];
 
     return {
-      hitHeight(a, seam.rowA, seam.colA, seam.east ? edge : along, seam.east ? along : edge),
-      hitHeight(b, seam.rowB, seam.colB, seam.east ? 0.0f : along, seam.east ? along : 0.0f),
-      hitHeight(a, seam.rowA, seam.colA, seam.east ? edge - 1.0f : along, seam.east ? along : edge - 1.0f)
+      hitHeight(a, seam.rowA, seam.colA, seam.east ? seamInA : along, seam.east ? along : seamInA),
+      hitHeight(b, seam.rowB, seam.colB, seam.east ? 1.0f : along, seam.east ? along : 1.0f),
+      hitHeight(a, seam.rowA, seam.colA, seam.east ? seamInA - 1.0f : along, seam.east ? along : seamInA - 1.0f)
     };
   }
+}
+
+TEST(DefaultTerrainTilesLayoutTest, TilesOverlapByThreeColumnsAndTheBasinStaysCentered)
+{
+  EXPECT_EQ(basin::tileColumns, 128);
+  EXPECT_EQ(basin::tileStride, basin::tileColumns - 3);
+  EXPECT_EQ(basin::worldColumns, basin::tilesPerSide * basin::tileStride + 3);
+  EXPECT_EQ(overlapColumns, 3);
+
+  // The drawn columns, 0 to worldColumns - 1, are centered on the world origin.
+  const float drawnCenter = static_cast<float>(basin::worldColumns - 1) * 0.5f;
+  EXPECT_NEAR(basin::tileOrigin(0, 0).x + drawnCenter * basin::voxelSize, 0.0f, 1e-3f);
+  EXPECT_NEAR(basin::tileOrigin(0, 0).z + drawnCenter * basin::voxelSize, 0.0f, 1e-3f);
+  EXPECT_NEAR(basin::tileOrigin(1, 2).x - basin::tileOrigin(1, 1).x,
+              static_cast<float>(basin::tileStride) * basin::voxelSize, 1e-3f);
+}
+
+TEST(DefaultTerrainTilesLayoutTest, EachTileOpensOnlyTheSidesFacingANeighbor)
+{
+  EXPECT_EQ(basin::tileOpenSides(0, 0), terrain::maxX | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(0, 2), terrain::minX | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(2, 0), terrain::maxX | terrain::minZ);
+  EXPECT_EQ(basin::tileOpenSides(2, 2), terrain::minX | terrain::minZ);
+  EXPECT_EQ(basin::tileOpenSides(0, 1), terrain::minX | terrain::maxX | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(1, 0), terrain::maxX | terrain::minZ | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(1, 1), terrain::allSides);
+}
+
+TEST_F(DefaultTerrainTilesTest, AnOuterTilesPerimeterSidesStayClosedLikeAClosedSurface)
+{
+  const auto& corner = *s_tiles[tileIndex(0, 0)];
+  const terrain::SampleBox occupied = corner.occupiedBounds();
+  const terrain::SampleBox closed = terrain::surfaceBounds(occupied);
+  const terrain::SampleBox meshed = terrain::desiredSurfaceBounds(occupied, basin::tileOpenSides(0, 0));
+
+  // The south and west sides are the world's edge: exactly what a closed surface meshes there.
+  EXPECT_EQ(meshed.min.x, closed.min.x);
+  EXPECT_EQ(meshed.min.z, closed.min.z);
+
+  // Positive control: the east and north sides face neighbors and are inset one sample from the occupied box.
+  EXPECT_EQ(meshed.max.x, occupied.max.x - 1);
+  EXPECT_EQ(meshed.max.z, occupied.max.z - 1);
+  EXPECT_NE(meshed.max.x, closed.max.x);
 }
 
 TEST_F(DefaultTerrainTilesTest, NeighborsShareTheirEdgeSamplesExactly)
@@ -128,20 +179,25 @@ TEST_F(DefaultTerrainTilesTest, NeighborsShareTheirEdgeSamplesExactly)
 
 TEST_F(DefaultTerrainTilesTest, TheColumnInsideAnEdgeDiffersFromTheEdge)
 {
-  // The positive control for the seam check: it can tell two different columns apart.
+  // The positive control for the seam check: it can tell two different columns apart, so each of the shared columns
+  // after the first differs from the one before it.
   const auto& tile = *s_tiles[tileIndex(1, 1)];
   const int top = tile.occupiedBounds().max.y;
 
-  int differing = 0;
-  for (int z = 0; z <= lastColumn; ++z)
+  for (int shared = 1; shared < overlapColumns; ++shared)
   {
-    for (int y = 0; y < top; ++y)
+    const int column = basin::tileStride + shared;
+    int differing = 0;
+    for (int z = 0; z <= lastColumn; ++z)
     {
-      differing += tile.distanceAtSample({ lastColumn, y, z }) != tile.distanceAtSample({ lastColumn - 1, y, z }) ? 1 : 0;
+      for (int y = 0; y < top; ++y)
+      {
+        differing += tile.distanceAtSample({ column, y, z }) != tile.distanceAtSample({ column - 1, y, z }) ? 1 : 0;
+      }
     }
-  }
 
-  EXPECT_GT(differing, 100);
+    EXPECT_GT(differing, 100) << "column " << column;
+  }
 }
 
 TEST_F(DefaultTerrainTilesTest, ARayStraightDownOnASeamHitsTheSameHeightFromBothTiles)
@@ -183,7 +239,9 @@ TEST_F(DefaultTerrainTilesTest, GenerationStaysQuick)
   GTEST_SKIP() << "A Release measurement: Debug, sanitizer and coverage builds skip it";
 #endif
   std::cout << "[ INFO ] basin generation took " << s_seconds << " s for " << totalChunks() << " chunks\n";
-  EXPECT_LT(s_seconds, 3.0);
+  // About 1.3 s in a local MSVC Release build but up to 3.8 s on the Linux clang CI runner; the bound, shared with
+  // the showcase's, catches a regression of several times without failing on runner speed.
+  EXPECT_LT(s_seconds, 5.0);
 }
 
 namespace {
@@ -318,7 +376,7 @@ TEST_F(DefaultTerrainTilesTest, TheNorthStepsIntoTerracesAndTheOtherSidesDoNot)
   // Row 2 across all three tiles.
   for (const int x : { 60, 190, 320 })
   {
-    EXPECT_GE(plateausAlong(line(x), 254, 380), 3) << x;
+    EXPECT_GE(plateausAlong(line(x), 250, 376), 3) << x;
   }
 
   // Positive control: the same rim to the south climbs in one smooth slope.
@@ -344,10 +402,10 @@ TEST_F(DefaultTerrainTilesTest, TheRiverbedCutsBelowBothBanksAcrossTheWestSeam)
 
 TEST_F(DefaultTerrainTilesTest, TheEastBankIsSteepAndTheSouthRimIsNot)
 {
-  EXPECT_GT(steepestStep(254, 380, 0, 254), 1.5f);
+  EXPECT_GT(steepestStep(250, 376, 0, 250), 1.5f);
 
   // Positive control: the south-center tile's rim is a gentle slope.
-  EXPECT_LT(steepestStep(127, 253, 0, 126), 1.0f);
+  EXPECT_LT(steepestStep(125, 249, 0, 124), 1.0f);
 }
 
 TEST_F(DefaultTerrainTilesTest, MogulsBumpTheSouthWestAndNowhereElse)

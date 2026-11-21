@@ -593,6 +593,7 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
       if (component.at("type") == "Collider" && component.at("subType") == "Terrain")
       {
         EXPECT_EQ(component.at("terrainUUID"), defaultproject::showcaseTerrain);
+        EXPECT_EQ(component.at("openSides").get<int>(), 0);
         ++terrains;
 
         const auto byType = componentsByType(object);
@@ -665,6 +666,9 @@ namespace {
     EXPECT_FLOAT_EQ(position.y, expected.y);
     EXPECT_FLOAT_EQ(position.z, expected.z);
     EXPECT_TRUE(collider.at("collisionEnabled").get<bool>());
+    // Corners open two sides, edges three and the center four: the sides facing a neighbor (-X 1, +X 2, -Z 4, +Z 8).
+    constexpr int expectedSides[9] = { 10, 11, 9, 14, 15, 13, 6, 7, 5 };
+    EXPECT_EQ(collider.at("openSides").get<int>(), expectedSides[index]);
     EXPECT_EQ(object.at("name"), "Terrain Tile " + std::to_string(index / 3) + " " + std::to_string(index % 3));
 
     return uuid;
