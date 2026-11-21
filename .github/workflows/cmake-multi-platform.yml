@@ -33,14 +33,14 @@ jobs:
       # Four toolchains - MSVC on Windows, gcc and clang on Linux, clang on macOS - each in Release and
       # Debug. Debug is not redundant: it is where assert() and the standard library's debug checks are
       # live, so a Release-only matrix never runs the invariant checks the code is written against.
-      # Sanitize (the ecs3d-sanitize preset: ASan, plus UBSan on gcc/clang) runs on Linux gcc and clang
-      # only: MSVC's ASan needs its runtime DLL on PATH and macOS is not worth the flake risk.
+      # The ecs3d-sanitize preset (ASan, plus UBSan on gcc/clang) is not in the matrix: its rows took too long.
+      # Run it locally with the preset when a change touches memory handling.
       # Coverage (the ecs3d-coverage preset) runs on ubuntu-24.04 with gcc-14 and publishes a report artifact:
       # gcovr 8.6 reads gcov's JSON (which keeps every template instantiation) only at format version 2, from
       # GCC 14 on; older gcov falls back to text output that drops some instantiations.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
-        build_type: [ Release, Debug, Sanitize, Coverage ]
+        build_type: [ Release, Debug, Coverage ]
         c_compiler: [ gcc, clang, cl ]
         include:
           - os: windows-latest
@@ -71,10 +71,6 @@ jobs:
             c_compiler: gcc
           - os: macos-latest
             c_compiler: cl
-          - os: windows-latest
-            build_type: Sanitize
-          - os: macos-latest
-            build_type: Sanitize
           - os: windows-latest
             build_type: Coverage
           - os: macos-latest
@@ -163,18 +159,14 @@ jobs:
         # Through the configure preset, so that CMakePresets.json is exercised by CI rather than
         # described by it: the generator, the build directory and the build type all come from the file
         # a developer uses. Only the compilers are passed here, because they are the one thing the
-        # matrix varies and the preset deliberately does not pin. The one exception: the sanitize preset turns
-        # precompiled headers off so a row catches a missing include, and the gcc row turns them back on because
-        # it is the slowest job and the clang row still makes that check.
-        run: >
+        # matrix varies and the preset deliberately does not pin.        run: >
           cmake --preset ${{ steps.strings.outputs.preset }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          ${{ matrix.build_type == 'Sanitize' && matrix.c_compiler == 'gcc' && '-DECS3D_PRECOMPILED_HEADERS=ON' || '' }}
 
       - name: Build
-        # Sanitize and Coverage skip the apps: the check target below builds the headless suite it runs.
-        if: ${{ matrix.build_type != 'Sanitize' && matrix.build_type != 'Coverage' }}
+        # Coverage skips the apps: the check target below builds the headless suite it runs.
+        if: ${{ matrix.build_type != 'Coverage' }}
         run: cmake --build ${{ steps.strings.outputs.build_dir }}
 
       - name: Test

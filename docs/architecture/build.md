@@ -48,9 +48,8 @@ multi-file ECS3D target gets its own PCH of the most-included standard and third
 Targets differ in compile definitions (VulkanEngine adds the `GLM_FORCE_*`/`VULKAN_HPP_*` set), so
 they do not share one. `windows.h` and GLFW stay out, since four files define macros before including
 them. A new multi-file target adds itself to that block. Turning the `ECS3D_PRECOMPILED_HEADERS`
-option off disables it. The `ecs3d-sanitize` preset does, so CI still catches a missing include in the
-libraries the test suite builds, though not in render, editor, net, scripting or the apps. Only the clang
-Sanitize row relies on that: the gcc Sanitize row turns the PCH back on to build faster. **Still
+option off disables it. The `ecs3d-sanitize` preset does, so a local sanitize build catches a missing include in the
+libraries the test suite builds; CI no longer runs that preset. **Still
 include what you use** - the PCH is not a substitute.
 
 ## CLR host helpers
@@ -75,8 +74,7 @@ the flat-shaded models.
 ## Continuous integration
 
 `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang)
-with the Vulkan SDK, then runs the suite through the `check` target; two more Linux rows (gcc, clang) run the
-`ecs3d-sanitize` preset's suite under ASan+UBSan, and one row on ubuntu-24.04 with gcc-14 runs
+with the Vulkan SDK, then runs the suite through the `check` target; one row on ubuntu-24.04 with gcc-14 runs
 `ecs3d-coverage` and uploads a gcovr/cobertura `coverage-report` artifact (the report needs GCC 14's gcov:
 gcovr reads gcov's JSON, which keeps every template instantiation, only at that version, and the text output older
 gcov writes drops some). A newer push to a pull request cancels that pull request's previous run.

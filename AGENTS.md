@@ -74,7 +74,7 @@
 | `tools/shapes/` | Python generator for the committed default models and textures in `source/apps/server/defaultAssets/`. |
 | `docs/guides/` | User-facing guides. Keep their claims true to the code when editor or scripting behavior changes. |
 | `docs/architecture/` | Design notes, one topic per file; see the [documentation map](#documentation-map). |
-| `.github/workflows/` | `cmake-multi-platform.yml` builds Release and Debug on Windows (MSVC), Linux (gcc, clang) and macOS (clang) and runs the `check` target, plus sanitizer and coverage rows on Linux. |
+| `.github/workflows/` | `cmake-multi-platform.yml` builds Release and Debug on Windows (MSVC), Linux (gcc, clang) and macOS (clang) and runs the `check` target, plus a coverage row on Linux (the sanitize preset is local-only). |
 
 ## Build System
 
