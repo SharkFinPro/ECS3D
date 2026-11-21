@@ -37,6 +37,7 @@ set(ECS3D_IMGUI_SOURCES
 
 add_executable(${PROJECT_NAME}
   AddAssetConflictLogTest.cpp
+  BasinBenchmarkTest.cpp
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
   CapsuleColliderTest.cpp
