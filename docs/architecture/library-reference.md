@@ -131,5 +131,7 @@ higher than the drawn surface's (so a terrain whose chunks change every frame st
 `maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are reported once per frame per terrain.
 Surfaces are released through the engine's deferred release on a new voxel size, a project reset, or when no object
 draws the terrain. The decisions are the headless `TerrainSurfacePlan.h`, and the model matrix has no scale because
-terrain space is metric. Picking, outlines, lighting and shadows wait on the engine. Depends on `ECS3DData` +
+terrain space is metric. A terrain is pickable through `isSelected(object uuid)` and outlined when its object is selected. Submissions wait
+until every object has voted, and the surface casts shadows when any object drawing it has `castShadows` on (the
+headless `TerrainShadowVotes.h`). Depends on `ECS3DData` +
 `VulkanEngine`.
