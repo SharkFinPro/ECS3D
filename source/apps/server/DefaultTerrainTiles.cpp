@@ -138,13 +138,13 @@ public:
   }
 
 private:
-  template <typename Read>
-  [[nodiscard]] static float slope(const Read& read, const int index)
+  template <typename HeightAt>
+  [[nodiscard]] static float slope(const HeightAt& heightAt, const int index)
   {
     const int before = std::max(index - 1, 0);
     const int after = std::min(index + 1, basin::worldColumns - 1);
 
-    return (read(after) - read(before)) / static_cast<float>(after - before);
+    return (heightAt(after) - heightAt(before)) / static_cast<float>(after - before);
   }
 
   [[nodiscard]] static size_t index(const int x, const int z)
