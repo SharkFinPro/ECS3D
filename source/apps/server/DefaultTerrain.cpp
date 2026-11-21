@@ -16,9 +16,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <numbers>
-#include <functional>
 #include <utility>
 #include <vector>
 #include <uuid.h>

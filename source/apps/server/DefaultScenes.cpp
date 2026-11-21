@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -188,7 +189,7 @@ float massOf(const json& body)
     }
   }
 
-  return 1.0f;
+  throw std::runtime_error("no RigidBody in " + body.at("name").get<std::string>());
 }
 
 // One of the thirteen kinds: a Sphere, a Block, or a prefab at a uniform scale that keeps its density.

@@ -1,78 +1,32 @@
 #include <gtest/gtest.h>
 
-#include "CollisionSystem.h"
-#include "DefaultProjectParts.h"
-#include "DefaultShapes.h"
-#include "DefaultTerrain.h"
 #include "DefaultTerrainTiles.h"
-#include "PhysicsSystem.h"
-#include "TestScene.h"
-#include "assets/AssetRegistry.h"
-#include "objects/Object.h"
-#include "objects/ObjectManager.h"
-#include "objects/components/RigidBody.h"
-#include "objects/components/collisions/ConvexMeshCollider.h"
-#include "objects/components/collisions/Terrain.h"
+#include "DefaultTerrainTilesFixture.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainRaycast.h"
-#include "terrain/TerrainStore.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
-#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
-#include <array>
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <iostream>
-#include <limits>
-#include <memory>
 #include <optional>
 #include <set>
-#include <string>
+#include <utility>
 #include <vector>
-#include <uuid.h>
+
+using basintest::DefaultTerrainTilesTest;
+using basintest::Seam;
+using basintest::Tiles;
+using basintest::lastColumn;
+using basintest::tileIndex;
 
 namespace {
-  using Tiles = std::array<std::shared_ptr<terrain::TerrainVolume>, basin::tileCount>;
-
   constexpr float voxel = basin::voxelSize;
-  constexpr int last = basin::tileColumns - 1;
-
-  AssetRecord terrainRecord(const std::string& uuid)
-  {
-    const auto parsed = uuids::uuid::from_string(uuid).value();
-
-    return { .uuid = parsed, .type = AssetType::Terrain, .path = terrainAssetPath(parsed) };
-  }
-
-  size_t tileIndex(const int row, const int col)
-  {
-    return static_cast<size_t>(row * basin::tilesPerSide + col);
-  }
-
-  bool sameChunks(const terrain::TerrainVolume& a, const terrain::TerrainVolume& b)
-  {
-    if (a.chunks().size() != b.chunks().size())
-    {
-      return false;
-    }
-
-    for (const auto& [coord, chunk] : a.chunks())
-    {
-      const auto other = b.chunk(coord);
-      if (!other || other->hash() != chunk->hash())
-      {
-        return false;
-      }
-    }
-
-    return true;
-  }
 
   // The materials of the solid samples inside the distance band, which is where the surface reads them.
   void addSurfaceMaterials(const terrain::TerrainVolume& volume, std::set<uint8_t>& materials)
@@ -106,91 +60,70 @@ namespace {
   }
 
   // The tallest y a sample on a tile's edge can have in either tile; every sample above it is air in both.
-  int topSample(const Tiles& tiles, const size_t a, const size_t b)
+  int topSample(const Tiles& tiles, const Seam& seam)
   {
-    return std::max(tiles[a]->occupiedBounds().max.y, tiles[b]->occupiedBounds().max.y);
+    return std::max(tiles[seam.a()]->occupiedBounds().max.y, tiles[seam.b()]->occupiedBounds().max.y);
   }
 
-  class DefaultTerrainTilesTest : public testing::Test
+  // How many samples of the shared edge differ between the two tiles of a seam.
+  int seamMismatches(const Tiles& tiles, const Seam& seam)
   {
-  protected:
-    static void SetUpTestSuite()
-    {
-      std::array<terrain::TerrainVolume*, basin::tileCount> pointers{};
-      for (size_t index = 0; index < s_tiles.size(); ++index)
-      {
-        s_tiles[index] = std::make_shared<terrain::TerrainVolume>(basin::voxelSize);
-        pointers[index] = s_tiles[index].get();
-      }
+    const auto& a = *tiles[seam.a()];
+    const auto& b = *tiles[seam.b()];
+    const int top = topSample(tiles, seam);
 
-      const auto start = std::chrono::steady_clock::now();
-      generateBasinTiles(pointers);
-      s_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    }
-
-    static void TearDownTestSuite()
+    int mismatches = 0;
+    for (int along = 0; along <= lastColumn; ++along)
     {
-      for (auto& tile : s_tiles)
+      for (int y = a.occupiedBounds().min.y; y < top; ++y)
       {
-        tile.reset();
+        const int16_t ours = seam.east ? a.distanceAtSample({ lastColumn, y, along })
+                                       : a.distanceAtSample({ along, y, lastColumn });
+        const int16_t theirs = seam.east ? b.distanceAtSample({ 0, y, along })
+                                         : b.distanceAtSample({ along, y, 0 });
+        mismatches += ours != theirs ? 1 : 0;
       }
     }
 
-    static size_t totalChunks()
-    {
-      size_t total = 0;
-      for (const auto& tile : s_tiles)
-      {
-        total += tile->chunks().size();
-      }
+    return mismatches;
+  }
 
-      return total;
-    }
-
-    static Tiles s_tiles;
-    static double s_seconds;
+  // The ground a ray straight down finds on the seam from each tile, and from one voxel inside the first tile.
+  struct SeamRays
+  {
+    std::optional<float> ours;
+    std::optional<float> theirs;
+    std::optional<float> inside;
   };
 
-  Tiles DefaultTerrainTilesTest::s_tiles;
-  double DefaultTerrainTilesTest::s_seconds = 0.0;
+  SeamRays raysAt(const Tiles& tiles, const Seam& seam, const float along)
+  {
+    const float edge = static_cast<float>(lastColumn);
+    const auto& a = *tiles[seam.a()];
+    const auto& b = *tiles[seam.b()];
+
+    return {
+      hitHeight(a, seam.rowA, seam.colA, seam.east ? edge : along, seam.east ? along : edge),
+      hitHeight(b, seam.rowB, seam.colB, seam.east ? 0.0f : along, seam.east ? along : 0.0f),
+      hitHeight(a, seam.rowA, seam.colA, seam.east ? edge - 1.0f : along, seam.east ? along : edge - 1.0f)
+    };
+  }
 }
 
 TEST_F(DefaultTerrainTilesTest, NeighborsShareTheirEdgeSamplesExactly)
 {
-  for (int row = 0; row < basin::tilesPerSide; ++row)
+  int seams = 0;
+  basintest::forEachSeam([&](const Seam& seam)
   {
-    for (int col = 0; col < basin::tilesPerSide; ++col)
-    {
-      for (const bool east : { true, false })
-      {
-        const int neighborRow = east ? row : row + 1;
-        const int neighborCol = east ? col + 1 : col;
-        if (neighborRow >= basin::tilesPerSide || neighborCol >= basin::tilesPerSide)
-        {
-          continue;
-        }
+    SCOPED_TRACE(seam.label());
 
-        const size_t a = tileIndex(row, col);
-        const size_t b = tileIndex(neighborRow, neighborCol);
-        SCOPED_TRACE("tile " + std::to_string(a) + (east ? " east of " : " south of ") + std::to_string(b));
+    // Both tiles start at the same height, so one loop over y compares the same samples.
+    EXPECT_EQ(s_tiles[seam.a()]->occupiedBounds().min.y, s_tiles[seam.b()]->occupiedBounds().min.y);
+    EXPECT_EQ(seamMismatches(s_tiles, seam), 0);
+    ++seams;
+  });
 
-        int mismatches = 0;
-        for (int along = 0; along <= last; ++along)
-        {
-          for (int y = 0; y < topSample(s_tiles, a, b); ++y)
-          {
-            const int16_t ours = east ? s_tiles[a]->distanceAtSample({ last, y, along })
-                                      : s_tiles[a]->distanceAtSample({ along, y, last });
-            const int16_t theirs = east ? s_tiles[b]->distanceAtSample({ 0, y, along })
-                                        : s_tiles[b]->distanceAtSample({ along, y, 0 });
-            mismatches += ours != theirs ? 1 : 0;
-          }
-        }
-
-        EXPECT_EQ(mismatches, 0);
-      }
-    }
-  }
+  EXPECT_EQ(seams, 12);
 }
 
 TEST_F(DefaultTerrainTilesTest, TheColumnInsideAnEdgeDiffersFromTheEdge)
@@ -200,11 +133,11 @@ TEST_F(DefaultTerrainTilesTest, TheColumnInsideAnEdgeDiffersFromTheEdge)
   const int top = tile.occupiedBounds().max.y;
 
   int differing = 0;
-  for (int z = 0; z <= last; ++z)
+  for (int z = 0; z <= lastColumn; ++z)
   {
     for (int y = 0; y < top; ++y)
     {
-      differing += tile.distanceAtSample({ last, y, z }) != tile.distanceAtSample({ last - 1, y, z }) ? 1 : 0;
+      differing += tile.distanceAtSample({ lastColumn, y, z }) != tile.distanceAtSample({ lastColumn - 1, y, z }) ? 1 : 0;
     }
   }
 
@@ -213,48 +146,30 @@ TEST_F(DefaultTerrainTilesTest, TheColumnInsideAnEdgeDiffersFromTheEdge)
 
 TEST_F(DefaultTerrainTilesTest, ARayStraightDownOnASeamHitsTheSameHeightFromBothTiles)
 {
+  // A vertical ray finds the zero crossing whatever the edge's slope scaling, so this guards the tiles' placement and
+  // stride; the exact-sample test above guards the rewrite of the edge columns.
   const float columns[] = { 8.0f, 37.5f, 64.0f, 99.0f, 120.25f };
   int compared = 0;
   float widestStep = 0.0f;
 
-  for (int row = 0; row < basin::tilesPerSide; ++row)
+  basintest::forEachSeam([&](const Seam& seam)
   {
-    for (int col = 0; col < basin::tilesPerSide; ++col)
+    for (const float along : columns)
     {
-      for (const bool east : { true, false })
-      {
-        const int neighborRow = east ? row : row + 1;
-        const int neighborCol = east ? col + 1 : col;
-        if (neighborRow >= basin::tilesPerSide || neighborCol >= basin::tilesPerSide)
-        {
-          continue;
-        }
+      const auto rays = raysAt(s_tiles, seam, along);
+      ASSERT_TRUE(rays.ours.has_value() && rays.theirs.has_value() && rays.inside.has_value());
+      EXPECT_NEAR(*rays.ours, *rays.theirs, 0.01f) << seam.label() << " at " << along;
+      ++compared;
 
-        for (const float along : columns)
-        {
-          const auto ours = hitHeight(*s_tiles[tileIndex(row, col)], row, col, east ? static_cast<float>(last) : along,
-                                      east ? along : static_cast<float>(last));
-          const auto theirs = hitHeight(*s_tiles[tileIndex(neighborRow, neighborCol)], neighborRow, neighborCol,
-                                        east ? 0.0f : along, east ? along : 0.0f);
-          ASSERT_TRUE(ours.has_value());
-          ASSERT_TRUE(theirs.has_value());
-          EXPECT_NEAR(*ours, *theirs, 0.01f) << row << "," << col << (east ? " east " : " south ") << along;
-          ++compared;
-
-          // One voxel in from the edge the ground is somewhere else.
-          const auto inside = hitHeight(*s_tiles[tileIndex(row, col)], row, col,
-                                        east ? static_cast<float>(last) - 1.0f : along,
-                                        east ? along : static_cast<float>(last) - 1.0f);
-          ASSERT_TRUE(inside.has_value());
-          widestStep = std::max(widestStep, std::abs(*inside - *ours));
-        }
-      }
+      // One voxel in from the edge the ground is somewhere else.
+      widestStep = std::max(widestStep, std::abs(*rays.inside - *rays.ours));
     }
-  }
+  });
 
   EXPECT_EQ(compared, 12 * 5);
   EXPECT_GT(widestStep, 0.1f);
 }
+
 
 TEST_F(DefaultTerrainTilesTest, TheChunkCountStaysWithinWhatEveryJoinStreams)
 {
@@ -458,231 +373,4 @@ TEST_F(DefaultTerrainTilesTest, TheSurfaceUsesSeveralMaterialsAndNeverTheReserve
   EXPECT_TRUE(materials.contains(2));
   EXPECT_TRUE(materials.contains(4));
   EXPECT_FALSE(materials.contains(terrain::reservedMaterial));
-}
-
-TEST_F(DefaultTerrainTilesTest, InstallFillsEveryTileAndTheShowcaseDeterministically)
-{
-  AssetRegistry registry;
-  registry.registerAsset(terrainRecord(defaultproject::showcaseTerrain));
-  for (const auto& uuid : defaultproject::basinTerrains)
-  {
-    registry.registerAsset(terrainRecord(uuid));
-  }
-
-  terrain::TerrainStore store;
-  store.reconcile(registry);
-  installDefaultTerrains(store);
-
-  for (size_t index = 0; index < defaultproject::basinTerrains.size(); ++index)
-  {
-    SCOPED_TRACE(index);
-    const auto uuid = uuids::uuid::from_string(defaultproject::basinTerrains[index]).value();
-    const auto volume = store.find(uuid);
-    ASSERT_NE(volume, nullptr);
-    ASSERT_FALSE(volume->chunks().empty());
-
-    EXPECT_TRUE(sameChunks(*volume, *s_tiles[index]));
-    EXPECT_FLOAT_EQ(volume->voxelSize(), basin::voxelSize);
-    EXPECT_FLOAT_EQ(store.description(uuid)->voxelSize, basin::voxelSize);
-    EXPECT_EQ(store.description(uuid)->chunkCount, volume->chunks().size());
-
-    for (const auto& [coord, chunk] : volume->chunks())
-    {
-      EXPECT_GT(store.revision(uuid, coord), 0u);
-    }
-  }
-
-  // Positive control: the comparison tells two different tiles apart.
-  EXPECT_FALSE(sameChunks(*s_tiles[0], *s_tiles[4]));
-
-  const auto showcase = store.find(uuids::uuid::from_string(defaultproject::showcaseTerrain).value());
-  ASSERT_NE(showcase, nullptr);
-  EXPECT_FALSE(showcase->chunks().empty());
-  EXPECT_FALSE(terrain::firstIncompleteTerrain(store).has_value());
-}
-
-TEST_F(DefaultTerrainTilesTest, InstallGeneratesTheTilesItHoldsAndLeavesOtherTerrainsEmpty)
-{
-  const auto otherUuid = "11111111-1111-1111-1111-111111111111";
-
-  AssetRegistry registry;
-  registry.registerAsset(terrainRecord(defaultproject::basinTerrains[0]));
-  registry.registerAsset(terrainRecord(defaultproject::basinTerrains[4]));
-  registry.registerAsset(terrainRecord(otherUuid));
-
-  terrain::TerrainStore store;
-  store.reconcile(registry);
-  installDefaultTerrains(store);
-
-  for (const size_t index : { size_t{ 0 }, size_t{ 4 } })
-  {
-    const auto volume = store.find(uuids::uuid::from_string(defaultproject::basinTerrains[index]).value());
-    ASSERT_NE(volume, nullptr);
-    EXPECT_TRUE(sameChunks(*volume, *s_tiles[index]));
-  }
-
-  EXPECT_EQ(store.find(uuids::uuid::from_string(defaultproject::basinTerrains[1]).value()), nullptr);
-
-  const auto other = store.find(uuids::uuid::from_string(otherUuid).value());
-  ASSERT_NE(other, nullptr);
-  EXPECT_TRUE(other->chunks().empty());
-  EXPECT_EQ(store.description(uuids::uuid::from_string(otherUuid).value())->chunkCount, 0u);
-}
-
-namespace {
-  struct Bodies
-  {
-    std::shared_ptr<Object> sphere;
-    std::shared_ptr<Object> d20;
-    std::shared_ptr<Object> capsule;
-  };
-
-  struct SeamDrop
-  {
-    float lowestGap = 1e9f;
-    float lowestCenter = 1e9f;
-    float lastSecondGap = 0.0f;
-    float finalGap = 0.0f;
-    float drift = 0.0f;
-  };
-
-  float lowestWorldY(ConvexMeshCollider& collider)
-  {
-    float lowest = std::numeric_limits<float>::max();
-    for (const auto& vertex : collider.getWorldVertices())
-    {
-      lowest = std::min(lowest, vertex.y);
-    }
-
-    return lowest;
-  }
-
-  // The body's lowest point over the basin's ground under its center.
-  float gapBelow(const std::shared_ptr<Object>& object, const std::string& kind)
-  {
-    const glm::vec3 position = fixtures::positionOf(object);
-    float bottom = position.y - 1.0f;
-    if (kind == "capsule")
-    {
-      bottom = position.y - 2.0f;
-    }
-    else if (kind == "d20")
-    {
-      bottom = lowestWorldY(*std::dynamic_pointer_cast<ConvexMeshCollider>(
-        object->getComponent<Collider>(ComponentType::collider)));
-    }
-
-    return bottom - basin::worldGroundY(position.x, position.z);
-  }
-
-  // A sphere, a D20 and an upright capsule dropped three units above the ground over a seam between two tiles at
-  // world (seamX, seamZ), a few units apart along z, for three seconds of the server's ticks.
-  std::array<SeamDrop, 3> dropAcrossSeam(const std::array<std::pair<int, int>, 2>& tileCells, const Tiles& tiles,
-                                         const float seamX, const float seamZ, const bool collisionEnabled)
-  {
-    constexpr float step = 1.0f / 50.0f;
-    constexpr int ticks = 150;
-
-    const auto scene = fixtures::makeScene();
-    for (const auto& [row, col] : tileCells)
-    {
-      const auto terrainObject = fixtures::addObject(scene, "Terrain", basin::tileOrigin(row, col));
-      const auto terrainComponent = std::make_shared<Terrain>();
-      terrainObject->addComponent(terrainComponent);
-      terrainComponent->setVolume(tiles[tileIndex(row, col)]);
-      terrainComponent->setCollisionEnabled(collisionEnabled);
-    }
-
-    const float groundY = basin::worldGroundY(seamX, seamZ);
-    const glm::vec3 spots[3] = { { seamX, groundY + 4.0f, seamZ - 8.0f }, { seamX, groundY + 5.5f, seamZ },
-                                 { seamX, groundY + 6.0f, seamZ + 8.0f } };
-    const std::string kinds[3] = { "sphere", "d20", "capsule" };
-    const std::shared_ptr<Object> objects[3] = {
-      scene.objectManager->instantiate(defaultproject::sphere(spots[0])),
-      scene.objectManager->instantiate(defaultproject::instanceOf(defaultproject::libraryBody("D20"), spots[1],
-                                                                  glm::vec3(1.0f), { 1.5f, 0.0f, 2.0f })),
-      scene.objectManager->instantiate(defaultproject::instanceOf(defaultproject::capsuleBody(), spots[2]))
-    };
-
-    CollisionSystem collisions;
-    std::array<SeamDrop, 3> drops;
-    for (int tick = 0; tick < ticks; ++tick)
-    {
-      PhysicsSystem::fixedUpdate(*scene.objectManager, step);
-      collisions.fixedUpdate(*scene.objectManager, step);
-
-      for (size_t i = 0; i < 3; ++i)
-      {
-        const float gap = gapBelow(objects[i], kinds[i]);
-        const glm::vec3 position = fixtures::positionOf(objects[i]);
-        drops[i].lowestGap = std::min(drops[i].lowestGap, gap);
-        const float center = position.y - basin::worldGroundY(position.x, position.z);
-        drops[i].lowestCenter = std::min(drops[i].lowestCenter, center);
-        drops[i].drift = std::max(drops[i].drift, std::hypot(position.x - spots[i].x, position.z - spots[i].z));
-        if (tick >= ticks - 50)
-        {
-          drops[i].lastSecondGap = std::max(drops[i].lastSecondGap, std::abs(gap));
-        }
-      }
-    }
-
-    for (size_t i = 0; i < 3; ++i)
-    {
-      drops[i].finalGap = gapBelow(objects[i], kinds[i]);
-    }
-
-    return drops;
-  }
-}
-
-TEST_F(DefaultTerrainTilesTest, BodiesDroppedOnAFlatSeamLandAndStayOnIt)
-{
-  // The seam between the arena tile and its eastern neighbor, on the arena floor.
-  const float seamX = basin::tileOrigin(1, 2).x;
-  const float seamZ = 0.0f;
-
-  const auto drops = dropAcrossSeam({ { { 1, 1 }, { 1, 2 } } }, s_tiles, seamX, seamZ, true);
-  const char* names[3] = { "sphere", "D20", "capsule" };
-
-  for (size_t i = 0; i < 3; ++i)
-  {
-    SCOPED_TRACE(names[i]);
-    EXPECT_NEAR(drops[i].finalGap, 0.0f, 0.15f);
-    EXPECT_LT(drops[i].lastSecondGap, 0.15f);
-    EXPECT_GT(drops[i].lowestGap, -0.15f);
-    EXPECT_LT(drops[i].drift, 3.0f);
-  }
-
-  // Positive control: without the terrain's collision the same bodies fall far below the ground.
-  const auto open = dropAcrossSeam({ { { 1, 1 }, { 1, 2 } } }, s_tiles, seamX, seamZ, false);
-  for (size_t i = 0; i < 3; ++i)
-  {
-    SCOPED_TRACE(names[i]);
-    EXPECT_LT(open[i].finalGap, -5.0f);
-  }
-}
-
-TEST_F(DefaultTerrainTilesTest, BodiesRollingAcrossASlopedSeamNeverSinkThroughIt)
-{
-  // The seam between the two southern tiles of the west and middle columns, on the rim's slope.
-  const float seamX = basin::tileOrigin(0, 1).x;
-  const float seamZ = basin::tileOrigin(0, 0).z + 60.0f * voxel;
-
-  const auto drops = dropAcrossSeam({ { { 0, 0 }, { 0, 1 } } }, s_tiles, seamX, seamZ, true);
-  const char* names[3] = { "sphere", "D20", "capsule" };
-
-  // Every body's center stays above the ground: a sphere's is a radius up, and the others' no lower than half that.
-  for (size_t i = 0; i < 3; ++i)
-  {
-    SCOPED_TRACE(names[i]);
-    EXPECT_GT(drops[i].lowestCenter, 0.5f);
-  }
-
-  // Positive control: without the terrain's collision the same bodies fall through the slope.
-  const auto open = dropAcrossSeam({ { { 0, 0 }, { 0, 1 } } }, s_tiles, seamX, seamZ, false);
-  for (size_t i = 0; i < 3; ++i)
-  {
-    SCOPED_TRACE(names[i]);
-    EXPECT_LT(open[i].lowestCenter, -5.0f);
-  }
 }

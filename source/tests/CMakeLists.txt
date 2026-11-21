@@ -270,6 +270,7 @@ add_executable(${PROJECT_NAME}
   EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
   DefaultTerrainTest.cpp
+  DefaultTerrainTilesPhysicsTest.cpp
   DefaultTerrainTilesTest.cpp
   DefaultWelcomePhysicsTest.cpp
   DefaultWelcomeTest.cpp

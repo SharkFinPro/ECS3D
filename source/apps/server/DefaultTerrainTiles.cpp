@@ -118,11 +118,12 @@ public:
   }
 
   // The distance to the surface in voxels at global column (x, z) and height y, from the fill's first order estimate
-  // over central differences. It reads past the tile edge, which is what lets two tiles agree on their shared column.
+  // over central differences. It reads past the tile edge, which is what lets two tiles agree on their shared column;
+  // only the world's own border takes the one-sided difference the fill uses there.
   [[nodiscard]] int16_t distanceAt(const int x, const int y, const int z) const
   {
-    const float gradX = (quantized(x + 1, z) - quantized(x - 1, z)) * 0.5f;
-    const float gradZ = (quantized(x, z + 1) - quantized(x, z - 1)) * 0.5f;
+    const float gradX = slope([this, z](const int i) { return quantized(i, z); }, x);
+    const float gradZ = slope([this, x](const int i) { return quantized(x, i); }, z);
     const float inverseNorm = 1.0f / std::sqrt(1.0f + gradX * gradX + gradZ * gradZ);
 
     return terrain::encodeDistance((static_cast<float>(y) - quantized(x, z)) * inverseNorm);
@@ -130,13 +131,22 @@ public:
 
   [[nodiscard]] float normalY(const int x, const int z) const
   {
-    const float gradX = (at(x + 1, z) - at(x - 1, z)) * 0.5f;
-    const float gradZ = (at(x, z + 1) - at(x, z - 1)) * 0.5f;
+    const float gradX = slope([this, z](const int i) { return at(i, z); }, x);
+    const float gradZ = slope([this, x](const int i) { return at(x, i); }, z);
 
     return 1.0f / std::sqrt(1.0f + gradX * gradX + gradZ * gradZ);
   }
 
 private:
+  template <typename Read>
+  [[nodiscard]] static float slope(const Read& read, const int index)
+  {
+    const int before = std::max(index - 1, 0);
+    const int after = std::min(index + 1, basin::worldColumns - 1);
+
+    return (read(after) - read(before)) / static_cast<float>(after - before);
+  }
+
   [[nodiscard]] static size_t index(const int x, const int z)
   {
     return static_cast<size_t>(z) * static_cast<size_t>(basin::worldColumns) + static_cast<size_t>(x);

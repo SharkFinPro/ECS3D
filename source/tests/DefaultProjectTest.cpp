@@ -646,44 +646,77 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
   EXPECT_EQ(project.at("currentSceneUUID"), scenes.at(0).at("uuid"));
 }
 
+namespace {
+  // Checks a basin tile's collider and placement; returns its uuid.
+  std::string expectBasinTile(const nlohmann::json& object, const nlohmann::json& collider)
+  {
+    const auto uuid = collider.at("terrainUUID").get<std::string>();
+    const auto found = std::ranges::find(defaultproject::basinTerrains, uuid);
+    EXPECT_NE(found, defaultproject::basinTerrains.end());
+    if (found == defaultproject::basinTerrains.end())
+    {
+      return uuid;
+    }
+
+    const int index = static_cast<int>(found - defaultproject::basinTerrains.begin());
+    const glm::vec3 expected = basin::tileOrigin(index / 3, index % 3);
+    const glm::vec3 position = positionOfObject(object);
+    EXPECT_FLOAT_EQ(position.x, expected.x);
+    EXPECT_FLOAT_EQ(position.y, expected.y);
+    EXPECT_FLOAT_EQ(position.z, expected.z);
+    EXPECT_TRUE(collider.at("collisionEnabled").get<bool>());
+    EXPECT_EQ(object.at("name"), "Terrain Tile " + std::to_string(index / 3) + " " + std::to_string(index % 3));
+
+    return uuid;
+  }
+
+  // On the arena's south side, just above the floor and clear of the tower over its middle.
+  void expectBasinPlayer(const nlohmann::json& object, const nlohmann::json& controller)
+  {
+    const glm::vec3 spawn = positionOfObject(object);
+    EXPECT_EQ(controller.at("playerSlot"), 0);
+
+    const float gap = spawn.y - 1.0f - basin::worldGroundY(spawn.x, spawn.z);
+    EXPECT_GE(gap, 0.0f);
+    EXPECT_LE(gap, 3.0f);
+    EXPECT_LT(spawn.z, -basin::stackSpacing * static_cast<float>(basin::towerColumns));
+  }
+
+  int basinRecords(const nlohmann::json& project)
+  {
+    int records = 0;
+    for (const auto& record : project.at("assets").at("terrains"))
+    {
+      const auto uuid = record.at("uuid").get<std::string>();
+      if (std::ranges::find(defaultproject::basinTerrains, uuid) != defaultproject::basinTerrains.end())
+      {
+        EXPECT_EQ(record.at("filePath"), terrainAssetPath(uuids::uuid::from_string(uuid).value()));
+        ++records;
+      }
+    }
+
+    return records;
+  }
+}
+
 TEST(DefaultProject, TheTerrainBasinSceneNamesNineTilesAPlayerAndTheirTerrains)
 {
   const auto project = buildDefaultProject();
-  const auto& objects = sceneObjects(project, "Terrain Basin");
 
   std::set<std::string> named;
   int activeCameras = 0;
   int players = 0;
-  for (const auto& object : objects)
+  for (const auto& object : sceneObjects(project, "Terrain Basin"))
   {
     for (const auto& component : object.at("components"))
     {
       if (component.at("type") == "Collider" && component.at("subType") == "Terrain")
       {
-        const auto uuid = component.at("terrainUUID").get<std::string>();
-        const auto found = std::ranges::find(defaultproject::basinTerrains, uuid);
-        ASSERT_NE(found, defaultproject::basinTerrains.end());
-        named.insert(uuid);
-
-        const int index = static_cast<int>(found - defaultproject::basinTerrains.begin());
-        const glm::vec3 expected = basin::tileOrigin(index / 3, index % 3);
-        const glm::vec3 position = positionOfObject(object);
-        EXPECT_FLOAT_EQ(position.x, expected.x);
-        EXPECT_FLOAT_EQ(position.y, expected.y);
-        EXPECT_FLOAT_EQ(position.z, expected.z);
-        EXPECT_TRUE(component.at("collisionEnabled").get<bool>());
-        EXPECT_EQ(object.at("name"), "Terrain Tile " + std::to_string(index / 3) + " " + std::to_string(index % 3));
+        named.insert(expectBasinTile(object, component));
       }
       else if (component.at("type") == "PlayerController")
       {
-        const glm::vec3 spawn = positionOfObject(object);
-        EXPECT_EQ(component.at("playerSlot"), 0);
-
-        // On the arena's south side, just above the floor and clear of the tower over its middle.
-        const float gap = spawn.y - 1.0f - basin::worldGroundY(spawn.x, spawn.z);
-        EXPECT_GE(gap, 0.0f);
-        EXPECT_LE(gap, 3.0f);
-        EXPECT_LT(spawn.z, -basin::stackSpacing * static_cast<float>(basin::towerColumns));
+        expectBasinPlayer(object, component);
         ++players;
       }
       else if (component.at("type") == "Camera" && component.at("active") == true)
@@ -696,24 +729,46 @@ TEST(DefaultProject, TheTerrainBasinSceneNamesNineTilesAPlayerAndTheirTerrains)
   EXPECT_EQ(named.size(), 9u);
   EXPECT_EQ(players, 1);
   EXPECT_EQ(activeCameras, 1);
-
-  int records = 0;
-  for (const auto& record : project.at("assets").at("terrains"))
-  {
-    const auto uuid = record.at("uuid").get<std::string>();
-    if (std::ranges::find(defaultproject::basinTerrains, uuid) != defaultproject::basinTerrains.end())
-    {
-      EXPECT_EQ(record.at("filePath"), terrainAssetPath(uuids::uuid::from_string(uuid).value()));
-      ++records;
-    }
-  }
-
-  EXPECT_EQ(records, 9);
+  EXPECT_EQ(basinRecords(project), 9);
 
   // Welcome stays the scene the project opens on.
   const auto& scenes = project.at("assets").at("scenes");
   EXPECT_EQ(scenes.at(0).at("name"), "Welcome");
   EXPECT_EQ(project.at("currentSceneUUID"), scenes.at(0).at("uuid"));
+}
+
+namespace {
+  // A basin body keeps its prefab's density, and spawns above the ground under it; returns that ground's height.
+  float expectDensityAndClearance(const nlohmann::json& project, const nlohmann::json& body, const float radius)
+  {
+    const auto name = body.at("name").get<std::string>();
+    const glm::vec3 scale = scaleOf(body);
+    const float widest = std::max({ scale.x, scale.y, scale.z });
+    const float prefabMass = rigidBodyIn(prefabBody(project, name)).at("mass").get<float>();
+    const float massScale = name == "Block" ? scale.x * scale.y * scale.z : widest * widest * widest;
+    SCOPED_TRACE(name);
+    EXPECT_NEAR(rigidBodyIn(body).at("mass").get<float>(), prefabMass * massScale, prefabMass * massScale * 1e-3f);
+
+    const glm::vec3 position = positionOfObject(body);
+    const float ground = basin::worldGroundY(position.x, position.z);
+    EXPECT_GT(position.y - radius, ground);
+
+    return ground;
+  }
+
+  size_t overlappingPairs(const std::vector<glm::vec3>& positions, const std::vector<float>& radii)
+  {
+    size_t overlapping = 0;
+    for (size_t a = 0; a < positions.size(); ++a)
+    {
+      for (size_t b = a + 1; b < positions.size(); ++b)
+      {
+        overlapping += glm::distance(positions[a], positions[b]) < radii[a] + radii[b] ? 1 : 0;
+      }
+    }
+
+    return overlapping;
+  }
 }
 
 TEST(DefaultProject, TheTerrainBasinStacksMixedBodiesThatSpawnClearOfEachOtherAndTheGround)
@@ -731,24 +786,10 @@ TEST(DefaultProject, TheTerrainBasinStacksMixedBodiesThatSpawnClearOfEachOtherAn
   float highestGround = -1e9f;
   for (const auto* body : bodies)
   {
-    const auto name = body->at("name").get<std::string>();
-    kinds.insert(name);
-
-    const glm::vec3 scale = scaleOf(*body);
-    const float widest = std::max({ scale.x, scale.y, scale.z });
-    const float prefabMass = rigidBodyIn(prefabBody(project, name)).at("mass").get<float>();
-    const float massScale = name == "Block" ? scale.x * scale.y * scale.z : widest * widest * widest;
-    SCOPED_TRACE(name);
-    EXPECT_NEAR(rigidBodyIn(*body).at("mass").get<float>(), prefabMass * massScale, prefabMass * massScale * 1e-3f);
-
-    const glm::vec3 position = positionOfObject(*body);
-    const float radius = boundingRadius(*body);
-    const float ground = basin::worldGroundY(position.x, position.z);
-    EXPECT_GT(position.y - radius, ground);
-    highestGround = std::max(highestGround, ground);
-
-    positions.push_back(position);
-    radii.push_back(radius);
+    kinds.insert(body->at("name").get<std::string>());
+    radii.push_back(boundingRadius(*body));
+    positions.push_back(positionOfObject(*body));
+    highestGround = std::max(highestGround, expectDensityAndClearance(project, *body, radii.back()));
   }
 
   EXPECT_GE(kinds.size(), 10u);
@@ -757,17 +798,7 @@ TEST(DefaultProject, TheTerrainBasinStacksMixedBodiesThatSpawnClearOfEachOtherAn
 
   // Positive control for the ground check: some stacks stand on ground well above the arena floor.
   EXPECT_GT(highestGround, 10.0f);
-
-  size_t overlapping = 0;
-  for (size_t a = 0; a < positions.size(); ++a)
-  {
-    for (size_t b = a + 1; b < positions.size(); ++b)
-    {
-      overlapping += glm::distance(positions[a], positions[b]) < radii[a] + radii[b] ? 1 : 0;
-    }
-  }
-
-  EXPECT_EQ(overlapping, 0u);
+  EXPECT_EQ(overlappingPairs(positions, radii), 0u);
 
   // Positive control: the radii are not so small that they hide overlaps; the largest bodies reach past a unit and
   // still fit their slot.
