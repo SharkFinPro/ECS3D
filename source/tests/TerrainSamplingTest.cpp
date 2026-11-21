@@ -403,35 +403,32 @@ TEST(TerrainSamplingTest, GradientMatchesACentralDifferenceOfDistanceOnRandomDat
   EXPECT_GT(nearBorder, 50);
 }
 
-TEST(TerrainSamplingTest, EveryCellReadsTheCornerSamplesTheVolumeHolds)
-{
-  std::mt19937 rng(77);
-  std::uniform_int_distribution<int> distance(-terrain::airDistance, terrain::airDistance);
-  terrain::TerrainVolume volume;
-
-  for (const terrain::ChunkCoord coord : terrain::chunksTouched({ { -32, -32, -32 }, { 32, 32, 32 } }))
+namespace {
+  // Random dense chunks over samples -32..32 on every axis, with a uniform and an absent chunk among them, so cells
+  // straddle each kind of chunk border.
+  void fillMixedChunks(terrain::TerrainVolume& volume, std::mt19937& rng)
   {
-    std::vector<int16_t> distances(terrain::samplesPerChunk);
-    for (auto& value : distances)
+    std::uniform_int_distribution<int> distance(-terrain::airDistance, terrain::airDistance);
+    for (const terrain::ChunkCoord coord : terrain::chunksTouched({ { -32, -32, -32 }, { 32, 32, 32 } }))
     {
-      value = static_cast<int16_t>(distance(rng));
+      std::vector<int16_t> distances(terrain::samplesPerChunk);
+      for (auto& value : distances)
+      {
+        value = static_cast<int16_t>(distance(rng));
+      }
+
+      volume.setChunk(coord, terrain::TerrainChunk::dense(std::move(distances),
+                                                          std::vector<uint8_t>(terrain::samplesPerChunk, 1)));
     }
 
-    volume.setChunk(coord, terrain::TerrainChunk::dense(std::move(distances),
-                                                        std::vector<uint8_t>(terrain::samplesPerChunk, 1)));
+    volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-1234, 1));
+    volume.setChunk({ -1, 0, -1 }, nullptr);
   }
 
-  // A uniform and an absent chunk among the dense ones, so cells straddle each kind of border.
-  volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-1234, 1));
-  volume.setChunk({ -1, 0, -1 }, nullptr);
-
-  const float voxelSize = volume.voxelSize();
-  terrain::Sampler sampler(volume);
-  std::uniform_real_distribution<float> sampleAxis(-33.0f, 33.0f);
-
-  const auto expected = [&volume, voxelSize](const glm::vec3& point)
+  // The trilinear distance at point from the volume's own samples, read one corner at a time.
+  float cornerByCornerDistance(const terrain::TerrainVolume& volume, const glm::vec3& point)
   {
-    const glm::vec3 position = point / voxelSize;
+    const glm::vec3 position = point / volume.voxelSize();
     const glm::vec3 base = glm::floor(position);
     const glm::vec3 f = position - base;
     const glm::ivec3 origin(base);
@@ -451,7 +448,26 @@ TEST(TerrainSamplingTest, EveryCellReadsTheCornerSamplesTheVolumeHolds)
     const float y1 = x01 + (x11 - x01) * f.y;
 
     return y0 + (y1 - y0) * f.z;
-  };
+  }
+
+  bool onTheLastCellOfAChunk(const glm::vec3& samplePoint)
+  {
+    const glm::ivec3 inChunk = (glm::ivec3(glm::floor(samplePoint)) % terrain::chunkSize + terrain::chunkSize) %
+      terrain::chunkSize;
+
+    return inChunk.x == terrain::chunkSize - 1 || inChunk.y == terrain::chunkSize - 1 ||
+      inChunk.z == terrain::chunkSize - 1;
+  }
+}
+
+TEST(TerrainSamplingTest, EveryCellReadsTheCornerSamplesTheVolumeHolds)
+{
+  std::mt19937 rng(77);
+  terrain::TerrainVolume volume;
+  fillMixedChunks(volume, rng);
+
+  terrain::Sampler sampler(volume);
+  std::uniform_real_distribution<float> sampleAxis(-33.0f, 33.0f);
 
   int acrossBorders = 0;
   for (int i = 0; i < 4000; ++i)
@@ -463,16 +479,9 @@ TEST(TerrainSamplingTest, EveryCellReadsTheCornerSamplesTheVolumeHolds)
       samplePoint[i % 12 / 4] = (i % 8 == 0 ? 31.0f : -1.0f) + 0.5f;
     }
 
-    const glm::vec3 point = samplePoint * voxelSize;
-    EXPECT_NEAR(sampler.distance(point), expected(point), 1.0e-6f) << i;
-
-    const glm::ivec3 inChunk = (glm::ivec3(glm::floor(samplePoint)) % terrain::chunkSize + terrain::chunkSize) %
-      terrain::chunkSize;
-    if (inChunk.x == terrain::chunkSize - 1 || inChunk.y == terrain::chunkSize - 1 ||
-        inChunk.z == terrain::chunkSize - 1)
-    {
-      ++acrossBorders;
-    }
+    const glm::vec3 point = samplePoint * volume.voxelSize();
+    EXPECT_NEAR(sampler.distance(point), cornerByCornerDistance(volume, point), 1.0e-6f) << i;
+    acrossBorders += onTheLastCellOfAChunk(samplePoint) ? 1 : 0;
   }
 
   EXPECT_GT(acrossBorders, 500);
