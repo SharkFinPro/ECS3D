@@ -159,7 +159,8 @@ jobs:
         # Through the configure preset, so that CMakePresets.json is exercised by CI rather than
         # described by it: the generator, the build directory and the build type all come from the file
         # a developer uses. Only the compilers are passed here, because they are the one thing the
-        # matrix varies and the preset deliberately does not pin.        run: >
+        # matrix varies and the preset deliberately does not pin.
+        run: >
           cmake --preset ${{ steps.strings.outputs.preset }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
