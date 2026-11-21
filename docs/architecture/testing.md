@@ -46,6 +46,11 @@ cobertura output in `<build-dir>/coverage/managed`; the native side is read with
 ImGui's core sources and `editor/ObjectGUIManager.cpp` compile in too, so panel tests can run a real headless
 frame (the backends and Vulkan stay out).
 VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
+`render/TerrainVolumeSource.cpp` compiles in too (it needs only the engine's header-only `VolumeSource.h`), together with
+the engine's headless `MarchingCubesExtractor.cpp` and `VolumeChunking.cpp`, which `TerrainSeamNormalsTest` uses to mesh
+tiles as the renderer does. They come from the fetched VulkanEngine source directory, read from the global
+`vulkanengine` FetchContent property; `source/tests/CMakeLists.txt` stops the configure with a FATAL_ERROR when it is
+missing.
 
 The suite's own translation units compile without optimization in Release (`/Od`, `-O0`; see
 `source/tests/CMakeLists.txt`). They are most of a Release build's compile time, and the code a test runs hot lives in

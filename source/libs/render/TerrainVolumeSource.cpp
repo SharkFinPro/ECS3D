@@ -5,8 +5,20 @@
 
 TerrainVolumeSource::TerrainVolumeSource(std::shared_ptr<const TerrainSurfaceFeed> feed,
                                          const terrain::SampleBox& bounds)
-  : m_feed(std::move(feed)), m_bounds{ bounds.min, bounds.max }
+  : TerrainVolumeSource(std::move(feed), bounds, bounds)
 {}
+
+TerrainVolumeSource::TerrainVolumeSource(std::shared_ptr<const TerrainSurfaceFeed> feed,
+                                         const terrain::SampleBox& bounds, const terrain::SampleBox& sampleBounds)
+  : m_feed(std::move(feed)), m_bounds{ bounds.min, bounds.max }, m_sampleBounds{ sampleBounds.min, sampleBounds.max }
+{}
+
+std::shared_ptr<const TerrainVolumeSource> TerrainVolumeSource::forSurface(
+  std::shared_ptr<const TerrainSurfaceFeed> feed, const terrain::SampleBox& meshedBounds, const uint8_t openSides)
+{
+  return std::make_shared<const TerrainVolumeSource>(std::move(feed), meshedBounds,
+                                                     terrain::openSampleBounds(meshedBounds, openSides));
+}
 
 void TerrainVolumeSource::fill(const vke::VolumeRegion& region, const uint32_t lod, const std::span<float> distance,
                                const std::span<uint8_t> material) const
@@ -26,4 +38,9 @@ void TerrainVolumeSource::fill(const vke::VolumeRegion& region, const uint32_t l
 vke::VolumeRegion TerrainVolumeSource::bounds() const
 {
   return m_bounds;
+}
+
+vke::VolumeRegion TerrainVolumeSource::sampleBounds() const
+{
+  return m_sampleBounds;
 }

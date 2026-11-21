@@ -28,6 +28,7 @@ add_library(${PROJECT_NAME}
   SharedAssetLoads.h
   StatsOverlay.h
   TerrainShadowVotes.h
+  TerrainSideVotes.h
   TerrainSurfaceFeed.h
   TerrainSurfacePlan.h
   TerrainSurfaceSampling.cpp

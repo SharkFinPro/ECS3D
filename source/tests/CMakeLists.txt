@@ -28,6 +28,13 @@ FetchContent_GetProperties(imgui SOURCE_DIR ECS3D_IMGUI_SOURCE_DIR)
 if(NOT ECS3D_IMGUI_SOURCE_DIR)
   message(FATAL_ERROR "imgui was not fetched; ECS3DTests needs it for ObjectGUIManager")
 endif()
+
+# The engine's headless surface extraction (no Vulkan) compiles in the same way, from its fetched source directory.
+FetchContent_GetProperties(vulkanengine SOURCE_DIR ECS3D_VULKANENGINE_SOURCE_DIR)
+if(NOT ECS3D_VULKANENGINE_SOURCE_DIR)
+  message(FATAL_ERROR "VulkanEngine was not fetched; ECS3DTests needs its surface extractor")
+endif()
+
 set(ECS3D_IMGUI_SOURCES
   ${ECS3D_IMGUI_SOURCE_DIR}/imgui.cpp
   ${ECS3D_IMGUI_SOURCE_DIR}/imgui_draw.cpp
@@ -243,7 +250,9 @@ add_executable(${PROJECT_NAME}
   TerrainReplicationTest.cpp
   TerrainSamplingTest.cpp
   TerrainSceneQueryTest.cpp
+  TerrainSeamNormalsTest.cpp
   TerrainShadowVotesTest.cpp
+  TerrainSideVotesTest.cpp
   TerrainSnapshotTest.cpp
   TerrainStoreTest.cpp
   TerrainStreamFocusTest.cpp
@@ -445,6 +454,13 @@ add_executable(${PROJECT_NAME}
   # The terrain surface sampling helpers depend only on ECS3DData headers and glm.
   ../libs/render/TerrainSurfaceSampling.cpp
 
+  # TerrainVolumeSource needs only the engine's header-only VolumeSource.h, no Vulkan.
+  ../libs/render/TerrainVolumeSource.cpp
+
+  # The engine's headless surface extractor and chunk grid, so the suite can mesh terrain exactly as the renderer does.
+  ${ECS3D_VULKANENGINE_SOURCE_DIR}/source/components/assets/volume/MarchingCubesExtractor.cpp
+  ${ECS3D_VULKANENGINE_SOURCE_DIR}/source/components/assets/volume/VolumeChunking.cpp
+
   # The thumbnail letterbox and PNG encode depend only on the standard library and stb_image_write.
   ../libs/render/ThumbnailImage.cpp
 
@@ -465,6 +481,7 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${ECS3D_STB_SOURCE_DIR}
   ${ECS3D_IMGUI_SOURCE_DIR}
+  ${ECS3D_VULKANENGINE_INCLUDE}
   ${CMAKE_CURRENT_SOURCE_DIR}/../apps/server
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings

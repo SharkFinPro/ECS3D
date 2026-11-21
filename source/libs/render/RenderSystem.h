@@ -3,6 +3,7 @@
 
 #include "LiveObjectTracker.h"
 #include "TerrainShadowVotes.h"
+#include "TerrainSideVotes.h"
 #include <glm/mat4x4.hpp>
 #include <memory>
 #include <optional>
@@ -135,6 +136,7 @@ private:
 
   std::vector<TerrainDraw> m_terrainDraws;
   TerrainShadowVotes m_terrainShadowVotes;
+  TerrainSideVotes m_terrainSideVotes;
 };
 
 

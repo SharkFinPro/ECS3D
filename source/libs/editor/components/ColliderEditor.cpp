@@ -419,6 +419,30 @@ namespace {
           edited = true;
         }
 
+        gc::rowLabel("Open Sides");
+        if (ImGui::IsItemHovered())
+        {
+          ImGui::SetTooltip("%s", "Leaves the surface open on the checked sides, where the outermost sample column only "
+                                  "shapes normals. For tiles that share columns with a neighbor. A side opens only "
+                                  "when every object drawing this terrain checks it.");
+        }
+
+        const struct { const char* label; terrain::TerrainSide side; } sides[] = {
+          { "-X", terrain::minX }, { "+X", terrain::maxX }, { "-Z", terrain::minZ }, { "+Z", terrain::maxZ }
+        };
+
+        uint8_t openSides = terrain->getOpenSides();
+        for (const auto& [label, side] : sides)
+        {
+          bool open = (openSides & side) != 0;
+          if (gc::accentCheckbox(label, &open, mixed.contains("openSides")))
+          {
+            openSides = static_cast<uint8_t>(open ? openSides | side : openSides & ~side);
+            terrain->setOpenSides(openSides);
+            edited = true;
+          }
+        }
+
         edited |= colliderLayerMaskEditor(terrain, mixed);
       }
 

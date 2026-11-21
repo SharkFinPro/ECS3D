@@ -22,6 +22,10 @@ namespace basintest {
 
   inline constexpr int lastColumn = basin::tileColumns - 1;
 
+  // Columns two neighbors hold in common: the seam and one apron column on each side. A's local column tileStride + k is
+  // B's local column k.
+  inline constexpr int overlapColumns = basin::tileColumns - basin::tileStride;
+
   inline size_t tileIndex(const int row, const int col)
   {
     return static_cast<size_t>(row * basin::tilesPerSide + col);
@@ -53,8 +57,8 @@ namespace basintest {
     return true;
   }
 
-  // Two neighboring tiles. For an east pair, a is west of b and they meet on a's last column and b's first; for a
-  // north pair, a is south of b and they meet on a's last row and b's first.
+  // Two neighboring tiles. For an east pair, a is west of b and they overlap on a's last overlapColumns columns and
+  // b's first; for a north pair, a is south of b and they overlap on a's last rows and b's first.
   struct Seam
   {
     int rowA;
