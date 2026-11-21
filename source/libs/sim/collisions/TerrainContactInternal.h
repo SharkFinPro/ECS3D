@@ -2,6 +2,8 @@
 #define TERRAINCONTACTINTERNAL_H
 
 #include "NarrowPhase.h"
+#include "TerrainContact.h"
+#include "terrain/TerrainTypes.h"
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <cstddef>
@@ -60,6 +62,11 @@ namespace collisions::detail {
 
   // The terrain's volume and placement, or nothing when its collision is off or it has no volume or transform.
   [[nodiscard]] std::optional<TerrainGround> prepareGround(Terrain& terrain);
+
+  // The samples of the terrain-local box that the world-space box from low to high, grown by reach, can read.
+  // Nothing when the box is not finite.
+  [[nodiscard]] std::optional<terrain::SampleBox> reachableSamples(const TerrainGround& ground, const glm::vec3& low,
+                                                                   const glm::vec3& high, float reach);
 
   // Whether any chunk holding ground lies within reach of the world-space box from low to high.
   [[nodiscard]] bool reachesGround(const TerrainGround& ground, const glm::vec3& low, const glm::vec3& high,
@@ -122,6 +129,8 @@ namespace collisions::detail {
                                                                  const glm::vec3& sweep);
 
   [[nodiscard]] bool polytopeIntersectsTerrain(Collider& collider, Terrain& terrain);
+
+  [[nodiscard]] TerrainProbe probePolytopeTerrain(Collider& collider, Terrain& terrain, const glm::vec3& sweep);
 
   // The world-space points a box or convex hull is tested at: every vertex, then points along its edges and over its
   // faces no more than a voxel apart, thinned to maxTerrainQueryPoints except for the vertices.

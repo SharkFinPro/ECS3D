@@ -124,6 +124,9 @@ private:
     // Neither side overlaps the other yet, but they close on each other fast enough to meet this tick. Such a
     // pair is solved, so it meets without sinking in, and raises no collision event until it does overlap.
     bool approaching = false;
+    // A terrain pair's contacts, found in the narrow phase with the body where the solve finds it, so the solve
+    // reuses them. Empty for a trigger pair, which is not solved.
+    std::optional<std::vector<collisions::Contact>> terrainContacts;
   };
 
   // A pair for the solver: the lower edge, the hit that names the higher one, and the pair's lowest bound.

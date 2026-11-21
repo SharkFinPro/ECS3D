@@ -206,14 +206,16 @@ those axes. Layer masks and `ignoreObject` apply as for any collider.
 out of every pair and event (`isInert`). A terrain object must not carry a `RigidBody`: that is unsupported.
 Collision ignores the body and treats the terrain as static, but `PhysicsSystem` would still integrate it.
 
-**Sweep.** Only the dynamic side of a terrain pair asks: `intersectsTerrain` sets that side's `lowerSees` or
-`higherSees` flag (no witness), and when it does not intersect, `approachesTerrain` with the body's sweep sets
-`approaching`. A terrain never reaches `intersects`, `approaches` or `findContact`. Events come from those flags, so
-enter, stay and exit name the terrain object's uuid. A trigger body gets events and no response, as against any
-collider.
+**Sweep.** Only the dynamic side of a terrain pair asks. `probeTerrain` with the body's sweep answers both
+`intersectsTerrain`, which sets that side's `lowerSees` or `higherSees` flag (no witness), and `findTerrainContacts`,
+whose contacts set `approaching` when it does not intersect and are kept on the `SweepHit` for the solve. A box or hull
+whose sweep is not traced is measured once for both answers. A trigger pair asks only `intersectsTerrain`. A terrain
+never reaches `intersects`, `approaches` or `findContact`. Events come from those flags, so enter, stay and exit name
+the terrain object's uuid. A trigger body gets events and no response, as against any collider.
 
-**Solve.** `solveIsland` calls `findTerrainContacts` with the dynamic body's sweep and pushes one `ContactPair` per
-contact: the body and its collider against the terrain with no other body, `manifold` the contact's index. The solver
+**Solve.** `solveIsland` takes the contacts the sweep found (nothing moves a body between the two) and pushes one
+`ContactPair` per contact: the body and its collider against the terrain with no other body, `manifold` the contact's
+index. The solver
 caches impulses under `PairKey` with that index as `subIndex` (zero for every other pair), so each wall of a gully keeps
 its own warm start. Contacts are ordered by depth, so near-equal walls can swap ordinals between ticks: when the
 exact sub-index is missing or faces another way, the lookup tries the pair's other sub-indices and takes the best
@@ -254,12 +256,15 @@ never zero.
 
 A box or convex hull takes the polytope path (`collisions/TerrainPolytopeContact.cpp`, sharing the terrain frame,
 surface refinement, clustering and contact builder with the above through `TerrainContactInternal.h`). Its early-out
-uses the collider's bounding box, widened by the sweep, the margin and a voxel. Query points have radius zero: every
+uses the collider's bounding box, widened by the sweep, the margin and a voxel, and also returns when every sample that
+box reads is air (`TerrainVolume::isAirWithin`, answered per 8-sample brick) and the band's edge is beyond the furthest
+a point is measured from. Query points have radius zero: every
 vertex, then points along each edge and over each face (`hullSupportFaces` polygons for a hull, six rectangles for a box)
 no more than a voxel apart, with face points on cell centers kept when inside the polygon. They are built on every call
 from the collider's world caches, not cached on the collider, since a lazy cache would be written by several threads in
-the narrow phase. The total is capped at `maxTerrainQueryPoints` (512) with the vertices always kept: edges and faces
-are ranked by the raw field distance at their middle, nearest first, and each in turn takes the finest spacing (steps
+the narrow phase. The total is capped at `maxTerrainQueryPoints` (512) with the vertices always kept: when the
+full-density points would pass it, edges and faces are ranked by the raw field distance at their middle, nearest
+first, and each in turn takes the finest spacing (steps
 of 25 percent over a voxel) that leaves room for the groups after it, so a face lying on the ground keeps its full grid
 while it fits. A point whose raw distance is beyond the margin, the sweep's length and a voxel is skipped, and so is
 one with no usable gradient. The rest are measured like a sphere of radius zero and clustered by normal as above; a

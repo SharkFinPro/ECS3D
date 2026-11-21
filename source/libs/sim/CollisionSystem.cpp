@@ -205,7 +205,7 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     ECS3D_PROFILE_SCOPE("Narrow phase");
 
-#pragma omp parallel for default(none) shared(forwardHits) schedule(dynamic, 8) num_threads(6)
+//#pragma omp parallel for default(none) shared(forwardHits) schedule(dynamic, 8) num_threads(6)
     for (int i = 0; i < m_collisionEdges.size(); ++i)
     {
       findCollisions(i, forwardHits[i]);
@@ -347,12 +347,12 @@ void CollisionSystem::resolveInIslands(const float dt)
   const int islandCount = static_cast<int>(islands.size());
   std::vector<std::vector<ContactSolver::CachedContact>> resolved(islands.size());
 
-#pragma omp parallel default(none) shared(islands, resolved, failure, dt, islandCount) num_threads(6)
+//#pragma omp parallel default(none) shared(islands, resolved, failure, dt, islandCount) num_threads(6)
   {
     // A worker's inertia cache would otherwise carry entries from earlier ticks.
     PhysicsSystem::clearInertiaCache();
 
-#pragma omp for schedule(dynamic)
+//#pragma omp for schedule(dynamic)
     for (int n = 0; n < islandCount; ++n)
     {
       try
@@ -361,7 +361,7 @@ void CollisionSystem::resolveInIslands(const float dt)
       }
       catch (...)
       {
-#pragma omp critical(collisionIslandFailure)
+//#pragma omp critical(collisionIslandFailure)
         {
           if (!failure)
           {
@@ -410,7 +410,9 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
       const auto& dynamicEdge = terrainFirst ? second : first;
       auto& terrain = static_cast<Terrain&>(terrainFirst ? *first.collider : *second.collider);
 
-      const auto contacts = collisions::findTerrainContacts(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+      const auto contacts = hit.terrainContacts
+                              ? *hit.terrainContacts
+                              : collisions::findTerrainContacts(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
       for (size_t i = 0; i < contacts.size(); ++i)
       {
         pairs.push_back({ dynamicEdge.body.get(), nullptr, dynamicEdge.collider.get(), &terrain, contacts[i],
@@ -562,11 +564,21 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
         continue;
       }
 
-      const bool touching = collisions::intersectsTerrain(*dynamicEdge.collider, terrain);
+      bool touching = false;
+      if (isTriggerPair(*edge.collider, *other.collider))
+      {
+        touching = collisions::intersectsTerrain(*dynamicEdge.collider, terrain);
+      }
+      else
+      {
+        auto probe = collisions::probeTerrain(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+        touching = probe.touching;
+        hit.approaching = !touching && !probe.contacts.empty();
+        hit.terrainContacts = std::move(probe.contacts);
+      }
+
       hit.lowerSees = !lowerIsTerrain && touching;
       hit.higherSees = lowerIsTerrain && touching;
-      hit.approaching = !touching && !isTriggerPair(*edge.collider, *other.collider) &&
-                        collisions::approachesTerrain(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
 
       if (touching || hit.approaching)
       {

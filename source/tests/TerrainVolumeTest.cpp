@@ -345,3 +345,27 @@ TEST(TerrainVolumeTest, RestoreChunksBumpsTheRevision)
   volume.restoreChunks(volume.snapshotChunks());
   EXPECT_GT(volume.revision(), restored);
 }
+
+TEST(TerrainVolumeTest, IsAirWithinReadsAbsentChunksAsAirAndAnyGroundAcrossChunks)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 1, 0, 0 }, solid());
+
+  EXPECT_TRUE(volume.isAirWithin({ { 0, 0, 0 }, { 32, 32, 32 } }));
+  EXPECT_TRUE(volume.isAirWithin({ { -100, -100, -100 }, { 32, 10, 10 } }));
+  EXPECT_TRUE(volume.isAirWithin({}));
+
+  EXPECT_FALSE(volume.isAirWithin({ { 31, 0, 0 }, { 33, 1, 1 } }));
+  EXPECT_FALSE(volume.isAirWithin({ { 40, 5, 5 }, { 41, 6, 6 } }));
+}
+
+TEST(TerrainVolumeTest, IsAirWithinAHugeBoxWalksTheHeldChunks)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ -5, 7, 2 }, solid());
+  volume.setChunk({ 300, 0, 0 }, solid());
+
+  EXPECT_FALSE(volume.isAirWithin({ { -1000000, -1000000, -1000000 }, { 1000000, 1000000, 1000000 } }));
+  EXPECT_TRUE(volume.isAirWithin({ { 0, -1000000, -1000000 }, { 9000, 1000000, 1000000 } }));
+  EXPECT_FALSE(volume.isAirWithin({ { 0, -1000000, -1000000 }, { 9601, 1000000, 1000000 } }));
+}

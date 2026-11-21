@@ -72,7 +72,9 @@ points along local +Y, and its `height` is the total height including both caps.
 larger of the object's x and z scale, and its half-height with y. `terrain/` holds the sparse signed-distance volume in
 `namespace terrain`: `TerrainVolume` maps chunk coordinates to immutable 32-sample `TerrainChunk`s that an edit swaps
 copy-on-write (its `revision()` is unique across all volumes and changes with every edit), `encodeChunk`/`decodeChunk` are the chunk byte format, and `Sampler` reads trilinear distance and
-gradient from it, which `raycast` sphere-traces with absent chunks skipped.
+gradient from it, which `raycast` sphere-traces with absent chunks skipped. A `Sampler` keeps the last two cells it
+read, so the distance and gradient at one position cost one fetch. Each chunk also records which of its 8-sample bricks
+hold anything but air, which `TerrainVolume::isAirWithin` answers from without reading samples.
 `TerrainStreamPlan` is the headless planner for streaming a volume to a joining view: it queues every chunk nearest a
 focus first, `next` takes a batch whose wire-framed size fits a byte budget (the first chunk always goes, so the stream
 cannot stall), and `requeue` sends a coordinate again after an edit, reading the chunk from the volume at `next` time.

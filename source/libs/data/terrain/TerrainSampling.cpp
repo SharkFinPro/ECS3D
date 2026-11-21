@@ -16,25 +16,57 @@ namespace terrain
     : m_volume(volume)
   {}
 
-  int16_t Sampler::sampleDistance(const glm::ivec3 sample)
+  const TerrainChunk* Sampler::chunkAt(const ChunkCoord coord)
   {
-    const ChunkCoord coord = chunkOfSample(sample);
-
-    for (const CacheSlot& slot : m_cache)
+    if (const CacheSlot& last = m_cache[m_lastSlot]; last.valid && last.coord == coord)
     {
-      if (slot.valid && slot.coord == coord)
+      return last.chunk.get();
+    }
+
+    for (size_t i = 0; i < m_cache.size(); ++i)
+    {
+      if (m_cache[i].valid && m_cache[i].coord == coord)
       {
-        return slot.chunk ? slot.chunk->distanceAtIndex(indexInChunk(sample)) : airDistance;
+        m_lastSlot = i;
+        return m_cache[i].chunk.get();
       }
     }
 
-    CacheSlot& slot = m_cache[m_nextSlot];
+    m_lastSlot = m_nextSlot;
     m_nextSlot = (m_nextSlot + 1) % m_cache.size();
+
+    CacheSlot& slot = m_cache[m_lastSlot];
     slot.coord = coord;
     slot.chunk = m_volume.chunk(coord);
     slot.valid = true;
 
-    return slot.chunk ? slot.chunk->distanceAtIndex(indexInChunk(sample)) : airDistance;
+    return slot.chunk.get();
+  }
+
+  int16_t Sampler::sampleDistance(const glm::ivec3 sample)
+  {
+    const TerrainChunk* chunk = chunkAt(chunkOfSample(sample));
+
+    return chunk ? chunk->distanceAtIndex(indexInChunk(sample)) : airDistance;
+  }
+
+  Sampler::Cell Sampler::cellAt(const glm::vec3 local)
+  {
+    for (const RecentCell& recent : m_recent)
+    {
+      if (recent.valid && recent.local == local)
+      {
+        return recent.cell;
+      }
+    }
+
+    RecentCell& recent = m_recent[m_nextRecent];
+    m_nextRecent = (m_nextRecent + 1) % m_recent.size();
+    recent.local = local;
+    recent.cell = fetchCell(local);
+    recent.valid = true;
+
+    return recent.cell;
   }
 
   Sampler::Cell Sampler::fetchCell(const glm::vec3 local)
@@ -52,6 +84,29 @@ namespace terrain
     const glm::vec3 base = glm::floor(position);
     cell.fraction = position - base;
     const glm::ivec3 origin(base);
+
+    // Most cells lie inside one chunk, whose eight corners are then read with one lookup.
+    const ChunkCoord coord = chunkOfSample(origin);
+    const glm::ivec3 inChunk = origin - chunkOrigin(coord);
+    if (inChunk.x < chunkSize - 1 && inChunk.y < chunkSize - 1 && inChunk.z < chunkSize - 1)
+    {
+      const TerrainChunk* chunk = chunkAt(coord);
+      if (!chunk || chunk->isUniform())
+      {
+        cell.corners.fill(decodeDistance(chunk ? chunk->distances().front() : airDistance));
+        return cell;
+      }
+
+      const int16_t* distances = chunk->distances().data();
+      const int first = sampleIndex(inChunk.x, inChunk.y, inChunk.z);
+      for (int corner = 0; corner < 8; ++corner)
+      {
+        const int index = first + sampleIndex(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
+        cell.corners[static_cast<size_t>(corner)] = decodeDistance(distances[index]);
+      }
+
+      return cell;
+    }
 
     for (int corner = 0; corner < 8; ++corner)
     {
@@ -103,17 +158,17 @@ namespace terrain
 
   float Sampler::distance(const glm::vec3 local)
   {
-    return distanceOf(fetchCell(local));
+    return distanceOf(cellAt(local));
   }
 
   glm::vec3 Sampler::gradient(const glm::vec3 local)
   {
-    return gradientOf(fetchCell(local));
+    return gradientOf(cellAt(local));
   }
 
   float Sampler::metricDistance(const glm::vec3 local)
   {
-    const Cell cell = fetchCell(local);
+    const Cell cell = cellAt(local);
     const float voxelSize = m_volume.voxelSize();
     const float length = std::max(glm::length(gradientOf(cell)), minGradientLength / voxelSize);
     const float reach = bandVoxels * voxelSize;

@@ -32,6 +32,15 @@ namespace collisions {
 
   // Whether collider, carried along sweep, would reach the ground: findTerrainContacts would report a contact.
   [[nodiscard]] bool approachesTerrain(Collider& collider, Terrain& terrain, const glm::vec3& sweep);
+
+  struct TerrainProbe {
+    bool touching = false;
+    std::vector<Contact> contacts;
+  };
+
+  // intersectsTerrain and findTerrainContacts for one sweep, with the same answers. A box or hull whose sweep is not
+  // traced is measured once for both.
+  [[nodiscard]] TerrainProbe probeTerrain(Collider& collider, Terrain& terrain, const glm::vec3& sweep);
 }
 
 #endif //TERRAINCONTACT_H

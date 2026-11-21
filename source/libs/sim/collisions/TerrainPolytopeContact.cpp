@@ -36,6 +36,10 @@ namespace collisions::detail {
     // Raw field distances are ranked at this resolution, in hundredths of a voxel.
     constexpr float rankQuantum = 100.0f;
 
+    // In voxels: keeps the all-air test on the safe side of measuredPoints' own reject distance, whose sweep length is
+    // what is left after the trace and so no longer, up to rounding.
+    constexpr float airSlack = 1e-3f;
+
     using Edge = std::pair<glm::vec3, glm::vec3>;
 
     struct Geometry {
@@ -245,29 +249,37 @@ namespace collisions::detail {
       }
     }
 
-    [[nodiscard]] std::vector<Group> groupsOf(const Geometry& geometry, const TerrainGround& ground,
-                                              terrain::Sampler& sampler, const glm::vec3& offset)
+    [[nodiscard]] std::vector<Group> groupsOf(const Geometry& geometry)
     {
-      const auto rankAt = [&ground, &sampler, &offset](const glm::vec3& world)
-      {
-        return std::round(sampler.distance(ground.frame.toLocal(world + offset)) * rankQuantum);
-      };
-
       std::vector<Group> groups;
+      groups.reserve(geometry.edges.size() + geometry.faces().size());
+
       for (const auto& edge : geometry.edges)
       {
-        groups.push_back({ &edge, nullptr, rankAt(0.5f * (edge.first + edge.second)) });
+        groups.push_back({ &edge, nullptr, 0.0f });
       }
 
       for (const auto& face : geometry.faces())
       {
         if (face.corners.size() >= 3)
         {
-          groups.push_back({ nullptr, &face, rankAt(face.center) });
+          groups.push_back({ nullptr, &face, 0.0f });
         }
       }
 
       return groups;
+    }
+
+    // Only needed to share out a budget the groups overrun, so groups are ranked only then.
+    void rankGroups(std::vector<Group>& groups, const TerrainGround& ground, terrain::Sampler& sampler,
+                    const glm::vec3& offset)
+    {
+      for (auto& group : groups)
+      {
+        const auto middle = group.edge != nullptr ? 0.5f * (group.edge->first + group.edge->second)
+                                                  : group.face->center;
+        group.rank = std::round(sampler.distance(ground.frame.toLocal(middle + offset)) * rankQuantum);
+      }
     }
 
     // The smallest spacing on a ladder of 25 percent steps at which the group gives no more than allowance
@@ -286,9 +298,12 @@ namespace collisions::detail {
       return -1.0f;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> cappedPoints(const Geometry& geometry, const std::vector<Group>& groups,
-                                                      const float voxelSize)
+    [[nodiscard]] std::vector<glm::vec3> cappedPoints(const Geometry& geometry, const TerrainGround& ground,
+                                                      terrain::Sampler& sampler, const glm::vec3& offset)
     {
+      const float voxelSize = ground.volume->voxelSize();
+      auto groups = groupsOf(geometry);
+
       const size_t budget = geometry.vertices.size() < maxTerrainQueryPoints
                               ? maxTerrainQueryPoints - geometry.vertices.size() : 0;
 
@@ -301,6 +316,8 @@ namespace collisions::detail {
       std::vector<float> spacings(groups.size(), voxelSize);
       if (full > budget)
       {
+        rankGroups(groups, ground, sampler, offset);
+
         // The nearest groups first keep the density they can. Later groups are reserved a point each, but never more
         // than half of what is left, so the nearest group is never starved; groups past the budget get none.
         std::vector<size_t> order(groups.size());
@@ -331,7 +348,9 @@ namespace collisions::detail {
         }
       }
 
-      std::vector<glm::vec3> points = geometry.vertices;
+      std::vector<glm::vec3> points;
+      points.reserve(geometry.vertices.size() + std::min(full, budget));
+      points.insert(points.end(), geometry.vertices.begin(), geometry.vertices.end());
       for (size_t i = 0; i < groups.size(); ++i)
       {
         if (spacings[i] > 0.0f)
@@ -343,44 +362,75 @@ namespace collisions::detail {
       return points;
     }
 
+    struct Measured {
+      std::vector<TerrainCandidate> candidates;
+      // What the same points measured with no sweep would say: whether any is inside the ground.
+      bool touching = false;
+    };
+
     // Measures each query point, taken offset along from where it is, against the ground that is near enough to touch
     // with what is left of the sweep. A point far in air has no usable gradient and is skipped; one deeper than the
-    // band is stepped out of the ground against the sweep.
-    [[nodiscard]] std::vector<TerrainCandidate> measuredPoints(Collider& collider, const TerrainGround& ground,
-                                                               terrain::Sampler& sampler, const glm::vec3& sweep,
-                                                               const glm::vec3& offset)
+    // band is stepped out of the ground against the sweep. With judgeTouching, which needs a zero offset, the points
+    // are also judged as measuring them with no sweep would.
+    [[nodiscard]] Measured measuredPoints(Collider& collider, const TerrainGround& ground, terrain::Sampler& sampler,
+                                          const glm::vec3& sweep, const glm::vec3& offset, const bool judgeTouching)
     {
       const float voxelSize = ground.volume->voxelSize();
       const float reject = contactMargin + glm::length(sweep) + voxelSize;
+      const float touchReject = contactMargin + glm::length(glm::vec3(0)) + voxelSize;
       const auto backward = stepBackDirection(ground.frame, sweep);
+      const auto touchBackward = stepBackDirection(ground.frame, glm::vec3(0));
 
-      std::vector<TerrainCandidate> candidates;
-      for (const auto& placed : polytopeQueryPoints(collider, ground, sampler, offset))
+      const auto points = polytopeQueryPoints(collider, ground, sampler, offset);
+
+      Measured measured;
+      measured.candidates.reserve(points.size());
+      for (const auto& placed : points)
       {
         const auto world = placed + offset;
         const auto local = ground.frame.toLocal(world);
-        float raw = sampler.distance(local) * voxelSize;
+        const float raw = sampler.distance(local) * voxelSize;
         if (raw > reject)
         {
           continue;
         }
 
+        float centerDistance = raw;
         auto surface = findSurface(sampler, local);
-        if (!surface)
+        const bool flat = !surface;
+        if (flat)
         {
           surface = findDeepSurface(sampler, local, backward, voxelSize, raw);
-          raw = unknownDepth;
+          centerDistance = unknownDepth;
         }
 
+        std::optional<TerrainCandidate> candidate;
         if (surface)
         {
-          auto candidate = measureCandidate(ground.frame, *surface, local, raw, 0.0f);
-          candidate.point = world;
-          candidates.push_back(candidate);
+          candidate = measureCandidate(ground.frame, *surface, local, centerDistance, 0.0f);
+          candidate->point = world;
+          measured.candidates.push_back(*candidate);
         }
+
+        if (!judgeTouching || measured.touching || raw > touchReject)
+        {
+          continue;
+        }
+
+        // Only a point stepped out of the ground depends on the direction it steps along.
+        if (flat && backward != touchBackward)
+        {
+          candidate.reset();
+          if (const auto touchSurface = findDeepSurface(sampler, local, touchBackward, voxelSize, raw))
+          {
+            candidate = measureCandidate(ground.frame, *touchSurface, local, unknownDepth, 0.0f);
+          }
+        }
+
+        measured.touching = candidate && candidate->distance < 0.0f;
       }
 
-      return candidates;
+      return measured;
     }
 
     // How far along sweep the collider first comes near the ground: its bounding sphere (the center of its bounds,
@@ -441,12 +491,97 @@ namespace collisions::detail {
       const glm::vec3 high(bounds.maxX + std::max(sweep.x, 0.0f), bounds.maxY + std::max(sweep.y, 0.0f),
                            bounds.maxZ + std::max(sweep.z, 0.0f));
 
-      if (!reachesGround(*ground, low, high, contactMargin + ground->volume->voxelSize()))
+      const float voxelSize = ground->volume->voxelSize();
+      if (!reachesGround(*ground, low, high, contactMargin + voxelSize))
       {
         return std::nullopt;
       }
 
+      // Each query point lies in the swept bounds and reads the cell around it, so when every sample there is air each
+      // reads the band's edge, and measuredPoints skips them all while that is further than the furthest it accepts.
+      const float airReading = terrain::decodeDistance(terrain::airDistance) * voxelSize;
+      const float furthestAccepted = contactMargin + glm::length(sweep) + voxelSize * (1.0f + airSlack);
+      if (airReading > furthestAccepted)
+      {
+        const auto samples = reachableSamples(*ground, low, high, voxelSize);
+        if (samples && ground->volume->isAirWithin(*samples))
+        {
+          return std::nullopt;
+        }
+      }
+
       return ground;
+    }
+
+    struct PolytopeProbe {
+      std::vector<Contact> contacts;
+      // Left empty when judging it would take a measure of its own.
+      std::optional<bool> touching;
+    };
+
+    // The collider is taken to where it first nears the ground; the contacts are then moved back to where it is.
+    // With judgeTouching, whether it is inside the ground now is judged from the same measure when the sweep is not
+    // traced, since the query points are then the ones it stands at.
+    [[nodiscard]] PolytopeProbe probePolytope(Collider& collider, Terrain& terrain, const glm::vec3& sweep,
+                                              const bool judgeTouching)
+    {
+      PolytopeProbe probe;
+
+      // The unswept bounds lie inside the swept ones and are tested against a nearer reach, so they find no ground
+      // either.
+      const auto ground = groundWithin(collider, terrain, sweep);
+      if (!ground)
+      {
+        if (judgeTouching)
+        {
+          probe.touching = false;
+        }
+
+        return probe;
+      }
+
+      terrain::Sampler sampler(*ground->volume);
+
+      const bool longSweep = glm::length(sweep) > ground->volume->voxelSize();
+      const float fraction = traceFraction(collider, *ground, sampler, sweep);
+
+      const auto offset = sweep * fraction;
+      const auto remaining = sweep - offset;
+
+      bool judgeHere = false;
+      if (judgeTouching && fraction == 0.0f)
+      {
+        judgeHere = sweep == glm::vec3(0) || groundWithin(collider, terrain, glm::vec3(0)).has_value();
+        probe.touching = false;
+      }
+
+      auto measured = measuredPoints(collider, *ground, sampler, remaining, offset, judgeHere);
+      if (judgeHere)
+      {
+        probe.touching = measured.touching;
+      }
+
+      std::vector<TerrainCandidate> reaching;
+      for (const auto& candidate : measured.candidates)
+      {
+        if (reachesAlong(candidate, remaining))
+        {
+          reaching.push_back(candidate);
+        }
+      }
+
+      for (auto& cluster : clusterByWall(std::move(reaching)))
+      {
+        if (longSweep)
+        {
+          trimToNearest(cluster, 0.5f * ground->volume->voxelSize());
+        }
+
+        probe.contacts.push_back(makeTerrainContact(cluster, polytopeManifoldPoints, remaining));
+        shiftTracedContact(probe.contacts.back(), sweep, fraction);
+      }
+
+      return probe;
     }
   }
 
@@ -461,50 +596,12 @@ namespace collisions::detail {
   std::vector<glm::vec3> polytopeQueryPoints(Collider& collider, const TerrainGround& ground,
                                              terrain::Sampler& sampler, const glm::vec3& offset)
   {
-    const auto geometry = geometryOf(collider);
-
-    return cappedPoints(geometry, groupsOf(geometry, ground, sampler, offset), ground.volume->voxelSize());
+    return cappedPoints(geometryOf(collider), ground, sampler, offset);
   }
 
   std::vector<Contact> findPolytopeTerrainContacts(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
   {
-    const auto ground = groundWithin(collider, terrain, sweep);
-    if (!ground)
-    {
-      return {};
-    }
-
-    terrain::Sampler sampler(*ground->volume);
-
-    // The collider is taken to where it first nears the ground; the contacts are then moved back to where it is.
-    const bool longSweep = glm::length(sweep) > ground->volume->voxelSize();
-    const float fraction = traceFraction(collider, *ground, sampler, sweep);
-
-    const auto offset = sweep * fraction;
-    const auto remaining = sweep - offset;
-
-    std::vector<TerrainCandidate> reaching;
-    for (const auto& candidate : measuredPoints(collider, *ground, sampler, remaining, offset))
-    {
-      if (reachesAlong(candidate, remaining))
-      {
-        reaching.push_back(candidate);
-      }
-    }
-
-    std::vector<Contact> contacts;
-    for (auto& cluster : clusterByWall(std::move(reaching)))
-    {
-      if (longSweep)
-      {
-        trimToNearest(cluster, 0.5f * ground->volume->voxelSize());
-      }
-
-      contacts.push_back(makeTerrainContact(cluster, polytopeManifoldPoints, remaining));
-      shiftTracedContact(contacts.back(), sweep, fraction);
-    }
-
-    return contacts;
+    return probePolytope(collider, terrain, sweep, false).contacts;
   }
 
   bool polytopeIntersectsTerrain(Collider& collider, Terrain& terrain)
@@ -517,10 +614,18 @@ namespace collisions::detail {
 
     terrain::Sampler sampler(*ground->volume);
 
-    return std::ranges::any_of(measuredPoints(collider, *ground, sampler, glm::vec3(0), glm::vec3(0)),
+    return std::ranges::any_of(measuredPoints(collider, *ground, sampler, glm::vec3(0), glm::vec3(0), false).candidates,
                                [](const TerrainCandidate& candidate)
     {
       return candidate.distance < 0.0f;
     });
+  }
+
+  TerrainProbe probePolytopeTerrain(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
+  {
+    auto probe = probePolytope(collider, terrain, sweep, true);
+    const bool touching = probe.touching ? *probe.touching : polytopeIntersectsTerrain(collider, terrain);
+
+    return { touching, std::move(probe.contacts) };
   }
 }

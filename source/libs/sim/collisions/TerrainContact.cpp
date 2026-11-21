@@ -107,11 +107,11 @@ namespace collisions {
 
       return chunk && !chunk->isAir();
     }
+  }
 
-    // The samples of the terrain-local box that the world-space box from low to high can reach.
-    [[nodiscard]] std::optional<terrain::SampleBox> reachableSamples(const detail::TerrainGround& ground,
-                                                                     const glm::vec3& low, const glm::vec3& high,
-                                                                     const float reach)
+  namespace detail {
+    std::optional<terrain::SampleBox> reachableSamples(const TerrainGround& ground, const glm::vec3& low,
+                                                       const glm::vec3& high, const float reach)
     {
       const float voxelSize = ground.volume->voxelSize();
 
@@ -140,9 +140,7 @@ namespace collisions {
       return terrain::SampleBox{ glm::ivec3(glm::floor(toSamples(localLow))),
                                  glm::ivec3(glm::ceil(toSamples(localHigh))) + 1 };
     }
-  }
 
-  namespace detail {
     // Walks the chunks of the box, or the volume's own chunks when there are fewer, so a huge box costs no more than
     // the terrain holds.
     bool reachesGround(const TerrainGround& ground, const glm::vec3& low, const glm::vec3& high, const float reach)
@@ -738,5 +736,15 @@ namespace collisions {
   bool approachesTerrain(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
   {
     return !findTerrainContacts(collider, terrain, sweep).empty();
+  }
+
+  TerrainProbe probeTerrain(Collider& collider, Terrain& terrain, const glm::vec3& sweep)
+  {
+    if (detail::isPolytopeCollider(collider))
+    {
+      return detail::probePolytopeTerrain(collider, terrain, sweep);
+    }
+
+    return { intersectsTerrain(collider, terrain), findTerrainContacts(collider, terrain, sweep) };
   }
 }

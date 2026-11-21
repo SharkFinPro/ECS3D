@@ -1,6 +1,7 @@
 #ifndef TERRAINCHUNK_H
 #define TERRAINCHUNK_H
 
+#include "TerrainTypes.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -40,6 +41,12 @@ namespace terrain
 
     [[nodiscard]] size_t byteSize() const;
 
+    // Whether every sample of the chunk-local box reads airDistance. Answered per brick of brickSize samples a side,
+    // so a box whose bricks also hold ground elsewhere reads as not air.
+    [[nodiscard]] bool isAirWithin(const SampleBox& local) const;
+
+    static constexpr int brickSize = 8;
+
   private:
     TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, bool uniformContent);
 
@@ -47,6 +54,8 @@ namespace terrain
     std::vector<uint8_t> m_materials;
     bool m_isUniform;
     uint64_t m_hash = 0;
+    // One bit per brick, set when the brick holds a sample other than airDistance.
+    uint64_t m_groundBricks = 0;
   };
 }
 
