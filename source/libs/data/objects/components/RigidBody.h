@@ -92,8 +92,9 @@ public:
   [[nodiscard]] int getRestTicks() const;
   void setRestTicks(int ticks);
 
-  // Whether the last solve held the body still on its support: on a face of three points or more, or a rolling
-  // contact. Balanced on an edge or a corner it is not, however slowly it has started to tip.
+  // Whether the last solve held the body still: on a face of three points or more or a rolling contact, or at three
+  // points or more between its loaded contacts (an edge on the ground and a neighbor it leans on). Balanced on one
+  // edge or corner it is not, however slowly it has started to tip.
   [[nodiscard]] bool isSteady() const;
   void setSteady(bool steady);
 

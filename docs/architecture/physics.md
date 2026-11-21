@@ -148,7 +148,8 @@ saved or replicated.
 
 - **Falling asleep.** After the solve, `CollisionSystem::sleepRestingIslands` looks at each solved island. A body is
   at rest when it is supported this tick, steadily held (`RigidBody::isSteady`, which the solver writes: on a face of
-  three points or more, or a rolling contact, not balanced on an edge or corner), slower than `sleepSpeed` (0.05 units
+  three points or more or a rolling contact, or at three points or more between its loaded contacts, as a box with an
+  edge on the ground leaning on another is; not balanced on one edge or corner), slower than `sleepSpeed` (0.05 units
   per second) and turning slower than `sleepAngularSpeed` (1 degree per second). When every body of an island has
   been at rest for `sleepSeconds` (0.5) in a row, the whole island sleeps as one group, with its velocities zeroed.
   One restless body keeps its island awake.

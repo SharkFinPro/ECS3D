@@ -68,6 +68,8 @@ namespace {
     // Held steady on a support this tick, and the spin of what holds it.
     bool supported = false;
     glm::vec3 supportSpin{ 0 };
+    // The points of every contact that carried load this tick, whichever way it faced.
+    size_t loadedPoints = 0;
   };
 
   struct SolverPoint {
@@ -875,6 +877,9 @@ namespace {
         return;
       }
 
+      m_bodies[constraint.body].loadedPoints += constraint.pointCount;
+      m_bodies[constraint.other].loadedPoints += constraint.pointCount;
+
       // A face, or the contact of a shape that rolls, holds a body still. Balanced on an edge or a corner it
       // is not at rest, however slowly it has started to fall.
       const bool steady = constraint.pointCount >= 3 || constraint.rollingGrip > 0.0f;
@@ -928,7 +933,9 @@ namespace {
     void write(const SolverBody& solved) const
     {
       auto& body = *solved.body;
-      body.setSteady(solved.supported);
+      // Held on a face or a rolling contact, or at three points or more between its contacts, as a box with an edge
+      // on the ground leaning on another is. On one edge alone it is not.
+      body.setSteady(solved.supported || solved.loadedPoints >= 3);
       if (solved.velocity != body.getVelocity())
       {
         body.setVelocity(solved.velocity);
