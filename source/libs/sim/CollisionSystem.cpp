@@ -205,7 +205,7 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     ECS3D_PROFILE_SCOPE("Narrow phase");
 
-//#pragma omp parallel for default(none) shared(forwardHits) schedule(dynamic, 8) num_threads(6)
+#pragma omp parallel for default(none) shared(forwardHits) schedule(dynamic, 8) num_threads(6)
     for (int i = 0; i < m_collisionEdges.size(); ++i)
     {
       findCollisions(i, forwardHits[i]);
@@ -347,12 +347,12 @@ void CollisionSystem::resolveInIslands(const float dt)
   const int islandCount = static_cast<int>(islands.size());
   std::vector<std::vector<ContactSolver::CachedContact>> resolved(islands.size());
 
-//#pragma omp parallel default(none) shared(islands, resolved, failure, dt, islandCount) num_threads(6)
+#pragma omp parallel default(none) shared(islands, resolved, failure, dt, islandCount) num_threads(6)
   {
     // A worker's inertia cache would otherwise carry entries from earlier ticks.
     PhysicsSystem::clearInertiaCache();
 
-//#pragma omp for schedule(dynamic)
+#pragma omp for schedule(dynamic)
     for (int n = 0; n < islandCount; ++n)
     {
       try
@@ -361,7 +361,7 @@ void CollisionSystem::resolveInIslands(const float dt)
       }
       catch (...)
       {
-//#pragma omp critical(collisionIslandFailure)
+#pragma omp critical(collisionIslandFailure)
         {
           if (!failure)
           {
