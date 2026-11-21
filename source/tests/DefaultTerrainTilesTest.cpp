@@ -2,6 +2,7 @@
 
 #include "DefaultTerrainTiles.h"
 #include "DefaultTerrainTilesFixture.h"
+#include "TerrainSurfaceSampling.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainRaycast.h"
 #include "terrain/TerrainTypes.h"
@@ -124,12 +125,40 @@ TEST(DefaultTerrainTilesLayoutTest, TilesOverlapByThreeColumnsAndTheBasinStaysCe
   EXPECT_EQ(basin::worldColumns, basin::tilesPerSide * basin::tileStride + 3);
   EXPECT_EQ(overlapColumns, 3);
 
-  // The drawn columns, 1 to worldColumns - 2, are centered on the world origin.
-  const float drawnCenter = (1.0f + static_cast<float>(basin::worldColumns - 2)) * 0.5f;
+  // The drawn columns, 0 to worldColumns - 1, are centered on the world origin.
+  const float drawnCenter = static_cast<float>(basin::worldColumns - 1) * 0.5f;
   EXPECT_NEAR(basin::tileOrigin(0, 0).x + drawnCenter * basin::voxelSize, 0.0f, 1e-3f);
   EXPECT_NEAR(basin::tileOrigin(0, 0).z + drawnCenter * basin::voxelSize, 0.0f, 1e-3f);
   EXPECT_NEAR(basin::tileOrigin(1, 2).x - basin::tileOrigin(1, 1).x,
               static_cast<float>(basin::tileStride) * basin::voxelSize, 1e-3f);
+}
+
+TEST(DefaultTerrainTilesLayoutTest, EachTileOpensOnlyTheSidesFacingANeighbor)
+{
+  EXPECT_EQ(basin::tileOpenSides(0, 0), terrain::maxX | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(0, 2), terrain::minX | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(2, 0), terrain::maxX | terrain::minZ);
+  EXPECT_EQ(basin::tileOpenSides(2, 2), terrain::minX | terrain::minZ);
+  EXPECT_EQ(basin::tileOpenSides(0, 1), terrain::minX | terrain::maxX | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(1, 0), terrain::maxX | terrain::minZ | terrain::maxZ);
+  EXPECT_EQ(basin::tileOpenSides(1, 1), terrain::allSides);
+}
+
+TEST_F(DefaultTerrainTilesTest, AnOuterTilesPerimeterSidesStayClosedLikeAClosedSurface)
+{
+  const auto& corner = *s_tiles[tileIndex(0, 0)];
+  const terrain::SampleBox occupied = corner.occupiedBounds();
+  const terrain::SampleBox closed = terrain::surfaceBounds(occupied);
+  const terrain::SampleBox meshed = terrain::desiredSurfaceBounds(occupied, basin::tileOpenSides(0, 0));
+
+  // The south and west sides are the world's edge: exactly what a closed surface meshes there.
+  EXPECT_EQ(meshed.min.x, closed.min.x);
+  EXPECT_EQ(meshed.min.z, closed.min.z);
+
+  // Positive control: the east and north sides face neighbors and are inset one sample from the occupied box.
+  EXPECT_EQ(meshed.max.x, occupied.max.x - 1);
+  EXPECT_EQ(meshed.max.z, occupied.max.z - 1);
+  EXPECT_NE(meshed.max.x, closed.max.x);
 }
 
 TEST_F(DefaultTerrainTilesTest, NeighborsShareTheirEdgeSamplesExactly)
@@ -150,21 +179,25 @@ TEST_F(DefaultTerrainTilesTest, NeighborsShareTheirEdgeSamplesExactly)
 
 TEST_F(DefaultTerrainTilesTest, TheColumnInsideAnEdgeDiffersFromTheEdge)
 {
-  // The positive control for the seam check: it can tell two different columns apart, and each of the three shared
-  // columns differs from the next.
+  // The positive control for the seam check: it can tell two different columns apart, so each of the shared columns
+  // after the first differs from the one before it.
   const auto& tile = *s_tiles[tileIndex(1, 1)];
   const int top = tile.occupiedBounds().max.y;
 
-  int differing = 0;
-  for (int z = 0; z <= lastColumn; ++z)
+  for (int shared = 1; shared < overlapColumns; ++shared)
   {
-    for (int y = 0; y < top; ++y)
+    const int column = basin::tileStride + shared;
+    int differing = 0;
+    for (int z = 0; z <= lastColumn; ++z)
     {
-      differing += tile.distanceAtSample({ lastColumn, y, z }) != tile.distanceAtSample({ lastColumn - 1, y, z }) ? 1 : 0;
+      for (int y = 0; y < top; ++y)
+      {
+        differing += tile.distanceAtSample({ column, y, z }) != tile.distanceAtSample({ column - 1, y, z }) ? 1 : 0;
+      }
     }
-  }
 
-  EXPECT_GT(differing, 100);
+    EXPECT_GT(differing, 100) << "column " << column;
+  }
 }
 
 TEST_F(DefaultTerrainTilesTest, ARayStraightDownOnASeamHitsTheSameHeightFromBothTiles)

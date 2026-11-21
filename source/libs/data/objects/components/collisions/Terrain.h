@@ -2,6 +2,7 @@
 #define TERRAIN_H
 
 #include "Collider.h"
+#include "../../../terrain/TerrainTypes.h"
 #include <glm/vec3.hpp>
 #include <array>
 #include <uuid.h>
@@ -32,11 +33,12 @@ public:
   [[nodiscard]] bool getCastShadows() const;
   void setCastShadows(bool castShadows);
 
-  // Render-only: leaves the surface open at the occupied box's x and z faces, with the outermost sample column
-  // on each face acting as an apron that only shapes the normals, so tiles overlapping by that column shade
-  // their seams alike. Collision, raycasts and the data do not change.
-  [[nodiscard]] bool getOpenSides() const;
-  void setOpenSides(bool openSides);
+  // Render-only: a mask of terrain::TerrainSide bits. The surface is left open at the occupied box's faces on those
+  // sides, with the outermost sample column there acting as an apron that only shapes the normals, so tiles
+  // overlapping by that column shade their seams alike. Bits outside terrain::allSides are dropped. Collision,
+  // raycasts and the data do not change.
+  [[nodiscard]] uint8_t getOpenSides() const;
+  void setOpenSides(uint8_t openSides);
 
   // Never serialized or packed. The owner of the store re-binds after a uuid change, and calls invalidateBounds()
   // when it edits a volume (an expired volume keeps its last box until the binder resets it).
@@ -65,7 +67,7 @@ private:
   uuids::uuid m_terrainUUID;
   bool m_collisionEnabled = true;
   bool m_castShadows = true;
-  bool m_openSides = false;
+  uint8_t m_openSides = 0;
 
   std::weak_ptr<const terrain::TerrainVolume> m_volume;
   bool m_volumeBound = false;
@@ -82,7 +84,7 @@ private:
     uuids::uuid terrainUUID;
     bool collisionEnabled = true;
     bool castShadows = true;
-    bool openSides = false;
+    uint8_t openSides = 0;
     bool renderCollider = false;
     uint32_t layer = 0;
     uint32_t mask = 0xFFFFFFFFu;

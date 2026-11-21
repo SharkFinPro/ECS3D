@@ -402,8 +402,7 @@ void GpuAssetCache::createTerrainSurface(const uuids::uuid& terrainUUID, CachedT
   {
     auto surface = m_renderer->getAssetManager()->createVolumeSurface(
       { .cellSize = cached.voxelSize, .chunkCells = terrain::surfaceChunkCells },
-      std::make_shared<const TerrainVolumeSource>(cached.feed, bounds,
-        cached.openSides ? terrain::openSampleBounds(bounds) : bounds));
+      TerrainVolumeSource::forSurface(cached.feed, bounds, cached.openSides));
 
     if (asReplacement)
     {
@@ -428,7 +427,7 @@ void GpuAssetCache::createTerrainSurface(const uuids::uuid& terrainUUID, CachedT
 }
 
 std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
-  const uuids::uuid& terrainUUID, const std::shared_ptr<const terrain::TerrainVolume>& volume, const bool openSides)
+  const uuids::uuid& terrainUUID, const std::shared_ptr<const terrain::TerrainVolume>& volume, const uint8_t openSides)
 {
   if (!volume)
   {
@@ -437,7 +436,8 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
 
   auto it = m_terrainSurfaces.find(terrainUUID);
 
-  if (it != m_terrainSurfaces.end() && (it->second.voxelSize != volume->voxelSize() || it->second.openSides != openSides))
+  if (it != m_terrainSurfaces.end() &&
+      (it->second.voxelSize != volume->voxelSize() || it->second.openSides != openSides))
   {
     releaseTerrainSurfaces(it->second);
     m_terrainSurfaces.erase(it);
@@ -518,7 +518,7 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
     slots.currentPending = cached.current->pendingFraction();
   }
 
-  const terrain::SurfacePlan plan = terrain::planTerrainSurface(cached.desired, slots, openSides);
+  const terrain::SurfacePlan plan = terrain::planTerrainSurface(cached.desired, slots, openSides != 0);
 
   switch (plan.step)
   {

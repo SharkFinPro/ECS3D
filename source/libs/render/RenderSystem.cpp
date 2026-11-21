@@ -118,14 +118,22 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   m_terrainShadowVotes.clear();
   m_terrainSideVotes.clear();
 
-  // Open sides change a surface's geometry, so every vote is in before the first surface is fetched.
+  // Open sides change a surface's geometry, so every vote is in before the first surface is fetched. Only the
+  // collider slot and the transform are looked up, with the draw loop's conditions.
   for (const auto& object : objectManager.getAllObjects())
   {
-    const auto components = gatherRenderComponents(*object);
+    const auto& owned = object->getComponents();
+    const auto collider = owned.find(ComponentType::collider);
 
-    if (const auto terrainComponent = components.terrain;
-        components.transform && terrainComponent && !terrainComponent->getTerrainUUID().is_nil() &&
-        terrainComponent->volume())
+    if (collider == owned.end() || collider->second->getSubType() != ComponentType::SubComponentType_terrain ||
+        !owned.contains(ComponentType::transform))
+    {
+      continue;
+    }
+
+    const auto* terrainComponent = static_cast<const Terrain*>(collider->second.get());
+
+    if (!terrainComponent->getTerrainUUID().is_nil() && terrainComponent->volume())
     {
       m_terrainSideVotes.vote(terrainComponent->getTerrainUUID(), terrainComponent->getOpenSides());
     }
@@ -293,7 +301,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         const auto& terrainUUID = terrainComponent->getTerrainUUID();
 
         if (const auto surface = assetCache.getTerrainSurface(terrainUUID, volume,
-                                                            m_terrainSideVotes.opensSides(terrainUUID)))
+                                                            m_terrainSideVotes.openSides(terrainUUID)))
         {
           m_terrainDraws.push_back({
             surface,

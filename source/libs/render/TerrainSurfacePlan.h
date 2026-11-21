@@ -41,12 +41,12 @@ namespace terrain
     SampleBox bounds;
   };
 
-  // desired is desiredSurfaceBounds(volume.occupiedBounds(), openSides). A closed surface may be larger than desired
-  // (it only draws extra air); with exactMatch, which an open-sided surface needs since a larger one would mesh air
-  // past its apron, the drawn surface is kept only when its bounds equal desired. An empty desired box keeps whatever is held. A replacement
-  // that is no less complete than the drawn surface is promoted before anything else, so a terrain whose chunks keep
-  // changing (and keep the replacement pending) still gets its larger surface drawn; while a replacement is
-  // building, nothing new is created.
+  // desired is desiredSurfaceBounds(volume.occupiedBounds(), sides). A closed surface may be larger than desired (it
+  // only draws extra air); with exactMatch, which an open-sided surface needs since a larger one would mesh air past
+  // its apron, the drawn surface is kept only when its bounds equal desired. An empty desired box keeps whatever is
+  // held. A replacement that is no less complete than the drawn surface is promoted before anything else, so a
+  // terrain whose chunks keep changing (and keep the replacement pending) still gets its larger surface drawn; while
+  // a replacement is building, nothing new is created.
   [[nodiscard]] inline SurfacePlan planTerrainSurface(const SampleBox& desired, const SurfaceSlots& slots,
                                                       const bool exactMatch = false)
   {

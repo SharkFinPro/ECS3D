@@ -275,7 +275,8 @@ json buildTerrainBasin()
     {
       objects.push_back(makeObject("Terrain Tile " + std::to_string(row) + " " + std::to_string(col), json::array({
         transform(basin::tileOrigin(row, col)),
-        terrainCollider(basinTerrains[static_cast<size_t>(row * basin::tilesPerSide + col)], true)
+        terrainCollider(basinTerrains[static_cast<size_t>(row * basin::tilesPerSide + col)],
+                        basin::tileOpenSides(row, col))
       })));
     }
   }

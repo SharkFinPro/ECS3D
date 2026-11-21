@@ -112,40 +112,57 @@ namespace terrain
     return bounds;
   }
 
-  SampleBox openSurfaceBounds(const SampleBox& occupied)
+  SampleBox openSurfaceBounds(const SampleBox& occupied, const uint8_t sides)
   {
     if (occupied.empty())
     {
       return {};
     }
 
-    const SampleBox rounded = surfaceBounds(occupied);
+    SampleBox bounds = surfaceBounds(occupied);
 
-    SampleBox bounds{ occupied.min + glm::ivec3(1, 0, 1), occupied.max - glm::ivec3(1, 0, 1) };
-    bounds.min.y = rounded.min.y;
-    bounds.max.y = rounded.max.y;
-
-    if (bounds.max.x - bounds.min.x < 2 || bounds.max.z - bounds.min.z < 2)
+    if ((sides & minX) != 0)
     {
-      return {};
+      bounds.min.x = occupied.min.x + 1;
     }
 
-    return bounds;
+    if ((sides & maxX) != 0)
+    {
+      bounds.max.x = occupied.max.x - 1;
+    }
+
+    if ((sides & minZ) != 0)
+    {
+      bounds.min.z = occupied.min.z + 1;
+    }
+
+    if ((sides & maxZ) != 0)
+    {
+      bounds.max.z = occupied.max.z - 1;
+    }
+
+    return bounds.empty() || bounds.max.x - bounds.min.x < 2 || bounds.max.z - bounds.min.z < 2 ? SampleBox{} : bounds;
   }
 
-  SampleBox openSampleBounds(const SampleBox& meshed)
+  SampleBox openSampleBounds(const SampleBox& meshed, const uint8_t sides)
   {
     if (meshed.empty())
     {
       return meshed;
     }
 
-    return { meshed.min - glm::ivec3(1, 0, 1), meshed.max + glm::ivec3(1, 0, 1) };
+    SampleBox samples = meshed;
+    samples.min.x -= (sides & minX) != 0 ? 1 : 0;
+    samples.max.x += (sides & maxX) != 0 ? 1 : 0;
+    samples.min.z -= (sides & minZ) != 0 ? 1 : 0;
+    samples.max.z += (sides & maxZ) != 0 ? 1 : 0;
+
+    return samples;
   }
 
-  SampleBox desiredSurfaceBounds(const SampleBox& occupied, const bool openSides)
+  SampleBox desiredSurfaceBounds(const SampleBox& occupied, const uint8_t sides)
   {
-    return openSides ? openSurfaceBounds(occupied) : surfaceBounds(occupied);
+    return sides == 0 ? surfaceBounds(occupied) : openSurfaceBounds(occupied, sides);
   }
 
   bool containsBox(const SampleBox& outer, const SampleBox& inner)

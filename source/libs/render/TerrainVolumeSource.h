@@ -18,6 +18,12 @@ public:
   TerrainVolumeSource(std::shared_ptr<const TerrainSurfaceFeed> feed, const terrain::SampleBox& bounds,
                       const terrain::SampleBox& sampleBounds);
 
+  // The source for a surface meshing meshedBounds and open on the sides in openSides (terrain::TerrainSide bits): the
+  // sample bounds are the meshed box grown by the apron on each open side. The one place a surface's samples are
+  // decided, for the renderer and the tests alike.
+  [[nodiscard]] static std::shared_ptr<const TerrainVolumeSource> forSurface(
+    std::shared_ptr<const TerrainSurfaceFeed> feed, const terrain::SampleBox& meshedBounds, uint8_t openSides);
+
   void fill(const vke::VolumeRegion& region, uint32_t lod, std::span<float> distance,
             std::span<uint8_t> material) const override;
 

@@ -95,7 +95,7 @@ namespace {
     terrain.setTerrainUUID(someUUID());
     terrain.setCollisionEnabled(false);
     terrain.setCastShadows(false);
-    terrain.setOpenSides(true);
+    terrain.setOpenSides(terrain::minX | terrain::maxZ);
     terrain.setRenderCollider(true);
     terrain.setLayer(7);
     terrain.setMask(0x0F0Fu);
@@ -114,14 +114,14 @@ namespace {
   }
 
   // The fields a valid terrain payload carries, in pack order after the discriminator.
-  net::Message wirePayload(const bool isTrigger, const uint32_t layer)
+  net::Message wirePayload(const bool isTrigger, const uint32_t layer, const uint8_t openSides = 6)
   {
     net::Message message(net::MessageType::undefined);
     message.write(true);
     message.write(someUUID());
     message.write(false);
     message.write(false);
-    message.write(true);
+    message.write(openSides);
     message.write(isTrigger);
     message.write(layer);
     message.write(uint32_t{ 0x0F0Fu });
@@ -171,7 +171,7 @@ TEST(TerrainComponentTest, StartsWithTheDocumentedDefaults)
   EXPECT_TRUE(terrain.getTerrainUUID().is_nil());
   EXPECT_TRUE(terrain.getCollisionEnabled());
   EXPECT_TRUE(terrain.getCastShadows());
-  EXPECT_FALSE(terrain.getOpenSides());
+  EXPECT_EQ(terrain.getOpenSides(), 0);
   EXPECT_FALSE(terrain.isTrigger());
   EXPECT_EQ(terrain.volume(), nullptr);
 }
@@ -207,7 +207,7 @@ TEST(TerrainComponentTest, ItRoundTripsThroughJson)
   EXPECT_EQ(loaded.getTerrainUUID(), someUUID());
   EXPECT_FALSE(loaded.getCollisionEnabled());
   EXPECT_FALSE(loaded.getCastShadows());
-  EXPECT_TRUE(loaded.getOpenSides());
+  EXPECT_EQ(loaded.getOpenSides(), terrain::minX | terrain::maxZ);
   EXPECT_EQ(loaded.getLayer(), 7u);
   EXPECT_EQ(loaded.getMask(), 0x0F0Fu);
   EXPECT_EQ(loaded.serialize()["subType"], "Terrain");
@@ -228,7 +228,7 @@ TEST(TerrainComponentTest, ItRoundTripsThroughThePacker)
 
   expectSameSettings(unpacked, source);
   EXPECT_EQ(unpacked.getTerrainUUID(), someUUID());
-  EXPECT_TRUE(unpacked.getOpenSides());
+  EXPECT_EQ(unpacked.getOpenSides(), terrain::minX | terrain::maxZ);
   EXPECT_EQ(unpacked.getMask(), 0x0F0Fu);
   EXPECT_EQ(reader.remaining(), 0u);
 }
@@ -245,23 +245,23 @@ TEST(TerrainComponentTest, ANilTerrainUuidSerializesAsEmptyAndLoadsBackNil)
   EXPECT_TRUE(loaded.getTerrainUUID().is_nil());
 }
 
-TEST(TerrainComponentTest, AnAbsentOpenSidesKeyReadsFalse)
+TEST(TerrainComponentTest, AnAbsentOpenSidesKeyReadsZero)
 {
   Terrain source;
-  source.setOpenSides(true);
+  source.setOpenSides(terrain::allSides);
   auto saved = source.serialize();
-  ASSERT_TRUE(saved.at("openSides").get<bool>());
+  ASSERT_EQ(saved.at("openSides").get<int>(), 15);
 
   // Positive control: the key, when present, is honored.
   Terrain withKey;
   withKey.loadFromJSON(saved);
-  EXPECT_TRUE(withKey.getOpenSides());
+  EXPECT_EQ(withKey.getOpenSides(), terrain::allSides);
 
   saved.erase("openSides");
   Terrain withoutKey;
-  withoutKey.setOpenSides(true);
+  withoutKey.setOpenSides(terrain::allSides);
   withoutKey.loadFromJSON(saved);
-  EXPECT_FALSE(withoutKey.getOpenSides());
+  EXPECT_EQ(withoutKey.getOpenSides(), 0);
 }
 
 TEST(TerrainComponentTest, EveryMalformedJsonPayloadIsRefusedAndChangesNothing)
@@ -282,7 +282,10 @@ TEST(TerrainComponentTest, EveryMalformedJsonPayloadIsRefusedAndChangesNothing)
   EXPECT_TRUE(refused(terrain, valid("terrainUUID", 5)));
   EXPECT_TRUE(refused(terrain, valid("collisionEnabled", "yes")));
   EXPECT_TRUE(refused(terrain, valid("castShadows", 1)));
-  EXPECT_TRUE(refused(terrain, valid("openSides", 1)));
+  EXPECT_TRUE(refused(terrain, valid("openSides", 16)));
+  EXPECT_TRUE(refused(terrain, valid("openSides", -1)));
+  EXPECT_TRUE(refused(terrain, valid("openSides", 1.5)));
+  EXPECT_TRUE(refused(terrain, valid("openSides", true)));
   EXPECT_TRUE(refused(terrain, valid("renderCollider", "true")));
   EXPECT_TRUE(refused(terrain, valid("layer", -1)));
   EXPECT_TRUE(refused(terrain, valid("layer", "3")));
@@ -309,13 +312,14 @@ TEST(TerrainComponentTest, AMalformedWirePayloadIsRefusedAndChangesNothing)
   const auto before = terrain.serialize();
 
   EXPECT_THROW(unpackInto(terrain, wirePayload(true, 5)), RefusedPayload);
+  EXPECT_THROW(unpackInto(terrain, wirePayload(false, 5, 16)), RefusedPayload);
   EXPECT_EQ(terrain.serialize(), before);
 
   unpackInto(terrain, wirePayload(false, 5));
   EXPECT_EQ(terrain.getLayer(), 5u);
   EXPECT_EQ(terrain.getTerrainUUID(), someUUID());
   EXPECT_FALSE(terrain.getCollisionEnabled());
-  EXPECT_TRUE(terrain.getOpenSides());
+  EXPECT_EQ(terrain.getOpenSides(), terrain::minZ | terrain::maxX);
 }
 
 TEST(TerrainComponentTest, AnOutOfRangeLayerIsClampedOnLoadAndOffTheWire)

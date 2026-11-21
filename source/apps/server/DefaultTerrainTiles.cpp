@@ -256,6 +256,17 @@ namespace basin
              static_cast<float>(row * tileStride) * voxelSize - half };
   }
 
+  uint8_t tileOpenSides(const int row, const int col)
+  {
+    uint8_t sides = 0;
+    sides |= col > 0 ? terrain::minX : 0;
+    sides |= col < tilesPerSide - 1 ? terrain::maxX : 0;
+    sides |= row > 0 ? terrain::minZ : 0;
+    sides |= row < tilesPerSide - 1 ? terrain::maxZ : 0;
+
+    return sides;
+  }
+
   float worldGroundY(const float worldX, const float worldZ)
   {
     const glm::vec3 origin = tileOrigin(0, 0);

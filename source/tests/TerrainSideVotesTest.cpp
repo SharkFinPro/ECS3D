@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <TerrainSideVotes.h>
+#include <terrain/TerrainTypes.h>
 
 #include <uuid.h>
 
@@ -18,47 +19,51 @@ TEST(TerrainSideVotesTest, NoVoteIsClosed)
 {
   const TerrainSideVotes votes;
 
-  EXPECT_FALSE(votes.opensSides(terrainA));
+  EXPECT_EQ(votes.openSides(terrainA), 0);
 }
 
-TEST(TerrainSideVotesTest, AllTrueVotesOpenTheSides)
+TEST(TerrainSideVotesTest, ASingleVoteSetsItsMask)
 {
   TerrainSideVotes votes;
-  votes.vote(terrainA, true);
-  votes.vote(terrainA, true);
+  votes.vote(terrainA, terrain::minX | terrain::maxZ);
 
-  EXPECT_TRUE(votes.opensSides(terrainA));
+  EXPECT_EQ(votes.openSides(terrainA), terrain::minX | terrain::maxZ);
 }
 
-TEST(TerrainSideVotesTest, AnyFalseVoteClosesThemInEitherOrder)
+TEST(TerrainSideVotesTest, EachSideIsAnAndAcrossTheVotes)
 {
   TerrainSideVotes votes;
-  votes.vote(terrainA, true);
-  votes.vote(terrainA, false);
-  votes.vote(terrainB, false);
-  votes.vote(terrainB, true);
+  votes.vote(terrainA, terrain::minX | terrain::maxX | terrain::maxZ);
+  votes.vote(terrainA, terrain::maxX | terrain::maxZ | terrain::minZ);
 
-  EXPECT_FALSE(votes.opensSides(terrainA));
-  EXPECT_FALSE(votes.opensSides(terrainB));
+  EXPECT_EQ(votes.openSides(terrainA), terrain::maxX | terrain::maxZ);
+
+  // Order does not matter, and a vote for no sides closes everything.
+  votes.vote(terrainB, terrain::maxX | terrain::maxZ | terrain::minZ);
+  votes.vote(terrainB, terrain::minX | terrain::maxX | terrain::maxZ);
+  EXPECT_EQ(votes.openSides(terrainB), terrain::maxX | terrain::maxZ);
+
+  votes.vote(terrainA, 0);
+  EXPECT_EQ(votes.openSides(terrainA), 0);
 }
 
 TEST(TerrainSideVotesTest, TerrainsAreIndependent)
 {
   TerrainSideVotes votes;
-  votes.vote(terrainA, true);
-  votes.vote(terrainB, false);
+  votes.vote(terrainA, terrain::allSides);
+  votes.vote(terrainB, 0);
 
-  EXPECT_TRUE(votes.opensSides(terrainA));
-  EXPECT_FALSE(votes.opensSides(terrainB));
+  EXPECT_EQ(votes.openSides(terrainA), terrain::allSides);
+  EXPECT_EQ(votes.openSides(terrainB), 0);
 }
 
 TEST(TerrainSideVotesTest, ClearRestoresTheClosedDefault)
 {
   TerrainSideVotes votes;
-  votes.vote(terrainA, true);
-  ASSERT_TRUE(votes.opensSides(terrainA));
+  votes.vote(terrainA, terrain::allSides);
+  ASSERT_EQ(votes.openSides(terrainA), terrain::allSides);
 
   votes.clear();
 
-  EXPECT_FALSE(votes.opensSides(terrainA));
+  EXPECT_EQ(votes.openSides(terrainA), 0);
 }

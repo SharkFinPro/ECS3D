@@ -34,23 +34,17 @@ namespace {
   // Vertices on a plane, keyed by their two other coordinates.
   using PlaneVertices = std::map<std::array<float, 2>, vke::SurfaceVertex>;
 
-  vke::VolumeRegion toRegion(const terrain::SampleBox& box)
-  {
-    return { box.min, box.max };
-  }
-
   // Meshes every chunk of the tile whose cells touch the plane at sample index plane on axis, and collects the vertices
-  // lying on it. Open meshes the tile as an open-sided surface; closed pads it with air as a closed one does.
-  PlaneVertices meshPlane(const terrain::TerrainVolume& tile, const bool open, const int axis, const int plane)
+  // lying on it. The surface is open on the sides in openSides, built the way the renderer builds it; 0 pads the tile
+  // with air as a closed surface does.
+  PlaneVertices meshPlane(const terrain::TerrainVolume& tile, const uint8_t openSides, const int axis, const int plane)
   {
-    const terrain::SampleBox occupied = tile.occupiedBounds();
-    const terrain::SampleBox meshed = terrain::desiredSurfaceBounds(occupied, open);
-    const terrain::SampleBox readable = open ? terrain::openSampleBounds(meshed) : meshed;
+    const terrain::SampleBox meshed = terrain::desiredSurfaceBounds(tile.occupiedBounds(), openSides);
 
     const auto feed = std::make_shared<const TerrainSurfaceFeed>(
       std::make_shared<const terrain::TerrainVolume::ChunkMap>(tile.snapshotChunks()));
-    const TerrainVolumeSource source(feed, meshed, readable);
-    const vke::VolumeChunkGrid grid(source.bounds(), source.sampleBounds(), terrain::surfaceChunkCells);
+    const auto source = TerrainVolumeSource::forSurface(feed, meshed, openSides);
+    const vke::VolumeChunkGrid grid(source->bounds(), source->sampleBounds(), terrain::surfaceChunkCells);
     const vke::MarchingCubesExtractor extractor;
 
     const float cellSize = tile.voxelSize();
@@ -69,7 +63,7 @@ namespace {
       const vke::VolumeRegion region = grid.fetchRegion(chunk);
       std::vector<float> distance(vke::sampleCount(region));
       std::vector<uint8_t> material(vke::sampleCount(region));
-      source.fill(region, 0, distance, material);
+      source->fill(region, 0, distance, material);
 
       vke::SurfaceMesh mesh;
       extractor.extract({ region, distance, material }, cells, cellSize, mesh);
@@ -109,8 +103,8 @@ namespace {
   }
 
   // How many vertices of a exist in b (the key is the position along the plane, which must match bit for bit), and how
-  // many of those have bit-identical normals. Both tiles compute a seam vertex from the same sample values with the same
-  // operations, so equality is exact.
+  // many of those have bit-identical normals. Both tiles compute a seam vertex from the same sample values with the
+  // same operations, so equality is exact.
   struct Agreement
   {
     int shared = 0;
@@ -118,7 +112,7 @@ namespace {
     float widestNormalGap = 0.0f;
   };
 
-  Agreement compare(const PlaneVertices& a, const PlaneVertices& b)
+  Agreement compareSeamVertices(const PlaneVertices& a, const PlaneVertices& b)
   {
     Agreement result;
     for (const auto& [key, ours] : a)
@@ -144,14 +138,14 @@ TEST_F(DefaultTerrainTilesTest, OpenSidedTilesShadeAnEastSeamWithIdenticalVertic
   const auto& west = *s_tiles[tileIndex(0, 0)];
   const auto& east = *s_tiles[tileIndex(0, 1)];
 
-  const PlaneVertices ours = meshPlane(west, true, axisX, basin::tileStride + 1);
-  const PlaneVertices theirs = meshPlane(east, true, axisX, 1);
+  const PlaneVertices ours = meshPlane(west, basin::tileOpenSides(0, 0), axisX, basin::tileStride + 1);
+  const PlaneVertices theirs = meshPlane(east, basin::tileOpenSides(0, 1), axisX, 1);
 
   ASSERT_GT(ours.size(), 40u);
   EXPECT_EQ(ours.size(), theirs.size());
   EXPECT_GT(steepestTilt(ours), 15.0f);
 
-  const Agreement agreement = compare(ours, theirs);
+  const Agreement agreement = compareSeamVertices(ours, theirs);
   EXPECT_EQ(agreement.shared, static_cast<int>(ours.size()));
   EXPECT_EQ(agreement.identical, agreement.shared);
 }
@@ -161,14 +155,14 @@ TEST_F(DefaultTerrainTilesTest, OpenSidedTilesShadeANorthSeamWithIdenticalVertic
   const auto& south = *s_tiles[tileIndex(0, 0)];
   const auto& north = *s_tiles[tileIndex(1, 0)];
 
-  const PlaneVertices ours = meshPlane(south, true, axisZ, basin::tileStride + 1);
-  const PlaneVertices theirs = meshPlane(north, true, axisZ, 1);
+  const PlaneVertices ours = meshPlane(south, basin::tileOpenSides(0, 0), axisZ, basin::tileStride + 1);
+  const PlaneVertices theirs = meshPlane(north, basin::tileOpenSides(1, 0), axisZ, 1);
 
   ASSERT_GT(ours.size(), 40u);
   EXPECT_EQ(ours.size(), theirs.size());
   EXPECT_GT(steepestTilt(ours), 15.0f);
 
-  const Agreement agreement = compare(ours, theirs);
+  const Agreement agreement = compareSeamVertices(ours, theirs);
   EXPECT_EQ(agreement.shared, static_cast<int>(ours.size()));
   EXPECT_EQ(agreement.identical, agreement.shared);
 }
@@ -181,11 +175,11 @@ TEST_F(DefaultTerrainTilesTest, ClosedTilesLightTheSameColumnWithDifferentNormal
   const auto& west = *s_tiles[tileIndex(0, 0)];
   const auto& east = *s_tiles[tileIndex(0, 1)];
 
-  const PlaneVertices edge = meshPlane(west, false, axisX, basin::tileColumns - 1);
-  const PlaneVertices interior = meshPlane(east, false, axisX, basin::tileColumns - 1 - basin::tileStride);
+  const PlaneVertices edge = meshPlane(west, 0, axisX, basin::tileColumns - 1);
+  const PlaneVertices interior = meshPlane(east, 0, axisX, basin::tileColumns - 1 - basin::tileStride);
 
   ASSERT_GT(edge.size(), 40u);
-  const Agreement agreement = compare(edge, interior);
+  const Agreement agreement = compareSeamVertices(edge, interior);
   ASSERT_GT(agreement.shared, 40);
 
   EXPECT_GT(agreement.widestNormalGap, 5.0f);
@@ -193,9 +187,9 @@ TEST_F(DefaultTerrainTilesTest, ClosedTilesLightTheSameColumnWithDifferentNormal
 
   // Positive control: the same column read from the interior of both tiles agrees, so the gap above comes from the
   // closed edge and not from the data.
-  const PlaneVertices insideWest = meshPlane(west, false, axisX, basin::tileStride + 1);
-  const PlaneVertices insideEast = meshPlane(east, false, axisX, 1);
-  const Agreement inside = compare(insideWest, insideEast);
+  const PlaneVertices insideWest = meshPlane(west, 0, axisX, basin::tileStride + 1);
+  const PlaneVertices insideEast = meshPlane(east, 0, axisX, 1);
+  const Agreement inside = compareSeamVertices(insideWest, insideEast);
   EXPECT_GT(inside.shared, 40);
   EXPECT_EQ(inside.identical, inside.shared);
 }

@@ -116,10 +116,10 @@ TEST(TerrainSurfaceBoundsTest, AlwaysContainsThePaddedOccupiedBox)
   }
 }
 
-TEST(TerrainOpenSurfaceBoundsTest, InsetsXAndZByOneSampleAndRoundsYLikeAClosedSurface)
+TEST(TerrainOpenSurfaceBoundsTest, AllSidesInsetXAndZByOneSampleAndRoundYLikeAClosedSurface)
 {
   const SampleBox occupied{ glm::ivec3(0), glm::ivec3(128, 64, 128) };
-  const SampleBox open = terrain::openSurfaceBounds(occupied);
+  const SampleBox open = terrain::openSurfaceBounds(occupied, terrain::allSides);
 
   EXPECT_EQ(open.min, glm::ivec3(1, -64, 1));
   EXPECT_EQ(open.max, glm::ivec3(127, 128, 127));
@@ -132,9 +132,34 @@ TEST(TerrainOpenSurfaceBoundsTest, InsetsXAndZByOneSampleAndRoundsYLikeAClosedSu
   EXPECT_NE(open.min.x, closed.min.x);
 }
 
-TEST(TerrainOpenSurfaceBoundsTest, InsetsWithoutRounding)
+TEST(TerrainOpenSurfaceBoundsTest, OneOpenSideInsetsOnlyThatSide)
 {
-  const SampleBox open = terrain::openSurfaceBounds({ glm::ivec3(-32, 0, 5), glm::ivec3(70, 32, 91) });
+  const SampleBox occupied{ glm::ivec3(0), glm::ivec3(128, 64, 128) };
+  const SampleBox closed = terrain::surfaceBounds(occupied);
+
+  const SampleBox minX = terrain::openSurfaceBounds(occupied, terrain::minX);
+  EXPECT_EQ(minX.min.x, 1);
+  EXPECT_EQ(minX.max, closed.max);
+  EXPECT_EQ(minX.min.y, closed.min.y);
+  EXPECT_EQ(minX.min.z, closed.min.z);
+
+  const SampleBox maxZ = terrain::openSurfaceBounds(occupied, terrain::maxZ);
+  EXPECT_EQ(maxZ.max.z, 127);
+  EXPECT_EQ(maxZ.min, closed.min);
+  EXPECT_EQ(maxZ.max.x, closed.max.x);
+
+  const SampleBox minZ = terrain::openSurfaceBounds(occupied, terrain::minZ);
+  const SampleBox maxX = terrain::openSurfaceBounds(occupied, terrain::maxX);
+  EXPECT_EQ(minZ.min.z, 1);
+  EXPECT_EQ(maxX.max.x, 127);
+  EXPECT_EQ(minZ.max, closed.max);
+  EXPECT_EQ(maxX.min, closed.min);
+}
+
+TEST(TerrainOpenSurfaceBoundsTest, OpenSidesInsetWithoutRounding)
+{
+  const SampleBox open =
+    terrain::openSurfaceBounds({ glm::ivec3(-32, 0, 5), glm::ivec3(70, 32, 91) }, terrain::allSides);
 
   EXPECT_EQ(open.min.x, -31);
   EXPECT_EQ(open.max.x, 69);
@@ -144,33 +169,49 @@ TEST(TerrainOpenSurfaceBoundsTest, InsetsWithoutRounding)
 
 TEST(TerrainOpenSurfaceBoundsTest, EmptyAndTooThinBoxesGiveEmptyBounds)
 {
-  EXPECT_TRUE(terrain::openSurfaceBounds({}).empty());
+  EXPECT_TRUE(terrain::openSurfaceBounds({}, terrain::allSides).empty());
+  EXPECT_TRUE(terrain::openSurfaceBounds({}, terrain::minX).empty());
 
   // Two samples remain after the inset on a four-sample axis, which is a cell; one remains on a three-sample axis.
-  EXPECT_FALSE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(4, 32, 4) }).empty());
-  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(3, 32, 64) }).empty());
-  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(64, 32, 3) }).empty());
+  EXPECT_FALSE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(4, 32, 4) }, terrain::allSides).empty());
+  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(3, 32, 64) }, terrain::allSides).empty());
+  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(64, 32, 3) }, terrain::allSides).empty());
+
+  // An axis open on both sides is too thin, while one open on a single side keeps its rounded-out other side.
+  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(3, 32, 64) }, terrain::minX | terrain::maxX)
+                .empty());
+  EXPECT_FALSE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(3, 32, 64) }, terrain::minX).empty());
 }
 
-TEST(TerrainOpenSurfaceBoundsTest, SampleBoundsGrowTheMeshedBoxOnXAndZOnly)
+TEST(TerrainOpenSurfaceBoundsTest, SampleBoundsGrowTheMeshedBoxOnOpenSidesOnly)
 {
-  const SampleBox meshed = terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(128, 64, 128) });
-  const SampleBox samples = terrain::openSampleBounds(meshed);
+  const SampleBox occupied{ glm::ivec3(0), glm::ivec3(128, 64, 128) };
+  const SampleBox meshed = terrain::openSurfaceBounds(occupied, terrain::allSides);
+  const SampleBox samples = terrain::openSampleBounds(meshed, terrain::allSides);
 
   EXPECT_EQ(samples.min, glm::ivec3(0, meshed.min.y, 0));
   EXPECT_EQ(samples.max, glm::ivec3(128, meshed.max.y, 128));
   EXPECT_TRUE(terrain::containsBox(samples, meshed));
-  EXPECT_TRUE(terrain::openSampleBounds({}).empty());
+  EXPECT_TRUE(terrain::openSampleBounds({}, terrain::allSides).empty());
+
+  const SampleBox oneSide = terrain::openSurfaceBounds(occupied, terrain::maxX);
+  const SampleBox oneSideSamples = terrain::openSampleBounds(oneSide, terrain::maxX);
+  EXPECT_EQ(oneSideSamples.max.x, oneSide.max.x + 1);
+  EXPECT_EQ(oneSideSamples.min, oneSide.min);
+  EXPECT_EQ(oneSideSamples.max.z, oneSide.max.z);
+
+  EXPECT_EQ(terrain::openSampleBounds(oneSide, 0).max, oneSide.max);
 }
 
-TEST(TerrainOpenSurfaceBoundsTest, DesiredBoundsFollowTheOpenSidesFlag)
+TEST(TerrainOpenSurfaceBoundsTest, DesiredBoundsAreTheClosedSurfaceWithoutOpenSides)
 {
   const SampleBox occupied{ glm::ivec3(0), glm::ivec3(128, 64, 128) };
-  const SampleBox open = terrain::desiredSurfaceBounds(occupied, true);
-  const SampleBox closed = terrain::desiredSurfaceBounds(occupied, false);
+  const SampleBox closed = terrain::desiredSurfaceBounds(occupied, 0);
+  const SampleBox open = terrain::desiredSurfaceBounds(occupied, terrain::allSides);
 
-  EXPECT_EQ(open.min, terrain::openSurfaceBounds(occupied).min);
   EXPECT_EQ(closed.min, terrain::surfaceBounds(occupied).min);
+  EXPECT_EQ(closed.max, terrain::surfaceBounds(occupied).max);
+  EXPECT_EQ(open.min, terrain::openSurfaceBounds(occupied, terrain::allSides).min);
   EXPECT_NE(open.min, closed.min);
 }
 
@@ -626,7 +667,8 @@ TEST(TerrainSurfaceFeedTest, PublishAcceptsAnEmptyReport)
 
 TEST(TerrainVolumeSourceTest, ReportsTheBoundsAndTheSampleBoundsItWasGiven)
 {
-  const auto feed = std::make_shared<const TerrainSurfaceFeed>(std::make_shared<const terrain::TerrainVolume::ChunkMap>());
+  const auto feed =
+    std::make_shared<const TerrainSurfaceFeed>(std::make_shared<const terrain::TerrainVolume::ChunkMap>());
   const SampleBox meshed{ glm::ivec3(1, -64, 1), glm::ivec3(127, 128, 127) };
   const SampleBox samples{ glm::ivec3(0, -64, 0), glm::ivec3(128, 128, 128) };
 
@@ -640,6 +682,24 @@ TEST(TerrainVolumeSourceTest, ReportsTheBoundsAndTheSampleBoundsItWasGiven)
   const TerrainVolumeSource closed(feed, meshed);
   EXPECT_EQ(closed.sampleBounds().min, meshed.min);
   EXPECT_EQ(closed.sampleBounds().max, meshed.max);
+}
+
+TEST(TerrainVolumeSourceTest, ForSurfaceGrowsTheSampleBoundsOnTheOpenSidesOnly)
+{
+  const auto feed =
+    std::make_shared<const TerrainSurfaceFeed>(std::make_shared<const terrain::TerrainVolume::ChunkMap>());
+  const SampleBox meshed{ glm::ivec3(1, -64, -64), glm::ivec3(127, 128, 192) };
+
+  const auto open = TerrainVolumeSource::forSurface(feed, meshed, terrain::minX | terrain::maxX);
+  EXPECT_EQ(open->bounds().min, meshed.min);
+  EXPECT_EQ(open->bounds().max, meshed.max);
+  EXPECT_EQ(open->sampleBounds().min, glm::ivec3(0, -64, -64));
+  EXPECT_EQ(open->sampleBounds().max, glm::ivec3(128, 128, 192));
+
+  // Positive control: with no open side the sample bounds are the bounds.
+  const auto closed = TerrainVolumeSource::forSurface(feed, meshed, 0);
+  EXPECT_EQ(closed->sampleBounds().min, meshed.min);
+  EXPECT_EQ(closed->sampleBounds().max, meshed.max);
 }
 
 TEST(TerrainVolumeSourceTest, AnswersSamplesOutsideItsBoundsFromTheFeed)
