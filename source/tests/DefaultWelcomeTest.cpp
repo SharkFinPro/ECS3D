@@ -201,7 +201,7 @@ TEST(DefaultWelcome, IsTheFirstAndCurrentSceneAndTheOthersAreRenamed)
   const auto project = buildDefaultProject();
   const auto& scenes = project.at("assets").at("scenes");
 
-  ASSERT_EQ(scenes.size(), 6u);
+  ASSERT_EQ(scenes.size(), 7u);
   EXPECT_EQ(scenes.at(0).at("name"), "Welcome");
   EXPECT_EQ(project.at("currentSceneUUID"), scenes.at(0).at("uuid"));
 
@@ -211,7 +211,8 @@ TEST(DefaultWelcome, IsTheFirstAndCurrentSceneAndTheOthersAreRenamed)
     names.push_back(scene.at("name").get<std::string>());
   }
 
-  for (const char* name : { "Lights and Players", "Ramps", "Tower Collapse", "Falling Balls", "Terrain Showcase" })
+  for (const char* name : { "Lights and Players", "Ramps", "Tower Collapse", "Falling Balls", "Terrain Showcase",
+                            "Terrain Basin" })
   {
     EXPECT_NE(std::find(names.begin(), names.end(), name), names.end()) << name;
   }

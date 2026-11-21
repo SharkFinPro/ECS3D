@@ -7,6 +7,7 @@
 #include "DefaultProjectParts.h"
 #include "DefaultShapes.h"
 #include "DefaultTerrain.h"
+#include "DefaultTerrainTiles.h"
 #include "InertiaTensor.h"
 #include "PhysicsSystem.h"
 #include "ProjectSerializer.h"
@@ -29,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <numbers>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -177,6 +179,82 @@ namespace {
   bool isFinite(const glm::vec3& value)
   {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+  }
+
+  glm::vec3 positionOfObject(const nlohmann::json& object)
+  {
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type") == "Transform")
+      {
+        return vec3Of(component.at("position"));
+      }
+    }
+
+    throw std::runtime_error(object.at("name").get<std::string>() + " has no Transform");
+  }
+
+  bool hasComponent(const nlohmann::json& object, const std::string& type)
+  {
+    return std::ranges::any_of(object.at("components"),
+                               [&type](const nlohmann::json& component) { return component.at("type") == type; });
+  }
+
+  // The radius of the sphere about the object's origin that holds its whole collider.
+  float boundingRadius(const nlohmann::json& object)
+  {
+    const glm::vec3 scale = scaleOf(object);
+    const float widest = std::max({ scale.x, scale.y, scale.z });
+
+    for (const auto& collider : object.at("components"))
+    {
+      if (collider.at("type") != "Collider")
+      {
+        continue;
+      }
+
+      const auto subType = collider.at("subType").get<std::string>();
+      if (subType == "Sphere")
+      {
+        return collider.at("radius").get<float>() * widest;
+      }
+
+      if (subType == "Box")
+      {
+        return glm::length(scale * vec3Of(collider.at("scale")));
+      }
+
+      if (subType == "Capsule")
+      {
+        return std::max(collider.at("height").get<float>() * 0.5f * scale.y,
+                        collider.at("radius").get<float>() * std::max(scale.x, scale.z));
+      }
+
+      float radius = 0.0f;
+      for (const auto& vertex : hullOfCollider(collider).vertices)
+      {
+        radius = std::max(radius, glm::length(vertex));
+      }
+
+      return radius * widest;
+    }
+
+    throw std::runtime_error(object.at("name").get<std::string>() + " has no collider");
+  }
+
+  // The scene's bodies: everything with a RigidBody that is not a player.
+  std::vector<const nlohmann::json*> bodiesOf(const nlohmann::json& objects)
+  {
+    std::vector<const nlohmann::json*> bodies;
+    for (const auto& object : objects)
+    {
+      if (hasComponent(object, "RigidBody") && !hasComponent(object, "PlayerController"))
+      {
+        bodies.push_back(&object);
+      }
+    }
+
+    return bodies;
   }
 }
 
@@ -566,6 +644,166 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
   const auto& scenes = project.at("assets").at("scenes");
   EXPECT_EQ(scenes.at(0).at("name"), "Welcome");
   EXPECT_EQ(project.at("currentSceneUUID"), scenes.at(0).at("uuid"));
+}
+
+namespace {
+  // Checks a basin tile's collider and placement; returns its uuid.
+  std::string expectBasinTile(const nlohmann::json& object, const nlohmann::json& collider)
+  {
+    const auto uuid = collider.at("terrainUUID").get<std::string>();
+    const auto found = std::ranges::find(defaultproject::basinTerrains, uuid);
+    EXPECT_NE(found, defaultproject::basinTerrains.end());
+    if (found == defaultproject::basinTerrains.end())
+    {
+      return uuid;
+    }
+
+    const int index = static_cast<int>(found - defaultproject::basinTerrains.begin());
+    const glm::vec3 expected = basin::tileOrigin(index / 3, index % 3);
+    const glm::vec3 position = positionOfObject(object);
+    EXPECT_FLOAT_EQ(position.x, expected.x);
+    EXPECT_FLOAT_EQ(position.y, expected.y);
+    EXPECT_FLOAT_EQ(position.z, expected.z);
+    EXPECT_TRUE(collider.at("collisionEnabled").get<bool>());
+    EXPECT_EQ(object.at("name"), "Terrain Tile " + std::to_string(index / 3) + " " + std::to_string(index % 3));
+
+    return uuid;
+  }
+
+  // On the arena's south side, just above the floor and clear of the tower over its middle.
+  void expectBasinPlayer(const nlohmann::json& object, const nlohmann::json& controller)
+  {
+    const glm::vec3 spawn = positionOfObject(object);
+    EXPECT_EQ(controller.at("playerSlot"), 0);
+
+    const float gap = spawn.y - 1.0f - basin::worldGroundY(spawn.x, spawn.z);
+    EXPECT_GE(gap, 0.0f);
+    EXPECT_LE(gap, 3.0f);
+    EXPECT_LT(spawn.z, -basin::stackSpacing * static_cast<float>(basin::towerColumns));
+  }
+
+  int basinRecords(const nlohmann::json& project)
+  {
+    int records = 0;
+    for (const auto& record : project.at("assets").at("terrains"))
+    {
+      const auto uuid = record.at("uuid").get<std::string>();
+      if (std::ranges::find(defaultproject::basinTerrains, uuid) != defaultproject::basinTerrains.end())
+      {
+        EXPECT_EQ(record.at("filePath"), terrainAssetPath(uuids::uuid::from_string(uuid).value()));
+        ++records;
+      }
+    }
+
+    return records;
+  }
+}
+
+TEST(DefaultProject, TheTerrainBasinSceneNamesNineTilesAPlayerAndTheirTerrains)
+{
+  const auto project = buildDefaultProject();
+
+  std::set<std::string> named;
+  int activeCameras = 0;
+  int players = 0;
+  for (const auto& object : sceneObjects(project, "Terrain Basin"))
+  {
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type") == "Collider" && component.at("subType") == "Terrain")
+      {
+        named.insert(expectBasinTile(object, component));
+      }
+      else if (component.at("type") == "PlayerController")
+      {
+        expectBasinPlayer(object, component);
+        ++players;
+      }
+      else if (component.at("type") == "Camera" && component.at("active") == true)
+      {
+        ++activeCameras;
+      }
+    }
+  }
+
+  EXPECT_EQ(named.size(), 9u);
+  EXPECT_EQ(players, 1);
+  EXPECT_EQ(activeCameras, 1);
+  EXPECT_EQ(basinRecords(project), 9);
+
+  // Welcome stays the scene the project opens on.
+  const auto& scenes = project.at("assets").at("scenes");
+  EXPECT_EQ(scenes.at(0).at("name"), "Welcome");
+  EXPECT_EQ(project.at("currentSceneUUID"), scenes.at(0).at("uuid"));
+}
+
+namespace {
+  // A basin body keeps its prefab's density, and spawns above the ground under it; returns that ground's height.
+  float expectDensityAndClearance(const nlohmann::json& project, const nlohmann::json& body, const float radius)
+  {
+    const auto name = body.at("name").get<std::string>();
+    const glm::vec3 scale = scaleOf(body);
+    const float widest = std::max({ scale.x, scale.y, scale.z });
+    const float prefabMass = rigidBodyIn(prefabBody(project, name)).at("mass").get<float>();
+    const float massScale = name == "Block" ? scale.x * scale.y * scale.z : widest * widest * widest;
+    SCOPED_TRACE(name);
+    EXPECT_NEAR(rigidBodyIn(body).at("mass").get<float>(), prefabMass * massScale, prefabMass * massScale * 1e-3f);
+
+    const glm::vec3 position = positionOfObject(body);
+    const float ground = basin::worldGroundY(position.x, position.z);
+    EXPECT_GT(position.y - radius, ground);
+
+    return ground;
+  }
+
+  size_t overlappingPairs(const std::vector<glm::vec3>& positions, const std::vector<float>& radii)
+  {
+    size_t overlapping = 0;
+    for (size_t a = 0; a < positions.size(); ++a)
+    {
+      for (size_t b = a + 1; b < positions.size(); ++b)
+      {
+        overlapping += glm::distance(positions[a], positions[b]) < radii[a] + radii[b] ? 1 : 0;
+      }
+    }
+
+    return overlapping;
+  }
+}
+
+TEST(DefaultProject, TheTerrainBasinStacksMixedBodiesThatSpawnClearOfEachOtherAndTheGround)
+{
+  const auto project = buildDefaultProject();
+  const auto bodies = bodiesOf(sceneObjects(project, "Terrain Basin"));
+
+  const size_t expected = static_cast<size_t>(basin::towerColumns * basin::towerColumns * basin::towerLayers +
+                                              8 * basin::stackColumns * basin::stackColumns * basin::stackLayers);
+  EXPECT_EQ(bodies.size(), expected);
+
+  std::set<std::string> kinds;
+  std::vector<glm::vec3> positions;
+  std::vector<float> radii;
+  float highestGround = -1e9f;
+  for (const auto* body : bodies)
+  {
+    kinds.insert(body->at("name").get<std::string>());
+    radii.push_back(boundingRadius(*body));
+    positions.push_back(positionOfObject(*body));
+    highestGround = std::max(highestGround, expectDensityAndClearance(project, *body, radii.back()));
+  }
+
+  EXPECT_GE(kinds.size(), 10u);
+  EXPECT_TRUE(kinds.contains("Sphere"));
+  EXPECT_TRUE(kinds.contains("Block"));
+
+  // Positive control for the ground check: some stacks stand on ground well above the arena floor.
+  EXPECT_GT(highestGround, 10.0f);
+  EXPECT_EQ(overlappingPairs(positions, radii), 0u);
+
+  // Positive control: the radii are not so small that they hide overlaps; the largest bodies reach past a unit and
+  // still fit their slot.
+  EXPECT_GT(*std::ranges::max_element(radii), 1.0f);
+  EXPECT_LT(*std::ranges::max_element(radii), basin::stackSpacing / 2.0f - 0.75f);
 }
 
 TEST(DefaultProject, TheMissingAssetPlaceholdersShipButAreNeverRegistered)

@@ -4,6 +4,7 @@
 #include "DefaultShapes.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -63,6 +64,16 @@ inline const std::string boulderPrefab = "dca2e8d6-7dab-4706-84f2-61da7ad076f1";
 // The built-in project's one terrain, generated in memory at server startup.
 inline const std::string showcaseTerrain = "5b0c7e42-3f1d-4a86-9e27-c4d81a6f2b95";
 
+// The nine tiles of the Terrain Basin scene in row-major order (row = z index, 0 = south; column = x index,
+// 0 = west), so a tile's index is row * 3 + column.
+inline const std::array<std::string, 9> basinTerrains = {
+  "06f00970-5e9d-4f46-8fc9-51f1ac27877b", "a46bffd8-2665-44c3-b180-77b6b53e882f",
+  "a0dd8c5c-e583-4256-a5e5-bc7c5af4e08c", "deac34b9-7acd-4b43-a1a3-e94c2bb48a19",
+  "1c6cb664-faed-4599-8e4f-4ba560dd1194", "a3d772a9-d04d-4767-97dc-b5affd06ea04",
+  "9874e377-4f4b-4edb-bff8-9bae00724758", "c32229de-67ff-40fa-b1f3-10048adc8423",
+  "0b3a83b6-73f4-46c2-a7be-f3f19ad1ce2a"
+};
+
 // A library shape and the hull its prefab, model and collider are built from.
 struct LibraryShape
 {
@@ -76,6 +87,7 @@ struct LibraryShape
 [[nodiscard]] const nlohmann::json& libraryBody(const std::string& name);
 
 [[nodiscard]] const nlohmann::json& capsuleBody();
+[[nodiscard]] const nlohmann::json& cylinderBody();
 [[nodiscard]] const nlohmann::json& rampBody();
 
 [[nodiscard]] std::string newUUID();
@@ -88,6 +100,9 @@ struct LibraryShape
 
 [[nodiscard]] nlohmann::json modelRenderer(const std::string& model, const std::string& texture,
                                            const std::string& specular);
+
+// The collider of a Terrain object: collision and shadows on, naming the terrain asset.
+[[nodiscard]] nlohmann::json terrainCollider(const std::string& terrainUUID);
 
 [[nodiscard]] nlohmann::json makeObject(const std::string& name, nlohmann::json components,
                                         nlohmann::json scripts = nlohmann::json::array());
@@ -121,6 +136,7 @@ struct LibraryShape
 [[nodiscard]] nlohmann::json buildScene3();
 [[nodiscard]] nlohmann::json buildFallingBalls();
 [[nodiscard]] nlohmann::json buildTerrainShowcase();
+[[nodiscard]] nlohmann::json buildTerrainBasin();
 
 }
 
