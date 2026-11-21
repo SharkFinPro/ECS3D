@@ -84,6 +84,13 @@ namespace {
     // The least speed the point may separate at: negative for a point short of its resting overlap, which may
     // close the distance it has left this tick and no more.
     float separatingSpeed = 0.0f;
+    // The spin a unit impulse along the normal, or along each tangent, gives each side before its share:
+    // inverseInertia * cross(arm, direction). The velocity passes scale these rather than turning every impulse
+    // through the inertia again, which rounds differently from doing so (see physics.md, "Precomputed turns").
+    glm::vec3 normalTurn{ 0 };
+    glm::vec3 otherNormalTurn{ 0 };
+    std::array<glm::vec3, 2> tangentTurn{};
+    std::array<glm::vec3, 2> otherTangentTurn{};
   };
 
   // The island's body slot standing for all static geometry: no inverse mass, so no impulse moves it.
@@ -407,9 +414,13 @@ namespace {
         point.arm = point.position - body.center;
         point.otherArm = point.position - other.center;
         point.normalMass = inverseOrZero(response(constraint, point, normal));
+        point.normalTurn = body.inverseInertia * glm::cross(point.arm, normal);
+        point.otherNormalTurn = other.inverseInertia * glm::cross(point.otherArm, normal);
         for (size_t t = 0; t < 2; ++t)
         {
           point.tangentMass[t] = inverseOrZero(response(constraint, point, constraint.tangents[t]));
+          point.tangentTurn[t] = body.inverseInertia * glm::cross(point.arm, constraint.tangents[t]);
+          point.otherTangentTurn[t] = other.inverseInertia * glm::cross(point.otherArm, constraint.tangents[t]);
         }
 
         point.separatingSpeed = std::min(point.depth - penetrationSlop, 0.0f);
@@ -606,6 +617,23 @@ namespace {
       }
     }
 
+    // As apply, with the spin each side takes given rather than found from the impulse: turn and otherTurn are the
+    // point's precomputed turns weighted by the impulse along each direction.
+    void applyTurning(const Constraint& constraint, const glm::vec3& impulse, const glm::vec3& turn,
+                      const glm::vec3& otherTurn)
+    {
+      auto& body = m_bodies[constraint.body];
+      body.velocity += impulse * constraint.share * body.inverseMass;
+      body.spin += turn * constraint.share;
+
+      if (constraint.other != staticSlot)
+      {
+        auto& other = m_bodies[constraint.other];
+        other.velocity += -impulse * constraint.otherShare * other.inverseMass;
+        other.spin -= otherTurn * constraint.otherShare;
+      }
+    }
+
     void relax(Constraint& constraint)
     {
       resistRolling(constraint);
@@ -621,9 +649,9 @@ namespace {
         // A contact only pushes, so it is the total that stays positive: a later pass may take back what an
         // earlier one gave.
         const float wanted = std::max(point.normalImpulse + point.normalMass * (point.separatingSpeed - separating), 0.0f);
-        const auto impulse = (wanted - point.normalImpulse) * constraint.normal;
+        const float change = wanted - point.normalImpulse;
         point.normalImpulse = wanted;
-        apply(constraint, point, impulse);
+        applyTurning(constraint, change * constraint.normal, change * point.normalTurn, change * point.otherNormalTurn);
       }
     }
 
@@ -650,10 +678,12 @@ namespace {
           wanted[1] *= scale;
         }
 
-        const auto impulse = (wanted[0] - point.tangentImpulse[0]) * constraint.tangents[0] +
-                             (wanted[1] - point.tangentImpulse[1]) * constraint.tangents[1];
+        const float first = wanted[0] - point.tangentImpulse[0];
+        const float second = wanted[1] - point.tangentImpulse[1];
         point.tangentImpulse = wanted;
-        apply(constraint, point, impulse);
+        applyTurning(constraint, first * constraint.tangents[0] + second * constraint.tangents[1],
+                     first * point.tangentTurn[0] + second * point.tangentTurn[1],
+                     first * point.otherTangentTurn[0] + second * point.otherTangentTurn[1]);
       }
     }
 

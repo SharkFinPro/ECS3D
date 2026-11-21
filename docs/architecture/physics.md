@@ -118,6 +118,28 @@ What the constraints are made of:
   takes only the share of each impulse that the mass ratio gives it (`shareTakenBy`), as if it weighed what
   presses on it; its support takes the rest. A stack then settles as one of equal bodies does whatever its masses.
 
+**Static geometry.** The static body is the island's slot zero (`staticSlot`). It never moves, so the solver leaves
+it out of relative velocities and pushes and gives it no impulse. That changes no result: its velocity, spin and
+push stay exactly zero either way.
+
+**Precomputed turns.** This is the one place the solver's arithmetic is not the plain formula, and it is not bit for
+bit with it. An impulse `j` along a direction `d` at arm `r` turns a body by `I^-1 (r x (j d))`. Each `SolverPoint`
+computes `I^-1 (r x d)` once per tick for its normal and both tangents, on both sides (`normalTurn`,
+`tangentTurn` and the `other` versions), and the velocity passes then add `j` times that, through `applyTurning`.
+In exact arithmetic the two are equal. In floats the multiply happens in a different order, so the spin each pass
+leaves differs in its last bits.
+
+- **What it changes:** individual runs, not behavior. A pile settles the same way and to the same tolerances, but a
+  chaotic sequence (a tower collapsing, a ball rolling on a ridge) amplifies the rounding, so a recorded run does not
+  replay exactly against one made before the change. The suite compares physics with tolerances, so it is unaffected;
+  a test that pins an exact float from the velocity passes would not survive it.
+- **Where it applies:** only the 32 velocity passes (relax and friction), where nearly all impulses are applied.
+  Bounce, warm start, settle and separation still turn each impulse through the inertia.
+- **Why:** on the Terrain Basin scene the velocity passes were a third of the single-threaded tick, and the
+  matrix multiply in each impulse was the largest part of them.
+- **To undo it:** have `relax` and `holdSliding` call `apply` with the impulse vector again and drop the turn fields.
+  Nothing else depends on them.
+
 ### Narrow phase
 
 `NarrowPhase.h`'s `findContact`, `intersects` and `approaches` are the entry points. GJK and EPA query each
