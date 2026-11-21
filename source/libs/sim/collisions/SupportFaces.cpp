@@ -297,6 +297,7 @@ namespace {
     }
 
     SupportFace face;
+    face.corners.reserve(outline.size());
     for (const auto id : outline)
     {
       face.corners.push_back(world[id]);

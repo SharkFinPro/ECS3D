@@ -613,7 +613,20 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
 
 std::array<glm::vec3, 3> CollisionSystem::approachSweeps(const CollisionEdge& first, const CollisionEdge& second)
 {
-  return { first.sweep - second.sweep, first.sweep, -second.sweep };
+  std::array<glm::vec3, 3> sweeps{ first.sweep - second.sweep, first.sweep, -second.sweep };
+
+  // With one side still, the relative sweep is the other's own. Asked again it answers as it did, so the repeat is
+  // zeroed, which callers skip.
+  for (size_t i = 1; i < sweeps.size(); ++i)
+  {
+    if (std::find(sweeps.begin(), sweeps.begin() + static_cast<std::ptrdiff_t>(i), sweeps[i]) !=
+        sweeps.begin() + static_cast<std::ptrdiff_t>(i))
+    {
+      sweeps[i] = glm::vec3(0);
+    }
+  }
+
+  return sweeps;
 }
 
 void CollisionSystem::liftOutOfStatic(std::vector<ContactPair>& pairs)

@@ -86,6 +86,9 @@ namespace {
     float separatingSpeed = 0.0f;
   };
 
+  // The island's body slot standing for all static geometry: no inverse mass, so no impulse moves it.
+  constexpr size_t staticSlot = 0;
+
   struct Constraint {
     size_t body = 0;
     size_t other = 0;
@@ -251,7 +254,7 @@ namespace {
     Island(const std::span<const ContactPair> pairs, const ContactSolver::Cache& previous, const float dt)
       : m_dt(dt)
     {
-      // Slot zero stands for all static geometry: it has no inverse mass, so no impulse moves it.
+      // The first slot is staticSlot.
       m_bodies.emplace_back();
 
       m_constraints.reserve(pairs.size());
@@ -528,13 +531,10 @@ namespace {
             continue;
           }
 
-          auto& body = m_bodies[constraint.body];
-          auto& other = m_bodies[constraint.other];
           for (size_t i = 0; i < constraint.pointCount; ++i)
           {
             const auto& point = constraint.points[i];
-            const float closing = -glm::dot(velocityAt(body, point.arm) - velocityAt(other, point.otherArm),
-                                            constraint.normal);
+            const float closing = -glm::dot(relativeVelocity(constraint, point), constraint.normal);
 
             // Only a point that is touching, or reaches the other shape this tick, has anything to bounce off.
             if (closing < minBounceSpeed * m_dt || closing <= -point.depth)
@@ -565,7 +565,10 @@ namespace {
       }
 
       body.spin += body.inverseInertia * constraint.rollingImpulse * constraint.share;
-      other.spin -= other.inverseInertia * constraint.rollingImpulse * constraint.otherShare;
+      if (constraint.other != staticSlot)
+      {
+        other.spin -= other.inverseInertia * constraint.rollingImpulse * constraint.otherShare;
+      }
     }
 
     // How fast a unit impulse along direction closes or opens the point, each side taking its share.
@@ -576,18 +579,35 @@ namespace {
              constraint.otherShare * responseAlong(m_bodies[constraint.other], point.otherArm, direction);
     }
 
-    // Pushes the first side by the impulse and the second back by it, each by its share.
+    // Slot zero never moves: its velocity and push stay zero, so it is left out of the relative motion. Only a second
+    // side is skipped, which leaves the arithmetic for the moving sides as it was.
+    [[nodiscard]] glm::vec3 relativeVelocity(const Constraint& constraint, const SolverPoint& point) const
+    {
+      const auto velocity = velocityAt(m_bodies[constraint.body], point.arm);
+
+      return constraint.other == staticSlot ? velocity
+                                            : velocity - velocityAt(m_bodies[constraint.other], point.otherArm);
+    }
+
+    [[nodiscard]] glm::vec3 relativePush(const Constraint& constraint, const SolverPoint& point) const
+    {
+      const auto push = pushAt(m_bodies[constraint.body], point.arm);
+
+      return constraint.other == staticSlot ? push : push - pushAt(m_bodies[constraint.other], point.otherArm);
+    }
+
+    // Pushes the first side by the impulse and the second back by it, each by its share; static geometry takes none.
     void apply(const Constraint& constraint, const SolverPoint& point, const glm::vec3& impulse)
     {
       applyImpulse(m_bodies[constraint.body], impulse * constraint.share, point.arm);
-      applyImpulse(m_bodies[constraint.other], -impulse * constraint.otherShare, point.otherArm);
+      if (constraint.other != staticSlot)
+      {
+        applyImpulse(m_bodies[constraint.other], -impulse * constraint.otherShare, point.otherArm);
+      }
     }
 
     void relax(Constraint& constraint)
     {
-      auto& body = m_bodies[constraint.body];
-      auto& other = m_bodies[constraint.other];
-
       resistRolling(constraint);
 
       // Friction first: the normal impulses then have the last word, so no pass ends with a point sinking.
@@ -596,8 +616,7 @@ namespace {
       for (size_t i = 0; i < constraint.pointCount; ++i)
       {
         auto& point = constraint.points[i];
-        const float separating = glm::dot(velocityAt(body, point.arm) - velocityAt(other, point.otherArm),
-                                          constraint.normal);
+        const float separating = glm::dot(relativeVelocity(constraint, point), constraint.normal);
 
         // A contact only pushes, so it is the total that stays positive: a later pass may take back what an
         // earlier one gave.
@@ -610,13 +629,10 @@ namespace {
 
     void holdSliding(Constraint& constraint)
     {
-      auto& body = m_bodies[constraint.body];
-      auto& other = m_bodies[constraint.other];
-
       for (size_t i = 0; i < constraint.pointCount; ++i)
       {
         auto& point = constraint.points[i];
-        const auto relative = velocityAt(body, point.arm) - velocityAt(other, point.otherArm);
+        const auto relative = relativeVelocity(constraint, point);
 
         auto wanted = point.tangentImpulse;
         for (size_t t = 0; t < 2; ++t)
@@ -684,7 +700,10 @@ namespace {
       const auto impulse = wanted - constraint.rollingImpulse;
       constraint.rollingImpulse = wanted;
       body.spin += body.inverseInertia * impulse * constraint.share;
-      other.spin -= other.inverseInertia * impulse * constraint.otherShare;
+      if (constraint.other != staticSlot)
+      {
+        other.spin -= other.inverseInertia * impulse * constraint.otherShare;
+      }
     }
 
     void separate(Constraint& constraint)
@@ -696,12 +715,15 @@ namespace {
       {
         auto& point = constraint.points[i];
         const float target = separationShare * std::max(point.depth - penetrationSlop, 0.0f);
-        const float moved = glm::dot(pushAt(body, point.arm) - pushAt(other, point.otherArm), constraint.normal);
+        const float moved = glm::dot(relativePush(constraint, point), constraint.normal);
         const float wanted = std::max(point.pushImpulse + point.normalMass * (target - moved), 0.0f);
         const auto impulse = (wanted - point.pushImpulse) * constraint.normal;
         point.pushImpulse = wanted;
         applyPush(body, impulse * constraint.share, point.arm);
-        applyPush(other, -impulse * constraint.otherShare, point.otherArm);
+        if (constraint.other != staticSlot)
+        {
+          applyPush(other, -impulse * constraint.otherShare, point.otherArm);
+        }
       }
     }
 
@@ -754,7 +776,7 @@ namespace {
         {
           auto& point = constraint.points[i];
           const auto& arm = bodyAbove ? point.arm : point.otherArm;
-          const auto relative = velocityAt(body, point.arm) - velocityAt(other, point.otherArm);
+          const auto relative = relativeVelocity(constraint, point);
 
           auto wanted = point.tangentImpulse;
           for (size_t t = 0; t < 2; ++t)
@@ -789,7 +811,7 @@ namespace {
           if (pushes)
           {
             const float target = separationShare * std::max(point.depth - penetrationSlop, 0.0f);
-            const float moved = glm::dot(pushAt(body, point.arm) - pushAt(other, point.otherArm),
+            const float moved = glm::dot(relativePush(constraint, point),
                                          constraint.normal);
             const float wanted = std::max(point.pushImpulse + mass * (target - moved), 0.0f);
             applyPush(upper, side * (wanted - point.pushImpulse) * constraint.normal, arm);
@@ -798,7 +820,7 @@ namespace {
             continue;
           }
 
-          const float separating = glm::dot(velocityAt(body, point.arm) - velocityAt(other, point.otherArm),
+          const float separating = glm::dot(relativeVelocity(constraint, point),
                                             constraint.normal);
           const float wanted = std::max(point.normalImpulse + mass * (point.separatingSpeed - separating), 0.0f);
           applyImpulse(upper, side * (wanted - point.normalImpulse) * constraint.normal, arm);

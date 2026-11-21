@@ -132,6 +132,13 @@ namespace collisions::detail {
       geometry.vertices = hull.getWorldVertices();
       geometry.sharedFaces = &hullSupportFaces(hull);
 
+      size_t corners = 0;
+      for (const auto& face : geometry.faces())
+      {
+        corners += face.corners.size();
+      }
+      geometry.edges.reserve(corners / 2);
+
       // Each edge borders two faces and runs opposite ways in them, so it is kept where it runs "forward".
       for (const auto& face : geometry.faces())
       {

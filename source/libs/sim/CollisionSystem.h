@@ -179,7 +179,7 @@ private:
                    float dt) const;
 
   // The displacements of first relative to second to look for an approach along: the two as they move now, then
-  // each one moving alone.
+  // each one moving alone. One that repeats an earlier one is zero, and a zero sweep is not asked.
   [[nodiscard]] static std::array<glm::vec3, 3> approachSweeps(const CollisionEdge& first, const CollisionEdge& second);
 
   // Moves a body that sank deep into static geometry this tick straight back out of it, as a fall fast enough to
