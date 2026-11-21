@@ -43,6 +43,12 @@ while playing) the same way it already undoes an edited Transform.
   built-in `DefaultProject` when no `--project` is given. Its Terrain Showcase scene (the landscape centered on the
   origin at player scale, 1.5-unit voxels and a 480 x 480 unit (96 m) footprint, with a player on the ground south
   of the tunnel) names a terrain that `DefaultTerrain` generates in memory at startup (never written to files).
+  Its Terrain Basin scene is nine 128-sample tiles in a 3 x 3 grid that `DefaultTerrainTiles` generates the same way:
+  neighboring tiles share their edge column and sample one global height function, so the seams are exact, and all
+  nine hold at most 600 chunks since every terrain streams to every join. A tower of mixed bodies over the arena and a
+  smaller stack over each outer tile are sized by the constants in `basin` and placed at random per launch. The noise
+  and the heightmap fill and slope painting both terrains share live in `DefaultTerrainNoise.h` and
+  `DefaultTerrainPaint`.
   `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library
   hulls (D4, D6, D8, D12, D20, Hex Prism, Drum, Gem, Boulder), whose formulas and seeded Boulder generator

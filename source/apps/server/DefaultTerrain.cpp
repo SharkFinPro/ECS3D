@@ -1,9 +1,10 @@
 #include "DefaultTerrain.h"
 #include "DefaultProjectParts.h"
+#include "DefaultTerrainNoise.h"
+#include "DefaultTerrainPaint.h"
+#include "DefaultTerrainTiles.h"
 #include <Log.h>
 #include <terrain/TerrainBrush.h>
-#include <terrain/TerrainChunk.h>
-#include <terrain/TerrainGenerators.h>
 #include <terrain/TerrainOps.h>
 #include <terrain/TerrainStore.h>
 #include <terrain/TerrainTypes.h>
@@ -17,76 +18,18 @@
 #include <cstdint>
 #include <memory>
 #include <numbers>
-#include <tuple>
+#include <functional>
 #include <utility>
 #include <vector>
 #include <uuid.h>
 
 using namespace defaultproject;
+using namespace defaultterrain;
 using nlohmann::json;
 
 namespace {
 
 constexpr float maxHeight = 126.0f;
-constexpr float groundThickness = 8.0f;
-constexpr uint8_t interiorMaterial = 2;
-
-constexpr uint8_t materialGray = 0;
-constexpr uint8_t materialGrass = 1;
-constexpr uint8_t materialBrown = 2;
-constexpr uint8_t materialSand = 4;
-
-uint32_t hashCell(const int x, const int z, const uint32_t seed)
-{
-  uint32_t value = static_cast<uint32_t>(x) * 0x8DA6B343u ^ static_cast<uint32_t>(z) * 0xD8163841u ^ seed * 0xCB1AB31Fu;
-  value ^= value >> 15;
-  value *= 0x2C1B3C6Du;
-  value ^= value >> 12;
-  value *= 0x297A2D39u;
-  value ^= value >> 15;
-
-  return value;
-}
-
-float easeCurve(const float t)
-{
-  return t * t * (3.0f - 2.0f * t);
-}
-
-float easeBetween(const float low, const float high, const float value)
-{
-  return easeCurve(std::clamp((value - low) / (high - low), 0.0f, 1.0f));
-}
-
-// In [-1, 1].
-float valueNoise(const float x, const float z, const uint32_t seed)
-{
-  const int cellX = static_cast<int>(std::floor(x));
-  const int cellZ = static_cast<int>(std::floor(z));
-  const float fractionX = easeCurve(x - static_cast<float>(cellX));
-  const float fractionZ = easeCurve(z - static_cast<float>(cellZ));
-
-  const auto corner = [seed](const int cx, const int cz)
-  {
-    return static_cast<float>(hashCell(cx, cz, seed) & 0xFFFFu) / 32767.5f - 1.0f;
-  };
-
-  const float lower = glm::mix(corner(cellX, cellZ), corner(cellX + 1, cellZ), fractionX);
-  const float upper = glm::mix(corner(cellX, cellZ + 1), corner(cellX + 1, cellZ + 1), fractionX);
-
-  return glm::mix(lower, upper, fractionZ);
-}
-
-float fbm(const float x, const float z)
-{
-  return (valueNoise(x / 64.0f, z / 64.0f, 1) + 0.5f * valueNoise(x / 32.0f, z / 32.0f, 2) +
-          0.25f * valueNoise(x / 16.0f, z / 16.0f, 3)) / 1.75f;
-}
-
-float distance2D(const float x, const float z, const float centerX, const float centerZ)
-{
-  return std::hypot(x - centerX, z - centerZ);
-}
 
 // The ground height of a column, in voxels.
 float groundAt(const float x, const float z)
@@ -143,15 +86,7 @@ struct Ground
 
 void fillGround(terrain::TerrainVolume& volume, const Ground& ground)
 {
-  std::vector<uint16_t> pixels(ground.heights.size());
-  for (size_t index = 0; index < pixels.size(); ++index)
-  {
-    pixels[index] = static_cast<uint16_t>(std::lround(ground.heights[index] / maxHeight * 65535.0f));
-  }
-
-  const terrain::HeightmapView view{ pixels, showcase::columns, showcase::columns };
-  terrain::commit(volume, terrain::fillFromHeightmap(volume, view, maxHeight * volume.voxelSize(),
-                                                     groundThickness * volume.voxelSize(), interiorMaterial));
+  fillHeights(volume, ground.heights, showcase::columns, maxHeight, groundThickness, interiorMaterial);
 }
 
 void applyAndCommit(terrain::TerrainVolume& volume, const terrain::BrushOp::Kind kind, const float x, const float y,
@@ -292,121 +227,6 @@ uint8_t materialFor(const glm::ivec3 sample, const float normalY, const Ground& 
   return groundMaterial(sample, normalY, ground);
 }
 
-std::vector<terrain::ChunkCoord> denseChunks(const terrain::TerrainVolume& volume)
-{
-  std::vector<terrain::ChunkCoord> dense;
-  for (const auto& [coord, chunk] : volume.chunks())
-  {
-    if (!chunk->isUniform())
-    {
-      dense.push_back(coord);
-    }
-  }
-
-  std::ranges::sort(dense, [](const terrain::ChunkCoord& a, const terrain::ChunkCoord& b)
-  {
-    return std::tie(a.x, a.y, a.z) < std::tie(b.x, b.y, b.z);
-  });
-
-  return dense;
-}
-
-// One chunk's distances for the slope reads; a neighbor outside the chunk comes from the volume. Reads are clamped
-// to the ground's columns so the outermost samples do not see the world beyond the box as air.
-class SlopeReader
-{
-public:
-  SlopeReader(const terrain::TerrainVolume& volume, const terrain::ChunkCoord coord,
-              const std::vector<int16_t>& distances)
-    : m_volume(volume), m_origin(terrain::chunkOrigin(coord)), m_distances(distances)
-  {}
-
-  [[nodiscard]] float normalY(const glm::ivec3 sample) const
-  {
-    const float gradX = static_cast<float>(distanceAt(sample + glm::ivec3(1, 0, 0)) -
-                                           distanceAt(sample - glm::ivec3(1, 0, 0)));
-    const float gradY = static_cast<float>(distanceAt(sample + glm::ivec3(0, 1, 0)) -
-                                           distanceAt(sample - glm::ivec3(0, 1, 0)));
-    const float gradZ = static_cast<float>(distanceAt(sample + glm::ivec3(0, 0, 1)) -
-                                           distanceAt(sample - glm::ivec3(0, 0, 1)));
-    const float length = std::sqrt(gradX * gradX + gradY * gradY + gradZ * gradZ);
-
-    return length > 0.0f ? gradY / length : 1.0f;
-  }
-
-private:
-  [[nodiscard]] int distanceAt(glm::ivec3 sample) const
-  {
-    sample.x = std::clamp(sample.x, 0, showcase::columns - 1);
-    sample.z = std::clamp(sample.z, 0, showcase::columns - 1);
-    const glm::ivec3 local = sample - m_origin;
-    const bool inside = local.x >= 0 && local.y >= 0 && local.z >= 0 && local.x < terrain::chunkSize &&
-                        local.y < terrain::chunkSize && local.z < terrain::chunkSize;
-
-    return static_cast<int>(inside ? m_distances[static_cast<size_t>(terrain::sampleIndex(local.x, local.y, local.z))]
-                                   : m_volume.distanceAtSample(sample));
-  }
-
-  const terrain::TerrainVolume& m_volume;
-  glm::ivec3 m_origin;
-  const std::vector<int16_t>& m_distances;
-};
-
-bool isSurfaceSample(const int16_t distance)
-{
-  return distance < terrain::airDistance && distance > -terrain::airDistance;
-}
-
-// The chunk repainted, or null when no material changed.
-std::shared_ptr<const terrain::TerrainChunk> paintChunk(const terrain::TerrainVolume& volume,
-                                                        const terrain::ChunkCoord coord, const Ground& ground)
-{
-  const auto source = volume.chunk(coord);
-  const glm::ivec3 origin = terrain::chunkOrigin(coord);
-  const std::vector<int16_t> distances(source->distances().begin(), source->distances().end());
-  std::vector<uint8_t> materials(source->materials().begin(), source->materials().end());
-  const SlopeReader reader(volume, coord, distances);
-  bool changed = false;
-
-  for (int z = 0; z < terrain::chunkSize; ++z)
-  {
-    for (int y = 0; y < terrain::chunkSize; ++y)
-    {
-      for (int x = 0; x < terrain::chunkSize; ++x)
-      {
-        const auto index = static_cast<size_t>(terrain::sampleIndex(x, y, z));
-        if (!isSurfaceSample(distances[index]))
-        {
-          continue;
-        }
-
-        const glm::ivec3 sample = origin + glm::ivec3(x, y, z);
-        const uint8_t material = materialFor(sample, reader.normalY(sample), ground);
-        changed = changed || material != materials[index];
-        materials[index] = material;
-      }
-    }
-  }
-
-  return changed ? terrain::TerrainChunk::dense(distances, std::move(materials)) : nullptr;
-}
-
-void paintBands(terrain::TerrainVolume& volume, const Ground& ground)
-{
-  // Every chunk reads the unedited volume, so a sample's slope never sees a neighbor already repainted.
-  terrain::ChunkEdits edits;
-
-  for (const auto& coord : denseChunks(volume))
-  {
-    if (auto painted = paintChunk(volume, coord, ground))
-    {
-      edits.emplace_back(coord, std::move(painted));
-    }
-  }
-
-  terrain::commit(volume, edits);
-}
-
 }
 
 void generateShowcaseGround(terrain::TerrainVolume& volume)
@@ -423,10 +243,15 @@ void generateShowcaseTerrain(terrain::TerrainVolume& volume)
   raiseArch(volume);
   raiseOverhang(volume);
   floatIsland(volume);
-  paintBands(volume, ground);
+  paintSurface(volume, showcase::columns, [&ground](const glm::ivec3 sample, const float normalY)
+  {
+    return materialFor(sample, normalY, ground);
+  });
 }
 
-void installDefaultTerrains(terrain::TerrainStore& store)
+namespace {
+
+void installShowcaseTerrain(terrain::TerrainStore& store)
 {
   const auto uuid = uuids::uuid::from_string(showcaseTerrain);
   if (!uuid)
@@ -456,6 +281,14 @@ void installDefaultTerrains(terrain::TerrainStore& store)
   store.stampAllChunks(*uuid);
 }
 
+}
+
+void installDefaultTerrains(terrain::TerrainStore& store)
+{
+  installShowcaseTerrain(store);
+  installBasinTerrains(store);
+}
+
 namespace defaultproject {
 
 json buildTerrainShowcase()
@@ -463,17 +296,7 @@ json buildTerrainShowcase()
   return json::array({
     makeObject("Terrain", json::array({
       transform(showcase::terrainOrigin()),
-      {
-        { "type", "Collider" },
-        { "subType", "Terrain" },
-        { "terrainUUID", showcaseTerrain },
-        { "collisionEnabled", true },
-        { "castShadows", true },
-        { "renderCollider", false },
-        { "isTrigger", false },
-        { "layer", 0u },
-        { "mask", 0xFFFFFFFFu }
-      }
+      terrainCollider(showcaseTerrain)
     })),
     player(showcase::playerSpawn(), 0, glm::vec3(0.0f, 0.0f, 1.0f)),
     light({ 0.0f, 300.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 0.35f, 0.8f, 0.4f)

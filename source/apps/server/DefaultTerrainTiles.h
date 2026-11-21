@@ -1,0 +1,59 @@
+#ifndef DEFAULTTERRAINTILES_H
+#define DEFAULTTERRAINTILES_H
+
+#include <glm/vec3.hpp>
+#include <array>
+
+namespace terrain
+{
+  class TerrainStore;
+  class TerrainVolume;
+}
+
+// The built-in Terrain Basin: one landscape cut into a 3 x 3 grid of terrain tiles, +z north. A flat arena in the
+// middle is ringed by a rim that rises into terraces to the north, a steep bank to the east, moguls in the south-west
+// and a dry riverbed crossing in from the west. Neighboring tiles share their edge column, so every tile samples one
+// global height function and meets its neighbor exactly. Positions are sample columns (voxels) unless a name says
+// world.
+namespace basin
+{
+  inline constexpr int tilesPerSide = 3;
+  inline constexpr int tileCount = tilesPerSide * tilesPerSide;
+
+  // Samples per tile side, and the step between one tile's first sample and its neighbor's.
+  inline constexpr int tileColumns = 128;
+  inline constexpr int tileStride = tileColumns - 1;
+  inline constexpr int worldColumns = tilesPerSide * tileStride + 1;
+
+  // World units per voxel, the arena floor and the heightmap's full scale, in voxels.
+  inline constexpr float voxelSize = 1.5f;
+  inline constexpr int groundHeight = 24;
+  inline constexpr int maxHeight = 96;
+
+  // The scene's knobs: the tower over the arena and the stack over each outer tile are columns x columns bodies
+  // wide and layers tall, one body every stackSpacing world units.
+  inline constexpr int towerColumns = 5;
+  inline constexpr int towerLayers = 12;
+  inline constexpr int stackColumns = 3;
+  inline constexpr int stackLayers = 5;
+  inline constexpr float stackSpacing = 5.0f;
+
+  // The ground height, in voxels, at global sample column (x, z).
+  [[nodiscard]] float groundAt(float x, float z);
+
+  // The Terrain object's position for tile (row, col): the basin is centered on the world origin in x and z with the
+  // arena floor at world y = 0.
+  [[nodiscard]] glm::vec3 tileOrigin(int row, int col);
+
+  [[nodiscard]] float worldGroundY(float worldX, float worldZ);
+}
+
+// Fills the nine tiles, in row-major order (index = row * 3 + column); a null entry is skipped. Deterministic. Each
+// volume must already use basin::voxelSize.
+void generateBasinTiles(const std::array<terrain::TerrainVolume*, basin::tileCount>& tiles);
+
+// Generates every basin tile the store holds a terrain for and sets each description's chunk count to what it holds.
+// A tile missing from the store is skipped and other terrains are left alone.
+void installBasinTerrains(terrain::TerrainStore& store);
+
+#endif //DEFAULTTERRAINTILES_H

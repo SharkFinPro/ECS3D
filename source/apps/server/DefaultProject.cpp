@@ -139,6 +139,21 @@ json camera(const glm::vec3& direction = glm::vec3(0, 0, -1))
   };
 }
 
+json terrainCollider(const std::string& terrainUUID)
+{
+  return {
+    { "type", "Collider" },
+    { "subType", "Terrain" },
+    { "terrainUUID", terrainUUID },
+    { "collisionEnabled", true },
+    { "castShadows", true },
+    { "renderCollider", false },
+    { "isTrigger", false },
+    { "layer", 0u },
+    { "mask", 0xFFFFFFFFu }
+  };
+}
+
 json makeObject(const std::string& name, json components, json scripts)
 {
   return {
@@ -494,11 +509,20 @@ json prefabAssets()
   });
 }
 
+json terrainRecord(const std::string& uuid)
+{
+  return { { "filePath", terrainAssetPath(uuids::uuid::from_string(uuid).value()) }, { "uuid", uuid } };
+}
+
 json terrainAssets()
 {
-  return json::array({
-    { { "filePath", terrainAssetPath(uuids::uuid::from_string(showcaseTerrain).value()) }, { "uuid", showcaseTerrain } }
-  });
+  json terrains = json::array({ terrainRecord(showcaseTerrain) });
+  for (const auto& uuid : basinTerrains)
+  {
+    terrains.push_back(terrainRecord(uuid));
+  }
+
+  return terrains;
 }
 
 json sceneAssets(json welcome)
@@ -509,7 +533,8 @@ json sceneAssets(json welcome)
     scene("Ramps", newUUID(), buildScene2()),
     scene("Tower Collapse", newUUID(), buildScene3()),
     scene("Falling Balls", newUUID(), buildFallingBalls()),
-    scene("Terrain Showcase", newUUID(), buildTerrainShowcase())
+    scene("Terrain Showcase", newUUID(), buildTerrainShowcase()),
+    scene("Terrain Basin", newUUID(), buildTerrainBasin())
   });
 }
 
