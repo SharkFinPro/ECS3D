@@ -551,3 +551,25 @@ TEST(ConvexMeshCollider, EveryGeometryChangeClearsTheMassCache)
   expectCleared("start", [&] { hull->start(); });
   expectCleared("stop", [&] { hull->stop(); });
 }
+
+TEST(ConvexMeshCollider, FurthestOfTakesTheFirstOfEquallyFarVertices)
+{
+  const std::vector<glm::vec3> vertices{ { 1, 0, 0 }, { 1, 1, 0 }, { 1, -1, 0 }, { -2, 1, 0 } };
+
+  EXPECT_EQ(ConvexMeshCollider::furthestOf(vertices, { 1, 0, 0 }), glm::vec3(1, 0, 0));
+  EXPECT_EQ(ConvexMeshCollider::furthestOf(vertices, { 0, 1, 0 }), glm::vec3(1, 1, 0));
+  EXPECT_EQ(ConvexMeshCollider::furthestOf(vertices, { -1, 0, 0 }), glm::vec3(-2, 1, 0));
+  EXPECT_EQ(ConvexMeshCollider::furthestOf(vertices, { 0, -1, 0 }), glm::vec3(1, -1, 0));
+}
+
+TEST(ConvexMeshCollider, FurthestOfNoVerticesOrANonFiniteDirectionIsTheOrigin)
+{
+  const std::vector<glm::vec3> vertices{ { 1, 0, 0 }, { 0, 1, 0 } };
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+
+  EXPECT_EQ(ConvexMeshCollider::furthestOf({}, { 1, 0, 0 }), glm::vec3(0));
+  EXPECT_EQ(ConvexMeshCollider::furthestOf(vertices, { nan, nan, nan }), glm::vec3(0));
+
+  // Positive control: a finite direction picks a vertex.
+  EXPECT_EQ(ConvexMeshCollider::furthestOf(vertices, { 0, 1, 0 }), glm::vec3(0, 1, 0));
+}
