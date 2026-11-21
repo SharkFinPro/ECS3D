@@ -273,6 +273,7 @@ add_executable(${PROJECT_NAME}
   TemplateValidationTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTippingTest.cpp
+  PhysicsSleepTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsFrictionHoldTest.cpp
   PhysicsSlopeStackTest.cpp

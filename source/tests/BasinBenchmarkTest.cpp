@@ -19,6 +19,7 @@
 #include "scenes/SceneManager.h"
 #include "terrain/TerrainVolume.h"
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -45,8 +46,8 @@ namespace {
 }
 
 // The Terrain Basin scene stepped as the server steps it, timed a second at a time, with how many of its bodies moved.
-// A measurement, not a check: run it on purpose with --gtest_also_run_disabled_tests, in a Release build, and set
-// OMP_NUM_THREADS=1 to time the single-threaded path. The stacks are placed at random each run.
+// A measurement, not a check: run it on purpose with --gtest_also_run_disabled_tests, in a Release build. See
+// testing.md for timing the single-threaded path. The stacks are placed at random each run.
 TEST(BasinBenchmark, DISABLED_TimesTheTerrainBasinTickByTick)
 {
   const auto componentRegistry = std::make_shared<ComponentRegistry>();
@@ -80,6 +81,7 @@ TEST(BasinBenchmark, DISABLED_TimesTheTerrainBasinTickByTick)
 
   int bound = 0;
   std::vector<std::shared_ptr<Transform>> bodies;
+  std::vector<std::shared_ptr<RigidBody>> rigidBodies;
   for (const auto& object : objectManager.getAllObjects())
   {
     if (const auto collider = object->getComponent<Collider>(ComponentType::collider);
@@ -99,6 +101,7 @@ TEST(BasinBenchmark, DISABLED_TimesTheTerrainBasinTickByTick)
     if (body && body->getOwner() == object.get())
     {
       bodies.push_back(object->getComponent<Transform>(ComponentType::transform));
+      rigidBodies.push_back(body);
     }
   }
 
@@ -155,6 +158,44 @@ TEST(BasinBenchmark, DISABLED_TimesTheTerrainBasinTickByTick)
     std::cout << "[basin] second " << second + 1 << ": " << perTick << " ms per tick (worst " << worst << "), "
               << static_cast<double>(moved) / ticksPerSecond << " of " << bodies.size() << " bodies moved per tick\n";
   }
+
+  // Why the bodies still awake at the end are: the first sleep test each fails, or none when the island holds them.
+  size_t asleep = 0;
+  size_t falling = 0;
+  size_t moving = 0;
+  size_t unsteady = 0;
+  size_t turning = 0;
+  size_t held = 0;
+  for (const auto& body : rigidBodies)
+  {
+    if (body->isAsleep())
+    {
+      ++asleep;
+    }
+    else if (body->getNextFalling())
+    {
+      ++falling;
+    }
+    else if (glm::length(body->getVelocity()) >= CollisionSystem::sleepSpeed * tick)
+    {
+      ++moving;
+    }
+    else if (!body->isSteady())
+    {
+      ++unsteady;
+    }
+    else if (glm::length(body->getAngularVelocity()) >= CollisionSystem::sleepAngularSpeed)
+    {
+      ++turning;
+    }
+    else
+    {
+      ++held;
+    }
+  }
+
+  std::cout << "[basin] at the end: " << asleep << " asleep; awake " << falling << " unsupported, " << moving
+            << " moving, " << unsteady << " on an edge or corner, " << turning << " turning, " << held << " resting in an island that is not\n";
 
   std::cout << "[basin] mean " << totalMilliseconds / (seconds * ticksPerSecond) << " ms per tick, last five seconds "
             << settledMilliseconds / (5 * ticksPerSecond) << " ms per tick, budget " << tick * 1000.0f << " ms\n";

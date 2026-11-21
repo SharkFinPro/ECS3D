@@ -140,6 +140,39 @@ leaves differs in its last bits.
 - **To undo it:** have `relax` and `holdSliding` call `apply` with the impulse vector again and drop the turn fields.
   Nothing else depends on them.
 
+### Sleeping
+
+A pile at rest is still solved every tick for contacts that change nothing, so bodies that have stayed at rest
+long enough sleep. The state is runtime only on `RigidBody` (`isAsleep`, its sleep group, its rest count), never
+saved or replicated.
+
+- **Falling asleep.** After the solve, `CollisionSystem::sleepRestingIslands` looks at each solved island. A body is
+  at rest when it is supported this tick, steadily held (`RigidBody::isSteady`, which the solver writes: on a face of
+  three points or more, or a rolling contact, not balanced on an edge or corner), slower than `sleepSpeed` (0.05 units
+  per second) and turning slower than `sleepAngularSpeed` (1 degree per second). When every body of an island has
+  been at rest for `sleepSeconds` (0.5) in a row, the whole island sleeps as one group, with its velocities zeroed.
+  One restless body keeps its island awake.
+- **Asleep.** `PhysicsSystem` does not move or accelerate a sleeper. The sweep does not test a pair with no awake
+  body in it (two sleepers, or a sleeper and static geometry): the pair is recorded as `sleeping`, is not solved,
+  keeps last tick's touch for the collision events (so a resting pair keeps reporting stay), and its cached impulses
+  are kept for the warm start when it wakes.
+- **Waking.** Any of these wakes the body's whole group:
+  - a queued force, or a change of velocity, angular velocity, mass or gravity (the `RigidBody` setters);
+  - a move of its transform from outside (`PhysicsSystem` compares the world update id against the one at sleep);
+  - a change of its own collider's bounds;
+  - any change to the static colliders' bounds or a terrain's revision (`wakeChangedSleepers` hashes them; it
+    wakes every sleeper, since edits are rare and a pile may rest on what changed);
+  - an awake body touching or about to meet it (`wakeTouchedSleepers`, after the narrow phase). The woken bodies'
+    untested pairs are then tested as the sweep would have, which may reach more sleepers, before the islands are
+    built, so the woken pile is solved with all its contacts that tick.
+- **Catching up.** A sleeper `PhysicsSystem` passed by this tick is marked (`hasSkippedStep`). Woken later in the
+  tick it takes `PhysicsSystem::catchUp`: the support bookkeeping and gravity the step would have given it. It moves
+  nowhere, since it had no velocity, so it falls from the tick it wakes, as an awake body would.
+
+What it changes: a resting pile stops creeping by float noise, and bodies that would have kept drifting slower than
+the thresholds stop. On the Terrain Basin benchmark (`BasinBenchmarkTest`) about half the bodies are asleep after
+20 seconds. Most of the awake ones are held in islands by a few that lean on an edge or still roll.
+
 ### Narrow phase
 
 `NarrowPhase.h`'s `findContact`, `intersects` and `approaches` are the entry points. GJK and EPA query each

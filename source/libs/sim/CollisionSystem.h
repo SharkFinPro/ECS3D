@@ -13,6 +13,7 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 #include <uuid.h>
 
@@ -112,6 +113,12 @@ public:
   // previous run don't leak into the next run's first diff as spurious enter/exit events.
   void reset();
 
+  // A solved island whose bodies all stay steadily supported (RigidBody::isSteady), slower than sleepSpeed (units per
+  // second) and turning slower than sleepAngularSpeed (degrees per second) for sleepSeconds falls asleep together.
+  static constexpr float sleepSpeed = 0.05f;
+  static constexpr float sleepAngularSpeed = 1.0f;
+  static constexpr float sleepSeconds = 0.5f;
+
 private:
   // A pair the forward sweep found: the higher edge's index, which dynamic side(s) saw the other, and the GJK
   // result each side found it with.
@@ -127,6 +134,9 @@ private:
     // A terrain pair's contacts, found in the narrow phase with the body where the solve finds it, so the solve
     // reuses them. Empty for a trigger pair, which is not solved.
     std::optional<std::vector<collisions::Contact>> terrainContacts;
+    // Neither side is an awake body, so the pair was not tested. It is not solved, and keeps last tick's touch for
+    // the events.
+    bool sleeping = false;
   };
 
   // A pair for the solver: the lower edge, the hit that names the higher one, and the pair's lowest bound.
@@ -143,6 +153,7 @@ private:
     uint32_t layer;
     uint32_t mask;
     bool dynamic;
+    bool awake;
   };
 
   std::vector<CollisionEdge> m_collisionEdges;
@@ -164,7 +175,31 @@ private:
   std::vector<CollisionPair> m_stays;
   std::vector<CollisionPair> m_exits;
 
+  // The bodies that fell asleep together, by group, which wake together.
+  std::unordered_map<uint64_t, std::vector<std::weak_ptr<RigidBody>>> m_sleepGroups;
+  uint64_t m_nextSleepGroup = 1;
+  // Each sleeping collider's bounds when it fell asleep: a sleeper whose bounds change was edited, and wakes.
+  std::unordered_map<const Collider*, BoundingBox> m_sleepingBounds;
+  // What the static colliders were last tick: their bounds and, for a terrain, its revision. A change wakes every
+  // sleeper, since one may have rested on what moved.
+  uint64_t m_staticSignature = 0;
+
   void checkCollisions(float dt);
+
+  // Wakes the sleepers something changed under or about since last tick, before the sweep pairs anything.
+  void wakeChangedSleepers(float dt);
+
+  // Wakes the sleepers an awake body touches or is about to meet, then tests their untested pairs as the sweep would
+  // have, which may reach further sleepers, until no more wake.
+  void wakeTouchedSleepers(float dt);
+
+  // Wakes body and every body that fell asleep with it. One PhysicsSystem passed by asleep this tick catches up on
+  // that step now.
+  void wakeGroup(RigidBody& body, float dt);
+
+  // Counts each solved island's bodies at rest toward sleeping, and puts an island whose bodies have all rested long
+  // enough to sleep.
+  void sleepRestingIslands(const std::vector<std::vector<PairRef>>& islands, float dt);
 
   // Build this tick's sorted pair set from the per-edge touches and diff it against the previous tick to
   // refresh m_enters/m_stays/m_exits.
@@ -189,6 +224,10 @@ private:
   // Forward sweep from one edge: appends a hit for every higher-indexed edge it meets, ascending. A pair is
   // visited once, from its lower-indexed edge, and only if at least one side is dynamic.
   void findCollisions(size_t index, std::vector<SweepHit>& hits) const;
+
+  // The narrow phase for the pair of edges index and other, index the lower: the hit to record, or nothing when the
+  // pair neither touches nor approaches.
+  [[nodiscard]] std::optional<SweepHit> testPair(size_t index, size_t other) const;
 
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
   static bool isTriggerPair(const Collider& collider, const Collider& other);

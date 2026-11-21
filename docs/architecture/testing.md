@@ -78,6 +78,13 @@ unindented listing line is neither a suite header nor the `Running main()` banne
 `tests` directory: `ECS3DTests --gtest_also_run_disabled_tests --gtest_filter=ProfileOverhead.*`. It prints
 nanoseconds per scope with profiling enabled and disabled, and asserts no timing.
 
+`BasinBenchmark.DISABLED_TimesTheTerrainBasinTickByTick` steps the built-in Terrain Basin scene (its nine generated
+tiles and several hundred bodies) as the server does, for 20 seconds. It prints milliseconds per tick for each second,
+how many bodies moved, and why the bodies still awake at the end are awake (see Sleeping in
+[physics.md](physics.md)). It runs the same way by hand, in a Release build. The collision loops pass `num_threads(6)`,
+which `OMP_NUM_THREADS` does not override, so the single-threaded path is timed from a build with those pragmas
+commented out. The stacks are placed at random each run, so compare runs over the whole 20 seconds, not tick by tick.
+
 Two consequences of sharing a process. A test must not depend on state a sibling case leaves behind. A case that
 calls `GTEST_SKIP()` is not shown as skipped, because the suite's entry reports a pass; no skip regular
 expression is set, since one skipped case would mark the whole suite skipped and hide its passes.

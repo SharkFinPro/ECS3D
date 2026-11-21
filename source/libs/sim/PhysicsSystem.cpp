@@ -81,32 +81,65 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
       continue;
     }
 
-    // The body moves by the velocity the last tick's contacts left it, and only then takes this tick's forces
-    // and gravity. The contact solver sees those before they move anything, so what a support or friction
-    // holds never moves at all.
-    integrate(*rigidBody, *transform, dt);
-
-    // Any forces a script queued this tick (e.g. PlayerScript's input-driven movement).
-    for (const auto& pending : rigidBody->getPendingForces())
+    // A sleeper stays put, held as it was. Moved from outside since, it wakes and is stepped as usual.
+    if (rigidBody->isAsleep())
     {
-      applyVelocityChange(*rigidBody, *transform, velocityChangeOf(pending, rigidBody->getMass(), dt),
-                          pending.position, dt);
-    }
-    rigidBody->clearPendingForces();
+      if (transform->getWorldUpdateID() == rigidBody->getSleepStamp())
+      {
+        rigidBody->setSkippedStep(true);
+        continue;
+      }
 
-    if (rigidBody->getDoGravity())
-    {
-      applyVelocityChange(*rigidBody, *transform, gravityStep(*rigidBody, dt), transform->getPosition(), dt);
+      rigidBody->wake();
     }
+
+    rigidBody->setSkippedStep(false);
+    step(*rigidBody, *transform, dt);
   }
 }
 
-void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float dt)
+void PhysicsSystem::step(RigidBody& body, Transform& transform, const float dt)
+{
+  // The body moves by the velocity the last tick's contacts left it, and only then takes this tick's forces
+  // and gravity. The contact solver sees those before they move anything, so what a support or friction
+  // holds never moves at all.
+  integrate(body, transform, dt);
+
+  // Any forces a script queued this tick (e.g. PlayerScript's input-driven movement).
+  for (const auto& pending : body.getPendingForces())
+  {
+    applyVelocityChange(body, transform, velocityChangeOf(pending, body.getMass(), dt), pending.position, dt);
+  }
+  body.clearPendingForces();
+
+  applyGravity(body, transform, dt);
+}
+
+void PhysicsSystem::catchUp(RigidBody& body, const Transform& transform, const float dt)
+{
+  advanceSupport(body);
+  applyGravity(body, transform, dt);
+}
+
+void PhysicsSystem::advanceSupport(RigidBody& body)
 {
   body.setFalling(body.getNextFalling());
   body.setNextFalling(true);
   body.setSupportNormal(body.getNextSupportNormal());
   body.setNextSupportNormal(glm::vec3(0));
+}
+
+void PhysicsSystem::applyGravity(RigidBody& body, const Transform& transform, const float dt)
+{
+  if (body.getDoGravity())
+  {
+    applyVelocityChange(body, transform, gravityStep(body, dt), transform.getPosition(), dt);
+  }
+}
+
+void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float dt)
+{
+  advanceSupport(body);
 
   const auto velocity = body.getVelocity();
   if (velocity != glm::vec3(0))

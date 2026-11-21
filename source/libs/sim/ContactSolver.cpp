@@ -928,6 +928,7 @@ namespace {
     void write(const SolverBody& solved) const
     {
       auto& body = *solved.body;
+      body.setSteady(solved.supported);
       if (solved.velocity != body.getVelocity())
       {
         body.setVelocity(solved.velocity);
