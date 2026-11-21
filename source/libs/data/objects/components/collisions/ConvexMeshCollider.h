@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 // A convex hull collider. The hull lives inline in the component (local-space vertices and triangle
@@ -37,10 +38,12 @@ public:
     std::vector<glm::vec3> normals;
   };
 
-  // The hull's planar faces in world space, filled by the sim. Derived state, current while generation matches.
+  // The hull's planar faces in world space, and the edges between them, each once, filled by the sim. Derived
+  // state, current while generation matches.
   struct WorldFaceCache {
     uint64_t generation = 0;
     std::vector<WorldFace> faces;
+    std::vector<std::pair<glm::vec3, glm::vec3>> edges;
   };
 
   ConvexMeshCollider();

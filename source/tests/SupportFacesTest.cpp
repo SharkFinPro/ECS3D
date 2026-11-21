@@ -686,3 +686,51 @@ TEST(SupportFaces, AMovedHullsCachedNormalsAreRewrittenToMatchAFreshBuild)
   EXPECT_EQ(after, collisions::hullFaceNormals(hull->getWorldVertices(), hull->getHull().indices));
   EXPECT_NE(after, before);
 }
+
+TEST(SupportFaces, AHullsEdgesAreKeptOnceEachWithItsFacesAndFollowAMove)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Hull", { 1.0f, 2.0f, 3.0f });
+  transformOf(object)->setRotation({ 10.0f, 25.0f, 40.0f });
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  const auto edges = collisions::hullSupportEdges(*hull);
+  ASSERT_EQ(edges.size(), 12u);
+
+  const auto lesser = [](const glm::vec3& a, const glm::vec3& b)
+  {
+    return a.x != b.x ? a.x < b.x : a.y != b.y ? a.y < b.y : a.z < b.z;
+  };
+
+  const auto& faces = collisions::hullSupportFaces(*hull);
+  for (size_t i = 0; i < edges.size(); ++i)
+  {
+    EXPECT_TRUE(lesser(edges[i].first, edges[i].second)) << i;
+
+    // Each runs between neighboring corners of some face, and no other edge repeats it.
+    const bool onAFace = std::ranges::any_of(faces, [&edges, i](const collisions::SupportFace& face)
+    {
+      for (size_t c = 0; c < face.corners.size(); ++c)
+      {
+        if (face.corners[c] == edges[i].first && face.corners[(c + 1) % face.corners.size()] == edges[i].second)
+        {
+          return true;
+        }
+      }
+
+      return false;
+    });
+    EXPECT_TRUE(onAFace) << i;
+
+    for (size_t j = i + 1; j < edges.size(); ++j)
+    {
+      EXPECT_FALSE(edges[i] == edges[j]) << i << " " << j;
+    }
+  }
+
+  transformOf(object)->setPosition({ -6.0f, 0.0f, 2.0f });
+  const auto& moved = collisions::hullSupportEdges(*hull);
+  ASSERT_EQ(moved.size(), 12u);
+  EXPECT_NE(moved.front(), edges.front());
+}

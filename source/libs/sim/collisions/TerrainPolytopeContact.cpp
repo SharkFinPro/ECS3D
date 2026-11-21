@@ -53,11 +53,25 @@ namespace collisions::detail {
 
     using Edge = std::pair<glm::vec3, glm::vec3>;
 
+    // A box's own, or a hull's shared from the collider's caches.
     struct Geometry {
-      std::vector<glm::vec3> vertices;
-      std::vector<Edge> edges;
+      std::vector<glm::vec3> ownedVertices;
+      std::vector<Edge> ownedEdges;
       std::vector<WorldFace> ownedFaces;
+      const std::vector<glm::vec3>* sharedVertices = nullptr;
+      const std::vector<Edge>* sharedEdges = nullptr;
       const std::vector<WorldFace>* sharedFaces = nullptr;
+
+      [[nodiscard]] std::span<const glm::vec3> vertices() const
+      {
+        return sharedVertices != nullptr ? std::span<const glm::vec3>(*sharedVertices)
+                                         : std::span<const glm::vec3>(ownedVertices);
+      }
+
+      [[nodiscard]] std::span<const Edge> edges() const
+      {
+        return sharedEdges != nullptr ? std::span<const Edge>(*sharedEdges) : std::span<const Edge>(ownedEdges);
+      }
 
       [[nodiscard]] std::span<const WorldFace> faces() const
       {
@@ -85,16 +99,6 @@ namespace collisions::detail {
       float rank;
     };
 
-    [[nodiscard]] bool before(const glm::vec3& a, const glm::vec3& b)
-    {
-      if (a.x != b.x)
-      {
-        return a.x < b.x;
-      }
-
-      return a.y != b.y ? a.y < b.y : a.z < b.z;
-    }
-
     [[nodiscard]] std::vector<glm::vec3> boxCorners(BoxCollider& box)
     {
       const auto& frame = box.getWorldFrame();
@@ -118,7 +122,7 @@ namespace collisions::detail {
     [[nodiscard]] Geometry boxGeometry(BoxCollider& box)
     {
       Geometry geometry;
-      geometry.vertices = boxCorners(box);
+      geometry.ownedVertices = boxCorners(box);
 
       for (int mask = 0; mask < 8; ++mask)
       {
@@ -126,8 +130,8 @@ namespace collisions::detail {
         {
           if ((mask & (1 << axis)) == 0)
           {
-            geometry.edges.emplace_back(geometry.vertices[static_cast<size_t>(mask)],
-                                        geometry.vertices[static_cast<size_t>(mask | (1 << axis))]);
+            geometry.ownedEdges.emplace_back(geometry.ownedVertices[static_cast<size_t>(mask)],
+                                             geometry.ownedVertices[static_cast<size_t>(mask | (1 << axis))]);
           }
         }
       }
@@ -140,29 +144,9 @@ namespace collisions::detail {
     [[nodiscard]] Geometry hullGeometry(ConvexMeshCollider& hull)
     {
       Geometry geometry;
-      geometry.vertices = hull.getWorldVertices();
+      geometry.sharedVertices = &hull.getWorldVertices();
       geometry.sharedFaces = &hullSupportFaces(hull);
-
-      size_t corners = 0;
-      for (const auto& face : geometry.faces())
-      {
-        corners += face.corners.size();
-      }
-      geometry.edges.reserve(corners / 2);
-
-      // Each edge borders two faces and runs opposite ways in them, so it is kept where it runs "forward".
-      for (const auto& face : geometry.faces())
-      {
-        for (size_t i = 0; i < face.corners.size(); ++i)
-        {
-          const auto& from = face.corners[i];
-          const auto& to = face.corners[(i + 1) % face.corners.size()];
-          if (face.corners.size() >= 3 && before(from, to))
-          {
-            geometry.edges.emplace_back(from, to);
-          }
-        }
-      }
+      geometry.sharedEdges = &hullSupportEdges(hull);
 
       return geometry;
     }
@@ -237,22 +221,8 @@ namespace collisions::detail {
       return static_cast<size_t>(grid.cellsU) * static_cast<size_t>(grid.cellsV);
     }
 
-    void appendPoints(const Group& group, const float spacing, std::vector<glm::vec3>& points)
+    void appendFacePoints(const WorldFace& face, const FaceGrid& grid, std::vector<glm::vec3>& points)
     {
-      if (group.edge != nullptr)
-      {
-        const int segments = cellsAlong(glm::distance(group.edge->first, group.edge->second), spacing);
-        for (int i = 1; i < segments; ++i)
-        {
-          points.push_back(glm::mix(group.edge->first, group.edge->second,
-                                    static_cast<float>(i) / static_cast<float>(segments)));
-        }
-
-        return;
-      }
-
-      const auto& face = *group.face;
-      const auto grid = gridOf(face, spacing);
       for (int j = 0; j < grid.cellsV; ++j)
       {
         for (int i = 0; i < grid.cellsU; ++i)
@@ -267,12 +237,29 @@ namespace collisions::detail {
       }
     }
 
+    void appendPoints(const Group& group, const float spacing, std::vector<glm::vec3>& points)
+    {
+      if (group.edge != nullptr)
+      {
+        const int segments = cellsAlong(glm::distance(group.edge->first, group.edge->second), spacing);
+        for (int i = 1; i < segments; ++i)
+        {
+          points.push_back(glm::mix(group.edge->first, group.edge->second,
+                                    static_cast<float>(i) / static_cast<float>(segments)));
+        }
+
+        return;
+      }
+
+      appendFacePoints(*group.face, gridOf(*group.face, spacing), points);
+    }
+
     [[nodiscard]] std::vector<Group> groupsOf(const Geometry& geometry)
     {
       std::vector<Group> groups;
-      groups.reserve(geometry.edges.size() + geometry.faces().size());
+      groups.reserve(geometry.edges().size() + geometry.faces().size());
 
-      for (const auto& edge : geometry.edges)
+      for (const auto& edge : geometry.edges())
       {
         groups.push_back({ &edge, nullptr, 0.0f });
       }
@@ -322,13 +309,23 @@ namespace collisions::detail {
       const float voxelSize = ground.volume->voxelSize();
       auto groups = groupsOf(geometry);
 
-      const size_t budget = geometry.vertices.size() < maxTerrainQueryPoints
-                              ? maxTerrainQueryPoints - geometry.vertices.size() : 0;
+      const auto vertices = geometry.vertices();
+      const size_t budget = vertices.size() < maxTerrainQueryPoints ? maxTerrainQueryPoints - vertices.size() : 0;
 
+      // Each face's grid at the finest spacing, built once for both counting its points and making them.
+      std::vector<FaceGrid> finestGrids(groups.size());
       size_t full = 0;
-      for (const auto& group : groups)
+      for (size_t i = 0; i < groups.size(); ++i)
       {
-        full += pointBound(group, voxelSize);
+        if (groups[i].face != nullptr)
+        {
+          finestGrids[i] = gridOf(*groups[i].face, voxelSize);
+          full += static_cast<size_t>(finestGrids[i].cellsU) * static_cast<size_t>(finestGrids[i].cellsV);
+        }
+        else
+        {
+          full += pointBound(groups[i], voxelSize);
+        }
       }
 
       std::vector<float> spacings(groups.size(), voxelSize);
@@ -367,11 +364,15 @@ namespace collisions::detail {
       }
 
       std::vector<glm::vec3> points;
-      points.reserve(geometry.vertices.size() + std::min(full, budget));
-      points.insert(points.end(), geometry.vertices.begin(), geometry.vertices.end());
+      points.reserve(vertices.size() + std::min(full, budget));
+      points.insert(points.end(), vertices.begin(), vertices.end());
       for (size_t i = 0; i < groups.size(); ++i)
       {
-        if (spacings[i] > 0.0f)
+        if (groups[i].face != nullptr && spacings[i] == voxelSize)
+        {
+          appendFacePoints(*groups[i].face, finestGrids[i], points);
+        }
+        else if (spacings[i] > 0.0f)
         {
           appendPoints(groups[i], spacings[i], points);
         }

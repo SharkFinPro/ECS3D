@@ -372,6 +372,33 @@ namespace {
     faces.resize(placed);
   }
 
+  [[nodiscard]] bool lesserCorner(const glm::vec3& a, const glm::vec3& b)
+  {
+    if (a.x != b.x)
+    {
+      return a.x < b.x;
+    }
+
+    return a.y != b.y ? a.y < b.y : a.z < b.z;
+  }
+
+  void placeHullEdges(const std::vector<SupportFace>& faces, std::vector<std::pair<glm::vec3, glm::vec3>>& edges)
+  {
+    edges.clear();
+    for (const auto& face : faces)
+    {
+      for (size_t i = 0; i < face.corners.size(); ++i)
+      {
+        const auto& from = face.corners[i];
+        const auto& to = face.corners[(i + 1) % face.corners.size()];
+        if (face.corners.size() >= 3 && lesserCorner(from, to))
+        {
+          edges.emplace_back(from, to);
+        }
+      }
+    }
+  }
+
   glm::vec3 nearestOnSegment(const glm::vec3& a, const glm::vec3& b, const glm::vec3& point)
   {
     const auto segment = b - a;
@@ -409,10 +436,18 @@ namespace collisions {
       auto refreshed = collider.takeWorldFaceCache().value_or(ConvexMeshCollider::WorldFaceCache{});
       refreshed.generation = generation;
       placeHullFaces(collider, refreshed.faces);
+      placeHullEdges(refreshed.faces, refreshed.edges);
       collider.setWorldFaceCache(std::move(refreshed));
     }
 
     return collider.getWorldFaceCache()->faces;
+  }
+
+  const std::vector<std::pair<glm::vec3, glm::vec3>>& hullSupportEdges(ConvexMeshCollider& collider)
+  {
+    static_cast<void>(hullSupportFaces(collider));
+
+    return collider.getWorldFaceCache()->edges;
   }
 
   std::vector<SupportFace> supportFacesOf(Collider& collider)

@@ -5,6 +5,7 @@
 #include <glm/vec3.hpp>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 class Collider;
@@ -20,6 +21,11 @@ namespace collisions {
 
   // A convex mesh's faces, as supportFacesOf returns them, kept on the collider until its world vertices change.
   [[nodiscard]] const std::vector<SupportFace>& hullSupportFaces(ConvexMeshCollider& collider);
+
+  // The edges of those faces, each once, in the order the faces give them. An edge borders two faces and runs
+  // opposite ways in them, so it is kept from the face where it starts at the lesser corner (by x, then y, then z).
+  // Kept with the faces.
+  [[nodiscard]] const std::vector<std::pair<glm::vec3, glm::vec3>>& hullSupportEdges(ConvexMeshCollider& collider);
 
   // The one face of the collider that supportFacesOf would return that points most along direction. A box builds
   // only that face; a collider with no faces gives nullopt.
