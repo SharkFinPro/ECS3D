@@ -321,8 +321,9 @@ the narrow phase. The total is capped at `maxTerrainQueryPoints` (512) with the 
 full-density points would pass it, edges and faces are ranked by the raw field distance at their middle, nearest
 first, and each in turn takes the finest spacing (steps
 of 25 percent over a voxel) that leaves room for the groups after it, so a face lying on the ground keeps its full grid
-while it fits. A point whose raw distance is beyond the margin, the sweep's length and a voxel is skipped, and so is
-one with no usable gradient. The rest are measured like a sphere of radius zero and clustered by normal as above; a
+while it fits. A point whose raw distance is beyond the margin and the sweep's length (`furthestReach`) is skipped
+before its surface is looked for: a candidate is never nearer the ground than its point's raw reading, so it could not
+reach. So is one with no usable gradient. The rest are measured like a sphere of radius zero and clustered by normal as above; a
 cluster is reduced with `detail::spreadOut` on quantized depths to at most four points, so a box lying flat reports its
 four bottom corners as one contact. The points are the collider's own surface points, as `referenceFaceManifold`
 reports for a box on a static box, and their depths are positive inside the ground and negative while short of it.

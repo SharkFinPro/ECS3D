@@ -286,18 +286,18 @@ namespace {
     return weighted / total;
   }
 
-  // A face from hull vertex ids, placed with the world vertices. The affine map keeps the face planar; it may
-  // reverse the winding, which the hull's centroid corrects.
-  std::optional<SupportFace> worldFace(const std::vector<uint32_t>& outline, const Vertices& world,
-                                       const glm::vec3& hullCentroid)
+  // A face from hull vertex ids, placed with the world vertices, written over face so its corners keep their
+  // storage. The affine map keeps the face planar; it may reverse the winding, which the hull's centroid corrects.
+  // False, with face left unusable, for an outline that gives no face.
+  bool placeWorldFace(const std::vector<uint32_t>& outline, const Vertices& world, const glm::vec3& hullCentroid,
+                      SupportFace& face)
   {
     if (outline.size() < 3)
     {
-      return std::nullopt;
+      return false;
     }
 
-    SupportFace face;
-    face.corners.reserve(outline.size());
+    face.corners.clear();
     for (const auto id : outline)
     {
       face.corners.push_back(world[id]);
@@ -311,7 +311,7 @@ namespace {
 
     if (!(glm::length(summed) > 0.0f))
     {
-      return std::nullopt;
+      return false;
     }
 
     if (glm::dot(summed, face.corners[0] - hullCentroid) < 0.0f)
@@ -323,7 +323,7 @@ namespace {
     face.normal = glm::normalize(summed);
     face.center = areaCentroid(face.corners, face.normal);
 
-    return face;
+    return true;
   }
 
   // The outlines depend only on the hull's own vertices, so they are found once per hull and kept on the collider.
@@ -347,23 +347,29 @@ namespace {
     return *collider.getFaceOutlines();
   }
 
-  std::vector<SupportFace> hullFacesOf(ConvexMeshCollider& collider)
+  // Writes over faces, reusing the storage of the faces already there: the faces of a moving hull are rebuilt
+  // every tick.
+  void placeHullFaces(ConvexMeshCollider& collider, std::vector<SupportFace>& faces)
   {
     const auto& world = collider.getWorldVertices();
     const auto& outlines = faceOutlinesOf(collider);
     const auto hullCentroid = centroidOf(world);
 
-    std::vector<SupportFace> faces;
-    faces.reserve(outlines.size());
+    size_t placed = 0;
     for (const auto& outline : outlines)
     {
-      if (auto face = worldFace(outline, world, hullCentroid))
+      if (placed == faces.size())
       {
-        faces.push_back(std::move(*face));
+        faces.emplace_back();
+      }
+
+      if (placeWorldFace(outline, world, hullCentroid, faces[placed]))
+      {
+        ++placed;
       }
     }
 
-    return faces;
+    faces.resize(placed);
   }
 
   glm::vec3 nearestOnSegment(const glm::vec3& a, const glm::vec3& b, const glm::vec3& point)
@@ -400,7 +406,10 @@ namespace collisions {
 
     if (const auto& cache = collider.getWorldFaceCache(); !cache || cache->generation != generation)
     {
-      collider.setWorldFaceCache({ generation, hullFacesOf(collider) });
+      auto refreshed = collider.takeWorldFaceCache().value_or(ConvexMeshCollider::WorldFaceCache{});
+      refreshed.generation = generation;
+      placeHullFaces(collider, refreshed.faces);
+      collider.setWorldFaceCache(std::move(refreshed));
     }
 
     return collider.getWorldFaceCache()->faces;

@@ -84,9 +84,15 @@ public:
 
   void setFaceNormalCache(FaceNormalCache cache);
 
+  // Moves the cache out, leaving none, so the sim can refill its storage rather than allocate anew.
+  [[nodiscard]] std::optional<FaceNormalCache> takeFaceNormalCache();
+
   [[nodiscard]] const std::optional<WorldFaceCache>& getWorldFaceCache() const;
 
   void setWorldFaceCache(WorldFaceCache cache);
+
+  // Moves the cache out, leaving none, so the sim can refill its storage rather than allocate anew.
+  [[nodiscard]] std::optional<WorldFaceCache> takeWorldFaceCache();
 
   // The vertex furthest along direction, the first of equals winning; the origin when there are none.
   [[nodiscard]] static glm::vec3 furthestOf(std::span<const glm::vec3> vertices, const glm::vec3& direction);

@@ -40,6 +40,17 @@ namespace collisions::detail {
     // what is left after the trace and so no longer, up to rounding.
     constexpr float airSlack = 1e-3f;
 
+    // Covers the rounding in reachesAlong's own comparison, so furthestReach errs toward measuring a point.
+    constexpr float reachSlack = 1e-4f;
+
+    // The furthest raw distance a query point can read and still give a contact along sweep. Its candidate is never
+    // nearer the ground than that reading, and reachesAlong accepts none past the margin and the part of the sweep
+    // closing on the ground, which is no more than the sweep's length.
+    [[nodiscard]] float furthestReach(const glm::vec3& sweep)
+    {
+      return contactMargin + glm::length(sweep) * (1.0f + reachSlack) + reachSlack;
+    }
+
     using Edge = std::pair<glm::vec3, glm::vec3>;
 
     struct Geometry {
@@ -376,15 +387,15 @@ namespace collisions::detail {
     };
 
     // Measures each query point, taken offset along from where it is, against the ground that is near enough to touch
-    // with what is left of the sweep. A point far in air has no usable gradient and is skipped; one deeper than the
-    // band is stepped out of the ground against the sweep. With judgeTouching, which needs a zero offset, the points
-    // are also judged as measuring them with no sweep would.
+    // with what is left of the sweep (furthestReach): a point further off could give no contact, so it is skipped
+    // before its surface is looked for. One deeper than the band is stepped out of the ground against the sweep.
+    // With judgeTouching, which needs a zero offset, the points are also judged as measuring them with no sweep
+    // would.
     [[nodiscard]] Measured measuredPoints(Collider& collider, const TerrainGround& ground, terrain::Sampler& sampler,
                                           const glm::vec3& sweep, const glm::vec3& offset, const bool judgeTouching)
     {
       const float voxelSize = ground.volume->voxelSize();
-      const float reject = contactMargin + glm::length(sweep) + voxelSize;
-      const float touchReject = contactMargin + glm::length(glm::vec3(0)) + voxelSize;
+      const float reject = furthestReach(sweep);
       const auto backward = stepBackDirection(ground.frame, sweep);
       const auto touchBackward = stepBackDirection(ground.frame, glm::vec3(0));
 
@@ -419,7 +430,8 @@ namespace collisions::detail {
           measured.candidates.push_back(*candidate);
         }
 
-        if (!judgeTouching || measured.touching || raw > touchReject)
+        // A candidate is no nearer the ground than its point's reading, so only a point inside it can touch.
+        if (!judgeTouching || measured.touching || !(raw < 0.0f))
         {
           continue;
         }
@@ -507,8 +519,7 @@ namespace collisions::detail {
       // Each query point lies in the swept bounds and reads the cell around it, so when every sample there is air each
       // reads the band's edge, and measuredPoints skips them all while that is further than the furthest it accepts.
       const float airReading = terrain::decodeDistance(terrain::airDistance) * voxelSize;
-      const float furthestAccepted = contactMargin + glm::length(sweep) + voxelSize * (1.0f + airSlack);
-      if (airReading > furthestAccepted)
+      if (airReading > furthestReach(sweep) + airSlack * voxelSize)
       {
         const auto samples = reachableSamples(*ground, low, high, voxelSize);
         if (samples && ground->volume->isAirWithin(*samples))

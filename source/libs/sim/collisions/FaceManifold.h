@@ -25,6 +25,10 @@ namespace collisions {
   [[nodiscard]] std::vector<glm::vec3> hullFaceNormals(std::span<const glm::vec3> vertices,
                                                        std::span<const uint32_t> indices);
 
+  // The same normals written over normals, which keeps its storage.
+  void placeHullFaceNormals(std::span<const glm::vec3> vertices, std::span<const uint32_t> indices,
+                            std::vector<glm::vec3>& normals);
+
   // The contact points of two convex shapes from the face of each that most nearly faces the other, the way a box
   // pair is built. normal points from first toward second. The side whose face is more nearly parallel to the normal
   // is the reference, ties going to first. The other side's touching face, or an edge of it, is clipped to the
