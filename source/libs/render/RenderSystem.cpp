@@ -30,6 +30,7 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
+#include <VulkanEngine/components/assets/volume/VolumeSurface.h>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 #include <VulkanEngine/components/lighting/lights/PointLight.h>
 #include <VulkanEngine/components/lighting/lights/SpotLight.h>
@@ -113,6 +114,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   m_liveObjects.beginFrame();
   m_selectionOutlines.clear();
   m_drawnTerrains.clear();
+  m_terrainDraws.clear();
+  m_terrainShadowVotes.clear();
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -277,8 +280,13 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         if (const auto surface = assetCache.getTerrainSurface(terrainUUID, volume))
         {
-          renderer->getRenderingManager()->getRenderer3D()->renderVolumeSurface(
-            surface, terrain::terrainModelMatrix(transform->getPosition(), transform->getOrientation()));
+          m_terrainDraws.push_back({
+            surface,
+            terrain::terrainModelMatrix(transform->getPosition(), transform->getOrientation()),
+            uuid,
+            terrainUUID
+          });
+          m_terrainShadowVotes.vote(terrainUUID, terrainComponent->getCastShadows());
         }
 
         m_drawnTerrains.insert(terrainUUID);
@@ -288,13 +296,30 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
   assetCache.trimTerrainSurfaces(m_drawnTerrains);
 
+  const auto renderer3D = renderer->getRenderingManager()->getRenderer3D();
+
+  for (const auto& draw : m_terrainDraws)
+  {
+    draw.surface->setCastsShadows(m_terrainShadowVotes.castsShadows(draw.terrainUUID));
+    renderer3D->renderVolumeSurface(draw.surface, draw.model, &m_selected[draw.objectUUID]);
+  }
+
   // The later submission owns an overlap in the outline mask, so selection outlines go last to win over
   // any collider gizmo outline.
   for (const auto& selected : m_selectionOutlines)
   {
-    renderer->getRenderingManager()->getRenderer3D()->renderOutline(selected, selectionOutlineColor);
+    renderer3D->renderOutline(selected, selectionOutlineColor);
   }
   m_selectionOutlines.clear();
+
+  for (const auto& draw : m_terrainDraws)
+  {
+    if (std::ranges::find(highlightUUIDs, draw.objectUUID) != highlightUUIDs.end())
+    {
+      renderer3D->renderOutline(draw.surface, draw.model, selectionOutlineColor);
+    }
+  }
+  m_terrainDraws.clear();
 
   // Release every render resource keyed by a uuid no longer in the scene (object deleted, scene
   // switched, project reloaded) - otherwise these caches grow for the life of the process, and a

@@ -2,6 +2,7 @@
 #define RENDERSYSTEM_H
 
 #include "LiveObjectTracker.h"
+#include "TerrainShadowVotes.h"
 #include <glm/mat4x4.hpp>
 #include <memory>
 #include <optional>
@@ -15,6 +16,7 @@ namespace vke {
   class PointLight;
   class RenderObject;
   class SpotLight;
+  class VolumeSurface;
   class VulkanEngine;
 }
 
@@ -53,8 +55,8 @@ public:
   // Shows or hides the renderer's ground grid. Cheap enough to call every frame.
   static void setGridVisible(GpuAssetCache& assetCache, bool visible);
 
-  // True for the object under the cursor; the editor reads it to drive Ctrl-click selection. Only an object
-  // drawn last frame can report true.
+  // True for the object under the cursor (a model, a light sprite or a terrain); the editor reads it to drive
+  // Ctrl-click selection. Only an object drawn last frame can report true.
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;
 
   // What the viewport is currently looking through: the last view matrix updateCamera pushed for a
@@ -122,6 +124,17 @@ private:
 
   // The terrains drawn this frame; kept as a member so the set does not allocate every frame.
   std::unordered_set<uuids::uuid> m_drawnTerrains;
+
+  // Terrain submissions wait until the loop ends so every vote for a surface's shadow flag is in first.
+  struct TerrainDraw {
+    std::shared_ptr<vke::VolumeSurface> surface;
+    glm::mat4 model;
+    uuids::uuid objectUUID;
+    uuids::uuid terrainUUID;
+  };
+
+  std::vector<TerrainDraw> m_terrainDraws;
+  TerrainShadowVotes m_terrainShadowVotes;
 };
 
 
