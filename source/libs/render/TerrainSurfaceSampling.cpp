@@ -112,6 +112,42 @@ namespace terrain
     return bounds;
   }
 
+  SampleBox openSurfaceBounds(const SampleBox& occupied)
+  {
+    if (occupied.empty())
+    {
+      return {};
+    }
+
+    const SampleBox rounded = surfaceBounds(occupied);
+
+    SampleBox bounds{ occupied.min + glm::ivec3(1, 0, 1), occupied.max - glm::ivec3(1, 0, 1) };
+    bounds.min.y = rounded.min.y;
+    bounds.max.y = rounded.max.y;
+
+    if (bounds.max.x - bounds.min.x < 2 || bounds.max.z - bounds.min.z < 2)
+    {
+      return {};
+    }
+
+    return bounds;
+  }
+
+  SampleBox openSampleBounds(const SampleBox& meshed)
+  {
+    if (meshed.empty())
+    {
+      return meshed;
+    }
+
+    return { meshed.min - glm::ivec3(1, 0, 1), meshed.max + glm::ivec3(1, 0, 1) };
+  }
+
+  SampleBox desiredSurfaceBounds(const SampleBox& occupied, const bool openSides)
+  {
+    return openSides ? openSurfaceBounds(occupied) : surfaceBounds(occupied);
+  }
+
   bool containsBox(const SampleBox& outer, const SampleBox& inner)
   {
     if (inner.empty())

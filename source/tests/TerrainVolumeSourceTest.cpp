@@ -6,6 +6,7 @@
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
+#include "TerrainVolumeSource.h"
 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
@@ -113,6 +114,64 @@ TEST(TerrainSurfaceBoundsTest, AlwaysContainsThePaddedOccupiedBox)
     const SampleBox padded{ box.min - glm::ivec3(1), box.max + glm::ivec3(1) };
     EXPECT_TRUE(terrain::containsBox(terrain::surfaceBounds(box), padded));
   }
+}
+
+TEST(TerrainOpenSurfaceBoundsTest, InsetsXAndZByOneSampleAndRoundsYLikeAClosedSurface)
+{
+  const SampleBox occupied{ glm::ivec3(0), glm::ivec3(128, 64, 128) };
+  const SampleBox open = terrain::openSurfaceBounds(occupied);
+
+  EXPECT_EQ(open.min, glm::ivec3(1, -64, 1));
+  EXPECT_EQ(open.max, glm::ivec3(127, 128, 127));
+
+  // Positive control: a closed surface over the same box pads and rounds x and z outward instead.
+  const SampleBox closed = terrain::surfaceBounds(occupied);
+  EXPECT_EQ(closed.min, glm::ivec3(-64));
+  EXPECT_EQ(open.min.y, closed.min.y);
+  EXPECT_EQ(open.max.y, closed.max.y);
+  EXPECT_NE(open.min.x, closed.min.x);
+}
+
+TEST(TerrainOpenSurfaceBoundsTest, InsetsWithoutRounding)
+{
+  const SampleBox open = terrain::openSurfaceBounds({ glm::ivec3(-32, 0, 5), glm::ivec3(70, 32, 91) });
+
+  EXPECT_EQ(open.min.x, -31);
+  EXPECT_EQ(open.max.x, 69);
+  EXPECT_EQ(open.min.z, 6);
+  EXPECT_EQ(open.max.z, 90);
+}
+
+TEST(TerrainOpenSurfaceBoundsTest, EmptyAndTooThinBoxesGiveEmptyBounds)
+{
+  EXPECT_TRUE(terrain::openSurfaceBounds({}).empty());
+
+  // Two samples remain after the inset on a four-sample axis, which is a cell; one remains on a three-sample axis.
+  EXPECT_FALSE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(4, 32, 4) }).empty());
+  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(3, 32, 64) }).empty());
+  EXPECT_TRUE(terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(64, 32, 3) }).empty());
+}
+
+TEST(TerrainOpenSurfaceBoundsTest, SampleBoundsGrowTheMeshedBoxOnXAndZOnly)
+{
+  const SampleBox meshed = terrain::openSurfaceBounds({ glm::ivec3(0), glm::ivec3(128, 64, 128) });
+  const SampleBox samples = terrain::openSampleBounds(meshed);
+
+  EXPECT_EQ(samples.min, glm::ivec3(0, meshed.min.y, 0));
+  EXPECT_EQ(samples.max, glm::ivec3(128, meshed.max.y, 128));
+  EXPECT_TRUE(terrain::containsBox(samples, meshed));
+  EXPECT_TRUE(terrain::openSampleBounds({}).empty());
+}
+
+TEST(TerrainOpenSurfaceBoundsTest, DesiredBoundsFollowTheOpenSidesFlag)
+{
+  const SampleBox occupied{ glm::ivec3(0), glm::ivec3(128, 64, 128) };
+  const SampleBox open = terrain::desiredSurfaceBounds(occupied, true);
+  const SampleBox closed = terrain::desiredSurfaceBounds(occupied, false);
+
+  EXPECT_EQ(open.min, terrain::openSurfaceBounds(occupied).min);
+  EXPECT_EQ(closed.min, terrain::surfaceBounds(occupied).min);
+  EXPECT_NE(open.min, closed.min);
 }
 
 TEST(TerrainContainsBoxTest, InsideTouchingOutsideAndEmpty)
@@ -500,6 +559,22 @@ TEST(TerrainSurfacePlanTest, TooManyChunksCreateNothingOnEitherCreatePath)
   EXPECT_EQ(terrain::planTerrainSurface(overCap, slots).step, terrain::SurfaceStep::tooLarge);
 }
 
+TEST(TerrainSurfacePlanTest, AnExactMatchReplacesALargerSurfaceTheContainsRuleKeeps)
+{
+  terrain::SurfaceSlots slots;
+  slots.current = largeBox;
+
+  // Positive control: without exact matching the larger drawn surface is kept.
+  ASSERT_EQ(terrain::planTerrainSurface(smallBox, slots).step, terrain::SurfaceStep::keep);
+
+  const auto plan = terrain::planTerrainSurface(smallBox, slots, true);
+  EXPECT_EQ(plan.step, terrain::SurfaceStep::createReplacement);
+  EXPECT_EQ(plan.bounds.max, smallBox.max);
+
+  EXPECT_EQ(terrain::planTerrainSurface(largeBox, slots, true).step, terrain::SurfaceStep::keep);
+  EXPECT_EQ(terrain::planTerrainSurface(smallBox, {}, true).step, terrain::SurfaceStep::createCurrent);
+}
+
 TEST(TerrainSurfacePlanTest, ModelMatrixTranslatesAndRotates)
 {
   const glm::quat quarterTurn = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -547,4 +622,39 @@ TEST(TerrainSurfaceFeedTest, PublishAcceptsAnEmptyReport)
   feed.publish(second, {});
 
   EXPECT_EQ(feed.snapshot(), second);
+}
+
+TEST(TerrainVolumeSourceTest, ReportsTheBoundsAndTheSampleBoundsItWasGiven)
+{
+  const auto feed = std::make_shared<const TerrainSurfaceFeed>(std::make_shared<const terrain::TerrainVolume::ChunkMap>());
+  const SampleBox meshed{ glm::ivec3(1, -64, 1), glm::ivec3(127, 128, 127) };
+  const SampleBox samples{ glm::ivec3(0, -64, 0), glm::ivec3(128, 128, 128) };
+
+  const TerrainVolumeSource open(feed, meshed, samples);
+  EXPECT_EQ(open.bounds().min, meshed.min);
+  EXPECT_EQ(open.bounds().max, meshed.max);
+  EXPECT_EQ(open.sampleBounds().min, samples.min);
+  EXPECT_EQ(open.sampleBounds().max, samples.max);
+
+  // Positive control: without sample bounds they are the bounds.
+  const TerrainVolumeSource closed(feed, meshed);
+  EXPECT_EQ(closed.sampleBounds().min, meshed.min);
+  EXPECT_EQ(closed.sampleBounds().max, meshed.max);
+}
+
+TEST(TerrainVolumeSourceTest, AnswersSamplesOutsideItsBoundsFromTheFeed)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, solid());
+
+  const auto feed = std::make_shared<const TerrainSurfaceFeed>(
+    std::make_shared<const terrain::TerrainVolume::ChunkMap>(volume.snapshotChunks()));
+  const TerrainVolumeSource source(feed, { glm::ivec3(1), glm::ivec3(8) }, { glm::ivec3(0), glm::ivec3(9) });
+
+  std::vector<float> distance(2);
+  std::vector<uint8_t> material(2);
+  source.fill({ glm::ivec3(-1, 0, 0), glm::ivec3(1, 1, 1) }, 0, distance, material);
+
+  EXPECT_GT(distance[0], 0.0f);
+  EXPECT_LT(distance[1], 0.0f);
 }

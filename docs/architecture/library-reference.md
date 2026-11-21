@@ -134,5 +134,11 @@ draws the terrain. The decisions are the headless `TerrainSurfacePlan.h`, and th
 terrain space is metric. A terrain is pickable through `isSelected(object uuid)` and outlined when its object is
 selected; the engine matches a pick to the surface it was drawn with, so a click on the frame a larger surface is
 promoted selects nothing. Submissions wait until every object has voted, and the surface casts shadows when any
-object drawing it has `castShadows` on (the headless `TerrainShadowVotes.h`). Depends on `ECS3DData` +
+object drawing it has `castShadows` on (the headless `TerrainShadowVotes.h`). `openSides` leaves a surface open at the
+occupied box's x and z faces: the surface meshes the box inset by one sample there (`openSurfaceBounds`), and the
+outermost column is an apron the engine reads only for the normals just inside it (`sampleBounds`,
+`openSampleBounds`), so tiles overlapping by that column shade their seams alike. It changes geometry, so it is voted
+before any surface is fetched and holds only when every object drawing the terrain asks for it (the headless
+`TerrainSideVotes.h`); a change starts the surface over, and an open surface is kept only on an exact bounds match
+(`planTerrainSurface`'s `exactMatch`). Depends on `ECS3DData` +
 `VulkanEngine`.

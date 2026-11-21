@@ -32,6 +32,12 @@ public:
   [[nodiscard]] bool getCastShadows() const;
   void setCastShadows(bool castShadows);
 
+  // Render-only: leaves the surface open at the occupied box's x and z faces, with the outermost sample column
+  // on each face acting as an apron that only shapes the normals, so tiles overlapping by that column shade
+  // their seams alike. Collision, raycasts and the data do not change.
+  [[nodiscard]] bool getOpenSides() const;
+  void setOpenSides(bool openSides);
+
   // Never serialized or packed. The owner of the store re-binds after a uuid change, and calls invalidateBounds()
   // when it edits a volume (an expired volume keeps its last box until the binder resets it).
   void setVolume(std::weak_ptr<const terrain::TerrainVolume> volume);
@@ -59,6 +65,7 @@ private:
   uuids::uuid m_terrainUUID;
   bool m_collisionEnabled = true;
   bool m_castShadows = true;
+  bool m_openSides = false;
 
   std::weak_ptr<const terrain::TerrainVolume> m_volume;
   bool m_volumeBound = false;
@@ -75,6 +82,7 @@ private:
     uuids::uuid terrainUUID;
     bool collisionEnabled = true;
     bool castShadows = true;
+    bool openSides = false;
     bool renderCollider = false;
     uint32_t layer = 0;
     uint32_t mask = 0xFFFFFFFFu;

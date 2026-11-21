@@ -95,6 +95,7 @@ namespace {
     terrain.setTerrainUUID(someUUID());
     terrain.setCollisionEnabled(false);
     terrain.setCastShadows(false);
+    terrain.setOpenSides(true);
     terrain.setRenderCollider(true);
     terrain.setLayer(7);
     terrain.setMask(0x0F0Fu);
@@ -105,6 +106,7 @@ namespace {
     EXPECT_EQ(actual.getTerrainUUID(), expected.getTerrainUUID());
     EXPECT_EQ(actual.getCollisionEnabled(), expected.getCollisionEnabled());
     EXPECT_EQ(actual.getCastShadows(), expected.getCastShadows());
+    EXPECT_EQ(actual.getOpenSides(), expected.getOpenSides());
     EXPECT_EQ(actual.getRenderCollider(), expected.getRenderCollider());
     EXPECT_EQ(actual.isTrigger(), expected.isTrigger());
     EXPECT_EQ(actual.getLayer(), expected.getLayer());
@@ -119,6 +121,7 @@ namespace {
     message.write(someUUID());
     message.write(false);
     message.write(false);
+    message.write(true);
     message.write(isTrigger);
     message.write(layer);
     message.write(uint32_t{ 0x0F0Fu });
@@ -168,6 +171,7 @@ TEST(TerrainComponentTest, StartsWithTheDocumentedDefaults)
   EXPECT_TRUE(terrain.getTerrainUUID().is_nil());
   EXPECT_TRUE(terrain.getCollisionEnabled());
   EXPECT_TRUE(terrain.getCastShadows());
+  EXPECT_FALSE(terrain.getOpenSides());
   EXPECT_FALSE(terrain.isTrigger());
   EXPECT_EQ(terrain.volume(), nullptr);
 }
@@ -203,6 +207,7 @@ TEST(TerrainComponentTest, ItRoundTripsThroughJson)
   EXPECT_EQ(loaded.getTerrainUUID(), someUUID());
   EXPECT_FALSE(loaded.getCollisionEnabled());
   EXPECT_FALSE(loaded.getCastShadows());
+  EXPECT_TRUE(loaded.getOpenSides());
   EXPECT_EQ(loaded.getLayer(), 7u);
   EXPECT_EQ(loaded.getMask(), 0x0F0Fu);
   EXPECT_EQ(loaded.serialize()["subType"], "Terrain");
@@ -223,6 +228,7 @@ TEST(TerrainComponentTest, ItRoundTripsThroughThePacker)
 
   expectSameSettings(unpacked, source);
   EXPECT_EQ(unpacked.getTerrainUUID(), someUUID());
+  EXPECT_TRUE(unpacked.getOpenSides());
   EXPECT_EQ(unpacked.getMask(), 0x0F0Fu);
   EXPECT_EQ(reader.remaining(), 0u);
 }
@@ -237,6 +243,25 @@ TEST(TerrainComponentTest, ANilTerrainUuidSerializesAsEmptyAndLoadsBackNil)
   loaded.setTerrainUUID(someUUID());
   loaded.loadFromJSON(json);
   EXPECT_TRUE(loaded.getTerrainUUID().is_nil());
+}
+
+TEST(TerrainComponentTest, AnAbsentOpenSidesKeyReadsFalse)
+{
+  Terrain source;
+  source.setOpenSides(true);
+  auto saved = source.serialize();
+  ASSERT_TRUE(saved.at("openSides").get<bool>());
+
+  // Positive control: the key, when present, is honored.
+  Terrain withKey;
+  withKey.loadFromJSON(saved);
+  EXPECT_TRUE(withKey.getOpenSides());
+
+  saved.erase("openSides");
+  Terrain withoutKey;
+  withoutKey.setOpenSides(true);
+  withoutKey.loadFromJSON(saved);
+  EXPECT_FALSE(withoutKey.getOpenSides());
 }
 
 TEST(TerrainComponentTest, EveryMalformedJsonPayloadIsRefusedAndChangesNothing)
@@ -257,6 +282,7 @@ TEST(TerrainComponentTest, EveryMalformedJsonPayloadIsRefusedAndChangesNothing)
   EXPECT_TRUE(refused(terrain, valid("terrainUUID", 5)));
   EXPECT_TRUE(refused(terrain, valid("collisionEnabled", "yes")));
   EXPECT_TRUE(refused(terrain, valid("castShadows", 1)));
+  EXPECT_TRUE(refused(terrain, valid("openSides", 1)));
   EXPECT_TRUE(refused(terrain, valid("renderCollider", "true")));
   EXPECT_TRUE(refused(terrain, valid("layer", -1)));
   EXPECT_TRUE(refused(terrain, valid("layer", "3")));
@@ -289,6 +315,7 @@ TEST(TerrainComponentTest, AMalformedWirePayloadIsRefusedAndChangesNothing)
   EXPECT_EQ(terrain.getLayer(), 5u);
   EXPECT_EQ(terrain.getTerrainUUID(), someUUID());
   EXPECT_FALSE(terrain.getCollisionEnabled());
+  EXPECT_TRUE(terrain.getOpenSides());
 }
 
 TEST(TerrainComponentTest, AnOutOfRangeLayerIsClampedOnLoadAndOffTheWire)

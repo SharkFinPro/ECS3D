@@ -109,10 +109,12 @@ public:
 
   // The surface drawing a terrain, keyed by terrain uuid (objects naming the same terrain share it). Follows the
   // volume: changed chunks are published to the surfaces once per call, a terrain that outgrows its surface gets a
-  // larger one built behind it, and a new voxel size starts over. Null when there is no volume, nothing is held yet,
+  // larger one built behind it, and a new voxel size or openSides starts over. With openSides the surface is left open at
+  // the occupied box's x and z faces (see Terrain::getOpenSides). Null when there is no volume, nothing is held yet,
   // or the terrain is too spread out (logged once per terrain).
   std::shared_ptr<vke::VolumeSurface> getTerrainSurface(const uuids::uuid& terrainUUID,
-                                                        const std::shared_ptr<const terrain::TerrainVolume>& volume);
+                                                        const std::shared_ptr<const terrain::TerrainVolume>& volume,
+                                                        bool openSides);
 
   // A read for the inspector; reflects the last frame's getTerrainSurface.
   [[nodiscard]] terrain::TerrainSurfaceStatus terrainSurfaceStatus(const uuids::uuid& terrainUUID) const;
@@ -125,8 +127,9 @@ private:
     std::shared_ptr<TerrainSurfaceFeed> feed;
     std::shared_ptr<const terrain::TerrainVolume::ChunkMap> snapshot;
     float voxelSize = 0.0f;
+    bool openSides = false;
     uint64_t revision = 0;
-    // surfaceBounds of the occupied box, recomputed only when the revision changes (occupiedBounds walks every chunk).
+    // desiredSurfaceBounds of the occupied box, recomputed only when the revision changes (occupiedBounds walks every chunk).
     terrain::SampleBox desired;
     std::shared_ptr<vke::VolumeSurface> current;
     terrain::SampleBox currentBounds;

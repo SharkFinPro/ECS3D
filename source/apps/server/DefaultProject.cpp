@@ -139,7 +139,7 @@ json camera(const glm::vec3& direction = glm::vec3(0, 0, -1))
   };
 }
 
-json terrainCollider(const std::string& terrainUUID)
+json terrainCollider(const std::string& terrainUUID, const bool openSides)
 {
   return {
     { "type", "Collider" },
@@ -147,6 +147,7 @@ json terrainCollider(const std::string& terrainUUID)
     { "terrainUUID", terrainUUID },
     { "collisionEnabled", true },
     { "castShadows", true },
+    { "openSides", openSides },
     { "renderCollider", false },
     { "isTrigger", false },
     { "layer", 0u },

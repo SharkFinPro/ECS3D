@@ -173,16 +173,18 @@ std::vector<float> tileHeights(const GlobalGround& ground, const int row, const 
   return heights;
 }
 
-// The heightmap fill clamps its slope to the tile at the outermost columns, so a shared edge would differ between the
-// two tiles that hold it. Rewriting those columns from the global heights makes both agree exactly.
+// The heightmap fill clamps its slope to the tile at the outermost columns, and rounds slightly differently from the
+// global estimate. Rewriting the three columns each side shares with a neighbor (the seam and its aprons) from the
+// global heights makes both tiles agree exactly.
 void matchEdgeColumns(terrain::TerrainVolume& volume, const GlobalGround& ground, const int offsetX, const int offsetZ)
 {
   const terrain::SampleBox bounds = volume.occupiedBounds();
-  const int last = basin::tileColumns - 1;
+  constexpr int overlap = basin::tileColumns - basin::tileStride;
+  constexpr int last = basin::tileColumns - overlap;
   const terrain::SampleBox strips[] = {
-    { { 0, bounds.min.y, 0 }, { 1, bounds.max.y, basin::tileColumns } },
+    { { 0, bounds.min.y, 0 }, { overlap, bounds.max.y, basin::tileColumns } },
     { { last, bounds.min.y, 0 }, { basin::tileColumns, bounds.max.y, basin::tileColumns } },
-    { { 0, bounds.min.y, 0 }, { basin::tileColumns, bounds.max.y, 1 } },
+    { { 0, bounds.min.y, 0 }, { basin::tileColumns, bounds.max.y, overlap } },
     { { 0, bounds.min.y, last }, { basin::tileColumns, bounds.max.y, basin::tileColumns } }
   };
 

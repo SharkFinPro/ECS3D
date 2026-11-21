@@ -101,8 +101,8 @@ struct LibraryShape
 [[nodiscard]] nlohmann::json modelRenderer(const std::string& model, const std::string& texture,
                                            const std::string& specular);
 
-// The collider of a Terrain object: collision and shadows on, naming the terrain asset.
-[[nodiscard]] nlohmann::json terrainCollider(const std::string& terrainUUID);
+// The collider of a Terrain object: collision and shadows on, naming the terrain asset; closed sides unless asked.
+[[nodiscard]] nlohmann::json terrainCollider(const std::string& terrainUUID, bool openSides = false);
 
 [[nodiscard]] nlohmann::json makeObject(const std::string& name, nlohmann::json components,
                                         nlohmann::json scripts = nlohmann::json::array());

@@ -419,6 +419,13 @@ namespace {
           edited = true;
         }
 
+        bool openSides = terrain->getOpenSides();
+        if (gc::accentCheckbox("Open Sides", &openSides, mixed.contains("openSides")))
+        {
+          terrain->setOpenSides(openSides);
+          edited = true;
+        }
+
         edited |= colliderLayerMaskEditor(terrain, mixed);
       }
 

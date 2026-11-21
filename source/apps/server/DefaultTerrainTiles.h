@@ -12,18 +12,21 @@ namespace terrain
 
 // The built-in Terrain Basin: one landscape cut into a 3 x 3 grid of terrain tiles, +z north. A flat arena in the
 // middle is ringed by a rim that rises into terraces to the north, a steep bank to the east, moguls in the south-west
-// and a dry riverbed crossing in from the west. Neighboring tiles share their edge column, so every tile samples one
-// global height function and meets its neighbor exactly. Positions are sample columns (voxels) unless a name says
-// world.
+// and a dry riverbed crossing in from the west. Neighboring tiles overlap by three columns, the shared seam column and
+// one apron column on each side, so every tile samples one global height function and meets its neighbor exactly.
+// The tile objects leave their sides open (Terrain::getOpenSides): the outermost column of a tile only shapes the
+// normals of the surface inside it, which makes both tiles shade a seam alike. Global columns 1 to worldColumns - 2 are
+// drawn. Positions are sample columns (voxels) unless a name says world.
 namespace basin
 {
   inline constexpr int tilesPerSide = 3;
   inline constexpr int tileCount = tilesPerSide * tilesPerSide;
 
-  // Samples per tile side, and the step between one tile's first sample and its neighbor's.
+  // Samples per tile side (four whole chunks, which an open side needs filled), and the step between one tile's first
+  // sample and its neighbor's.
   inline constexpr int tileColumns = 128;
-  inline constexpr int tileStride = tileColumns - 1;
-  inline constexpr int worldColumns = tilesPerSide * tileStride + 1;
+  inline constexpr int tileStride = tileColumns - 3;
+  inline constexpr int worldColumns = tilesPerSide * tileStride + 3;
 
   // World units per voxel, the arena floor and the heightmap's full scale, in voxels.
   inline constexpr float voxelSize = 1.5f;

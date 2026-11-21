@@ -23,6 +23,17 @@ namespace terrain
   // multiples of surfaceBoundsStep. Empty for an empty box.
   [[nodiscard]] SampleBox surfaceBounds(const SampleBox& occupied);
 
+  // The meshed box of an open-sided surface: the occupied box inset by one sample on x and z (no rounding), y as
+  // surfaceBounds gives it. Empty for an empty box, or when the inset leaves fewer than two samples on x or z.
+  [[nodiscard]] SampleBox openSurfaceBounds(const SampleBox& occupied);
+
+  // The samples an open-sided surface reads: the meshed box grown by one sample on x and z, which only shape the
+  // normals at the meshed box's side faces.
+  [[nodiscard]] SampleBox openSampleBounds(const SampleBox& meshed);
+
+  // The box to mesh for a terrain: openSurfaceBounds when openSides, else surfaceBounds.
+  [[nodiscard]] SampleBox desiredSurfaceBounds(const SampleBox& occupied, bool openSides);
+
   // True when inner is empty or lies entirely inside outer.
   [[nodiscard]] bool containsBox(const SampleBox& outer, const SampleBox& inner);
 

@@ -116,6 +116,20 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   m_drawnTerrains.clear();
   m_terrainDraws.clear();
   m_terrainShadowVotes.clear();
+  m_terrainSideVotes.clear();
+
+  // Open sides change a surface's geometry, so every vote is in before the first surface is fetched.
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    const auto components = gatherRenderComponents(*object);
+
+    if (const auto terrainComponent = components.terrain;
+        components.transform && terrainComponent && !terrainComponent->getTerrainUUID().is_nil() &&
+        terrainComponent->volume())
+    {
+      m_terrainSideVotes.vote(terrainComponent->getTerrainUUID(), terrainComponent->getOpenSides());
+    }
+  }
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -278,7 +292,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       {
         const auto& terrainUUID = terrainComponent->getTerrainUUID();
 
-        if (const auto surface = assetCache.getTerrainSurface(terrainUUID, volume))
+        if (const auto surface = assetCache.getTerrainSurface(terrainUUID, volume,
+                                                            m_terrainSideVotes.opensSides(terrainUUID)))
         {
           m_terrainDraws.push_back({
             surface,

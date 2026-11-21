@@ -10,6 +10,11 @@
 
 namespace terrain
 {
+  [[nodiscard]] inline bool sameBox(const SampleBox& a, const SampleBox& b)
+  {
+    return a.min == b.min && a.max == b.max;
+  }
+
   // The bounds of the surfaces a terrain holds: the one drawn, and a larger one being built to replace it.
   struct SurfaceSlots
   {
@@ -36,11 +41,14 @@ namespace terrain
     SampleBox bounds;
   };
 
-  // desired is surfaceBounds(volume.occupiedBounds()). An empty desired box keeps whatever is held. A replacement
+  // desired is desiredSurfaceBounds(volume.occupiedBounds(), openSides). A closed surface may be larger than desired
+  // (it only draws extra air); with exactMatch, which an open-sided surface needs since a larger one would mesh air
+  // past its apron, the drawn surface is kept only when its bounds equal desired. An empty desired box keeps whatever is held. A replacement
   // that is no less complete than the drawn surface is promoted before anything else, so a terrain whose chunks keep
   // changing (and keep the replacement pending) still gets its larger surface drawn; while a replacement is
   // building, nothing new is created.
-  [[nodiscard]] inline SurfacePlan planTerrainSurface(const SampleBox& desired, const SurfaceSlots& slots)
+  [[nodiscard]] inline SurfacePlan planTerrainSurface(const SampleBox& desired, const SurfaceSlots& slots,
+                                                      const bool exactMatch = false)
   {
     if (slots.replacement && slots.replacementPending <= slots.currentPending)
     {
@@ -52,7 +60,7 @@ namespace terrain
       return {};
     }
 
-    if (slots.current && containsBox(*slots.current, desired))
+    if (slots.current && (exactMatch ? sameBox(*slots.current, desired) : containsBox(*slots.current, desired)))
     {
       return {};
     }
