@@ -372,6 +372,9 @@ namespace {
 // library that does the timed work stays optimized.
 TEST(TerrainResting, TheCostOfTwoHundredRestingBoxesIsMeasuredAgainstABoxFloor)
 {
+#ifndef NDEBUG
+  GTEST_SKIP() << "A Release measurement: Debug, sanitizer and coverage builds skip it";
+#endif
   World onTerrain(flatGround());
   const auto terrainBoxes = layBoxes(onTerrain);
 

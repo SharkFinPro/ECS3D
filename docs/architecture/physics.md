@@ -300,21 +300,23 @@ gradient and loses its contact, and larger shapes are later work. The collider's
 on several threads warms the collider first; the terrain side only reads. The early-out walks only as many chunks as the
 box or the volume holds, whichever is fewer.
 
-`TerrainRestingTest.cpp` is the quality gate for the contact generator: scenes at the server tick on a 2.5 unit voxel,
-run with the solver and generator as they are, that print what they measure. It covers a box, hull, capsule and sphere on
-a 20 degree slope (a sphere or a capsule lying across it rolls on a box ramp too, so its gate is the same roll as on the
-ramp), five-box stacks and boxes over 20 voxels wide on rolling terrain, a ridge and a gully, each both on and off the
-voxel lattice, downward raycasts against the sampled surface and the analytic height, a brush dig and fill under a
-resting box, a hull dropped into a dimple (it topples onto an edge and rests), and the cost of 200 resting boxes against
-the same boxes on a box floor. A flat box's four corners at equal depth are in `TerrainContactTest.cpp`.
+`TerrainRestingTest.cpp` and `TerrainGateTest.cpp` are the quality gate for the contact generator: scenes at the server
+tick on a 2.5 unit voxel, run with the solver and generator as they are, that print what they measure. It covers a box,
+hull, capsule and sphere on a 20 degree slope (a sphere or a capsule lying across it rolls on a box ramp too, so its
+gate is the same roll as on the ramp), five-box stacks and boxes over 20 voxels wide on rolling terrain, a ridge and a
+gully, each both on and off the voxel lattice, downward raycasts against the sampled surface and the analytic height, a
+brush dig and fill under a resting box, a hull dropped into a dimple (it topples onto an edge and rests), and the cost
+of 200 resting boxes against the same boxes on a box floor. A flat box's four corners at equal depth are in
+`TerrainContactTest.cpp`.
 
 The `DISABLED_` scenes are the ones the generator does not hold, each with its numbers in a comment. The stack on a dome
 crest at a cell corner drifts about 0.5 units in 60 s, because the one-sided trilinear gradient there tilts the crest
 normal about 0.95 degrees; the same stack at a mid-cell crest holds, and that is an enabled test. The trough and flank
 stacks and the balanced wide box on a ridge also fail when moved 0.37 voxel off the lattice (drifts of 0.03 to 0.05
-units, and the ridge box sinks 0.2 units into the analytic ridge). The collision pass for the 200 resting boxes measured
-about 1.9 times the box floor's (Release, MSVC, simulation library optimized and test sources not), against a target of
-1.25.
+units, and the ridge box sinks 0.2 units into the analytic ridge). The lattice-aligned flank stack holds on MSVC Release
+but drifts 0.026 units in the macOS clang Debug build, so it is disabled too. The collision pass for the 200 resting
+boxes measured about 1.9 times the box floor's (Release, MSVC, simulation library optimized and test sources not),
+against a target of 1.25. The cost test runs only in Release builds.
 
 ## Convex mesh collider
 
