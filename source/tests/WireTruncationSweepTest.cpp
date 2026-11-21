@@ -1,4 +1,4 @@
-// Cuts every wire payload at every offset. The sanitize CI rows run this under ASan/UBSan, which is what
+// Cuts every wire payload at every offset. The sanitize preset runs this under ASan/UBSan, which is what
 // turns a read past the end of a short payload into a failure rather than a lucky pass.
 #include <gtest/gtest.h>
 
