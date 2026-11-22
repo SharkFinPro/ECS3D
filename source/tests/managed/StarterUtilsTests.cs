@@ -489,4 +489,39 @@ public unsafe class StarterUtilsTests : IDisposable
     AssertVec(Vector3.Zero, LastSteer());
     Assert.Single(Warnings());
   }
+
+  private static string LastRotation()
+  {
+    var call = FakeNatives.Calls.Last(c => c.StartsWith("Transform.setRotation(", StringComparison.Ordinal));
+    return call.Substring(call.IndexOf(',') + 1).TrimEnd(')');
+  }
+
+  private static void LookWithMouseDelta(PlayerScript player, float deltaY)
+  {
+    FakeNatives.Set("InputUtils.mouseButtonForObject", true);
+    FakeNatives.Set("InputUtils.mouseDeltaForObject", new Vector2(0f, deltaY));
+    Step(player);
+  }
+
+  [Fact]
+  public void PlayerScript_NegativeMouseDeltaYLowersPitchByDefault()
+  {
+    var player = NewPlayer();
+
+    LookWithMouseDelta(player, -10f);
+
+    Assert.Equal("-1.5,0,0", LastRotation());
+  }
+
+  [Fact]
+  public void PlayerScript_InvertLookRaisesPitchForNegativeMouseDeltaY()
+  {
+    var player = NewPlayer();
+    typeof(PlayerScript).GetField("m_invertLook", BindingFlags.Instance | BindingFlags.NonPublic)!
+      .SetValue(player, true);
+
+    LookWithMouseDelta(player, -10f);
+
+    Assert.Equal("1.5,0,0", LastRotation());
+  }
 }
