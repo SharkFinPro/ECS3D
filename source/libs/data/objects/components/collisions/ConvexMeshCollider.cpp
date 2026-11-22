@@ -8,7 +8,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
 #include <limits>
-#include <utility>
 #include <stdexcept>
 #include <string>
 #include <utility>

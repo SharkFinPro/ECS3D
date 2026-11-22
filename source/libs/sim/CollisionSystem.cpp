@@ -439,9 +439,11 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
       const auto& dynamicEdge = terrainFirst ? second : first;
       auto& terrain = static_cast<Terrain&>(terrainFirst ? *first.collider : *second.collider);
 
-      const auto contacts = hit.terrainContacts
-                              ? *hit.terrainContacts
-                              : collisions::findTerrainContacts(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+      std::vector<collisions::Contact> measured;
+      const auto& contacts = hit.terrainContacts
+                               ? *hit.terrainContacts
+                               : (measured = collisions::findTerrainContacts(*dynamicEdge.collider, terrain,
+                                                                             dynamicEdge.sweep));
       for (size_t i = 0; i < contacts.size(); ++i)
       {
         pairs.push_back({ dynamicEdge.body.get(), nullptr, dynamicEdge.collider.get(), &terrain, contacts[i],
@@ -546,7 +548,7 @@ void CollisionSystem::reset()
 {
   m_contactCache.clear();
   m_sleepGroups.clear();
-  m_sleepingBounds.clear();
+  m_restedColliders.clear();
   m_staticSignature = 0;
   m_previousPairs.clear();
   m_enters.clear();
@@ -554,26 +556,41 @@ void CollisionSystem::reset()
   m_exits.clear();
 }
 
-void CollisionSystem::wakeGroup(RigidBody& body, const float dt)
-{
-  const auto wakeOne = [dt](RigidBody& member)
+namespace {
+  void wakeBody(RigidBody& body, const float dt)
   {
-    member.wake();
-    member.clearSleepGroup();
+    body.wake();
+    body.clearSleepGroup();
 
-    if (member.hasSkippedStep())
+    if (body.hasSkippedStep())
     {
-      member.setSkippedStep(false);
-      if (const auto transform = member.getOwner()->getComponent<Transform>(ComponentType::transform))
+      body.setSkippedStep(false);
+      if (const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform))
       {
-        PhysicsSystem::catchUp(member, *transform, dt);
+        PhysicsSystem::catchUp(body, *transform, dt);
       }
     }
-  };
+  }
+}
 
+bool CollisionSystem::RestedCollider::matches(Collider& collider) const
+{
+  const auto& box = collider.getBoundingBox();
+
+  return bounds.minX == box.minX && bounds.maxX == box.maxX && bounds.minY == box.minY && bounds.maxY == box.maxY &&
+    bounds.minZ == box.minZ && bounds.maxZ == box.maxZ && layer == collider.getLayer() &&
+    mask == collider.getMask() && trigger == collider.isTrigger();
+}
+
+void CollisionSystem::wakeGroup(RigidBody& body, const float dt)
+{
   const auto group = body.getSleepGroup();
-  wakeOne(body);
+  wakeBody(body, dt);
+  wakeGroupMembers(group, dt);
+}
 
+void CollisionSystem::wakeGroupMembers(const uint64_t group, const float dt)
+{
   const auto found = m_sleepGroups.find(group);
   if (group == 0 || found == m_sleepGroups.end())
   {
@@ -586,7 +603,7 @@ void CollisionSystem::wakeGroup(RigidBody& body, const float dt)
   {
     if (const auto member = weak.lock())
     {
-      wakeOne(*member);
+      wakeBody(*member, dt);
     }
   }
 }
@@ -617,6 +634,9 @@ void CollisionSystem::wakeChangedSleepers(const float dt)
     const auto& box = edge.collider->getBoundingBox();
     const std::array<float, 6> bounds{ box.minX, box.maxX, box.minY, box.maxY, box.minZ, box.maxZ };
     feed(bounds.data(), sizeof(bounds));
+    const std::array<uint32_t, 3> filter{ edge.collider->getLayer(), edge.collider->getMask(),
+                                          edge.collider->isTrigger() ? 1u : 0u };
+    feed(filter.data(), sizeof(filter));
     if (isTerrain(*edge.collider))
     {
       if (const auto volume = static_cast<const Terrain&>(*edge.collider).volume())
@@ -630,6 +650,7 @@ void CollisionSystem::wakeChangedSleepers(const float dt)
   const bool staticChanged = signature != m_staticSignature;
   m_staticSignature = signature;
 
+  std::unordered_set<const Collider*> sleepingNow;
   for (const auto& edge : m_collisionEdges)
   {
     if (!edge.body)
@@ -645,21 +666,30 @@ void CollisionSystem::wakeChangedSleepers(const float dt)
         wakeGroup(*edge.body, dt);
       }
 
-      m_sleepingBounds.erase(edge.collider.get());
+      m_restedColliders.erase(edge.collider.get());
       continue;
     }
 
-    const auto& box = edge.collider->getBoundingBox();
-    const auto rested = m_sleepingBounds.find(edge.collider.get());
-    const bool moved = rested == m_sleepingBounds.end() || rested->second.minX != box.minX ||
-      rested->second.maxX != box.maxX || rested->second.minY != box.minY || rested->second.maxY != box.maxY ||
-      rested->second.minZ != box.minZ || rested->second.maxZ != box.maxZ;
-
-    if (staticChanged || moved)
+    sleepingNow.insert(edge.collider.get());
+    const auto rested = m_restedColliders.find(edge.collider.get());
+    if (staticChanged || rested == m_restedColliders.end() || !rested->second.matches(*edge.collider))
     {
       wakeGroup(*edge.body, dt);
-      m_sleepingBounds.erase(edge.collider.get());
+      m_restedColliders.erase(edge.collider.get());
     }
+  }
+
+  // A sleeping collider no longer among the sleeping edges was taken away, so its group may have lost what held it.
+  for (auto rested = m_restedColliders.begin(); rested != m_restedColliders.end();)
+  {
+    if (sleepingNow.contains(rested->first))
+    {
+      ++rested;
+      continue;
+    }
+
+    wakeGroupMembers(rested->second.group, dt);
+    rested = m_restedColliders.erase(rested);
   }
 }
 
@@ -796,7 +826,9 @@ void CollisionSystem::sleepRestingIslands(const std::vector<std::vector<PairRef>
     }
     else if (edge.body->isAsleep())
     {
-      m_sleepingBounds[edge.collider.get()] = edge.collider->getBoundingBox();
+      m_restedColliders[edge.collider.get()] = { edge.collider->getBoundingBox(), edge.collider->getLayer(),
+                                                 edge.collider->getMask(), edge.collider->isTrigger(),
+                                                 edge.body->getSleepGroup() };
     }
   }
 }

@@ -178,10 +178,21 @@ private:
   // The bodies that fell asleep together, by group, which wake together.
   std::unordered_map<uint64_t, std::vector<std::weak_ptr<RigidBody>>> m_sleepGroups;
   uint64_t m_nextSleepGroup = 1;
-  // Each sleeping collider's bounds when it fell asleep: a sleeper whose bounds change was edited, and wakes.
-  std::unordered_map<const Collider*, BoundingBox> m_sleepingBounds;
-  // What the static colliders were last tick: their bounds and, for a terrain, its revision. A change wakes every
-  // sleeper, since one may have rested on what moved.
+  // Each sleeping collider as it fell asleep, and its group. A sleeper whose collider changed since was edited, and
+  // wakes; one whose collider is gone (its object removed, or its collider or body) wakes the rest of its group,
+  // which may have rested on it.
+  struct RestedCollider {
+    BoundingBox bounds;
+    uint32_t layer;
+    uint32_t mask;
+    bool trigger;
+    uint64_t group;
+
+    [[nodiscard]] bool matches(Collider& collider) const;
+  };
+  std::unordered_map<const Collider*, RestedCollider> m_restedColliders;
+  // What the static colliders were last tick: their bounds, layers, masks, trigger flags and, for a terrain, its
+  // revision. A change wakes every sleeper, since one may have rested on what changed.
   uint64_t m_staticSignature = 0;
 
   void checkCollisions(float dt);
@@ -196,6 +207,8 @@ private:
   // Wakes body and every body that fell asleep with it. One PhysicsSystem passed by asleep this tick catches up on
   // that step now.
   void wakeGroup(RigidBody& body, float dt);
+
+  void wakeGroupMembers(uint64_t group, float dt);
 
   // Counts each solved island's bodies at rest toward sleeping, and puts an island whose bodies have all rested long
   // enough to sleep.

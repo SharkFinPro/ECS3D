@@ -5,8 +5,10 @@
 #include "PhysicsTestHelpers.h"
 #include "TestScene.h"
 #include "objects/Object.h"
+#include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
+#include "objects/components/collisions/BoxCollider.h"
 
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -25,17 +27,18 @@ namespace {
     fixtures::Scene scene = fixtures::makeScene();
     CollisionSystem collisions;
     std::shared_ptr<Object> floor;
+    std::shared_ptr<BoxCollider> floorCollider;
 
     // The floor's top is the plane y = 0.
     World()
-      : floor(addObject(scene, "Floor", { 0, -1, 0 }, { 20, 1, 20 }))
-    {
-      fixtures::addBoxCollider(floor);
-    }
+      : floor(addObject(scene, "Floor", { 0, -1, 0 }, { 20, 1, 20 })),
+        floorCollider(fixtures::addBoxCollider(floor))
+    {}
 
     struct Box {
       std::shared_ptr<Object> object;
       std::shared_ptr<RigidBody> body;
+      std::shared_ptr<BoxCollider> collider;
 
       [[nodiscard]] glm::vec3 position() const
       {
@@ -47,9 +50,9 @@ namespace {
     Box box(const std::string& name, const glm::vec3& position)
     {
       const auto object = addObject(scene, name, position, glm::vec3(1));
-      fixtures::addBoxCollider(object);
+      const auto collider = fixtures::addBoxCollider(object);
 
-      return { object, addBody(object, true) };
+      return { object, addBody(object, true), collider };
     }
 
     void step()
@@ -219,4 +222,53 @@ TEST(PhysicsSleep, ASleepersImpulsesAreKeptForWhenItWakes)
   world.run(ticksPerSecond);
 
   EXPECT_EQ(world.collisions.getContactCache().size(), cached);
+}
+
+TEST(PhysicsSleep, RemovingASleepingSupportWakesWhatRestedOnIt)
+{
+  World world;
+  const auto bottom = world.box("Bottom", { 0, 1.0f, 0 });
+  const auto top = world.box("Top", { 0, 3.0f, 0 });
+  world.run(4 * ticksPerSecond);
+  ASSERT_TRUE(top.body->isAsleep());
+  ASSERT_EQ(bottom.body->getSleepGroup(), top.body->getSleepGroup());
+
+  world.scene.objectManager->removeSubtree(bottom.object);
+  world.step();
+
+  EXPECT_FALSE(top.body->isAsleep());
+  world.run(ticksPerSecond);
+  EXPECT_NEAR(top.position().y, 1.0f, 0.02f);
+}
+
+TEST(PhysicsSleep, MakingTheFloorATriggerWakesWhatSleptOnIt)
+{
+  World world;
+  const auto box = world.box("Box", { 0, 1.0f, 0 });
+  world.run(3 * ticksPerSecond);
+  ASSERT_TRUE(box.body->isAsleep());
+
+  world.floorCollider->setIsTrigger(true);
+  world.step();
+
+  EXPECT_FALSE(box.body->isAsleep());
+  world.run(10);
+  EXPECT_LT(box.position().y, 0.9f);
+}
+
+TEST(PhysicsSleep, ChangingASleepersLayerWakesIt)
+{
+  World world;
+  const auto box = world.box("Box", { 0, 1.0f, 0 });
+  world.run(3 * ticksPerSecond);
+  ASSERT_TRUE(box.body->isAsleep());
+
+  // Positive control: a tick with nothing changed leaves it asleep.
+  world.step();
+  ASSERT_TRUE(box.body->isAsleep());
+
+  box.collider->setLayer(3);
+  world.step();
+
+  EXPECT_FALSE(box.body->isAsleep());
 }

@@ -160,12 +160,16 @@ saved or replicated.
 - **Waking.** Any of these wakes the body's whole group:
   - a queued force, or a change of velocity, angular velocity, mass or gravity (the `RigidBody` setters);
   - a move of its transform from outside (`PhysicsSystem` compares the world update id against the one at sleep);
-  - a change of its own collider's bounds;
-  - any change to the static colliders' bounds or a terrain's revision (`wakeChangedSleepers` hashes them; it
-    wakes every sleeper, since edits are rare and a pile may rest on what changed);
+  - a change of its own collider's bounds, layer, mask or trigger flag;
+  - one of its group's colliders taken away (its object removed, or its collider or body), since the rest may have
+    rested on it;
+  - any change to the static colliders' bounds, layers, masks or trigger flags, or a terrain's revision
+    (`wakeChangedSleepers` hashes them). It wakes every sleeper, since a pile may rest on what changed, so a static
+    collider a script moves every tick keeps the whole scene awake;
   - an awake body touching or about to meet it (`wakeTouchedSleepers`, after the narrow phase). The woken bodies'
     untested pairs are then tested as the sweep would have, which may reach more sleepers, before the islands are
-    built, so the woken pile is solved with all its contacts that tick.
+    built, so the woken pile is solved with all its contacts that tick. Pairs are found from bounds swept before
+    the wake, so a pair only the woken body's first gravity step would reach is found the tick after.
 - **Catching up.** A sleeper `PhysicsSystem` passed by this tick is marked (`hasSkippedStep`). Woken later in the
   tick it takes `PhysicsSystem::catchUp`: the support bookkeeping and gravity the step would have given it. It moves
   nowhere, since it had no velocity, so it falls from the tick it wakes, as an awake body would.
