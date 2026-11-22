@@ -283,6 +283,7 @@ add_executable(${PROJECT_NAME}
   DefaultTerrainCavesPhysicsTest.cpp
   DefaultTerrainCavesTest.cpp
   DefaultTerrainTest.cpp
+  ProcessCpuClock.h
   DefaultTerrainTilesPhysicsTest.cpp
   DefaultTerrainTilesTest.cpp
   DefaultWelcomePhysicsTest.cpp

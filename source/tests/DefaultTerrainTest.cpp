@@ -4,6 +4,7 @@
 #include "CollisionSystem.h"
 #include "DefaultTerrain.h"
 #include "PhysicsSystem.h"
+#include "ProcessCpuClock.h"
 #include "TestScene.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
@@ -18,7 +19,7 @@
 
 #include <glm/vec3.hpp>
 #include <algorithm>
-#include <chrono>
+
 #include <cmath>
 #include <cstddef>
 #include <iostream>
@@ -96,9 +97,9 @@ namespace {
     static void SetUpTestSuite()
     {
       s_full = std::make_shared<terrain::TerrainVolume>(showcase::voxelSize);
-      const auto start = std::chrono::steady_clock::now();
+      const double start = testclock::processCpuSeconds();
       generateShowcaseTerrain(*s_full);
-      s_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      s_seconds = testclock::processCpuSeconds() - start;
 
       s_ground = std::make_unique<terrain::TerrainVolume>(showcase::voxelSize);
       generateShowcaseGround(*s_ground);
