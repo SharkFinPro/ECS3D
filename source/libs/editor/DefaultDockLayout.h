@@ -11,20 +11,20 @@
 // Sizes are pixels of the dock space; the base sizes are unscaled and follow the content scale like the panels'
 // own contents do.
 
-inline constexpr float defaultDockLeftWidth = 240.0f;
-inline constexpr float defaultDockRightWidth = 270.0f;
+inline constexpr float defaultDockLeftWidth = 258.0f;
+inline constexpr float defaultDockRightWidth = 288.0f;
 inline constexpr float defaultDockBottomHeight = 220.0f;
 
 // Both side panels together take at most this share of the width, the bottom panels this share of the height.
-inline constexpr float defaultDockSidesFraction = 0.34f;
+inline constexpr float defaultDockSidesFraction = 0.37f;
 inline constexpr float defaultDockBottomFraction = 0.26f;
 
 // The panels' own minimum sizes in unscaled pixels, on the one axis each is a floor for. The app applies them and
 // the layout tests read them, so the two cannot drift.
 inline constexpr float sceneStatusBaseMinimumHeight = 88.0f;
-inline constexpr float objectsBaseFloor = 230.0f;
-inline constexpr float inspectorBaseFloor = 270.0f;
-inline constexpr float sceneScriptsBaseFloor = 270.0f;
+inline constexpr float objectsBaseFloor = 245.0f;
+inline constexpr float inspectorBaseFloor = 285.0f;
+inline constexpr float sceneScriptsBaseFloor = 285.0f;
 inline constexpr float assetsBaseFloor = 150.0f;
 inline constexpr float projectErrorsBaseFloor = 80.0f;
 inline constexpr float consoleBaseFloor = 100.0f;

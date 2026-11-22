@@ -214,8 +214,8 @@ void EditorApp::displaySceneStatus()
     m_sceneStatusGroupWidths[index] = ImGui::GetItemRectSize().x;
   };
 
-  constexpr float groupGap = 12.0f;
-  constexpr float optionsGap = 10.0f;
+  constexpr float groupGap = 8.0f;
+  constexpr float optionsGap = 8.0f;
 
   drawGroup(groupGap, [&] { displayPlayControls(); });
   drawGroup(groupGap, [&] { displayRayTracingToggle(); });
@@ -396,7 +396,7 @@ void EditorApp::displayCameraSelector()
   ImGui::TextColored(theme::t2, "%s", "View");
   ImGui::SameLine();
 
-  ImGui::SetNextItemWidth(165.0f);
+  ImGui::SetNextItemWidth(160.0f);
   if (ImGui::BeginCombo("##ViewCamera", preview.c_str()))
   {
     if (ImGui::Selectable(freeFlyLabel, !m_viewCameraObject))
@@ -429,7 +429,7 @@ void EditorApp::displayPlayerSelector()
                        && !m_requestedPlayerSlot.has_value();
 
   ImGui::BeginDisabled(!canRequest);
-  ImGui::SetNextItemWidth(125.0f);
+  ImGui::SetNextItemWidth(115.0f);
   if (ImGui::BeginCombo("##PlayerSlot", preview.c_str()))
   {
     for (const int32_t slot : slots)

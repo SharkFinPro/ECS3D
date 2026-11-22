@@ -164,11 +164,11 @@ bottom panel floors are re-applied whenever the viewport size or content scale c
 (height) of the window, so two side floors leave the central node at least 68% of the width; where a floor is larger than
 the fit, the floor wins. The change takes effect one frame after the resize.
 
-The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 240 and Inspector 270 unscaled
-pixels, times the content scale, and together at most 34% of the width. The bottom dock takes 220 unscaled pixels,
+The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 258 and Inspector 288 unscaled
+pixels, times the content scale, and together at most 37% of the width. The bottom dock takes 220 unscaled pixels,
 which shows the Assets search row, filter row and one row of tiles, and at most 26% of the height. At 2000x1087 and
-scale 1.25 that is about 15% (Objects), 68% (scene view) and 17% (Inspector) of the width, and 25% of the height for
-the bottom dock. The panel floors (the same constants the app applies) are 230 (Objects), 270 (Inspector, Scene
+scale 1.25 that is about 16% (Objects), 65% (scene view) and 18% (Inspector) of the width, and 25% of the height for
+the bottom dock. The panel floors (the same constants the app applies) are 245 (Objects), 285 (Inspector, Scene
 Scripts) and 150 (Assets) unscaled pixels, capped at 16% of the width for side panels and 17% of the height for
 bottom panels. Small windows give up space gracefully: the scene view keeps at least 60% of the width, and 60% of the
 height in a roomy window (at least 50% under 700 unscaled pixels tall, 45% under 400) with the Scene Status toolbar

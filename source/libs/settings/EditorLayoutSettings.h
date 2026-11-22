@@ -12,7 +12,7 @@ namespace editorLayoutSettings {
 
   // Bump this whenever the default dock layout geometry changes. A layout stored by another version is ignored, so
   // the new defaults appear once and the next save replaces the old layout. A missing version reads as 0.
-  inline constexpr int currentLayoutVersion = 1;
+  inline constexpr int currentLayoutVersion = 2;
 
   // The ImGui ini text (window placement and dock tree); empty when none was saved.
   [[nodiscard]] std::string readImGuiLayout(const SettingsStore& settings);

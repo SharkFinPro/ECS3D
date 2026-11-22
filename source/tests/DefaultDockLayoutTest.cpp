@@ -100,7 +100,7 @@ TEST(DefaultDockLayoutTest, SidePanelsShrinkTogetherKeepingTheirRatio)
 {
   const DefaultDockSizes sizes = defaultDockSizes(1000.0f, 1000.0f, 1.0f);
 
-  EXPECT_NEAR(sizes.left + sizes.right, 340.0f, 0.01f);
+  EXPECT_NEAR(sizes.left + sizes.right, 370.0f, 0.01f);
   EXPECT_NEAR(sizes.left / sizes.right, defaultDockLeftWidth / defaultDockRightWidth, 0.001f);
 }
 
