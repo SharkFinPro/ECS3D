@@ -60,10 +60,7 @@ public class PlayerScript : ScriptBase
 
     public override void start()
     {
-        // Seed from any editor-set body rotation so mouse-look starts from the placed facing.
-        Vector3 rotation = transform.getRotation();
-        m_pitch = rotation.X;
-        m_yaw = rotation.Y;
+        seedLookFromTransform();
 
         Log.info("Player is ready!");
     }
@@ -102,6 +99,7 @@ public class PlayerScript : ScriptBase
         // Mouse-look owns rotation, so cancel any physics spin (e.g. from a collision) before physics
         // integrates it this tick - otherwise the view would fight/jitter against the look direction.
         rigidBody.setAngularVelocity(0, 0, 0);
+        restoreLookRotation();
     }
 
     public override void variableUpdate()
@@ -125,7 +123,30 @@ public class PlayerScript : ScriptBase
     {
         transform.stop();
         transform.start();
+        seedLookFromTransform();
         rigidBody.setVelocity(0, 0, 0);
+    }
+
+    // Seeds from any editor-set body rotation so mouse-look starts from the placed facing.
+    private void seedLookFromTransform()
+    {
+        Vector3 rotation = transform.getRotation();
+        m_pitch = rotation.X;
+        m_yaw = rotation.Y;
+    }
+
+    // A contact can rewrite the stored Euler triple: it tilts the body, and the same orientation can come back as an
+    // alternate triple (yaw mirrored through 180 degrees). Writing the look angles back keeps the view level.
+    private void restoreLookRotation()
+    {
+        const float tolerance = 1e-3f;
+        Vector3 rotation = transform.getRotation();
+        if (MathF.Abs(rotation.X - m_pitch) > tolerance
+            || MathF.Abs(rotation.Y - m_yaw) > tolerance
+            || MathF.Abs(rotation.Z) > tolerance)
+        {
+            transform.setRotation(m_pitch, m_yaw, 0.0f);
+        }
     }
 
     private void handleLook()
@@ -196,8 +217,9 @@ public class PlayerScript : ScriptBase
                 ? Vector3.Normalize(baseForward)
                 : new Vector3(0.0f, 0.0f, -1.0f); // camera looks straight up/down: fall back to forward
 
-            // Rotate the base heading by the body's current yaw (mouse-look), then derive right from it.
-            float yawRad = transform.getRotation().Y * (MathF.PI / 180.0f);
+            // Rotate the base heading by the look yaw, not the Transform's Euler Y, which a contact can rewrite to
+            // an alternate triple with the same orientation but a different yaw.
+            float yawRad = m_yaw * (MathF.PI / 180.0f);
             float cos = MathF.Cos(yawRad), sin = MathF.Sin(yawRad);
             Vector3 forward = new Vector3(
                 baseForward.X * cos + baseForward.Z * sin,
