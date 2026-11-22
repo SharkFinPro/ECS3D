@@ -10,6 +10,17 @@ namespace editorLayoutSettings {
   void writeImGuiLayout(SettingsStore& settings, const std::string& iniText)
   {
     settings.set(imguiLayoutKey, iniText);
+    settings.set(layoutVersionKey, currentLayoutVersion);
+  }
+
+  int readLayoutVersion(const SettingsStore& settings)
+  {
+    return settings.get<int>(layoutVersionKey, 0);
+  }
+
+  std::string readRestorableImGuiLayout(const SettingsStore& settings)
+  {
+    return readLayoutVersion(settings) == currentLayoutVersion ? readImGuiLayout(settings) : std::string();
   }
 
   bool hasDockLayout(const std::string_view iniText)

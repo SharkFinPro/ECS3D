@@ -15,6 +15,7 @@
 #include <SceneScriptsPanel.h>
 #include <SettingsStore.h>
 #include <SceneStatusLayout.h>
+#include <DefaultDockLayout.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <objects/Object.h>
@@ -213,9 +214,9 @@ bool dockspaceHasActiveDrag(const ImGuiDockNode* root)
   return context.ActiveId != 0 && root->HostWindow != nullptr && context.ActiveIdWindow == root->HostWindow;
 }
 
-void rescaleLayout(const DockProportions& proportions, const ImVec2 extent, const DockTreeSides& tree)
+void rescaleLayout(const DockUpdate& update, const DockTreeSides& tree)
 {
-  for (const auto& [id, axis, size] : proportions.fit(extent.x, extent.y))
+  for (const auto& [id, axis, size] : update.sizes)
   {
     const auto node = std::ranges::find(tree.existing, id);
 
@@ -224,13 +225,6 @@ void rescaleLayout(const DockProportions& proportions, const ImVec2 extent, cons
       tree.all[node - tree.existing.begin()]->SizeRef[axis] = size;
     }
   }
-}
-
-void rememberLayout(DockProportions& proportions, const bool settling, const ImVec2 extent,
-                    const DockTreeSides& tree)
-{
-  proportions.rememberChanges(tree.sides, settling ? std::vector<DockSideSize>{} : tree.sides, tree.existing,
-                              extent.x, extent.y);
 }
 }
 
@@ -270,6 +264,11 @@ void EditorApp::updateDockSpace()
     // The engine rebuilds the default tree on the frame after the percents change and keeps the node ids, so
     // the proportions are taken again from the rebuilt tree.
     m_dockSettleFrames = dockPercentsSetup ? 3 : 0;
+
+    if (dockPercentsSetup)
+    {
+      m_dockLayout.defaultsApplied();
+    }
   }
 
   fitDockToViewport();
@@ -306,54 +305,32 @@ void EditorApp::fitDockToViewport()
     tree.existing.push_back(static_cast<std::uint32_t>(node->ID));
   }
 
-  const bool settling = m_dockSettleFrames > 0;
-  const bool layoutChanged = settling || !m_dockProportions.tracks(tree.sides);
-  const bool dragging = dockspaceHasActiveDrag(root);
+  DockFrame frame;
+  frame.width = root->Size.x;
+  frame.height = root->Size.y;
+  frame.contentScale = m_renderer->getWindow()->getContentScale();
+  frame.settling = m_dockSettleFrames > 0;
+  frame.dragging = dockspaceHasActiveDrag(root);
+  frame.sides = tree.sides;
+  frame.existing = tree.existing;
+
+  for (std::size_t i = 0; i < tree.nodes.size(); ++i)
+  {
+    const ImGuiDockNode* node = tree.nodes[i];
+    const int axis = tree.sides[i].axis;
+    const float nodeCenter = node->Pos[axis] + node->Size[axis] * 0.5f;
+    const float rootCenter = root->Pos[axis] + root->Size[axis] * 0.5f;
+
+    frame.roles.push_back(dockSideRole(axis, nodeCenter, rootCenter));
+  }
 
   m_dockSettleFrames = std::max(m_dockSettleFrames - 1, 0);
 
-  const DockLayoutStep step = m_dockResizeGate.update(root->Size.x, root->Size.y, dragging, layoutChanged);
+  rescaleLayout(m_dockLayout.update(frame), tree);
 
-  runDockStep(step, settling, root->Size, tree);
-
-  if (!dragging)
+  if (!frame.dragging)
   {
     sizeSceneStatusNodes(tree.contentSized);
-  }
-}
-
-void EditorApp::runDockStep(const DockLayoutStep step, const bool settling, const ImVec2 extent,
-                            const DockTreeSides& tree)
-{
-  switch (step)
-  {
-  case DockLayoutStep::remember:
-    rememberLayout(m_dockProportions, settling, extent, tree);
-    break;
-
-  case DockLayoutStep::rememberAndRescale:
-    rememberLayout(m_dockProportions, settling, extent, tree);
-
-    if (!settling)
-    {
-      rescaleLayout(m_dockProportions, extent, tree);
-    }
-    break;
-
-  case DockLayoutStep::rescale:
-    rescaleLayout(m_dockProportions, extent, tree);
-    break;
-
-  case DockLayoutStep::beginDrag:
-    m_dockDragStart = tree.sides;
-    break;
-
-  case DockLayoutStep::endDrag:
-    m_dockProportions.rememberChanges(tree.sides, m_dockDragStart, tree.existing, extent.x, extent.y);
-    break;
-
-  case DockLayoutStep::none:
-    break;
   }
 }
 
@@ -453,13 +430,13 @@ void EditorApp::applyDockPanelMinimumSizes() const
     return ImVec2{0.0f, dockFloorForExtent(base, height, dockBottomFloorFraction)};
   };
 
-  gui->setDockedWindowMinimumSize("Objects", sideFloor(260.0f));
-  gui->setDockedWindowMinimumSize("Inspector", sideFloor(310.0f));
-  gui->setDockedWindowMinimumSize("Scene Scripts", sideFloor(310.0f));
-  gui->setDockedWindowMinimumSize("Assets", bottomFloor(200.0f));
-  gui->setDockedWindowMinimumSize("Project Errors", bottomFloor(90.0f));
-  gui->setDockedWindowMinimumSize("Console", bottomFloor(120.0f));
-  gui->setDockedWindowMinimumSize("Profiler", bottomFloor(120.0f));
+  gui->setDockedWindowMinimumSize("Objects", sideFloor(objectsBaseFloor));
+  gui->setDockedWindowMinimumSize("Inspector", sideFloor(inspectorBaseFloor));
+  gui->setDockedWindowMinimumSize("Scene Scripts", sideFloor(sceneScriptsBaseFloor));
+  gui->setDockedWindowMinimumSize("Assets", bottomFloor(assetsBaseFloor));
+  gui->setDockedWindowMinimumSize("Project Errors", bottomFloor(projectErrorsBaseFloor));
+  gui->setDockedWindowMinimumSize("Console", bottomFloor(consoleBaseFloor));
+  gui->setDockedWindowMinimumSize("Profiler", bottomFloor(profilerBaseFloor));
 }
 
 bool EditorApp::applyDockPercents() const
@@ -473,19 +450,8 @@ bool EditorApp::applyDockPercents() const
     return false;
   }
 
-  // Objects/Inspector: wide enough for a name/icon column and field labels, capped so a narrow window
-  // still leaves the center scene view usable.
-  constexpr float leftPanelWidth = 280.0f;
-  constexpr float rightPanelWidth = 360.0f;
-  constexpr float maxSideFraction = 0.3f;
-
-  // Assets/Project Errors: enough height for a row of thumbnails or a few log lines.
-  constexpr float bottomPanelHeight = 240.0f;
-  constexpr float maxBottomFraction = 0.35f;
-
-  const float leftWidth = std::min(leftPanelWidth, viewportSize.x * maxSideFraction);
-  const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
-  const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
+  const DefaultDockSizes sizes =
+    defaultDockSizes(viewportSize.x, viewportSize.y, m_renderer->getWindow()->getContentScale());
 
   // The default layout sizes Scene Status for one row of controls: title bar + padding + one control row
   // fits it exactly at any font size or DPI, with no scrollbar. A narrow window wraps the controls onto more
@@ -496,19 +462,13 @@ bool EditorApp::applyDockPercents() const
 
   const auto gui = m_renderer->getImGuiInstance();
 
-  // DockBuilderSplitNode cuts each dock from whatever remains of the node (left, then right of that,
-  // then top, then bottom of what's left), so later percents must be relative to the reduced node, not
-  // the full viewport.
-  const float leftPercent = leftWidth / viewportSize.x;
-  const float rightPercent = rightWidth / (viewportSize.x - leftWidth);
-  const float topPercent = topHeight / viewportSize.y;
-  const float bottomPercent = bottomHeight / (viewportSize.y - topHeight);
+  const DefaultDockPercents percents = defaultDockPercents(sizes, viewportSize.x, viewportSize.y, topHeight);
 
-  gui->setTopDockPercent(topPercent);
-  gui->setBottomDockPercent(bottomPercent);
+  gui->setTopDockPercent(percents.top);
+  gui->setBottomDockPercent(percents.bottom);
 
-  gui->setLeftDockPercent(leftPercent);
-  gui->setRightDockPercent(rightPercent);
+  gui->setLeftDockPercent(percents.left);
+  gui->setRightDockPercent(percents.right);
 
   return true;
 }

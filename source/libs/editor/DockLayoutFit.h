@@ -23,9 +23,9 @@ struct DockSideSize
 inline constexpr float dockMinimumCentralFraction = 0.4f;
 
 // A panel's own floor never takes more than this share of the window width (side panels) or height (bottom
-// panels). Two side floors therefore leave the central node at least half of the width.
-inline constexpr float dockSideFloorFraction = 0.25f;
-inline constexpr float dockBottomFloorFraction = 0.3f;
+// panels). Two side floors therefore leave the central node at least 68% of the width.
+inline constexpr float dockSideFloorFraction = 0.16f;
+inline constexpr float dockBottomFloorFraction = 0.17f;
 
 // Moves smaller than this many pixels are a click, not an edit of the layout.
 inline constexpr float dockEditTolerance = 1.0f;
@@ -210,6 +210,12 @@ public:
     return sizes;
   }
 
+  // Remembers one node at this fraction of the dock space along its axis, replacing what was remembered for it.
+  void setFraction(const std::uint32_t id, const int axis, const float fraction)
+  {
+    m_entries[id] = Entry{axis, fraction};
+  }
+
   // Whether every visible node with a size is remembered, so a docking change that adds one is noticed. A node
   // without a size cannot be remembered and does not count.
   [[nodiscard]] bool tracks(const std::vector<DockSideSize>& nodes) const
@@ -247,6 +253,17 @@ private:
     }
   }
 };
+
+// Whether any node of `after` sits at a different size than the same node of `before`, by more than a click.
+[[nodiscard]] inline bool dockSidesMoved(const std::vector<DockSideSize>& before,
+                                         const std::vector<DockSideSize>& after)
+{
+  return std::ranges::any_of(after, [&before](const DockSideSize& node)
+  {
+    const auto earlier = std::ranges::find(before, node.id, &DockSideSize::id);
+    return earlier == before.end() || std::fabs(earlier->size - node.size) > dockEditTolerance;
+  });
+}
 
 enum class DockLayoutStep
 {

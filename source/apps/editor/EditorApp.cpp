@@ -668,7 +668,7 @@ void EditorApp::restoreLayout()
   // No imgui.ini: the layout lives in the user's settings, so it follows the user rather than the build folder.
   ImGui::GetIO().IniFilename = nullptr;
 
-  const auto layout = editorLayoutSettings::readImGuiLayout(*m_settings);
+  const auto layout = editorLayoutSettings::readRestorableImGuiLayout(*m_settings);
 
   if (!editorLayoutSettings::hasDockLayout(layout))
   {
@@ -706,7 +706,7 @@ void EditorApp::saveLayout()
 
   const std::string candidate(text, size);
 
-  if (editorLayoutSettings::shouldReplaceLayout(editorLayoutSettings::readImGuiLayout(*m_settings), candidate))
+  if (editorLayoutSettings::shouldReplaceLayout(editorLayoutSettings::readRestorableImGuiLayout(*m_settings), candidate))
   {
     editorLayoutSettings::writeImGuiLayout(*m_settings, candidate);
   }

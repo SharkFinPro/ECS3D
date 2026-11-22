@@ -64,3 +64,32 @@ TEST(ConsolePanelLayoutTest, OversizedItemGetsItsOwnLine)
   const auto counts = lineCounts({ 50.0f, 500.0f, 50.0f }, 16.0f, 400.0f);
   EXPECT_EQ(counts.size(), 3u);
 }
+
+TEST(ConsolePanelLayoutTest, WideHeaderPutsTheActionsOnTheSearchLine)
+{
+  const auto layout = consoleHeaderLayout(800.0f, 8.0f, 60.0f, 240.0f, 140.0f);
+
+  EXPECT_TRUE(layout.actionsOnSearchLine);
+  EXPECT_FLOAT_EQ(layout.searchWidth, 800.0f - 60.0f - 240.0f - 16.0f);
+}
+
+TEST(ConsolePanelLayoutTest, HeaderWrapsTheActionsWhenSearchWouldGetTooNarrow)
+{
+  const auto layout = consoleHeaderLayout(400.0f, 8.0f, 60.0f, 240.0f, 140.0f);
+
+  EXPECT_FALSE(layout.actionsOnSearchLine);
+  EXPECT_FLOAT_EQ(layout.searchWidth, 400.0f - 60.0f - 8.0f);
+}
+
+TEST(ConsolePanelLayoutTest, HeaderSearchKeepsItsMinimumWhenTheActionsJustFit)
+{
+  const auto layout = consoleHeaderLayout(464.0f, 8.0f, 60.0f, 240.0f, 140.0f);
+
+  EXPECT_TRUE(layout.actionsOnSearchLine);
+  EXPECT_FLOAT_EQ(layout.searchWidth, 148.0f);
+}
+
+TEST(ConsolePanelLayoutTest, HeaderSearchWidthStaysPositiveInATinyPanel)
+{
+  EXPECT_GT(consoleHeaderLayout(40.0f, 8.0f, 60.0f, 240.0f, 140.0f).searchWidth, 0.0f);
+}

@@ -11,7 +11,7 @@
 class RingBufferSink;
 
 // The editor's "Console" window: everything Log::write sends to the shared RingBufferSink, with per-level
-// and per-category toggles, a text search, copy-to-clipboard, and a clear that only hides history (the
+// and per-category toggles (hideable), a text search, copy-to-clipboard, and a clear that only hides history (the
 // sink is shared, so clearing here must not affect anything else reading it).
 class ConsolePanel {
 public:
@@ -40,6 +40,9 @@ private:
 
   bool m_autoScroll = true;
 
+  // The level and category toggles can be tucked away to leave the rows more room.
+  bool m_showFilters = true;
+
   // Cache of the current filtered view, rebuilt only when the sink has new entries or the filter changed.
   bool m_cacheDirty = true;
   std::uint64_t m_lastSeenSequence = 0;
@@ -49,9 +52,11 @@ private:
 
   void refreshCacheIfNeeded();
 
-  void displayFilterRow();
+  void displaySearchRow();
 
-  void displayActionRow();
+  void displayActions();
+
+  void displayFilterToggles();
 
   void displayRows();
 };

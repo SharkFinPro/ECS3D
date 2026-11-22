@@ -123,8 +123,9 @@ Open it from Window, then Console. It shows the editor's log and the server's lo
 the server are prefixed with "[server] ". You can:
 
 - toggle each level (trace, debug, info, warn, error, each with a count) and each category;
-- search the text;
-- Copy the filtered lines to the clipboard, Clear the list, and turn Auto-scroll on or off.
+- search the text, with the Filters button next to the search box hiding or showing those toggles;
+- Copy the filtered lines to the clipboard, Clear the list, and turn Auto-scroll on or off; these sit on the
+  search line when the panel is wide enough.
 
 Output from a script's `Log.info` and similar calls appears here under the script category. Compile errors
 in your scripts appear here too.

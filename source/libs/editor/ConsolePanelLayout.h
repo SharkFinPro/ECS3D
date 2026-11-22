@@ -1,6 +1,8 @@
 #ifndef CONSOLEPANELLAYOUT_H
 #define CONSOLEPANELLAYOUT_H
 
+#include <algorithm>
+
 struct LinePlacement {
   bool sameLine = false;
   float usedWidth = 0.0f;
@@ -23,6 +25,28 @@ struct LinePlacement {
   }
 
   return { false, itemWidth };
+}
+
+// The search line: the Filters button, the search field and, when the search field keeps at least minSearchWidth
+// beside them, the Copy/Clear/Auto-scroll group. Otherwise the group wraps onto a line of its own and the search
+// field takes what the Filters button leaves.
+struct ConsoleHeaderLayout {
+  float searchWidth = 0.0f;
+  bool actionsOnSearchLine = false;
+};
+
+[[nodiscard]] inline ConsoleHeaderLayout consoleHeaderLayout(const float availWidth, const float gap,
+                                                             const float filtersButtonWidth, const float actionsWidth,
+                                                             const float minSearchWidth)
+{
+  const float withActions = availWidth - filtersButtonWidth - actionsWidth - 2.0f * gap;
+
+  if (withActions >= minSearchWidth)
+  {
+    return { withActions, true };
+  }
+
+  return { std::max(availWidth - filtersButtonWidth - gap, 1.0f), false };
 }
 
 #endif

@@ -90,7 +90,12 @@ private:
 
   void displayAsset(const uuids::uuid& uuid, const AssetRecord& record, float cellSize, const std::string& name) const;
 
-  // The import/create items shared by the menu bar, the Options row's "+" popup and the grid's
+  // The search row ("+", search, sort) and the type filter chips above the grid.
+  void displaySearchRow();
+
+  void displayFilterChips();
+
+  // The import/create items shared by the menu bar, the search row's "+" popup and the grid's
   // empty-space context menu. They only record the request; displayGui opens the modal.
   void displayCreateItems();
 
