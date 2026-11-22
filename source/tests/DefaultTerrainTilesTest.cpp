@@ -239,9 +239,10 @@ TEST_F(DefaultTerrainTilesTest, GenerationStaysQuick)
   GTEST_SKIP() << "A Release measurement: Debug, sanitizer and coverage builds skip it";
 #endif
   std::cout << "[ INFO ] basin generation took " << s_seconds << " s for " << totalChunks() << " chunks\n";
-  // About 1.3 s in a local MSVC Release build but up to 3.8 s on the Linux clang CI runner; the bound, shared with
-  // the showcase's, catches a regression of several times without failing on runner speed.
-  EXPECT_LT(s_seconds, 5.0);
+  // About 1.3 s of CPU time in a local MSVC Release build, 1.9 s with parallel ctest locally and 5.7 s on the loaded
+  // Linux clang CI runner. The bound, shared with the showcase's, catches a regression of several times without
+  // failing on runner speed.
+  EXPECT_LT(s_seconds, 15.0);
 }
 
 namespace {

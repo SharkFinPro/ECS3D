@@ -4,12 +4,12 @@
 #include <gtest/gtest.h>
 
 #include "DefaultTerrainTiles.h"
+#include "ProcessCpuClock.h"
 #include "assets/AssetRegistry.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainVolume.h"
 
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -115,9 +115,9 @@ namespace basintest {
         pointers[index] = s_tiles[index].get();
       }
 
-      const auto start = std::chrono::steady_clock::now();
+      const double start = testclock::processCpuSeconds();
       generateBasinTiles(pointers);
-      s_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      s_seconds = testclock::processCpuSeconds() - start;
     }
 
     static void TearDownTestSuite()
