@@ -22,6 +22,12 @@ public class PlayerScript : ScriptBase
     // tick, on the ground or in the air.
     private const float Grip = 0.1f;
 
+    // Pitch stays shy of straight up/down so the view can't roll past vertical.
+    private const float MaxPitch = 89.0f;
+
+    // Degrees per component by which the Transform may stray from the look angles before they are written back.
+    private const float RotationTolerance = 1e-3f;
+
     // Key names, read with StarterUtils.parseKey. The arrow keys always move too.
     [ExposeToEditor("Forward Key")]
     private string m_forward = "W";
@@ -60,10 +66,7 @@ public class PlayerScript : ScriptBase
 
     public override void start()
     {
-        // Seed from any editor-set body rotation so mouse-look starts from the placed facing.
-        Vector3 rotation = transform.getRotation();
-        m_pitch = rotation.X;
-        m_yaw = rotation.Y;
+        seedLookFromTransform();
 
         Log.info("Player is ready!");
     }
@@ -102,6 +105,7 @@ public class PlayerScript : ScriptBase
         // Mouse-look owns rotation, so cancel any physics spin (e.g. from a collision) before physics
         // integrates it this tick - otherwise the view would fight/jitter against the look direction.
         rigidBody.setAngularVelocity(0, 0, 0);
+        restoreLookRotation();
     }
 
     public override void variableUpdate()
@@ -125,7 +129,29 @@ public class PlayerScript : ScriptBase
     {
         transform.stop();
         transform.start();
+        seedLookFromTransform();
         rigidBody.setVelocity(0, 0, 0);
+    }
+
+    // Seeds from any editor-set body rotation so mouse-look starts from the placed facing.
+    private void seedLookFromTransform()
+    {
+        Vector3 rotation = transform.getLocalRotation();
+        m_pitch = Math.Clamp(rotation.X, -MaxPitch, MaxPitch);
+        m_yaw = rotation.Y;
+    }
+
+    // A contact can rewrite the stored Euler triple: it tilts the body, and the same orientation can come back as an
+    // alternate triple (yaw mirrored through 180 degrees). Writing the look angles back keeps the view level.
+    private void restoreLookRotation()
+    {
+        Vector3 rotation = transform.getLocalRotation();
+        if (MathF.Abs(rotation.X - m_pitch) > RotationTolerance
+            || MathF.Abs(rotation.Y - m_yaw) > RotationTolerance
+            || MathF.Abs(rotation.Z) > RotationTolerance)
+        {
+            transform.setRotation(m_pitch, m_yaw, 0.0f);
+        }
     }
 
     private void handleLook()
@@ -149,7 +175,7 @@ public class PlayerScript : ScriptBase
         m_yaw -= delta.X * m_lookSensitivity;
         float pitchStep = delta.Y * m_lookSensitivity;
         m_pitch += m_invertLook ? pitchStep : -pitchStep;
-        m_pitch = Math.Clamp(m_pitch, -89.0f, 89.0f);
+        m_pitch = Math.Clamp(m_pitch, -MaxPitch, MaxPitch);
 
         transform.setRotation(m_pitch, m_yaw, 0.0f);
     }
@@ -196,8 +222,9 @@ public class PlayerScript : ScriptBase
                 ? Vector3.Normalize(baseForward)
                 : new Vector3(0.0f, 0.0f, -1.0f); // camera looks straight up/down: fall back to forward
 
-            // Rotate the base heading by the body's current yaw (mouse-look), then derive right from it.
-            float yawRad = transform.getRotation().Y * (MathF.PI / 180.0f);
+            // Rotate the base heading by the look yaw, not the Transform's Euler Y, which a contact can rewrite to
+            // an alternate triple with the same orientation but a different yaw.
+            float yawRad = m_yaw * (MathF.PI / 180.0f);
             float cos = MathF.Cos(yawRad), sin = MathF.Sin(yawRad);
             Vector3 forward = new Vector3(
                 baseForward.X * cos + baseForward.Z * sin,

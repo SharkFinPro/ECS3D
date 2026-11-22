@@ -321,6 +321,9 @@ public unsafe class StarterUtilsTests : IDisposable
     player.fixedUpdate(dt);
   }
 
+  private static string[] SetRotationCalls() =>
+    FakeNatives.Calls.Where(c => c.StartsWith("Transform.setRotation(", StringComparison.Ordinal)).ToArray();
+
   private static Vector3 LastSteer()
   {
     var call = FakeNatives.Calls.Last(c => c.StartsWith("RigidBody.applyForce(", StringComparison.Ordinal));
@@ -372,12 +375,77 @@ public unsafe class StarterUtilsTests : IDisposable
   public void PlayerScript_HeadingTurnsWithTheBodysYaw()
   {
     var player = NewPlayer();
-    FakeNatives.Set("Transform.getRotation", new Vector3(0f, 90f, 0f));
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(0f, 90f, 0f));
+    player.start();
 
     Press(Key.W);
     Step(player);
 
     AssertVec(new Vector3(-0.09f, 0f, 0f), LastSteer());
+  }
+
+  [Fact]
+  public void PlayerScript_HeadingIgnoresAnAlternateEulerTripleOfTheSameOrientation()
+  {
+    var player = NewPlayer();
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(0f, 170f, 0f));
+    player.start();
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(180f, 10f, 180f));
+
+    Press(Key.W);
+    Step(player);
+
+    float yaw = 170f * (MathF.PI / 180f);
+    AssertVec(new Vector3(-MathF.Sin(yaw), 0f, -MathF.Cos(yaw)) * 0.09f, LastSteer());
+  }
+
+  [Fact]
+  public void PlayerScript_FixedUpdateRestoresALookRotationAContactTilted()
+  {
+    var player = NewPlayer();
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(0f, 90f, 0f));
+    player.start();
+    FakeNatives.Calls.Clear();
+
+    player.fixedUpdate(0.1f);
+    Assert.Empty(SetRotationCalls());
+
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(5f, 90f, 3f));
+    player.fixedUpdate(0.1f);
+
+    var call = Assert.Single(SetRotationCalls());
+    Assert.EndsWith(",0,90,0)", call);
+  }
+
+  [Fact]
+  public void PlayerScript_SeedsAPlacedPitchWithinTheLookRange()
+  {
+    var player = NewPlayer();
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(120f, 0f, 0f));
+    player.start();
+    FakeNatives.Calls.Clear();
+
+    player.fixedUpdate(0.1f);
+
+    Assert.EndsWith(",89,0,0)", Assert.Single(SetRotationCalls()));
+  }
+
+  [Fact]
+  public void PlayerScript_RespawnReseedsTheLookYawFromTheResetRotation()
+  {
+    var player = NewPlayer();
+    player.start();
+    FakeNatives.Set("Transform.getPosition", new Vector3(0f, -300f, 0f));
+    FakeNatives.Set("Transform.getLocalRotation", new Vector3(0f, 90f, 0f));
+    player.fixedUpdate(0.1f);
+    FakeNatives.Set("Transform.getPosition", Vector3.Zero);
+    FakeNatives.Calls.Clear();
+
+    Press(Key.W);
+    Step(player);
+
+    AssertVec(new Vector3(-0.09f, 0f, 0f), LastSteer());
+    Assert.Empty(SetRotationCalls());
   }
 
   [Fact]
