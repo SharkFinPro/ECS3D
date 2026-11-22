@@ -1,4 +1,5 @@
 #include "DefaultProjectParts.h"
+#include "DefaultTerrainCaves.h"
 #include "DefaultTerrainTiles.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
@@ -236,14 +237,13 @@ float highestGround(const float centerX, const float centerZ, const float halfWi
   return highest;
 }
 
-// A columns x columns x layers stack of random bodies centered over (centerX, centerZ), starting six units above
-// the highest ground under it.
-void addStack(json& objects, std::mt19937& gen, const float centerX, const float centerZ, const int columns,
-              const int layers)
+// A columns x columns x layers stack of random bodies centered over (centerX, centerZ), whose lowest layer is at
+// bottomY.
+void addStackAt(json& objects, std::mt19937& gen, const float centerX, const float centerZ, const float bottomY,
+                const int columns, const int layers)
 {
   std::uniform_real_distribution<float> jitter(-stackJitter, stackJitter);
   const float half = static_cast<float>(columns - 1) * basin::stackSpacing / 2.0f;
-  const float bottomY = highestGround(centerX, centerZ, half + stackJitter + bodyReach) + 6.0f;
 
   for (int layer = 0; layer < layers; ++layer)
   {
@@ -261,10 +261,21 @@ void addStack(json& objects, std::mt19937& gen, const float centerX, const float
   }
 }
 
+// A stack starting six units above the highest ground under it.
+void addStack(json& objects, std::mt19937& gen, const float centerX, const float centerZ, const int columns,
+              const int layers)
+{
+  const float half = static_cast<float>(columns - 1) * basin::stackSpacing / 2.0f;
+  const float bottomY = highestGround(centerX, centerZ, half + stackJitter + bodyReach) + 6.0f;
+
+  addStackAt(objects, gen, centerX, centerZ, bottomY, columns, layers);
+}
+
 }
 
 // Nine terrain tiles that join into one basin, a tower of mixed bodies over the arena and a smaller stack over each
-// outer tile. The stack sizes are the basin constants; the placement is random per launch.
+// outer tile, plus a stack on top of and inside each of its caves and arches (basin::caves). The tower and tile stack
+// sizes are the basin constants; the placement is random per launch.
 json buildTerrainBasin()
 {
   json objects = json::array();
@@ -302,6 +313,12 @@ json buildTerrainBasin()
                origin.z + static_cast<float>(basin::tileStride / 2) * basin::voxelSize, basin::stackColumns,
                basin::stackLayers);
     }
+  }
+
+  for (const auto& stack : basin::caves::stacks())
+  {
+    addStackAt(objects, gen, stack.worldX, stack.worldZ, stack.surfaceY + basin::caves::stackLift, stack.columns,
+               stack.layers);
   }
 
   return objects;

@@ -7,6 +7,7 @@
 #include "DefaultProjectParts.h"
 #include "DefaultShapes.h"
 #include "DefaultTerrain.h"
+#include "DefaultTerrainCaves.h"
 #include "DefaultTerrainTiles.h"
 #include "InertiaTensor.h"
 #include "PhysicsSystem.h"
@@ -759,7 +760,28 @@ TEST(DefaultProject, TheTerrainBasinSceneNamesNineTilesAPlayerAndTheirTerrains)
 }
 
 namespace {
-  // A basin body keeps its prefab's density, and spawns above the ground under it; returns that ground's height.
+  // What a basin body spawned over: the top of the cave or arch stack whose footprint holds it and whose surface is
+  // below it (the highest such one), otherwise the heightfield under it.
+  float spawnSurface(const glm::vec3& position, const float radius)
+  {
+    bool found = false;
+    float surface = basin::worldGroundY(position.x, position.z);
+    for (const auto& stack : basin::caves::stacks())
+    {
+      const float span = basin::caves::stackHalfSpan(stack);
+      const bool inside = std::abs(position.x - stack.worldX) <= span && std::abs(position.z - stack.worldZ) <= span &&
+                          stack.surfaceY <= position.y - radius;
+      if (inside && (!found || stack.surfaceY > surface))
+      {
+        found = true;
+        surface = stack.surfaceY;
+      }
+    }
+
+    return surface;
+  }
+
+  // A basin body keeps its prefab's density, and spawns above the surface under it; returns that surface's height.
   float expectDensityAndClearance(const nlohmann::json& project, const nlohmann::json& body, const float radius)
   {
     const auto name = body.at("name").get<std::string>();
@@ -771,7 +793,7 @@ namespace {
     EXPECT_NEAR(rigidBodyIn(body).at("mass").get<float>(), prefabMass * massScale, prefabMass * massScale * 1e-3f);
 
     const glm::vec3 position = positionOfObject(body);
-    const float ground = basin::worldGroundY(position.x, position.z);
+    const float ground = spawnSurface(position, radius);
     EXPECT_GT(position.y - radius, ground);
 
     return ground;
@@ -797,8 +819,13 @@ TEST(DefaultProject, TheTerrainBasinStacksMixedBodiesThatSpawnClearOfEachOtherAn
   const auto project = buildDefaultProject();
   const auto bodies = bodiesOf(sceneObjects(project, "Terrain Basin"));
 
-  const size_t expected = static_cast<size_t>(basin::towerColumns * basin::towerColumns * basin::towerLayers +
-                                              8 * basin::stackColumns * basin::stackColumns * basin::stackLayers);
+  size_t expected = static_cast<size_t>(basin::towerColumns * basin::towerColumns * basin::towerLayers +
+                                        8 * basin::stackColumns * basin::stackColumns * basin::stackLayers);
+  for (const auto& stack : basin::caves::stacks())
+  {
+    expected += static_cast<size_t>(stack.columns * stack.columns * stack.layers);
+  }
+
   EXPECT_EQ(bodies.size(), expected);
 
   std::set<std::string> kinds;

@@ -45,10 +45,13 @@ while playing) the same way it already undoes an edited Transform.
   of the tunnel) names a terrain that `DefaultTerrain` generates in memory at startup (never written to files).
   Its Terrain Basin scene is nine 128-sample tiles in a 3 x 3 grid that `DefaultTerrainTiles` generates the same way:
   neighboring tiles share their edge column and sample one global height function, so the seams are exact, and all
-  nine hold at most 600 chunks since every terrain streams to every join. A tower of mixed bodies over the arena and a
-  smaller stack over each outer tile are sized by the constants in `basin` and placed at random per launch. The noise
-  and the heightmap fill and slope painting both terrains share live in `DefaultTerrainNoise.h` and
-  `DefaultTerrainPaint`.
+  nine hold at most 600 chunks since every terrain streams to every join. `DefaultTerrainCaves` then rewrites the rock
+  under three features a heightmap cannot hold, each inside one tile's interior so the seams stay exact: a tunnel and
+  chamber in the north rim, a rock arch on the arena floor, and an east cavern with a tunnel from the arena and a
+  shaft from the plateau down onto a ramp. A tower of mixed bodies over the arena, a smaller stack over each outer
+  tile, and a stack on top of and inside each feature (`basin::caves::stacks()`) are sized by the constants in `basin`
+  and placed at random per launch. The noise and the heightmap fill and slope painting the terrains share live in
+  `DefaultTerrainNoise.h` and `DefaultTerrainPaint`.
   `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library
   hulls (D4, D6, D8, D12, D20, Hex Prism, Drum, Gem, Boulder), whose formulas and seeded Boulder generator

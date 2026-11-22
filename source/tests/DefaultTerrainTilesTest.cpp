@@ -354,7 +354,7 @@ TEST_F(DefaultTerrainTilesTest, TheArenaIsFlatAndTheRimRisesFarAboveIt)
 TEST_F(DefaultTerrainTilesTest, TheVolumeHoldsTheGroundTheFunctionDescribes)
 {
   // The raycast lands within a voxel of groundAt: on the arena, on a terrace, on the bank and in the riverbed.
-  const std::pair<int, int> columns[] = { { 190, 190 }, { 190, 300 }, { 300, 190 }, { 60, 200 }, { 60, 60 } };
+  const std::pair<int, int> columns[] = { { 190, 190 }, { 240, 300 }, { 300, 190 }, { 60, 200 }, { 60, 60 } };
 
   for (const auto& [x, z] : columns)
   {

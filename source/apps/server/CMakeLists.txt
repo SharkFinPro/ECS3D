@@ -16,6 +16,8 @@ add_executable(${PROJECT_NAME}
   DefaultShapes.h
   DefaultTerrain.cpp
   DefaultTerrain.h
+  DefaultTerrainCaves.cpp
+  DefaultTerrainCaves.h
   DefaultTerrainNoise.h
   DefaultTerrainPaint.cpp
   DefaultTerrainPaint.h
