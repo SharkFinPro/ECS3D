@@ -280,6 +280,8 @@ add_executable(${PROJECT_NAME}
   DefaultProjectTest.cpp
   EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
+  DefaultTerrainCavesPhysicsTest.cpp
+  DefaultTerrainCavesTest.cpp
   DefaultTerrainTest.cpp
   DefaultTerrainTilesPhysicsTest.cpp
   DefaultTerrainTilesTest.cpp
@@ -417,6 +419,7 @@ add_executable(${PROJECT_NAME}
   ../apps/server/DefaultScenes.cpp
   ../apps/server/DefaultShapes.cpp
   ../apps/server/DefaultTerrain.cpp
+  ../apps/server/DefaultTerrainCaves.cpp
   ../apps/server/DefaultTerrainPaint.cpp
   ../apps/server/DefaultTerrainTiles.cpp
   ../apps/server/DefaultWelcome.cpp

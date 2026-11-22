@@ -1,5 +1,6 @@
 #include "DefaultTerrainTiles.h"
 #include "DefaultProjectParts.h"
+#include "DefaultTerrainCaves.h"
 #include "DefaultTerrainNoise.h"
 #include "DefaultTerrainPaint.h"
 #include <Log.h>
@@ -122,11 +123,17 @@ public:
   // only the world's own border takes the one-sided difference the fill uses there.
   [[nodiscard]] int16_t distanceAt(const int x, const int y, const int z) const
   {
+    return terrain::encodeDistance(signedDistance(x, y, z));
+  }
+
+  // The same estimate unclamped, which stays meaningful far below the surface where the caves combine it with shapes.
+  [[nodiscard]] float signedDistance(const int x, const int y, const int z) const
+  {
     const float gradX = slope([this, z](const int i) { return quantized(i, z); }, x);
     const float gradZ = slope([this, x](const int i) { return quantized(x, i); }, z);
     const float inverseNorm = 1.0f / std::sqrt(1.0f + gradX * gradX + gradZ * gradZ);
 
-    return terrain::encodeDistance((static_cast<float>(y) - quantized(x, z)) * inverseNorm);
+    return (static_cast<float>(y) - quantized(x, z)) * inverseNorm;
   }
 
   [[nodiscard]] float normalY(const int x, const int z) const
@@ -201,11 +208,19 @@ void matchEdgeColumns(terrain::TerrainVolume& volume, const GlobalGround& ground
 
 // Sand on the arena floor and in the riverbed, grass on gentle slopes, brown on steep faces and under the surface,
 // gray on the high ground. The slope comes from the global heights so a shared edge paints the same on both tiles.
-uint8_t surfaceMaterial(const GlobalGround& ground, const int x, const int y, const int z)
+// Over a cave feature only the top skin of rock counts as ground, so cave walls and floors are brown, and the arch's
+// top and walls are rock.
+uint8_t surfaceMaterial(const GlobalGround& ground, const int x, const int y, const int z, const float normalY)
 {
   const float height = ground.at(x, z);
 
-  if (height - static_cast<float>(y) > 3.0f || ground.normalY(x, z) < 0.6f)
+  if (basin::caves::isArchRock(x, y, z, normalY))
+  {
+    return normalY > 0.6f ? materialGray : materialBrown;
+  }
+
+  const float skin = basin::caves::isFeatureColumn(x, z) ? 1.5f : 3.0f;
+  if (height - static_cast<float>(y) > skin || ground.normalY(x, z) < 0.6f)
   {
     return materialBrown;
   }
@@ -219,7 +234,7 @@ uint8_t surfaceMaterial(const GlobalGround& ground, const int x, const int y, co
   return height > grayLine ? materialGray : materialGrass;
 }
 
-void generateTile(terrain::TerrainVolume& volume, const GlobalGround& ground, const int row, const int col)
+void fillTile(terrain::TerrainVolume& volume, const GlobalGround& ground, const int row, const int col)
 {
   const int offsetX = col * basin::tileStride;
   const int offsetZ = row * basin::tileStride;
@@ -227,9 +242,22 @@ void generateTile(terrain::TerrainVolume& volume, const GlobalGround& ground, co
   fillHeights(volume, tileHeights(ground, row, col), basin::tileColumns, static_cast<float>(basin::maxHeight),
               groundThickness, interiorMaterial);
   matchEdgeColumns(volume, ground, offsetX, offsetZ);
-  paintSurface(volume, basin::tileColumns, [&](const glm::ivec3 sample, float)
+}
+
+void carveTile(terrain::TerrainVolume& volume, const GlobalGround& ground, const int row, const int col)
+{
+  basin::caves::carveTile(volume, row, col, col * basin::tileStride, row * basin::tileStride,
+                          [&ground](const int x, const int y, const int z) { return ground.signedDistance(x, y, z); });
+}
+
+void paintTile(terrain::TerrainVolume& volume, const GlobalGround& ground, const int row, const int col)
+{
+  const int offsetX = col * basin::tileStride;
+  const int offsetZ = row * basin::tileStride;
+
+  paintSurface(volume, basin::tileColumns, [&](const glm::ivec3 sample, const float normalY)
   {
-    return surfaceMaterial(ground, offsetX + sample.x, sample.y, offsetZ + sample.z);
+    return surfaceMaterial(ground, offsetX + sample.x, sample.y, offsetZ + sample.z, normalY);
   });
 }
 
@@ -280,16 +308,30 @@ void generateBasinTiles(const std::array<terrain::TerrainVolume*, basin::tileCou
 {
   const GlobalGround ground;
 
-  for (int row = 0; row < basin::tilesPerSide; ++row)
+  // The paint reads the surface, so it waits until every tile is carved.
+  const auto forEachTile = [&tiles](const auto& stage)
   {
-    for (int col = 0; col < basin::tilesPerSide; ++col)
+    for (int row = 0; row < basin::tilesPerSide; ++row)
     {
-      if (auto* volume = tiles[static_cast<size_t>(row * basin::tilesPerSide + col)])
+      for (int col = 0; col < basin::tilesPerSide; ++col)
       {
-        generateTile(*volume, ground, row, col);
+        if (auto* volume = tiles[static_cast<size_t>(row * basin::tilesPerSide + col)])
+        {
+          stage(*volume, row, col);
+        }
       }
     }
-  }
+  };
+
+  forEachTile([&ground](terrain::TerrainVolume& volume, const int row, const int col)
+  {
+    fillTile(volume, ground, row, col);
+    carveTile(volume, ground, row, col);
+  });
+  forEachTile([&ground](terrain::TerrainVolume& volume, const int row, const int col)
+  {
+    paintTile(volume, ground, row, col);
+  });
 }
 
 void installBasinTerrains(terrain::TerrainStore& store)

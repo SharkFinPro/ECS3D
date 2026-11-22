@@ -18,8 +18,9 @@ namespace terrain
 // one apron column on each side, so every tile samples one global height function and meets its neighbor exactly.
 // A tile leaves open only the sides that face a neighbor (Terrain::getOpenSides): the outermost column there only
 // shapes the normals of the surface inside it, which makes both tiles shade a seam alike. The sides on the world's
-// perimeter stay closed, so the basin ends in an ordinary closed edge. Positions are sample columns (voxels) unless a
-// name says world.
+// perimeter stay closed, so the basin ends in an ordinary closed edge. DefaultTerrainCaves then cuts caves and an arch
+// into the rock, which is what keeps the basin from being a plain heightmap. Positions are sample columns (voxels)
+// unless a name says world.
 namespace basin
 {
   inline constexpr int tilesPerSide = 3;
