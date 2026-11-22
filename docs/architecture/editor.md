@@ -62,7 +62,9 @@ left to do calls `stopRepeat()`), `SceneScriptsPanel` (the "Scene Scripts" windo
 the current scene's scripts, docked on the Inspector's side; its pure decisions are the headless
 `SceneScriptsPanelLogic.h`, and the field widgets are `ScriptEditor.h`'s `drawScriptFieldWidgets`, shared with
 the object Script handler), `ConsolePanel` (the "Console" window — reads the editor's `RingBufferSink` through a
-`LogFilter`: a search line (Filters button, search, then Copy, Clear and Auto-scroll when they fit; `ConsolePanelLayout.h` decides) above the level and category toggles with per-level counts, which the Filters button hides, Copy (the filtered rows through
+`LogFilter`. The top line holds a Filters button, the search field and, when they fit, Copy, Clear and Auto-scroll;
+`ConsolePanelLayout.h` decides. Below it are the level toggles with per-level counts and the category toggles, which
+the Filters button hides. Copy (the filtered rows through
 `formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink; the
 rows and per-level counts come from the headless `ConsoleView.h`), and Auto-scroll; entries the connected server
 forwards land in this same sink, message-prefixed `"[server] "`, so
@@ -153,17 +155,22 @@ layout, and a hand-resized layout keeps its own proportions. They are remembered
 engine rebuilds it with the same node ids, so three settle frames re-read it) and from a restored one. A drag in the
 dockspace updates only the nodes that moved more than a pixel since it began, so a click on a tab or splitter changes
 nothing, and a docking change adopts only new nodes. A zero-size (minimized) frame changes nothing. The side and
-bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 19% (width) and 22%
+bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 19% (width) and 20%
 (height) of the window, so two side floors leave the central node over 60% of the width; where a floor is larger than
 the fit, the floor wins. The change takes effect one frame after the resize.
 
-The default layout is sized by the headless `DefaultDockLayout.h`: Objects 280 and Inspector 360 unscaled pixels
-(times the content scale), together at most 35% of the width, and a bottom dock of 200 unscaled pixels, at most 22% of
-the height. The floors are capped at 19% (side) and 22% (bottom) of the window, so the scene view keeps over 60% of
-the width. While nobody has resized the layout (`m_dockDefaultsUntouched`: no splitter drag moved a side node and no
-docking change added one), a window size change takes the default sizes for the new size rather than the fractions
-the first window gave, so a window that starts small and grows does not inflate the panels. The first drag that moves a
-side node hands the layout to the remembered fractions above.
+The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 280 and Inspector 360 unscaled
+pixels, times the content scale, and together at most 35% of the width. The bottom dock takes 200 unscaled pixels, at
+most 20% of the height. The panel floors (the same constants the app applies) are capped at 19% of the width for side
+panels and 20% of the height for bottom panels. The scene view therefore keeps over 60% of the width. It keeps 60% of
+the height as well, with the Scene Status toolbar on one row, unless the window is under 400 unscaled pixels tall;
+there it keeps at least 55%. A toolbar that wraps onto more rows takes more.
+
+`DockLayoutState` holds the remembered proportions and decides each frame what to write back. A layout still at its
+defaults follows a new window size, or a new content scale at the same size, to the default pixel sizes, including a
+resize during the settle frames. Only the end of a drag that moved or added a node ends that, so the engine's own
+startup rebuilds never do. After that, the remembered fractions are rescaled as described above, and a content scale
+change at the same window size leaves them alone: they are fractions of the window.
 
 ## Connection state
 
