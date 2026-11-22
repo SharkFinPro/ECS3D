@@ -29,7 +29,9 @@ object) using a **nonce** handshake: the client tags its `join` with a random no
 matches its own. The handshake's build and parse live in
 `data/Replication.{h,cpp}` (see [replication.md](replication.md)). `PlayerScript` mouse-look rotates the
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
-gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
+gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look. It also
+writes its look angles back to the `Transform` whenever a collision tilted it or stored an alternate Euler triple, and
+steers by its own look yaw rather than one read from the `Transform`;
 movement is relative to the `Camera.direction` (via `CameraBindings`, see [scripting.md](scripting.md)) rotated by that yaw, not a hardcoded
 forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse`** (unless its viewport stops being an ImGui window): its 3D viewport
 *is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and

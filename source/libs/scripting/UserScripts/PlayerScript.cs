@@ -22,6 +22,12 @@ public class PlayerScript : ScriptBase
     // tick, on the ground or in the air.
     private const float Grip = 0.1f;
 
+    // Pitch stays shy of straight up/down so the view can't roll past vertical.
+    private const float MaxPitch = 89.0f;
+
+    // Degrees per component by which the Transform may stray from the look angles before they are written back.
+    private const float RotationTolerance = 1e-3f;
+
     // Key names, read with StarterUtils.parseKey. The arrow keys always move too.
     [ExposeToEditor("Forward Key")]
     private string m_forward = "W";
@@ -130,8 +136,8 @@ public class PlayerScript : ScriptBase
     // Seeds from any editor-set body rotation so mouse-look starts from the placed facing.
     private void seedLookFromTransform()
     {
-        Vector3 rotation = transform.getRotation();
-        m_pitch = rotation.X;
+        Vector3 rotation = transform.getLocalRotation();
+        m_pitch = Math.Clamp(rotation.X, -MaxPitch, MaxPitch);
         m_yaw = rotation.Y;
     }
 
@@ -139,11 +145,10 @@ public class PlayerScript : ScriptBase
     // alternate triple (yaw mirrored through 180 degrees). Writing the look angles back keeps the view level.
     private void restoreLookRotation()
     {
-        const float tolerance = 1e-3f;
-        Vector3 rotation = transform.getRotation();
-        if (MathF.Abs(rotation.X - m_pitch) > tolerance
-            || MathF.Abs(rotation.Y - m_yaw) > tolerance
-            || MathF.Abs(rotation.Z) > tolerance)
+        Vector3 rotation = transform.getLocalRotation();
+        if (MathF.Abs(rotation.X - m_pitch) > RotationTolerance
+            || MathF.Abs(rotation.Y - m_yaw) > RotationTolerance
+            || MathF.Abs(rotation.Z) > RotationTolerance)
         {
             transform.setRotation(m_pitch, m_yaw, 0.0f);
         }
@@ -170,7 +175,7 @@ public class PlayerScript : ScriptBase
         m_yaw -= delta.X * m_lookSensitivity;
         float pitchStep = delta.Y * m_lookSensitivity;
         m_pitch += m_invertLook ? pitchStep : -pitchStep;
-        m_pitch = Math.Clamp(m_pitch, -89.0f, 89.0f);
+        m_pitch = Math.Clamp(m_pitch, -MaxPitch, MaxPitch);
 
         transform.setRotation(m_pitch, m_yaw, 0.0f);
     }
