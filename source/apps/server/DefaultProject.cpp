@@ -386,10 +386,11 @@ json sphere(const glm::vec3& position, const glm::vec3& scale)
 }
 
 json player(const glm::vec3& position, const int slot,
-            const glm::vec3& cameraDirection)
+            const glm::vec3& cameraDirection, const float facingYawDegrees)
 {
   // Per-instance overrides on top of the shared body: which player owns it, and where its camera looks.
-  // The camera's facing lives on the Camera component, independent of the player model's orientation.
+  // PlayerScript's mouse-look assumes a camera that faces -Z before the body's rotation, so a player that starts
+  // facing another way is turned with the yaw, not with a different camera direction, or the pitch comes out flipped.
   auto object = instanceOf(playerBody(), position);
   object["name"] = "Player " + std::to_string(slot);
 
@@ -397,7 +398,11 @@ json player(const glm::vec3& position, const int slot,
   {
     const auto& type = component.at("type");
 
-    if (type == "PlayerController")
+    if (type == "Transform")
+    {
+      component["rotation"] = vec(glm::vec3(0.0f, facingYawDegrees, 0.0f));
+    }
+    else if (type == "PlayerController")
     {
       component["playerSlot"] = slot;
     }

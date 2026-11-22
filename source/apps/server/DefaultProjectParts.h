@@ -124,7 +124,8 @@ struct LibraryShape
 [[nodiscard]] nlohmann::json sphere(const glm::vec3& position, const glm::vec3& scale = glm::vec3(1));
 
 [[nodiscard]] nlohmann::json player(const glm::vec3& position, int slot = 0,
-                                    const glm::vec3& cameraDirection = glm::vec3(0, 0, -1));
+                                    const glm::vec3& cameraDirection = glm::vec3(0, 0, -1),
+                                    float facingYawDegrees = 0.0f);
 
 [[nodiscard]] nlohmann::json light(const glm::vec3& position, const glm::vec3& color, float ambient,
                                    float diffuse, float specular);
