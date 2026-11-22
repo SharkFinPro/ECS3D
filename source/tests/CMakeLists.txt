@@ -163,6 +163,7 @@ add_executable(${PROJECT_NAME}
   PlayControlsTest.cpp
   SceneStatusLayoutTest.cpp
   DockLayoutFitTest.cpp
+  DefaultDockLayoutTest.cpp
   GridVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
   ClientDisplaySettingsTest.cpp

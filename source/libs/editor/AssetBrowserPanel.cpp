@@ -1,4 +1,5 @@
 #include "AssetBrowserPanel.h"
+#include "ConsolePanelLayout.h"
 #include "AssetCreateFlow.h"
 #include "AssetDisplay.h"
 #include "AssetDragDrop.h"
@@ -183,86 +184,9 @@ void AssetBrowserPanel::displayGui()
 {
   ImGui::Begin("Assets");
 
-  if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_DefaultOpen))
-  {
-    ImGui::Spacing();
+  displaySearchRow();
 
-    // Filter chips on one row (label sits inline with its chips).
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(theme::t2, "Filter");
-    bool allSelected = m_filter.empty();
-    ImGui::SameLine(0.0f, 16.0f);
-    if (gc::accentCheckboxCompact("All", &allSelected))
-    {
-      m_filter.clear();
-      m_dirty = true;
-    }
-
-    for (const auto& [type, label] : kAssetTypeLabels)
-    {
-      bool selected = m_filter.isActive(type);
-      ImGui::SameLine(0.0f, 16.0f);
-      if (gc::accentCheckboxCompact(label, &selected))
-      {
-        m_filter.set(type, selected);
-        m_dirty = true;
-      }
-    }
-
-    // Search + Sort share a row (mockup): the search box fills the row, the sort combo sits on the right.
-    constexpr float sortWidth = 200.0f;
-    constexpr float gap = 10.0f;
-    const float createButtonWidth = ImGui::GetFrameHeight();
-    const float searchWidth =
-      std::max(120.0f, ImGui::GetContentRegionAvail().x - sortWidth - createButtonWidth - 2.0f * gap);
-
-    ImGui::BeginDisabled(!m_editable);
-    if (ImGui::Button("+", ImVec2(createButtonWidth, 0.0f)))
-    {
-      ImGui::OpenPopup("##CreateAssetMenu");
-    }
-    ImGui::EndDisabled();
-
-    if (ImGui::BeginPopup("##CreateAssetMenu"))
-    {
-      displayCreateItems();
-      ImGui::EndPopup();
-    }
-
-    ImGui::SameLine(0.0f, gap);
-    if (gc::searchField("##Search", m_search, sizeof(m_search), "Search assets", searchWidth))
-    {
-      m_dirty = true;
-    }
-
-    ImGui::SameLine(0.0f, gap);
-    ImGui::SetNextItemWidth(sortWidth);
-    const char* sortLabel = m_sortType == SortType::NameAscending  ? "Name (A-Z)"
-                          : m_sortType == SortType::NameDescending ? "Name (Z-A)"
-                                                                   : "Type";
-    if (ImGui::BeginCombo("##Sort", sortLabel))
-    {
-      if (ImGui::Selectable("Name (A-Z)", m_sortType == SortType::NameAscending))
-      {
-        m_sortType = SortType::NameAscending;
-        m_dirty = true;
-      }
-      if (ImGui::Selectable("Name (Z-A)", m_sortType == SortType::NameDescending))
-      {
-        m_sortType = SortType::NameDescending;
-        m_dirty = true;
-      }
-      if (ImGui::Selectable("Type", m_sortType == SortType::Type))
-      {
-        m_sortType = SortType::Type;
-        m_dirty = true;
-      }
-      ImGui::EndCombo();
-    }
-
-    ImGui::Spacing();
-    ImGui::Spacing();
-  }
+  displayFilterChips();
 
   ImGui::Separator();
 
@@ -333,6 +257,100 @@ void AssetBrowserPanel::displayGui()
   }
 
   displayCreateAssetPopup();
+}
+
+void AssetBrowserPanel::displaySearchRow()
+{
+  // "+", the search box and the sort combo share a row: the search box fills it.
+  constexpr float sortWidth = 200.0f;
+  constexpr float gap = 10.0f;
+  const float createButtonWidth = ImGui::GetFrameHeight();
+  const float searchWidth =
+    std::max(120.0f, ImGui::GetContentRegionAvail().x - sortWidth - createButtonWidth - 2.0f * gap);
+
+  ImGui::BeginDisabled(!m_editable);
+  if (ImGui::Button("+", ImVec2(createButtonWidth, 0.0f)))
+  {
+    ImGui::OpenPopup("##CreateAssetMenu");
+  }
+  ImGui::EndDisabled();
+
+  if (ImGui::BeginPopup("##CreateAssetMenu"))
+  {
+    displayCreateItems();
+    ImGui::EndPopup();
+  }
+
+  ImGui::SameLine(0.0f, gap);
+  if (gc::searchField("##Search", m_search, sizeof(m_search), "Search assets", searchWidth))
+  {
+    m_dirty = true;
+  }
+
+  ImGui::SameLine(0.0f, gap);
+  ImGui::SetNextItemWidth(sortWidth);
+  const char* sortLabel = m_sortType == SortType::NameAscending  ? "Name (A-Z)"
+                        : m_sortType == SortType::NameDescending ? "Name (Z-A)"
+                                                                 : "Type";
+  if (ImGui::BeginCombo("##Sort", sortLabel))
+  {
+    if (ImGui::Selectable("Name (A-Z)", m_sortType == SortType::NameAscending))
+    {
+      m_sortType = SortType::NameAscending;
+      m_dirty = true;
+    }
+    if (ImGui::Selectable("Name (Z-A)", m_sortType == SortType::NameDescending))
+    {
+      m_sortType = SortType::NameDescending;
+      m_dirty = true;
+    }
+    if (ImGui::Selectable("Type", m_sortType == SortType::Type))
+    {
+      m_sortType = SortType::Type;
+      m_dirty = true;
+    }
+    ImGui::EndCombo();
+  }
+}
+
+void AssetBrowserPanel::displayFilterChips()
+{
+  constexpr float gap = 16.0f;
+  const float availWidth = ImGui::GetContentRegionAvail().x;
+
+  // The label sits inline with its chips, which wrap at the panel's edge.
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextColored(theme::t2, "Filter");
+  float usedWidth = ImGui::CalcTextSize("Filter").x;
+
+  const auto chip = [&](const char* label, bool& selected)
+  {
+    const auto placement = placeOnLine(usedWidth, gap, gc::accentCheckboxCompactWidth(label), availWidth);
+    if (placement.sameLine)
+    {
+      ImGui::SameLine(0.0f, gap);
+    }
+    usedWidth = placement.usedWidth;
+
+    return gc::accentCheckboxCompact(label, &selected);
+  };
+
+  bool allSelected = m_filter.empty();
+  if (chip("All", allSelected))
+  {
+    m_filter.clear();
+    m_dirty = true;
+  }
+
+  for (const auto& [type, label] : kAssetTypeLabels)
+  {
+    bool selected = m_filter.isActive(type);
+    if (chip(label, selected))
+    {
+      m_filter.set(type, selected);
+      m_dirty = true;
+    }
+  }
 }
 
 void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name) const

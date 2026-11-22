@@ -62,7 +62,7 @@ left to do calls `stopRepeat()`), `SceneScriptsPanel` (the "Scene Scripts" windo
 the current scene's scripts, docked on the Inspector's side; its pure decisions are the headless
 `SceneScriptsPanelLogic.h`, and the field widgets are `ScriptEditor.h`'s `drawScriptFieldWidgets`, shared with
 the object Script handler), `ConsolePanel` (the "Console" window — reads the editor's `RingBufferSink` through a
-`LogFilter`: level and category toggles with per-level counts, a text search, Copy (the filtered rows through
+`LogFilter`: a search line (Filters button, search, then Copy, Clear and Auto-scroll when they fit; `ConsolePanelLayout.h` decides) above the level and category toggles with per-level counts, which the Filters button hides, Copy (the filtered rows through
 `formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink; the
 rows and per-level counts come from the headless `ConsoleView.h`), and Auto-scroll; entries the connected server
 forwards land in this same sink, message-prefixed `"[server] "`, so
@@ -153,9 +153,17 @@ layout, and a hand-resized layout keeps its own proportions. They are remembered
 engine rebuilds it with the same node ids, so three settle frames re-read it) and from a restored one. A drag in the
 dockspace updates only the nodes that moved more than a pixel since it began, so a click on a tab or splitter changes
 nothing, and a docking change adopts only new nodes. A zero-size (minimized) frame changes nothing. The side and
-bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 25% (width) and 30%
-(height) of the window, so two side floors leave the central node at least half of it; where a floor is larger than
+bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 19% (width) and 22%
+(height) of the window, so two side floors leave the central node over 60% of the width; where a floor is larger than
 the fit, the floor wins. The change takes effect one frame after the resize.
+
+The default layout is sized by the headless `DefaultDockLayout.h`: Objects 280 and Inspector 360 unscaled pixels
+(times the content scale), together at most 35% of the width, and a bottom dock of 200 unscaled pixels, at most 22% of
+the height. The floors are capped at 19% (side) and 22% (bottom) of the window, so the scene view keeps over 60% of
+the width. While nobody has resized the layout (`m_dockDefaultsUntouched`: no splitter drag moved a side node and no
+docking change added one), a window size change takes the default sizes for the new size rather than the fractions
+the first window gave, so a window that starts small and grows does not inflate the panels. The first drag that moves a
+side node hands the layout to the remembered fractions above.
 
 ## Connection state
 

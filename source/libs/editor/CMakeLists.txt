@@ -37,6 +37,7 @@ add_library(${PROJECT_NAME}
   PlayControls.h
   SceneStatusLayout.h
   DockLayoutFit.h
+  DefaultDockLayout.h
   AssetReferences.cpp
   AssetReferences.h
   SettingsPanel.cpp

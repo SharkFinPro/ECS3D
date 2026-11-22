@@ -75,18 +75,76 @@ void ConsolePanel::refreshCacheIfNeeded()
   m_filtered = std::move(view.rows);
 }
 
-void ConsolePanel::displayFilterRow()
+void ConsolePanel::displaySearchRow()
 {
-  if (gc::searchField("##ConsoleSearch", m_search, sizeof(m_search), "Search log"))
+  constexpr float gap = 8.0f;
+  constexpr float minSearchWidth = 140.0f;
+
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float filtersButtonWidth = ImGui::CalcTextSize("Filters").x + 2.0f * style.FramePadding.x;
+  const float actionsWidth = ImGui::CalcTextSize("Copy").x + ImGui::CalcTextSize("Clear").x +
+                             4.0f * style.FramePadding.x + gc::accentCheckboxCompactWidth("Auto-scroll") +
+                             2.0f * style.ItemSpacing.x;
+  const auto layout = consoleHeaderLayout(ImGui::GetContentRegionAvail().x, gap, filtersButtonWidth, actionsWidth,
+                                          minSearchWidth);
+
+  ImGui::PushStyleColor(ImGuiCol_Button, m_showFilters ? theme::accent : style.Colors[ImGuiCol_Button]);
+  ImGui::PushStyleColor(ImGuiCol_Text, m_showFilters ? theme::onAcc : style.Colors[ImGuiCol_Text]);
+  if (ImGui::Button("Filters"))
+  {
+    m_showFilters = !m_showFilters;
+  }
+  ImGui::PopStyleColor(2);
+
+  ImGui::SameLine(0.0f, gap);
+
+  if (gc::searchField("##ConsoleSearch", m_search, sizeof(m_search), "Search log", layout.searchWidth))
   {
     m_filter.search = m_search;
     m_cacheDirty = true;
   }
 
+  if (layout.actionsOnSearchLine)
+  {
+    ImGui::SameLine(0.0f, gap);
+  }
+
+  displayActions();
+}
+
+void ConsolePanel::displayActions()
+{
+  if (ImGui::Button("Copy"))
+  {
+    std::string text;
+    for (const auto& entry : m_filtered)
+    {
+      text += formatEntry(entry);
+      text += "\n";
+    }
+
+    ImGui::SetClipboardText(text.c_str());
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Clear"))
+  {
+    m_clearedBefore = m_sink->sequence();
+    m_cacheDirty = true;
+  }
+
+  ImGui::SameLine();
+
+  gc::accentCheckboxCompact("Auto-scroll", &m_autoScroll);
+}
+
+void ConsolePanel::displayFilterToggles()
+{
   const float availWidth = ImGui::GetContentRegionAvail().x;
   float usedWidth = 0.0f;
 
-  // The search field fills its line, so toggles start on the next one and wrap at the panel's edge.
+  // Levels then categories flow as one run, wrapping at the panel's edge, with a wider gap between the groups.
   const auto toggle = [&](const char* label, bool& value, const float gap)
   {
     const auto placement = placeOnLine(usedWidth, gap, gc::accentCheckboxCompactWidth(label), availWidth);
@@ -115,10 +173,8 @@ void ConsolePanel::displayFilterRow()
     char label[32];
     std::snprintf(label, sizeof(label), "%s (%d)", toString(level).data(), m_levelCounts[index]);
 
-    toggle(label, m_filter.levels[index], 16.0f);
+    toggle(label, m_filter.levels[index], 12.0f);
   }
-
-  usedWidth = 0.0f;
 
   static constexpr std::array<LogCategory, categoryCount> categories = {
     LogCategory::engine, LogCategory::assets, LogCategory::physics, LogCategory::net,
@@ -127,35 +183,10 @@ void ConsolePanel::displayFilterRow()
 
   for (const auto category : categories)
   {
-    toggle(toString(category).data(), m_filter.categories[static_cast<std::size_t>(category)], 12.0f);
+    const bool first = category == categories.front();
+
+    toggle(toString(category).data(), m_filter.categories[static_cast<std::size_t>(category)], first ? 28.0f : 12.0f);
   }
-}
-
-void ConsolePanel::displayActionRow()
-{
-  if (ImGui::Button("Copy"))
-  {
-    std::string text;
-    for (const auto& entry : m_filtered)
-    {
-      text += formatEntry(entry);
-      text += "\n";
-    }
-
-    ImGui::SetClipboardText(text.c_str());
-  }
-
-  ImGui::SameLine();
-
-  if (ImGui::Button("Clear"))
-  {
-    m_clearedBefore = m_sink->sequence();
-    m_cacheDirty = true;
-  }
-
-  ImGui::SameLine();
-
-  ImGui::Checkbox("Auto-scroll", &m_autoScroll);
 }
 
 void ConsolePanel::displayRows()
@@ -202,11 +233,14 @@ void ConsolePanel::displayGui()
   bool stayOpen = true;
   if (ImGui::Begin(windowName, &stayOpen))
   {
-    displayFilterRow();
+    displaySearchRow();
+
+    if (m_showFilters)
+    {
+      displayFilterToggles();
+    }
 
     refreshCacheIfNeeded();
-
-    displayActionRow();
 
     displayRows();
   }
