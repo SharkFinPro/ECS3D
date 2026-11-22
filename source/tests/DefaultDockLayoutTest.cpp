@@ -9,13 +9,13 @@
 
 namespace
 {
-constexpr std::array<std::array<float, 2>, 4> windowSizes = {{
-  {1280.0f, 720.0f}, {1600.0f, 900.0f}, {1920.0f, 1080.0f}, {2560.0f, 1440.0f}
+constexpr std::array<std::array<float, 2>, 5> windowSizes = {{
+  {1280.0f, 720.0f}, {1600.0f, 900.0f}, {1920.0f, 1080.0f}, {2000.0f, 1087.0f}, {2560.0f, 1440.0f}
 }};
 constexpr std::array<float, 4> contentScales = {1.0f, 1.25f, 1.5f, 2.0f};
 
-// Below these logical heights the Scene Status floor and the bottom floor alone leave the scene view under 66%.
-constexpr float shortWindowLogicalHeight = 500.0f;
+// Below these logical heights the Scene Status floor and the bottom dock alone leave the scene view under 60%.
+constexpr float roomyWindowLogicalHeight = 700.0f;
 constexpr float tinyWindowLogicalHeight = 400.0f;
 
 float sideFloor(const float base, const float width, const float scale)
@@ -58,10 +58,11 @@ TEST(DefaultDockLayoutTest, SceneViewTakesTheMajorityOfEveryWindowAndScale)
     {
       const EffectiveLayout layout = effectiveLayout(width, height, scale);
 
-      EXPECT_GE(1.0f - (layout.left + layout.right) / width, 0.68f) << width << "x" << height << " @" << scale;
-      const float minimumHeight = height / scale < tinyWindowLogicalHeight    ? 0.55f
-                                    : height / scale < shortWindowLogicalHeight ? 0.6f
-                                                                                : 0.66f;
+      EXPECT_GE(1.0f - (layout.left + layout.right) / width, 0.6f) << width << "x" << height << " @" << scale;
+
+      const float minimumHeight = height / scale < tinyWindowLogicalHeight     ? 0.45f
+                                  : height / scale < roomyWindowLogicalHeight ? 0.5f
+                                                                              : 0.6f;
 
       EXPECT_GE(1.0f - (layout.top + layout.bottom) / height, minimumHeight)
         << width << "x" << height << " @" << scale;
@@ -99,7 +100,7 @@ TEST(DefaultDockLayoutTest, SidePanelsShrinkTogetherKeepingTheirRatio)
 {
   const DefaultDockSizes sizes = defaultDockSizes(1000.0f, 1000.0f, 1.0f);
 
-  EXPECT_NEAR(sizes.left + sizes.right, 280.0f, 0.01f);
+  EXPECT_NEAR(sizes.left + sizes.right, 340.0f, 0.01f);
   EXPECT_NEAR(sizes.left / sizes.right, defaultDockLeftWidth / defaultDockRightWidth, 0.001f);
 }
 
@@ -382,4 +383,14 @@ TEST(DockLayoutStateTest, AContentScaleChangeLeavesAHandSizedLayoutAlone)
   moved[0].size = 400.0f;
 
   EXPECT_TRUE(state.update(frameFor(1280.0f, 720.0f, 2.0f, false, moved)).sizes.empty());
+}
+
+TEST(DefaultDockLayoutTest, AFreshLaunchAt2000x1087LandsOnTheHandTunedProportions)
+{
+  const EffectiveLayout layout = effectiveLayout(2000.0f, 1087.0f, 1.25f);
+
+  EXPECT_NEAR(layout.left / 2000.0f, 0.157f, 0.02f);
+  EXPECT_NEAR(layout.right / 2000.0f, 0.18f, 0.02f);
+  EXPECT_NEAR(1.0f - (layout.left + layout.right) / 2000.0f, 0.66f, 0.025f);
+  EXPECT_NEAR(layout.bottom / 1087.0f, 0.253f, 0.02f);
 }

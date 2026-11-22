@@ -142,6 +142,11 @@ the per-panel minimum sizes and the resize fit; with no saved layout the default
 restored layout, such as one added in a later build, opens floating rather than in its default dock; the per-panel
 minimum sizes still apply.
 
+The stored layout carries a version (`editor.layout.version`, `editorLayoutSettings::currentLayoutVersion`). A layout
+saved by another version, or with none, is not restored, so the current defaults apply as on a first run, and the
+next save replaces it. Bump the version whenever the default layout geometry changes, or users keep the old
+proportions.
+
 ImGui keeps a docked side node at its absolute `SizeRef` when the window shrinks and gives the central node what is
 left, so a narrow window squeezed the scene view. `EditorApp::fitDockToViewport` (the headless `DockLayoutFit.h`)
 remembers the fraction of the dock space each side node takes and, when the dock space size changes, writes `SizeRef`
@@ -155,17 +160,19 @@ layout, and a hand-resized layout keeps its own proportions. They are remembered
 engine rebuilds it with the same node ids, so three settle frames re-read it) and from a restored one. A drag in the
 dockspace updates only the nodes that moved more than a pixel since it began, so a click on a tab or splitter changes
 nothing, and a docking change adopts only new nodes. A zero-size (minimized) frame changes nothing. The side and
-bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 15% (width) and 17%
-(height) of the window, so two side floors leave the central node at least 70% of the width; where a floor is larger than
+bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 16% (width) and 17%
+(height) of the window, so two side floors leave the central node at least 68% of the width; where a floor is larger than
 the fit, the floor wins. The change takes effect one frame after the resize.
 
-The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 230 and Inspector 290 unscaled
-pixels, times the content scale, and together at most 28% of the width. The bottom dock takes 170 unscaled pixels, at
-most 17% of the height. The panel floors (the same constants the app applies) are 200 (Objects), 250 (Inspector, Scene
-Scripts) and 150 (Assets) unscaled pixels, capped at 15% of the width for side panels and 17% of the height for bottom
-panels. The scene view therefore keeps at least 70% of the width. It keeps 66% of the height with the Scene Status
-toolbar on one row, unless the window is under 500 unscaled pixels tall (at least 60% there) or 400 (at least 55%). A toolbar that
-wraps onto more rows takes more, and it wraps whenever the central node is narrower than its controls need.
+The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 240 and Inspector 270 unscaled
+pixels, times the content scale, and together at most 34% of the width. The bottom dock takes 220 unscaled pixels,
+which shows the Assets search row, filter row and one row of tiles, and at most 26% of the height. At 2000x1087 and
+scale 1.25 that is about 15% (Objects), 68% (scene view) and 17% (Inspector) of the width, and 25% of the height for
+the bottom dock. The panel floors (the same constants the app applies) are 230 (Objects), 270 (Inspector, Scene
+Scripts) and 150 (Assets) unscaled pixels, capped at 16% of the width for side panels and 17% of the height for
+bottom panels. Small windows give up space gracefully: the scene view keeps at least 60% of the width, and 60% of the
+height in a roomy window (at least 50% under 700 unscaled pixels tall, 45% under 400) with the Scene Status toolbar
+on one row. A toolbar that wraps onto more rows takes more.
 
 `DockLayoutState` holds the remembered proportions and decides each frame what to write back. A layout still at its
 defaults follows a new window size, or a new content scale at the same size, to the default pixel sizes, including a

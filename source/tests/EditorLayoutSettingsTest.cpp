@@ -162,3 +162,70 @@ TEST(EditorLayoutReplacement, AnythingIsWrittenOverAStoredLayoutWithoutADockTree
   EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout(windowOnlyLayout, windowOnlyLayout));
   EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout("", savedLayout));
 }
+
+TEST_F(EditorLayoutSettings, WritingStampsTheCurrentVersion)
+{
+  SettingsStore settings(m_file);
+
+  EXPECT_EQ(editorLayoutSettings::readLayoutVersion(settings), 0);
+
+  editorLayoutSettings::writeImGuiLayout(settings, savedLayout);
+
+  EXPECT_EQ(editorLayoutSettings::readLayoutVersion(settings), editorLayoutSettings::currentLayoutVersion);
+}
+
+TEST_F(EditorLayoutSettings, ALayoutSavedByTheCurrentVersionRestores)
+{
+  {
+    SettingsStore settings(m_file);
+    editorLayoutSettings::writeImGuiLayout(settings, savedLayout);
+    settings.flush();
+  }
+
+  const SettingsStore reloaded(m_file);
+
+  EXPECT_EQ(editorLayoutSettings::readRestorableImGuiLayout(reloaded), savedLayout);
+}
+
+TEST_F(EditorLayoutSettings, ALayoutWithoutAVersionIsIgnored)
+{
+  std::filesystem::create_directories(m_directory);
+  {
+    std::ofstream out(m_file);
+    out << R"({"editor.layout.imgui": "[Docking][Data]\nDockSpace ID=0x1\n"})";
+  }
+
+  const SettingsStore settings(m_file);
+
+  EXPECT_EQ(editorLayoutSettings::readLayoutVersion(settings), 0);
+  EXPECT_TRUE(editorLayoutSettings::readRestorableImGuiLayout(settings).empty());
+  EXPECT_FALSE(editorLayoutSettings::readImGuiLayout(settings).empty());
+}
+
+TEST_F(EditorLayoutSettings, ALayoutFromAnotherVersionIsIgnoredAndTheNextSaveReplacesIt)
+{
+  std::filesystem::create_directories(m_directory);
+  {
+    std::ofstream out(m_file);
+    out << R"({"editor.layout.imgui": "[Docking][Data]\nDockSpace ID=0x1\n", "editor.layout.version": 999})";
+  }
+
+  SettingsStore settings(m_file);
+
+  EXPECT_TRUE(editorLayoutSettings::readRestorableImGuiLayout(settings).empty());
+  EXPECT_TRUE(editorLayoutSettings::shouldReplaceLayout(editorLayoutSettings::readRestorableImGuiLayout(settings),
+                                                        windowOnlyLayout));
+
+  editorLayoutSettings::writeImGuiLayout(settings, windowOnlyLayout);
+
+  EXPECT_EQ(editorLayoutSettings::readRestorableImGuiLayout(settings), windowOnlyLayout);
+}
+
+TEST_F(EditorLayoutSettings, ACurrentLayoutStillRefusesTextWithoutADockTree)
+{
+  SettingsStore settings(m_file);
+  editorLayoutSettings::writeImGuiLayout(settings, savedLayout);
+
+  EXPECT_FALSE(editorLayoutSettings::shouldReplaceLayout(editorLayoutSettings::readRestorableImGuiLayout(settings),
+                                                         windowOnlyLayout));
+}
