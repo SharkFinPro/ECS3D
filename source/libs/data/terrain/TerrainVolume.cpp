@@ -1,5 +1,6 @@
 #include "TerrainVolume.h"
 #include <glm/common.hpp>
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -127,6 +128,56 @@ namespace terrain
     }
 
     return { lowest, highest };
+  }
+
+  bool TerrainVolume::isAirWithin(const SampleBox& box) const
+  {
+    if (box.empty())
+    {
+      return true;
+    }
+
+    const ChunkCoord first = chunkOfSample(box.min);
+    const ChunkCoord last = chunkOfSample(box.max - glm::ivec3(1));
+
+    const auto airIn = [&box](const ChunkCoord coord, const TerrainChunk& chunk)
+    {
+      const glm::ivec3 origin = chunkOrigin(coord);
+      return chunk.isAirWithin({ box.min - origin, box.max - origin });
+    };
+
+    const int64_t inBox = static_cast<int64_t>(last.x - first.x + 1) * static_cast<int64_t>(last.y - first.y + 1) *
+      static_cast<int64_t>(last.z - first.z + 1);
+
+    // Walks the held chunks instead when there are fewer, so a huge box costs no more than the volume holds.
+    if (inBox > static_cast<int64_t>(m_chunks.size()))
+    {
+      return std::ranges::all_of(m_chunks, [&first, &last, &airIn](const auto& entry)
+      {
+        const ChunkCoord& coord = entry.first;
+        const bool inside = coord.x >= first.x && coord.x <= last.x && coord.y >= first.y && coord.y <= last.y &&
+          coord.z >= first.z && coord.z <= last.z;
+
+        return !inside || airIn(coord, *entry.second);
+      });
+    }
+
+    for (int32_t z = first.z; z <= last.z; ++z)
+    {
+      for (int32_t y = first.y; y <= last.y; ++y)
+      {
+        for (int32_t x = first.x; x <= last.x; ++x)
+        {
+          const auto found = m_chunks.find({ x, y, z });
+          if (found != m_chunks.end() && !airIn(found->first, *found->second))
+          {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
   }
 
   size_t TerrainVolume::byteSize() const

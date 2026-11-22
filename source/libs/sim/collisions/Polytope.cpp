@@ -209,7 +209,10 @@ const std::vector<glm::vec3>& hullFaceNormalsOf(ConvexMeshCollider& hullCollider
 
   if (const auto& cache = hullCollider.getFaceNormalCache(); !cache || cache->generation != generation)
   {
-    hullCollider.setFaceNormalCache({ generation, collisions::hullFaceNormals(vertices, hullCollider.getHull().indices) });
+    auto refreshed = hullCollider.takeFaceNormalCache().value_or(ConvexMeshCollider::FaceNormalCache{});
+    refreshed.generation = generation;
+    collisions::placeHullFaceNormals(vertices, hullCollider.getHull().indices, refreshed.normals);
+    hullCollider.setFaceNormalCache(std::move(refreshed));
   }
 
   return hullCollider.getFaceNormalCache()->normals;

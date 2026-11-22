@@ -70,6 +70,38 @@ public:
   [[nodiscard]] glm::vec3 getNextSupportNormal() const;
   void setNextSupportNormal(const glm::vec3& nextSupportNormal);
 
+  // Runtime state, never serialized or packed. A body that has rested long enough sleeps: PhysicsSystem stops moving
+  // it and CollisionSystem stops testing it against static geometry and other sleepers. A queued force, a change of
+  // velocity, mass or gravity, or a move of its transform wakes it; CollisionSystem wakes it on contact too.
+  [[nodiscard]] bool isAsleep() const;
+
+  // Zeroes both velocities. transformStamp is the transform's world update id now, so a move from outside shows;
+  // group names the bodies that fell asleep together, which wake together.
+  void sleep(uint64_t transformStamp, uint64_t group);
+
+  // Does nothing to an awake body, so the solver's own writes leave its rest count alone. Keeps the group.
+  void wake();
+
+  [[nodiscard]] uint64_t getSleepStamp() const;
+
+  // Zero when the body is in no sleep group.
+  [[nodiscard]] uint64_t getSleepGroup() const;
+  void clearSleepGroup();
+
+  // How many ticks in a row the body has been at rest, which CollisionSystem counts toward sleeping.
+  [[nodiscard]] int getRestTicks() const;
+  void setRestTicks(int ticks);
+
+  // Whether the last solve held the body still: on a face of three points or more or a rolling contact, or at three
+  // points or more between its loaded contacts (an edge on the ground and a neighbor it leans on). Balanced on one
+  // edge or corner it is not, however slowly it has started to tip.
+  [[nodiscard]] bool isSteady() const;
+  void setSteady(bool steady);
+
+  // Whether PhysicsSystem passed the body by asleep this tick, so a wake later in the tick owes it that step.
+  [[nodiscard]] bool hasSkippedStep() const;
+  void setSkippedStep(bool skipped);
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -94,6 +126,13 @@ private:
   glm::vec3 m_nextSupportNormal{ 0 };
 
   std::vector<PendingForce> m_pendingForces;
+
+  bool m_asleep = false;
+  uint64_t m_sleepStamp = 0;
+  uint64_t m_sleepGroup = 0;
+  int m_restTicks = 0;
+  bool m_skippedStep = false;
+  bool m_steady = false;
 };
 
 

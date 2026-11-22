@@ -118,6 +118,66 @@ What the constraints are made of:
   takes only the share of each impulse that the mass ratio gives it (`shareTakenBy`), as if it weighed what
   presses on it; its support takes the rest. A stack then settles as one of equal bodies does whatever its masses.
 
+**Static geometry.** The static body is the island's slot zero (`staticSlot`). It never moves, so the solver leaves
+it out of relative velocities and pushes and gives it no impulse. That changes no result: its velocity, spin and
+push stay exactly zero either way.
+
+**Precomputed turns.** This is the one place the solver's arithmetic is not the plain formula, and it is not bit for
+bit with it. An impulse `j` along a direction `d` at arm `r` turns a body by `I^-1 (r x (j d))`. Each `SolverPoint`
+computes `I^-1 (r x d)` once per tick for its normal and both tangents, on both sides (`normalTurn`,
+`tangentTurn` and the `other` versions), and the velocity passes then add `j` times that, through `applyTurning`.
+In exact arithmetic the two are equal. In floats the multiply happens in a different order, so the spin each pass
+leaves differs in its last bits.
+
+- **What it changes:** individual runs, not behavior. A pile settles the same way and to the same tolerances, but a
+  chaotic sequence (a tower collapsing, a ball rolling on a ridge) amplifies the rounding, so a recorded run does not
+  replay exactly against one made before the change. The suite compares physics with tolerances, so it is unaffected;
+  a test that pins an exact float from the velocity passes would not survive it.
+- **Where it applies:** only the 32 velocity passes (relax and friction), where nearly all impulses are applied.
+  Bounce, warm start, settle and separation still turn each impulse through the inertia.
+- **Why:** on the Terrain Basin scene the velocity passes were a third of the single-threaded tick, and the
+  matrix multiply in each impulse was the largest part of them.
+- **To undo it:** have `relax` and `holdSliding` call `apply` with the impulse vector again and drop the turn fields.
+  Nothing else depends on them.
+
+### Sleeping
+
+A pile at rest is still solved every tick for contacts that change nothing, so bodies that have stayed at rest
+long enough sleep. The state is runtime only on `RigidBody` (`isAsleep`, its sleep group, its rest count), never
+saved or replicated.
+
+- **Falling asleep.** After the solve, `CollisionSystem::sleepRestingIslands` looks at each solved island. A body is
+  at rest when it is supported this tick, steadily held (`RigidBody::isSteady`, which the solver writes: on a face of
+  three points or more or a rolling contact, or at three points or more between its loaded contacts, as a box with an
+  edge on the ground leaning on another is; not balanced on one edge or corner), slower than `sleepSpeed` (0.05 units
+  per second) and turning slower than `sleepAngularSpeed` (1 degree per second). When every body of an island has
+  been at rest for `sleepSeconds` (0.5) in a row, the whole island sleeps as one group, with its velocities zeroed.
+  One restless body keeps its island awake.
+- **Asleep.** `PhysicsSystem` does not move or accelerate a sleeper. The sweep does not test a pair with no awake
+  body in it (two sleepers, or a sleeper and static geometry): the pair is recorded as `sleeping`, is not solved,
+  keeps last tick's touch for the collision events (so a resting pair keeps reporting stay), and its cached impulses
+  are kept for the warm start when it wakes.
+- **Waking.** Any of these wakes the body's whole group:
+  - a queued force, or a change of velocity, angular velocity, mass or gravity (the `RigidBody` setters);
+  - a move of its transform from outside (`PhysicsSystem` compares the world update id against the one at sleep);
+  - a change of its own collider's bounds, layer, mask or trigger flag;
+  - one of its group's colliders taken away (its object removed, or its collider or body), since the rest may have
+    rested on it;
+  - any change to the static colliders' bounds, layers, masks or trigger flags, or a terrain's revision
+    (`wakeChangedSleepers` hashes them). It wakes every sleeper, since a pile may rest on what changed, so a static
+    collider a script moves every tick keeps the whole scene awake;
+  - an awake body touching or about to meet it (`wakeTouchedSleepers`, after the narrow phase). The woken bodies'
+    untested pairs are then tested as the sweep would have, which may reach more sleepers, before the islands are
+    built, so the woken pile is solved with all its contacts that tick. Pairs are found from bounds swept before
+    the wake, so a pair only the woken body's first gravity step would reach is found the tick after.
+- **Catching up.** A sleeper `PhysicsSystem` passed by this tick is marked (`hasSkippedStep`). Woken later in the
+  tick it takes `PhysicsSystem::catchUp`: the support bookkeeping and gravity the step would have given it. It moves
+  nowhere, since it had no velocity, so it falls from the tick it wakes, as an awake body would.
+
+What it changes: a resting pile stops creeping by float noise, and bodies that would have kept drifting slower than
+the thresholds stop. On the Terrain Basin benchmark (`BasinBenchmarkTest`) about half the bodies are asleep after
+20 seconds. Most of the awake ones are held in islands by a few that lean on an edge or still roll.
+
 ### Narrow phase
 
 `NarrowPhase.h`'s `findContact`, `intersects` and `approaches` are the entry points. GJK and EPA query each
@@ -206,14 +266,16 @@ those axes. Layer masks and `ignoreObject` apply as for any collider.
 out of every pair and event (`isInert`). A terrain object must not carry a `RigidBody`: that is unsupported.
 Collision ignores the body and treats the terrain as static, but `PhysicsSystem` would still integrate it.
 
-**Sweep.** Only the dynamic side of a terrain pair asks: `intersectsTerrain` sets that side's `lowerSees` or
-`higherSees` flag (no witness), and when it does not intersect, `approachesTerrain` with the body's sweep sets
-`approaching`. A terrain never reaches `intersects`, `approaches` or `findContact`. Events come from those flags, so
-enter, stay and exit name the terrain object's uuid. A trigger body gets events and no response, as against any
-collider.
+**Sweep.** Only the dynamic side of a terrain pair asks. `probeTerrain` with the body's sweep answers both
+`intersectsTerrain`, which sets that side's `lowerSees` or `higherSees` flag (no witness), and `findTerrainContacts`,
+whose contacts set `approaching` when it does not intersect and are kept on the `SweepHit` for the solve. A box or hull
+whose sweep is not traced is measured once for both answers. A trigger pair asks only `intersectsTerrain`. A terrain
+never reaches `intersects`, `approaches` or `findContact`. Events come from those flags, so enter, stay and exit name
+the terrain object's uuid. A trigger body gets events and no response, as against any collider.
 
-**Solve.** `solveIsland` calls `findTerrainContacts` with the dynamic body's sweep and pushes one `ContactPair` per
-contact: the body and its collider against the terrain with no other body, `manifold` the contact's index. The solver
+**Solve.** `solveIsland` takes the contacts the sweep found (nothing moves a body between the two) and pushes one
+`ContactPair` per contact: the body and its collider against the terrain with no other body, `manifold` the contact's
+index. The solver
 caches impulses under `PairKey` with that index as `subIndex` (zero for every other pair), so each wall of a gully keeps
 its own warm start. Contacts are ordered by depth, so near-equal walls can swap ordinals between ticks: when the
 exact sub-index is missing or faces another way, the lookup tries the pair's other sub-indices and takes the best
@@ -254,15 +316,19 @@ never zero.
 
 A box or convex hull takes the polytope path (`collisions/TerrainPolytopeContact.cpp`, sharing the terrain frame,
 surface refinement, clustering and contact builder with the above through `TerrainContactInternal.h`). Its early-out
-uses the collider's bounding box, widened by the sweep, the margin and a voxel. Query points have radius zero: every
+uses the collider's bounding box, widened by the sweep, the margin and a voxel, and also returns when every sample that
+box reads is air (`TerrainVolume::isAirWithin`, answered per 8-sample brick) and the band's edge is beyond the furthest
+a point is measured from. Query points have radius zero: every
 vertex, then points along each edge and over each face (`hullSupportFaces` polygons for a hull, six rectangles for a box)
 no more than a voxel apart, with face points on cell centers kept when inside the polygon. They are built on every call
 from the collider's world caches, not cached on the collider, since a lazy cache would be written by several threads in
-the narrow phase. The total is capped at `maxTerrainQueryPoints` (512) with the vertices always kept: edges and faces
-are ranked by the raw field distance at their middle, nearest first, and each in turn takes the finest spacing (steps
+the narrow phase. The total is capped at `maxTerrainQueryPoints` (512) with the vertices always kept: when the
+full-density points would pass it, edges and faces are ranked by the raw field distance at their middle, nearest
+first, and each in turn takes the finest spacing (steps
 of 25 percent over a voxel) that leaves room for the groups after it, so a face lying on the ground keeps its full grid
-while it fits. A point whose raw distance is beyond the margin, the sweep's length and a voxel is skipped, and so is
-one with no usable gradient. The rest are measured like a sphere of radius zero and clustered by normal as above; a
+while it fits. A point whose raw distance is beyond the margin and the sweep's length (`furthestReach`) is skipped
+before its surface is looked for: a candidate is never nearer the ground than its point's raw reading, so it could not
+reach. So is one with no usable gradient. The rest are measured like a sphere of radius zero and clustered by normal as above; a
 cluster is reduced with `detail::spreadOut` on quantized depths to at most four points, so a box lying flat reports its
 four bottom corners as one contact. The points are the collider's own surface points, as `referenceFaceManifold`
 reports for a box on a static box, and their depths are positive inside the ground and negative while short of it.

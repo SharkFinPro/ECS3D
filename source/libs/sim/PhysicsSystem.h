@@ -15,6 +15,11 @@ public:
   // contact solver in CollisionSystem::fixedUpdate runs next and answers them before they move anything.
   static void fixedUpdate(const ObjectManager& objectManager, float dt);
 
+  // What fixedUpdate would have done this tick to a sleeper it passed by, for one woken later in the tick: the
+  // support bookkeeping and gravity. A sleeper has no velocity, so the step would have moved it nowhere, and a force
+  // queued after fixedUpdate waits for the next tick as it would on an awake body.
+  static void catchUp(RigidBody& body, const Transform& transform, float dt);
+
   // A change of velocity at position, in units per tick like the velocity it is added to. Mass does not scale
   // it: off the center it turns the body as far as an impulse of mass times the change would. The spin is
   // stored in degrees per second, which is what needs dt.
@@ -42,6 +47,13 @@ public:
   [[nodiscard]] static std::optional<glm::mat3> worldInverseInertia(const RigidBody& body, const Transform& transform);
 
 private:
+  static void step(RigidBody& body, Transform& transform, float dt);
+
+  // Moves the support the body found last tick into place, and starts this tick's search for one.
+  static void advanceSupport(RigidBody& body);
+
+  static void applyGravity(RigidBody& body, const Transform& transform, float dt);
+
   // Moves and turns the body by its velocity and spin.
   static void integrate(RigidBody& body, Transform& transform, float dt);
 

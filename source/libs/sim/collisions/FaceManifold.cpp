@@ -211,15 +211,24 @@ namespace collisions {
   std::vector<glm::vec3> hullFaceNormals(const std::span<const glm::vec3> vertices,
                                          const std::span<const uint32_t> indices)
   {
+    std::vector<glm::vec3> normals;
+    placeHullFaceNormals(vertices, indices, normals);
+
+    return normals;
+  }
+
+  void placeHullFaceNormals(const std::span<const glm::vec3> vertices, const std::span<const uint32_t> indices,
+                            std::vector<glm::vec3>& normals)
+  {
+    normals.clear();
     if (vertices.empty())
     {
-      return {};
+      return;
     }
 
     // A mirrored transform reverses every triangle's winding, so each normal is turned away from the center.
     const glm::vec3 center = centroidOf(vertices);
 
-    std::vector<glm::vec3> normals;
     for (size_t i = 0; i + 2 < indices.size(); i += 3)
     {
       const glm::vec3& a = vertices[indices[i]];
@@ -233,8 +242,6 @@ namespace collisions {
         normals.push_back(glm::dot(unit, center - a) > 0.0f ? -unit : unit);
       }
     }
-
-    return normals;
   }
 
   std::vector<glm::vec3> referenceFaceManifold(const FaceShape& first, const FaceShape& second,

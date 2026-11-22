@@ -44,6 +44,7 @@ set(ECS3D_IMGUI_SOURCES
 
 add_executable(${PROJECT_NAME}
   AddAssetConflictLogTest.cpp
+  BasinBenchmarkTest.cpp
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
   CapsuleColliderTest.cpp
@@ -272,6 +273,7 @@ add_executable(${PROJECT_NAME}
   TemplateValidationTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTippingTest.cpp
+  PhysicsSleepTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsFrictionHoldTest.cpp
   PhysicsSlopeStackTest.cpp

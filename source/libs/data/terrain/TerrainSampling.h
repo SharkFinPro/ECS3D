@@ -47,17 +47,32 @@ namespace terrain
       glm::vec3 fraction{ 0.0f };
     };
 
+    struct RecentCell
+    {
+      glm::vec3 local{ 0.0f };
+      Cell cell;
+      bool valid = false;
+    };
+
+    // Callers ask for the distance and the gradient at one position in turn, so the last cells fetched are kept.
+    [[nodiscard]] Cell cellAt(glm::vec3 local);
+
     [[nodiscard]] Cell fetchCell(glm::vec3 local);
 
     [[nodiscard]] static float distanceOf(const Cell& cell);
 
     [[nodiscard]] glm::vec3 gradientOf(const Cell& cell) const;
 
+    [[nodiscard]] const TerrainChunk* chunkAt(ChunkCoord coord);
+
     [[nodiscard]] int16_t sampleDistance(glm::ivec3 sample);
 
     const TerrainVolume& m_volume;
     std::array<CacheSlot, 8> m_cache;
     size_t m_nextSlot = 0;
+    size_t m_lastSlot = 0;
+    std::array<RecentCell, 2> m_recent;
+    size_t m_nextRecent = 0;
   };
 }
 

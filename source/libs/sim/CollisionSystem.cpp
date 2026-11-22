@@ -12,6 +12,7 @@
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/Terrain.h>
+#include <terrain/TerrainVolume.h>
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,7 @@
 #include <limits>
 #include <numeric>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace {
@@ -145,6 +147,9 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     ECS3D_PROFILE_SCOPE("Broad phase");
 
+    // Before the bounds are swept, so a body woken here moves with this tick's velocity like any other.
+    wakeChangedSleepers(dt);
+
     for (auto& edge : m_collisionEdges)
     {
       edge.bounds = edge.collider->getBoundingBox();
@@ -191,7 +196,8 @@ void CollisionSystem::checkCollisions(const float dt)
     for (size_t i = 0; i < edgeCount; ++i)
     {
       const auto& edge = m_collisionEdges[i];
-      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr };
+      m_sweepBoxes[i] = { edge.bounds, edge.layer, edge.mask, edge.body != nullptr,
+                          edge.body != nullptr && !edge.body->isAsleep() };
     }
   }
 
@@ -210,6 +216,8 @@ void CollisionSystem::checkCollisions(const float dt)
     {
       findCollisions(i, forwardHits[i]);
     }
+
+    wakeTouchedSleepers(dt);
   }
 
   {
@@ -290,6 +298,11 @@ void CollisionSystem::resolveInIslands(const float dt)
 
     for (const auto& hit : m_forwardHits[i])
     {
+      if (hit.sleeping)
+      {
+        continue;
+      }
+
       const auto& other = m_collisionEdges[hit.other];
       if (edge.body && other.body)
       {
@@ -312,7 +325,7 @@ void CollisionSystem::resolveInIslands(const float dt)
       const auto& other = m_collisionEdges[hit.other];
 
       // Triggers still recorded the pair (events fire), but get no response.
-      if (isTriggerPair(*edge.collider, *other.collider))
+      if (hit.sleeping || isTriggerPair(*edge.collider, *other.collider))
       {
         continue;
       }
@@ -372,7 +385,21 @@ void CollisionSystem::resolveInIslands(const float dt)
     }
   }
 
-  m_contactCache.clear();
+  // A sleeper's impulses are kept for when it wakes, so its pile takes up its load again from where it was.
+  std::unordered_set<const Collider*> sleeping;
+  for (const auto& edge : m_collisionEdges)
+  {
+    if (edge.body && edge.body->isAsleep())
+    {
+      sleeping.insert(edge.collider.get());
+    }
+  }
+
+  std::erase_if(m_contactCache, [&sleeping](const auto& entry)
+  {
+    return !sleeping.contains(entry.first.first) && !sleeping.contains(entry.first.second);
+  });
+
   for (const auto& island : resolved)
   {
     for (const auto& contact : island)
@@ -386,6 +413,8 @@ void CollisionSystem::resolveInIslands(const float dt)
   {
     std::rethrow_exception(failure);
   }
+
+  sleepRestingIslands(islands, dt);
 }
 
 void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
@@ -410,7 +439,11 @@ void CollisionSystem::solveIsland(const std::vector<PairRef>& island,
       const auto& dynamicEdge = terrainFirst ? second : first;
       auto& terrain = static_cast<Terrain&>(terrainFirst ? *first.collider : *second.collider);
 
-      const auto contacts = collisions::findTerrainContacts(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+      std::vector<collisions::Contact> measured;
+      const auto& contacts = hit.terrainContacts
+                               ? *hit.terrainContacts
+                               : (measured = collisions::findTerrainContacts(*dynamicEdge.collider, terrain,
+                                                                             dynamicEdge.sweep));
       for (size_t i = 0; i < contacts.size(); ++i)
       {
         pairs.push_back({ dynamicEdge.body.get(), nullptr, dynamicEdge.collider.get(), &terrain, contacts[i],
@@ -476,6 +509,25 @@ void CollisionSystem::recordCollisionEvents()
     }
   }
 
+  // An untested pair of sleepers still touches as it did: nothing in it has moved.
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    for (const auto& hit : m_forwardHits[i])
+    {
+      if (!hit.sleeping)
+      {
+        continue;
+      }
+
+      const auto pair = CollisionPair::make(m_collisionEdges[i].object->getUUID(),
+                                            m_collisionEdges[hit.other].object->getUUID());
+      if (std::ranges::binary_search(m_previousPairs, pair))
+      {
+        current.push_back(pair);
+      }
+    }
+  }
+
   std::ranges::sort(current);
   current.erase(std::unique(current.begin(), current.end()), current.end());
 
@@ -495,10 +547,290 @@ void CollisionSystem::recordCollisionEvents()
 void CollisionSystem::reset()
 {
   m_contactCache.clear();
+  m_sleepGroups.clear();
+  m_restedColliders.clear();
+  m_staticSignature = 0;
   m_previousPairs.clear();
   m_enters.clear();
   m_stays.clear();
   m_exits.clear();
+}
+
+namespace {
+  void wakeBody(RigidBody& body, const float dt)
+  {
+    body.wake();
+    body.clearSleepGroup();
+
+    if (body.hasSkippedStep())
+    {
+      body.setSkippedStep(false);
+      if (const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform))
+      {
+        PhysicsSystem::catchUp(body, *transform, dt);
+      }
+    }
+  }
+}
+
+bool CollisionSystem::RestedCollider::matches(Collider& collider) const
+{
+  const auto& box = collider.getBoundingBox();
+
+  return bounds.minX == box.minX && bounds.maxX == box.maxX && bounds.minY == box.minY && bounds.maxY == box.maxY &&
+    bounds.minZ == box.minZ && bounds.maxZ == box.maxZ && layer == collider.getLayer() &&
+    mask == collider.getMask() && trigger == collider.isTrigger();
+}
+
+void CollisionSystem::wakeGroup(RigidBody& body, const float dt)
+{
+  const auto group = body.getSleepGroup();
+  wakeBody(body, dt);
+  wakeGroupMembers(group, dt);
+}
+
+void CollisionSystem::wakeGroupMembers(const uint64_t group, const float dt)
+{
+  const auto found = m_sleepGroups.find(group);
+  if (group == 0 || found == m_sleepGroups.end())
+  {
+    return;
+  }
+
+  const auto members = std::move(found->second);
+  m_sleepGroups.erase(found);
+  for (const auto& weak : members)
+  {
+    if (const auto member = weak.lock())
+    {
+      wakeBody(*member, dt);
+    }
+  }
+}
+
+void CollisionSystem::wakeChangedSleepers(const float dt)
+{
+  // FNV-1a over each static collider's identity, bounds and terrain revision.
+  uint64_t signature = 14695981039346656037ULL;
+  const auto feed = [&signature](const void* data, const size_t size)
+  {
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (size_t i = 0; i < size; ++i)
+    {
+      signature ^= bytes[i];
+      signature *= 1099511628211ULL;
+    }
+  };
+
+  for (const auto& edge : m_collisionEdges)
+  {
+    if (edge.body)
+    {
+      continue;
+    }
+
+    const Collider* collider = edge.collider.get();
+    feed(&collider, sizeof(collider));
+    const auto& box = edge.collider->getBoundingBox();
+    const std::array<float, 6> bounds{ box.minX, box.maxX, box.minY, box.maxY, box.minZ, box.maxZ };
+    feed(bounds.data(), sizeof(bounds));
+    const std::array<uint32_t, 3> filter{ edge.collider->getLayer(), edge.collider->getMask(),
+                                          edge.collider->isTrigger() ? 1u : 0u };
+    feed(filter.data(), sizeof(filter));
+    if (isTerrain(*edge.collider))
+    {
+      if (const auto volume = static_cast<const Terrain&>(*edge.collider).volume())
+      {
+        const uint64_t revision = volume->revision();
+        feed(&revision, sizeof(revision));
+      }
+    }
+  }
+
+  const bool staticChanged = signature != m_staticSignature;
+  m_staticSignature = signature;
+
+  std::unordered_set<const Collider*> sleepingNow;
+  for (const auto& edge : m_collisionEdges)
+  {
+    if (!edge.body)
+    {
+      continue;
+    }
+
+    if (!edge.body->isAsleep())
+    {
+      // Woken from outside (a force, a new velocity, a move) since last tick: what fell asleep with it follows.
+      if (edge.body->getSleepGroup() != 0)
+      {
+        wakeGroup(*edge.body, dt);
+      }
+
+      m_restedColliders.erase(edge.collider.get());
+      continue;
+    }
+
+    sleepingNow.insert(edge.collider.get());
+    const auto rested = m_restedColliders.find(edge.collider.get());
+    if (staticChanged || rested == m_restedColliders.end() || !rested->second.matches(*edge.collider))
+    {
+      wakeGroup(*edge.body, dt);
+      m_restedColliders.erase(edge.collider.get());
+    }
+  }
+
+  // A sleeping collider no longer among the sleeping edges was taken away, so its group may have lost what held it.
+  for (auto rested = m_restedColliders.begin(); rested != m_restedColliders.end();)
+  {
+    if (sleepingNow.contains(rested->first))
+    {
+      ++rested;
+      continue;
+    }
+
+    wakeGroupMembers(rested->second.group, dt);
+    rested = m_restedColliders.erase(rested);
+  }
+}
+
+void CollisionSystem::wakeTouchedSleepers(const float dt)
+{
+  const size_t edgeCount = m_collisionEdges.size();
+  const auto awake = [this](const size_t index)
+  {
+    const auto& body = m_collisionEdges[index].body;
+    return body && !body->isAsleep();
+  };
+
+  // Each round can only turn untested pairs into tested ones, so it ends.
+  for (bool woke = true; woke;)
+  {
+    woke = false;
+    for (size_t i = 0; i < edgeCount; ++i)
+    {
+      for (const auto& hit : m_forwardHits[i])
+      {
+        if (hit.sleeping || isTriggerPair(*m_collisionEdges[i].collider, *m_collisionEdges[hit.other].collider))
+        {
+          continue;
+        }
+
+        for (const size_t side : { i, hit.other })
+        {
+          if (const auto& body = m_collisionEdges[side].body; body && body->isAsleep())
+          {
+            wakeGroup(*body, dt);
+            woke = true;
+          }
+        }
+      }
+    }
+
+    if (!woke)
+    {
+      break;
+    }
+
+    // The woken took their step, so their pairs are tested with the sweep it gave them.
+    for (auto& edge : m_collisionEdges)
+    {
+      if (edge.body && !edge.body->isAsleep())
+      {
+        edge.sweep = edge.body->getVelocity();
+      }
+    }
+
+    for (size_t i = 0; i < edgeCount; ++i)
+    {
+      for (auto& hit : m_forwardHits[i])
+      {
+        if (!hit.sleeping || (!awake(i) && !awake(hit.other)))
+        {
+          continue;
+        }
+
+        const size_t other = hit.other;
+        if (auto tested = testPair(i, other))
+        {
+          hit = std::move(*tested);
+        }
+        else
+        {
+          hit = SweepHit{ other, false, false, std::nullopt, std::nullopt };
+        }
+      }
+
+      std::erase_if(m_forwardHits[i], [](const SweepHit& hit)
+      {
+        return !hit.sleeping && !hit.lowerSees && !hit.higherSees && !hit.approaching;
+      });
+    }
+  }
+}
+
+void CollisionSystem::sleepRestingIslands(const std::vector<std::vector<PairRef>>& islands, const float dt)
+{
+  const int restTicksToSleep = static_cast<int>(std::ceil(sleepSeconds / dt));
+  const float sleepStep = sleepSpeed * dt;
+
+  std::unordered_set<const RigidBody*> solved;
+  for (const auto& island : islands)
+  {
+    std::vector<std::shared_ptr<RigidBody>> bodies;
+    for (const auto& ref : island)
+    {
+      for (const size_t side : { ref.lower, ref.hit->other })
+      {
+        const auto& body = m_collisionEdges[side].body;
+        if (body && solved.insert(body.get()).second)
+        {
+          bodies.push_back(body);
+        }
+      }
+    }
+
+    bool allRested = !bodies.empty();
+    for (const auto& body : bodies)
+    {
+      const bool resting = !body->getNextFalling() && body->isSteady() &&
+        glm::length(body->getVelocity()) < sleepStep && glm::length(body->getAngularVelocity()) < sleepAngularSpeed;
+      body->setRestTicks(resting ? body->getRestTicks() + 1 : 0);
+      allRested = allRested && body->getRestTicks() >= restTicksToSleep;
+    }
+
+    if (!allRested)
+    {
+      continue;
+    }
+
+    const uint64_t group = m_nextSleepGroup++;
+    auto& members = m_sleepGroups[group];
+    for (const auto& body : bodies)
+    {
+      const auto transform = body->getOwner()->getComponent<Transform>(ComponentType::transform);
+      body->sleep(transform ? transform->getWorldUpdateID() : 0, group);
+      members.push_back(body);
+    }
+  }
+
+  for (const auto& edge : m_collisionEdges)
+  {
+    if (!edge.body)
+    {
+      continue;
+    }
+
+    if (!solved.contains(edge.body.get()))
+    {
+      edge.body->setRestTicks(0);
+    }
+    else if (edge.body->isAsleep())
+    {
+      m_restedColliders[edge.collider.get()] = { edge.collider->getBoundingBox(), edge.collider->getLayer(),
+                                                 edge.collider->getMask(), edge.collider->isTrigger(),
+                                                 edge.body->getSleepGroup() };
+    }
+  }
 }
 
 void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& hits) const
@@ -507,7 +839,6 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
   // collider, and nothing moves a transform until the response pass after the loop.
   const auto& self = m_sweepBoxes[index];
   const auto& bbox = self.bounds;
-  const bool selfDynamic = self.dynamic;
 
   for (size_t j = index + 1; j < m_sweepBoxes.size(); ++j)
   {
@@ -519,7 +850,7 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
     }
 
     // A pair of static colliders never needs testing.
-    if (!selfDynamic && !box.dynamic)
+    if (!self.dynamic && !box.dynamic)
     {
       continue;
     }
@@ -540,68 +871,112 @@ void CollisionSystem::findCollisions(const size_t index, std::vector<SweepHit>& 
       continue;
     }
 
-    const auto& edge = m_collisionEdges[index];
-    const auto& other = m_collisionEdges[j];
-
-    if (partOfSameAssembly(edge, other))
+    if (partOfSameAssembly(m_collisionEdges[index], m_collisionEdges[j]))
     {
       continue;
     }
 
-    SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
-
-    if (isTerrain(*edge.collider) || isTerrain(*other.collider))
+    // Nothing in a pair of sleepers, or of a sleeper and static geometry, has moved since it fell asleep.
+    if (!self.awake && !box.awake)
     {
-      // Only the dynamic side asks, and the terrain is never handed to the shape-pair narrow phase.
-      const bool lowerIsTerrain = isTerrain(*edge.collider);
-      const auto& dynamicEdge = lowerIsTerrain ? other : edge;
-      auto& terrain = static_cast<Terrain&>(lowerIsTerrain ? *edge.collider : *other.collider);
-
-      if (dynamicEdge.body == nullptr)
-      {
-        continue;
-      }
-
-      const bool touching = collisions::intersectsTerrain(*dynamicEdge.collider, terrain);
-      hit.lowerSees = !lowerIsTerrain && touching;
-      hit.higherSees = lowerIsTerrain && touching;
-      hit.approaching = !touching && !isTriggerPair(*edge.collider, *other.collider) &&
-                        collisions::approachesTerrain(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
-
-      if (touching || hit.approaching)
-      {
-        hits.push_back(std::move(hit));
-      }
-
-      continue;
-    }
-
-    // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
-    // keeps its own answer.
-    hit.lowerSees = selfDynamic && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
-    hit.higherSees = box.dynamic && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
-
-    if (!hit.lowerSees && !hit.higherSees && !isTriggerPair(*edge.collider, *other.collider))
-    {
-      // Against each other as they move now, and each alone against the other standing still: a body about to
-      // be stopped by its own support no longer moves with what falls onto it.
-      for (const auto& sweep : approachSweeps(edge, other))
-      {
-        hit.approaching = hit.approaching ||
-                          (sweep != glm::vec3(0) && collisions::approaches(*edge.collider, *other.collider, sweep));
-      }
-    }
-
-    if (hit.lowerSees || hit.higherSees || hit.approaching)
-    {
+      SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
+      hit.sleeping = true;
       hits.push_back(std::move(hit));
+      continue;
+    }
+
+    if (auto hit = testPair(index, j))
+    {
+      hits.push_back(std::move(*hit));
     }
   }
 }
 
+std::optional<CollisionSystem::SweepHit> CollisionSystem::testPair(const size_t index, const size_t j) const
+{
+  const auto& edge = m_collisionEdges[index];
+  const auto& other = m_collisionEdges[j];
+  const bool selfDynamic = m_sweepBoxes[index].dynamic;
+  const bool otherDynamic = m_sweepBoxes[j].dynamic;
+
+  SweepHit hit{ j, false, false, std::nullopt, std::nullopt };
+
+  if (isTerrain(*edge.collider) || isTerrain(*other.collider))
+  {
+    // Only the dynamic side asks, and the terrain is never handed to the shape-pair narrow phase.
+    const bool lowerIsTerrain = isTerrain(*edge.collider);
+    const auto& dynamicEdge = lowerIsTerrain ? other : edge;
+    auto& terrain = static_cast<Terrain&>(lowerIsTerrain ? *edge.collider : *other.collider);
+
+    if (dynamicEdge.body == nullptr)
+    {
+      return std::nullopt;
+    }
+
+    bool touching = false;
+    if (isTriggerPair(*edge.collider, *other.collider))
+    {
+      touching = collisions::intersectsTerrain(*dynamicEdge.collider, terrain);
+    }
+    else
+    {
+      auto probe = collisions::probeTerrain(*dynamicEdge.collider, terrain, dynamicEdge.sweep);
+      touching = probe.touching;
+      hit.approaching = !touching && !probe.contacts.empty();
+      hit.terrainContacts = std::move(probe.contacts);
+    }
+
+    hit.lowerSees = !lowerIsTerrain && touching;
+    hit.higherSees = lowerIsTerrain && touching;
+
+    if (touching || hit.approaching)
+    {
+      return hit;
+    }
+
+    return std::nullopt;
+  }
+
+  // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
+  // keeps its own answer.
+  hit.lowerSees = selfDynamic && collisions::intersects(*edge.collider, *other.collider, hit.lowerWitness);
+  hit.higherSees = otherDynamic && collisions::intersects(*other.collider, *edge.collider, hit.higherWitness);
+
+  if (!hit.lowerSees && !hit.higherSees && !isTriggerPair(*edge.collider, *other.collider))
+  {
+    // Against each other as they move now, and each alone against the other standing still: a body about to
+    // be stopped by its own support no longer moves with what falls onto it.
+    for (const auto& sweep : approachSweeps(edge, other))
+    {
+      hit.approaching = hit.approaching ||
+                        (sweep != glm::vec3(0) && collisions::approaches(*edge.collider, *other.collider, sweep));
+    }
+  }
+
+  if (hit.lowerSees || hit.higherSees || hit.approaching)
+  {
+    return hit;
+  }
+
+  return std::nullopt;
+}
+
 std::array<glm::vec3, 3> CollisionSystem::approachSweeps(const CollisionEdge& first, const CollisionEdge& second)
 {
-  return { first.sweep - second.sweep, first.sweep, -second.sweep };
+  std::array<glm::vec3, 3> sweeps{ first.sweep - second.sweep, first.sweep, -second.sweep };
+
+  // With one side still, the relative sweep is the other's own. Asked again it answers as it did, so the repeat is
+  // zeroed, which callers skip.
+  for (size_t i = 1; i < sweeps.size(); ++i)
+  {
+    if (std::find(sweeps.begin(), sweeps.begin() + static_cast<std::ptrdiff_t>(i), sweeps[i]) !=
+        sweeps.begin() + static_cast<std::ptrdiff_t>(i))
+    {
+      sweeps[i] = glm::vec3(0);
+    }
+  }
+
+  return sweeps;
 }
 
 void CollisionSystem::liftOutOfStatic(std::vector<ContactPair>& pairs)

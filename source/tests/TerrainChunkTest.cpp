@@ -393,3 +393,35 @@ TEST(TerrainTypesTest, ChunkCoordHashWorksInAnUnorderedMapWithNegativeKeys)
 
   EXPECT_EQ(hashes.size(), map.size());
 }
+
+TEST(TerrainChunkTest, IsAirWithinSeesOnlyTheBricksAGroundSampleIsIn)
+{
+  auto distances = filledDistances(terrain::airDistance);
+  distances[static_cast<size_t>(terrain::sampleIndex(9, 17, 25))] = terrain::airDistance - 1;
+  const auto chunk = terrain::TerrainChunk::dense(std::move(distances), filledMaterials(1));
+  ASSERT_NE(chunk, nullptr);
+  ASSERT_FALSE(chunk->isUniform());
+
+  EXPECT_FALSE(chunk->isAirWithin({ { 9, 17, 25 }, { 10, 18, 26 } }));
+  EXPECT_FALSE(chunk->isAirWithin({ { 0, 0, 0 }, { 32, 32, 32 } }));
+  // The same brick as the ground sample, though not the sample itself, reads as ground.
+  EXPECT_FALSE(chunk->isAirWithin({ { 8, 16, 24 }, { 9, 17, 25 } }));
+
+  EXPECT_TRUE(chunk->isAirWithin({ { 0, 0, 0 }, { 8, 16, 24 } }));
+  EXPECT_TRUE(chunk->isAirWithin({ { 16, 0, 0 }, { 32, 32, 32 } }));
+  // A box reaching past the chunk is clipped to it.
+  EXPECT_TRUE(chunk->isAirWithin({ { -40, -40, -40 }, { 8, 8, 8 } }));
+  EXPECT_TRUE(chunk->isAirWithin({ { 40, 40, 40 }, { 50, 50, 50 } }));
+  EXPECT_TRUE(chunk->isAirWithin({ { 3, 3, 3 }, { 3, 9, 9 } }));
+}
+
+TEST(TerrainChunkTest, IsAirWithinAUniformChunkIsWhetherItIsAir)
+{
+  const auto air = terrain::TerrainChunk::uniform(terrain::airDistance, 1);
+  const auto solid = terrain::TerrainChunk::uniform(-terrain::airDistance, 1);
+  const auto nearAir = terrain::TerrainChunk::uniform(terrain::airDistance - 1, 1);
+
+  EXPECT_TRUE(air->isAirWithin({ { 0, 0, 0 }, { 32, 32, 32 } }));
+  EXPECT_FALSE(solid->isAirWithin({ { 0, 0, 0 }, { 1, 1, 1 } }));
+  EXPECT_FALSE(nearAir->isAirWithin({ { 31, 31, 31 }, { 32, 32, 32 } }));
+}

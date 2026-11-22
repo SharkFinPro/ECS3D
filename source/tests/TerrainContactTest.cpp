@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -965,4 +966,95 @@ TEST(TerrainContact, TheWayOutThroughTheEdgeOfTheVolumeDoesNotDependOnWhereTheSt
     expectNormal(contacts[0], up());
     EXPECT_NEAR(height + contacts[0].overlap(), 63.5f + 1.0f, tolerance) << height;
   }
+}
+
+namespace {
+  // The probe runs the same arithmetic as the two queries it stands for, so its answers match them exactly.
+  void expectSameContacts(const std::vector<collisions::Contact>& actual,
+                          const std::vector<collisions::Contact>& expected, const std::string& label)
+  {
+    ASSERT_EQ(actual.size(), expected.size()) << label;
+    for (size_t i = 0; i < actual.size(); ++i)
+    {
+      EXPECT_EQ(actual[i].minimumTranslationVector, expected[i].minimumTranslationVector) << label << " " << i;
+      EXPECT_EQ(actual[i].point, expected[i].point) << label << " " << i;
+      EXPECT_EQ(actual[i].advance, expected[i].advance) << label << " " << i;
+      ASSERT_EQ(actual[i].pointCount, expected[i].pointCount) << label << " " << i;
+      for (size_t j = 0; j < actual[i].pointCount; ++j)
+      {
+        EXPECT_EQ(actual[i].points[j], expected[i].points[j]) << label << " " << i << " " << j;
+        EXPECT_EQ(actual[i].depths[j], expected[i].depths[j]) << label << " " << i << " " << j;
+      }
+    }
+  }
+
+  struct ProbeTally {
+    int touching = 0;
+    int approaching = 0;
+    int apart = 0;
+  };
+
+  void expectProbeMatches(World& world, Collider& collider, const std::vector<glm::vec3>& sweeps,
+                          const std::string& label, ProbeTally& tally)
+  {
+    for (const auto& sweep : sweeps)
+    {
+      const auto sweepLabel = label + " sweep (" + std::to_string(sweep.x) + ", " + std::to_string(sweep.y) + ", " +
+        std::to_string(sweep.z) + ")";
+      const auto probe = collisions::probeTerrain(collider, *world.terrain, sweep);
+
+      EXPECT_EQ(probe.touching, collisions::intersectsTerrain(collider, *world.terrain)) << sweepLabel;
+      expectSameContacts(probe.contacts, collisions::findTerrainContacts(collider, *world.terrain, sweep), sweepLabel);
+
+      if (probe.touching)
+      {
+        ++tally.touching;
+      }
+      else if (!probe.contacts.empty())
+      {
+        ++tally.approaching;
+      }
+      else
+      {
+        ++tally.apart;
+      }
+    }
+  }
+}
+
+TEST(TerrainContact, ProbeTerrainAnswersAsIntersectsAndFindTerrainContactsDo)
+{
+  const std::vector<glm::vec3> sweeps{ glm::vec3(0), { 0, -0.5f, 0 }, { 0.6f, -0.4f, 0.3f }, { 0, 0.5f, 0 },
+                                       { 0, -30, 0 }, { 3, -2, 0 } };
+  ProbeTally tally;
+
+  World flat(flatGround());
+  for (const float height : { -6.0f, 0.9f, 1.0f, 1.02f, 1.5f, 3.0f, 10.0f })
+  {
+    const auto label = "height " + std::to_string(height);
+    expectProbeMatches(flat, *flat.boxAt({ centerX, height, centerZ }, glm::vec3(1)), sweeps, "box " + label, tally);
+    expectProbeMatches(flat, *flat.boxAt({ centerX + 8.0f, height, centerZ }, { 2.0f, 0.5f, 1.5f }, { 10, 25, 5 }),
+                       sweeps, "tilted box " + label, tally);
+    expectProbeMatches(flat, *flat.hullAt({ centerX - 8.0f, height, centerZ }, octahedron()), sweeps, "hull " + label,
+                       tally);
+    expectProbeMatches(flat, *flat.sphereAt({ centerX, height, centerZ + 8.0f }, 1.0f), sweeps, "sphere " + label,
+                       tally);
+    expectProbeMatches(flat, *flat.capsuleAt({ centerX, height, centerZ - 8.0f }, 0.5f, 3.0f, { 0, 0, 90 }), sweeps,
+                       "capsule " + label, tally);
+  }
+
+  // Deep in a wall, a sweep into it steps the points out sideways where standing still steps them up.
+  World wall(wallGround());
+  const std::vector<glm::vec3> wallSweeps{ glm::vec3(0), { 1, 0, 0 }, { 0.5f, 0.2f, 0 }, { 0, -1, 0 } };
+  expectProbeMatches(wall, *wall.boxAt({ centerX + 7.0f, 16.0f, centerZ }, glm::vec3(1)), wallSweeps, "deep box",
+                     tally);
+  expectProbeMatches(wall, *wall.hullAt({ centerX + 7.0f, 16.0f, centerZ + 10.0f }, octahedron()), wallSweeps,
+                     "deep hull", tally);
+  expectProbeMatches(wall, *wall.boxAt({ centerX - 0.9f, 16.0f, centerZ }, glm::vec3(1)), wallSweeps, "wall box",
+                     tally);
+
+  // Positive control: every kind of answer came up, so the comparison covered each path.
+  EXPECT_GT(tally.touching, 20);
+  EXPECT_GT(tally.approaching, 10);
+  EXPECT_GT(tally.apart, 10);
 }

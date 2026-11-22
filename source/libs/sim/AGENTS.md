@@ -23,5 +23,8 @@ resting or the contact manifold: that behavior is tuned as a whole, and the suit
   `collisions::warmContactCaches`.
 - The `CollisionSystem` profile scopes (`Broad phase`, `Narrow phase`, `Response`) open on the calling thread around
   each phase; never put one inside the OpenMP region.
+- Bodies at rest sleep (physics.md, Sleeping). A new way to move a body, change what holds it up or edit static
+  geometry must wake the sleepers it affects, through a `RigidBody` setter, the transform or the static signature
+  `CollisionSystem::wakeChangedSleepers` hashes, or a sleeper stays floating where it was.
 - The narrow phase entry points are `collisions::findContact` and `collisions::intersects` (`collisions/NarrowPhase.h`).
 - Compare physics results in tests with a tolerance: results pass through matrix math and accumulation.

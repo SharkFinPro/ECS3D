@@ -237,6 +237,11 @@ void ConvexMeshCollider::setFaceNormalCache(FaceNormalCache cache)
   m_faceNormalCache = std::move(cache);
 }
 
+std::optional<ConvexMeshCollider::FaceNormalCache> ConvexMeshCollider::takeFaceNormalCache()
+{
+  return std::exchange(m_faceNormalCache, std::nullopt);
+}
+
 const std::optional<ConvexMeshCollider::WorldFaceCache>& ConvexMeshCollider::getWorldFaceCache() const
 {
   return m_worldFaceCache;
@@ -245,6 +250,11 @@ const std::optional<ConvexMeshCollider::WorldFaceCache>& ConvexMeshCollider::get
 void ConvexMeshCollider::setWorldFaceCache(WorldFaceCache cache)
 {
   m_worldFaceCache = std::move(cache);
+}
+
+std::optional<ConvexMeshCollider::WorldFaceCache> ConvexMeshCollider::takeWorldFaceCache()
+{
+  return std::exchange(m_worldFaceCache, std::nullopt);
 }
 
 nlohmann::json ConvexMeshCollider::serialize()
@@ -329,19 +339,19 @@ glm::vec3 ConvexMeshCollider::findFurthestPoint(const glm::vec3& direction)
 
 glm::vec3 ConvexMeshCollider::furthestOf(const std::span<const glm::vec3> vertices, const glm::vec3& direction)
 {
+  // The first vertex furthest along, picked by selects rather than a branch the vertices would keep mispredicting.
   float largestDot = std::numeric_limits<float>::lowest();
-  glm::vec3 furthestVertex{ 0, 0, 0 };
+  size_t furthest = vertices.size();
 
-  for (const auto& vertex : vertices)
+  for (size_t i = 0; i < vertices.size(); ++i)
   {
-    if (const float currentDot = dot(vertex, direction); currentDot > largestDot)
-    {
-      largestDot = currentDot;
-      furthestVertex = vertex;
-    }
+    const float currentDot = dot(vertices[i], direction);
+    const bool further = currentDot > largestDot;
+    largestDot = further ? currentDot : largestDot;
+    furthest = further ? i : furthest;
   }
 
-  return furthestVertex;
+  return furthest < vertices.size() ? vertices[furthest] : glm::vec3(0, 0, 0);
 }
 
 void ConvexMeshCollider::pack(net::Message& message) const

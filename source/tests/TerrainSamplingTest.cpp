@@ -5,8 +5,10 @@
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -399,6 +401,116 @@ TEST(TerrainSamplingTest, GradientMatchesACentralDifferenceOfDistanceOnRandomDat
   }
 
   EXPECT_GT(nearBorder, 50);
+}
+
+namespace {
+  // Random dense chunks over samples -32..32 on every axis, with a uniform and an absent chunk among them, so cells
+  // straddle each kind of chunk border.
+  void fillMixedChunks(terrain::TerrainVolume& volume, std::mt19937& rng)
+  {
+    std::uniform_int_distribution<int> distance(-terrain::airDistance, terrain::airDistance);
+    for (const terrain::ChunkCoord coord : terrain::chunksTouched({ { -32, -32, -32 }, { 32, 32, 32 } }))
+    {
+      std::vector<int16_t> distances(terrain::samplesPerChunk);
+      for (auto& value : distances)
+      {
+        value = static_cast<int16_t>(distance(rng));
+      }
+
+      volume.setChunk(coord, terrain::TerrainChunk::dense(std::move(distances),
+                                                          std::vector<uint8_t>(terrain::samplesPerChunk, 1)));
+    }
+
+    volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-1234, 1));
+    volume.setChunk({ -1, 0, -1 }, nullptr);
+  }
+
+  // The trilinear distance at point from the volume's own samples, read one corner at a time.
+  float cornerByCornerDistance(const terrain::TerrainVolume& volume, const glm::vec3& point)
+  {
+    const glm::vec3 position = point / volume.voxelSize();
+    const glm::vec3 base = glm::floor(position);
+    const glm::vec3 f = position - base;
+    const glm::ivec3 origin(base);
+
+    std::array<float, 8> c{};
+    for (int corner = 0; corner < 8; ++corner)
+    {
+      const glm::ivec3 offset(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
+      c[static_cast<size_t>(corner)] = terrain::decodeDistance(volume.distanceAtSample(origin + offset));
+    }
+
+    const float x00 = c[0] + (c[1] - c[0]) * f.x;
+    const float x10 = c[2] + (c[3] - c[2]) * f.x;
+    const float x01 = c[4] + (c[5] - c[4]) * f.x;
+    const float x11 = c[6] + (c[7] - c[6]) * f.x;
+    const float y0 = x00 + (x10 - x00) * f.y;
+    const float y1 = x01 + (x11 - x01) * f.y;
+
+    return y0 + (y1 - y0) * f.z;
+  }
+
+  bool onTheLastCellOfAChunk(const glm::vec3& samplePoint)
+  {
+    const glm::ivec3 inChunk = (glm::ivec3(glm::floor(samplePoint)) % terrain::chunkSize + terrain::chunkSize) %
+      terrain::chunkSize;
+
+    return inChunk.x == terrain::chunkSize - 1 || inChunk.y == terrain::chunkSize - 1 ||
+      inChunk.z == terrain::chunkSize - 1;
+  }
+}
+
+TEST(TerrainSamplingTest, EveryCellReadsTheCornerSamplesTheVolumeHolds)
+{
+  std::mt19937 rng(77);
+  terrain::TerrainVolume volume;
+  fillMixedChunks(volume, rng);
+
+  terrain::Sampler sampler(volume);
+  std::uniform_real_distribution<float> sampleAxis(-33.0f, 33.0f);
+
+  int acrossBorders = 0;
+  for (int i = 0; i < 4000; ++i)
+  {
+    glm::vec3 samplePoint(sampleAxis(rng), sampleAxis(rng), sampleAxis(rng));
+    if (i % 4 == 0)
+    {
+      // On the last cell of a chunk along a random axis, whose far corners lie in the next chunk.
+      samplePoint[i % 12 / 4] = (i % 8 == 0 ? 31.0f : -1.0f) + 0.5f;
+    }
+
+    const glm::vec3 point = samplePoint * volume.voxelSize();
+    EXPECT_NEAR(sampler.distance(point), cornerByCornerDistance(volume, point), 1.0e-6f) << i;
+    acrossBorders += onTheLastCellOfAChunk(samplePoint) ? 1 : 0;
+  }
+
+  EXPECT_GT(acrossBorders, 500);
+}
+
+TEST(TerrainSamplingTest, RepeatedAndInterleavedQueriesAnswerAsAFreshSamplerDoes)
+{
+  const glm::vec3 normal = glm::normalize(glm::vec3(0.4f, 1.0f, 0.1f));
+  terrain::TerrainVolume volume;
+  fillField(volume, tiltedPlane(normal, 2.0f));
+
+  const glm::vec3 first(3.1f, 1.7f, -4.2f);
+  const glm::vec3 second(-20.0f, 9.3f, 60.5f);
+  const glm::vec3 third(79.9f, -3.0f, 0.4f);
+
+  terrain::Sampler reused(volume);
+  for (const glm::vec3& point : { first, first, second, first, third, second, second, third, first })
+  {
+    terrain::Sampler fresh(volume);
+
+    EXPECT_EQ(reused.gradient(point), fresh.gradient(point));
+    EXPECT_EQ(reused.metricDistance(point), fresh.metricDistance(point));
+    EXPECT_EQ(reused.distance(point), fresh.distance(point));
+  }
+
+  // Positive control: the three positions read different distances, so a stale cell would show.
+  terrain::Sampler control(volume);
+  EXPECT_NE(control.distance(first), control.distance(second));
+  EXPECT_NE(control.distance(second), control.distance(third));
 }
 
 TEST(TerrainSamplingTest, VoxelSizeChangesUnitsButNotVoxelTerms)

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 // A convex hull collider. The hull lives inline in the component (local-space vertices and triangle
@@ -37,10 +38,12 @@ public:
     std::vector<glm::vec3> normals;
   };
 
-  // The hull's planar faces in world space, filled by the sim. Derived state, current while generation matches.
+  // The hull's planar faces in world space, and the edges between them, each once, filled by the sim. Derived
+  // state, current while generation matches.
   struct WorldFaceCache {
     uint64_t generation = 0;
     std::vector<WorldFace> faces;
+    std::vector<std::pair<glm::vec3, glm::vec3>> edges;
   };
 
   ConvexMeshCollider();
@@ -84,9 +87,15 @@ public:
 
   void setFaceNormalCache(FaceNormalCache cache);
 
+  // Moves the cache out, leaving none, so the sim can refill its storage rather than allocate anew.
+  [[nodiscard]] std::optional<FaceNormalCache> takeFaceNormalCache();
+
   [[nodiscard]] const std::optional<WorldFaceCache>& getWorldFaceCache() const;
 
   void setWorldFaceCache(WorldFaceCache cache);
+
+  // Moves the cache out, leaving none, so the sim can refill its storage rather than allocate anew.
+  [[nodiscard]] std::optional<WorldFaceCache> takeWorldFaceCache();
 
   // The vertex furthest along direction, the first of equals winning; the origin when there are none.
   [[nodiscard]] static glm::vec3 furthestOf(std::span<const glm::vec3> vertices, const glm::vec3& direction);

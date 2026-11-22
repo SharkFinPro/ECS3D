@@ -25,6 +25,7 @@ RigidBody::RigidBody()
 void RigidBody::addPendingForce(const glm::vec3& force, const glm::vec3& position, const ForceMode mode)
 {
   m_pendingForces.push_back({ force, position, mode });
+  wake();
 }
 
 const std::vector<RigidBody::PendingForce>& RigidBody::getPendingForces() const
@@ -49,6 +50,11 @@ void RigidBody::setVelocity(const glm::vec3& velocity)
     return;
   }
 
+  if (velocity != m_velocity.get())
+  {
+    wake();
+  }
+
   m_velocity.set(velocity);
 }
 
@@ -64,6 +70,11 @@ void RigidBody::setAngularVelocity(const glm::vec3& angularVelocity)
     return;
   }
 
+  if (angularVelocity != m_angularVelocity.get())
+  {
+    wake();
+  }
+
   m_angularVelocity.set(angularVelocity);
 }
 
@@ -77,6 +88,11 @@ void RigidBody::setMass(const float mass)
   if (!finiteCheck::isFinite(mass))
   {
     return;
+  }
+
+  if (std::max(mass, kMinMass) != m_mass.get())
+  {
+    wake();
   }
 
   m_mass.set(std::max(mass, kMinMass));
@@ -109,6 +125,11 @@ void RigidBody::setGravity(const float gravity)
     return;
   }
 
+  if (gravity != m_gravity.get())
+  {
+    wake();
+  }
+
   m_gravity.set(gravity);
 }
 
@@ -119,7 +140,82 @@ bool RigidBody::getDoGravity() const
 
 void RigidBody::setDoGravity(const bool doGravity)
 {
+  if (doGravity != m_doGravity.get())
+  {
+    wake();
+  }
+
   m_doGravity.set(doGravity);
+}
+
+bool RigidBody::isAsleep() const
+{
+  return m_asleep;
+}
+
+void RigidBody::sleep(const uint64_t transformStamp, const uint64_t group)
+{
+  m_asleep = true;
+  m_sleepStamp = transformStamp;
+  m_sleepGroup = group;
+  m_velocity.set(glm::vec3(0));
+  m_angularVelocity.set(glm::vec3(0));
+}
+
+void RigidBody::wake()
+{
+  if (!m_asleep)
+  {
+    return;
+  }
+
+  m_asleep = false;
+  m_restTicks = 0;
+}
+
+uint64_t RigidBody::getSleepStamp() const
+{
+  return m_sleepStamp;
+}
+
+uint64_t RigidBody::getSleepGroup() const
+{
+  return m_sleepGroup;
+}
+
+void RigidBody::clearSleepGroup()
+{
+  m_sleepGroup = 0;
+}
+
+int RigidBody::getRestTicks() const
+{
+  return m_restTicks;
+}
+
+void RigidBody::setRestTicks(const int ticks)
+{
+  m_restTicks = ticks;
+}
+
+bool RigidBody::isSteady() const
+{
+  return m_steady;
+}
+
+void RigidBody::setSteady(const bool steady)
+{
+  m_steady = steady;
+}
+
+bool RigidBody::hasSkippedStep() const
+{
+  return m_skippedStep;
+}
+
+void RigidBody::setSkippedStep(const bool skipped)
+{
+  m_skippedStep = skipped;
 }
 
 bool RigidBody::isFalling() const

@@ -40,6 +40,10 @@ namespace terrain
 
     [[nodiscard]] SampleBox occupiedBounds() const;
 
+    // Whether every sample of the box reads airDistance, absent chunks included. May answer false for a box that is
+    // all air but shares a brick (TerrainChunk::brickSize) with ground.
+    [[nodiscard]] bool isAirWithin(const SampleBox& box) const;
+
     [[nodiscard]] size_t byteSize() const;
 
     // Changes whenever the held chunks change and is unique across all volumes, so the revision alone tells a reader
