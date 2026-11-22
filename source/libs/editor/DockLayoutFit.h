@@ -23,9 +23,9 @@ struct DockSideSize
 inline constexpr float dockMinimumCentralFraction = 0.4f;
 
 // A panel's own floor never takes more than this share of the window width (side panels) or height (bottom
-// panels). Two side floors therefore leave the central node more than 60% of the width.
-inline constexpr float dockSideFloorFraction = 0.19f;
-inline constexpr float dockBottomFloorFraction = 0.2f;
+// panels). Two side floors therefore leave the central node at least 70% of the width.
+inline constexpr float dockSideFloorFraction = 0.15f;
+inline constexpr float dockBottomFloorFraction = 0.17f;
 
 // Moves smaller than this many pixels are a click, not an edit of the layout.
 inline constexpr float dockEditTolerance = 1.0f;

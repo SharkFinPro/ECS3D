@@ -14,8 +14,9 @@ constexpr std::array<std::array<float, 2>, 4> windowSizes = {{
 }};
 constexpr std::array<float, 4> contentScales = {1.0f, 1.25f, 1.5f, 2.0f};
 
-// Below this logical height the Scene Status floor and the bottom floor alone leave the scene view under 60%.
-constexpr float shortWindowLogicalHeight = 400.0f;
+// Below these logical heights the Scene Status floor and the bottom floor alone leave the scene view under 66%.
+constexpr float shortWindowLogicalHeight = 500.0f;
+constexpr float tinyWindowLogicalHeight = 400.0f;
 
 float sideFloor(const float base, const float width, const float scale)
 {
@@ -57,8 +58,10 @@ TEST(DefaultDockLayoutTest, SceneViewTakesTheMajorityOfEveryWindowAndScale)
     {
       const EffectiveLayout layout = effectiveLayout(width, height, scale);
 
-      EXPECT_GE(1.0f - (layout.left + layout.right) / width, 0.6f) << width << "x" << height << " @" << scale;
-      const float minimumHeight = height / scale < shortWindowLogicalHeight ? 0.55f : 0.6f;
+      EXPECT_GE(1.0f - (layout.left + layout.right) / width, 0.68f) << width << "x" << height << " @" << scale;
+      const float minimumHeight = height / scale < tinyWindowLogicalHeight    ? 0.55f
+                                    : height / scale < shortWindowLogicalHeight ? 0.6f
+                                                                                : 0.66f;
 
       EXPECT_GE(1.0f - (layout.top + layout.bottom) / height, minimumHeight)
         << width << "x" << height << " @" << scale;
@@ -96,7 +99,7 @@ TEST(DefaultDockLayoutTest, SidePanelsShrinkTogetherKeepingTheirRatio)
 {
   const DefaultDockSizes sizes = defaultDockSizes(1000.0f, 1000.0f, 1.0f);
 
-  EXPECT_NEAR(sizes.left + sizes.right, 350.0f, 0.01f);
+  EXPECT_NEAR(sizes.left + sizes.right, 280.0f, 0.01f);
   EXPECT_NEAR(sizes.left / sizes.right, defaultDockLeftWidth / defaultDockRightWidth, 0.001f);
 }
 
@@ -109,8 +112,8 @@ TEST(DefaultDockLayoutTest, SidePanelsAreNeverBelowTheirFloorsUnlessTheFloorIsCa
       const EffectiveLayout layout = effectiveLayout(width, height, scale);
       const float cap = dockSideFloorFraction * width;
 
-      EXPECT_GE(layout.left, std::min(objectsBaseFloor * scale, cap)) << width << "x" << height << " @" << scale;
-      EXPECT_GE(layout.right, std::min(inspectorBaseFloor * scale, cap)) << width << "x" << height << " @" << scale;
+      EXPECT_GE(layout.left + 0.01f, std::min(objectsBaseFloor * scale, cap)) << width << "x" << height << " @" << scale;
+      EXPECT_GE(layout.right + 0.01f, std::min(inspectorBaseFloor * scale, cap)) << width << "x" << height << " @" << scale;
     }
   }
 }

@@ -155,16 +155,17 @@ layout, and a hand-resized layout keeps its own proportions. They are remembered
 engine rebuilds it with the same node ids, so three settle frames re-read it) and from a restored one. A drag in the
 dockspace updates only the nodes that moved more than a pixel since it began, so a click on a tab or splitter changes
 nothing, and a docking change adopts only new nodes. A zero-size (minimized) frame changes nothing. The side and
-bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 19% (width) and 20%
-(height) of the window, so two side floors leave the central node over 60% of the width; where a floor is larger than
+bottom panel floors are re-applied whenever the viewport size or content scale changes, at most 15% (width) and 17%
+(height) of the window, so two side floors leave the central node at least 70% of the width; where a floor is larger than
 the fit, the floor wins. The change takes effect one frame after the resize.
 
-The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 280 and Inspector 360 unscaled
-pixels, times the content scale, and together at most 35% of the width. The bottom dock takes 200 unscaled pixels, at
-most 20% of the height. The panel floors (the same constants the app applies) are capped at 19% of the width for side
-panels and 20% of the height for bottom panels. The scene view therefore keeps over 60% of the width. It keeps 60% of
-the height as well, with the Scene Status toolbar on one row, unless the window is under 400 unscaled pixels tall;
-there it keeps at least 55%. A toolbar that wraps onto more rows takes more.
+The default layout is sized by the headless `DefaultDockLayout.h`. Objects take 230 and Inspector 290 unscaled
+pixels, times the content scale, and together at most 28% of the width. The bottom dock takes 170 unscaled pixels, at
+most 17% of the height. The panel floors (the same constants the app applies) are 200 (Objects), 250 (Inspector, Scene
+Scripts) and 150 (Assets) unscaled pixels, capped at 15% of the width for side panels and 17% of the height for bottom
+panels. The scene view therefore keeps at least 70% of the width. It keeps 66% of the height with the Scene Status
+toolbar on one row, unless the window is under 500 unscaled pixels tall (at least 60% there) or 400 (at least 55%). A toolbar that
+wraps onto more rows takes more, and it wraps whenever the central node is narrower than its controls need.
 
 `DockLayoutState` holds the remembered proportions and decides each frame what to write back. A layout still at its
 defaults follows a new window size, or a new content scale at the same size, to the default pixel sizes, including a
