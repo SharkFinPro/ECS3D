@@ -578,6 +578,23 @@ TEST(DefaultProject, TheShapeLibraryPrefabsAreRegisteredWithStableUuidsAndWeighT
   EXPECT_NEAR(rigidBodyIn(prefabBody(project, "D6")).at("mass").get<float>(), unitBlockMass, 1e-3f);
 }
 
+namespace {
+  // Mouse-look assumes a -Z camera before the body's rotation; a player that looks down +Z gets there by yawing 180
+  // degrees, never by a +Z camera direction (which would flip the pitch).
+  void expectFacesPositiveZ(const std::map<std::string, nlohmann::json>& byType)
+  {
+    const auto& direction = byType.at("Camera").at("direction");
+    EXPECT_NEAR(direction.at(0).get<float>(), 0.0f, 1e-5f);
+    EXPECT_NEAR(direction.at(1).get<float>(), 0.0f, 1e-5f);
+    EXPECT_NEAR(direction.at(2).get<float>(), -1.0f, 1e-5f);
+
+    const auto& rotation = byType.at("Transform").at("rotation");
+    EXPECT_NEAR(rotation.at(0).get<float>(), 0.0f, 1e-5f);
+    EXPECT_NEAR(rotation.at(1).get<float>(), 180.0f, 1e-5f);
+    EXPECT_NEAR(rotation.at(2).get<float>(), 0.0f, 1e-5f);
+  }
+}
+
 TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
 {
   const auto project = buildDefaultProject();
@@ -615,8 +632,7 @@ TEST(DefaultProject, TheTerrainShowcaseSceneNamesTheProjectsTerrain)
         EXPECT_FLOAT_EQ(position.at(1).get<float>(), spawn.y);
         EXPECT_FLOAT_EQ(position.at(2).get<float>(), spawn.z);
 
-        const auto& direction = byType.at("Camera").at("direction");
-        EXPECT_NEAR(direction.at(2).get<float>(), 1.0f, 1e-5f);
+        expectFacesPositiveZ(byType);
       }
       else if (component.at("type") == "Camera" && component.at("active") == true)
       {
@@ -677,6 +693,7 @@ namespace {
   // On the arena's south side, just above the floor and clear of the tower over its middle.
   void expectBasinPlayer(const nlohmann::json& object, const nlohmann::json& controller)
   {
+    expectFacesPositiveZ(componentsByType(object));
     const glm::vec3 spawn = positionOfObject(object);
     EXPECT_EQ(controller.at("playerSlot"), 0);
 

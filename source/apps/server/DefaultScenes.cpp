@@ -282,7 +282,7 @@ json buildTerrainBasin()
   }
 
   objects.push_back(light({ 0.0f, 300.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 0.35f, 0.8f, 0.4f));
-  objects.push_back(player({ 0.0f, 3.0f, -60.0f }, 0, glm::vec3(0.0f, 0.0f, 1.0f)));
+  objects.push_back(player({ 0.0f, 3.0f, -60.0f }, 0, glm::vec3(0.0f, 0.0f, -1.0f), 180.0f));
 
   std::random_device rd;
   std::mt19937 gen(rd());
