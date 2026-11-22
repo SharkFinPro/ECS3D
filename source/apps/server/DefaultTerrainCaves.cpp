@@ -10,6 +10,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <cstdint>
 
@@ -124,7 +125,7 @@ struct Feature
 };
 
 const std::array<Feature, basin::caves::featureCount> features = { {
-  { 2, 1, { { 156, 0, 258 }, { 221, 72, 347 } }, northCave },
+  { 2, 1, { { 156, 0, 258 }, { 221, 72, 358 } }, northCave },
   { 1, 2, { { 262, 0, 150 }, { 362, 84, 231 } }, eastCavern },
   { 1, 1, { { 136, 0, 154 }, { 176, 64, 224 } }, rockArch }
 } };
@@ -204,6 +205,7 @@ namespace basin::caves
 
   float stackHalfSpan(const Stack& stack)
   {
-    return static_cast<float>(stack.columns - 1) * stackSpacing * 0.5f + 1.5f + 2.0f;
+    // A stack's slots are stackSpacing apart and its bodies stay within their slot.
+    return static_cast<float>(stack.columns) * stackSpacing * 0.5f;
   }
 }

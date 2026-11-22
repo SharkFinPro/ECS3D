@@ -317,7 +317,8 @@ json buildTerrainBasin()
 
   for (const auto& stack : basin::caves::stacks())
   {
-    addStackAt(objects, gen, stack.worldX, stack.worldZ, stack.surfaceY + basin::caves::stackLift, stack.columns, stack.layers);
+    addStackAt(objects, gen, stack.worldX, stack.worldZ, stack.surfaceY + basin::caves::stackLift, stack.columns,
+               stack.layers);
   }
 
   return objects;

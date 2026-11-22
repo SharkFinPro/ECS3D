@@ -240,7 +240,8 @@ TEST_F(DefaultTerrainTilesTest, TheFeaturesGiveTheArchAndTheCavesRockMaterials)
   const int columnZ = static_cast<int>(columnOf(top.worldZ, false));
   const int topSample = basin::groundHeight + static_cast<int>(std::lround(top.surfaceY / voxel));
   const auto& volume = probe.volume;
-  const glm::ivec3 local(columnX - probe.col * basin::tileStride, topSample - 1, columnZ - probe.row * basin::tileStride);
+  const glm::ivec3 local(columnX - probe.col * basin::tileStride, topSample - 1,
+                         columnZ - probe.row * basin::tileStride);
 
   EXPECT_EQ(volume.materialAtSample(local), defaultterrain::materialGray);
 

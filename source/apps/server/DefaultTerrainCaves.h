@@ -17,14 +17,14 @@ namespace terrain
 // name says world.
 namespace basin::caves
 {
-  // Every feature's rock is re-evaluated from solid ground, since the heightmap fill leaves only a thin shell.
   inline constexpr int featureCount = 3;
 
   // The signed distance, in voxels, of the plain ground at a global sample; negative inside the rock.
   using GroundDistance = std::function<float(int x, int y, int z)>;
 
   // Rewrites the features that lie in tile (row, col) of the volume, whose first sample is global column
-  // (offsetX, offsetZ).
+  // (offsetX, offsetZ). Each feature's rock is re-evaluated from solid ground, since the heightmap fill leaves only a
+  // thin shell.
   void carveTile(terrain::TerrainVolume& volume, int row, int col, int offsetX, int offsetZ,
                  const GroundDistance& ground);
 
@@ -55,7 +55,7 @@ namespace basin::caves
 
   [[nodiscard]] const std::array<Stack, stackCount>& stacks();
 
-  // How far, in world units, a stack's bodies may reach from its center in x and z, with some margin.
+  // How far, in world units, a stack's bodies may reach from its center in x and z.
   [[nodiscard]] float stackHalfSpan(const Stack& stack);
 }
 
