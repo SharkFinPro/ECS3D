@@ -144,11 +144,12 @@ public class PlayerScript : ScriptBase
 
         Vector2 delta = input.mouseDelta();
 
-        // Mouse right -> look right; mouse up -> look up (flip the vertical with Invert Look). Pitch is
-        // clamped shy of straight up/down so the view can't roll past vertical.
+        // Mouse right -> look right; mouse up -> look down by default, like a flight stick (Invert Look flips the
+        // vertical to mouse up -> look up). Pitch is clamped shy of straight up/down so the view can't roll past
+        // vertical.
         m_yaw -= delta.X * m_lookSensitivity;
         float pitchStep = delta.Y * m_lookSensitivity;
-        m_pitch += m_invertLook ? pitchStep : -pitchStep;
+        m_pitch += m_invertLook ? -pitchStep : pitchStep;
         m_pitch = Math.Clamp(m_pitch, -89.0f, 89.0f);
 
         transform.setRotation(m_pitch, m_yaw, 0.0f);
