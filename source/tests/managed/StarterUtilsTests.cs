@@ -504,7 +504,7 @@ public unsafe class StarterUtilsTests : IDisposable
   }
 
   [Fact]
-  public void PlayerScript_MouseUpLooksDownByDefault()
+  public void PlayerScript_NegativeMouseDeltaYLowersPitchByDefault()
   {
     var player = NewPlayer();
 
@@ -514,7 +514,7 @@ public unsafe class StarterUtilsTests : IDisposable
   }
 
   [Fact]
-  public void PlayerScript_InvertLookMakesMouseUpLookUp()
+  public void PlayerScript_InvertLookRaisesPitchForNegativeMouseDeltaY()
   {
     var player = NewPlayer();
     typeof(PlayerScript).GetField("m_invertLook", BindingFlags.Instance | BindingFlags.NonPublic)!
