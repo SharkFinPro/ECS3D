@@ -161,8 +161,7 @@ private:
   profile::Lane m_profileLane{"editor", 4096};
 
   // The editor-wide selection slot (object vs. asset vs. nothing), shared into the panels that read or
-  // write it - the object tree, inspector, and asset browser. handlePicking writes it directly from
-  // viewport mouse-picking.
+  // write it - the object tree, inspector, and asset browser. A viewport pick's callback writes it directly.
   std::shared_ptr<EditorSelection> m_selection;
 
   std::shared_ptr<ComponentEditor> m_componentEditor;
@@ -273,7 +272,7 @@ private:
   // unanswered this long is abandoned instead of leaving the Player combo disabled.
   static constexpr std::chrono::seconds playerSlotRequestTimeout{3};
 
-  // Edge-detect the mouse so viewport picking only fires on a fresh click.
+  // Edge-detect the mouse so viewport picking only requests on a fresh click.
   bool m_mouseWasPressed = false;
 
   // The groups drawn through drawGroup in displaySceneStatus; the readout is placed separately.
@@ -374,8 +373,6 @@ private:
   void expirePlayerSlotRequest();
 
   void handlePicking();
-
-  [[nodiscard]] std::optional<uuids::uuid> findPickedObject(const std::shared_ptr<SceneAsset>& scene) const;
 
   void applyPick(const std::optional<uuids::uuid>& picked, bool toggle) const;
 

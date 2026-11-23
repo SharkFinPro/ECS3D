@@ -20,7 +20,7 @@ Related design notes: [undo-redo.md](../../../docs/architecture/undo-redo.md),
   `ConsolePanelLayout.h`, `ConsoleView.h`, `FramePacingNotes.h`, `GizmoEditSending.h`, `SceneStatusLayout.h`,
   `PrefabBodyEdits.h`, `KeybindRebindFlow.h`, `AssetCreateFlow.h`, `ProfilerPanelState.h`, `ProfilerServerLane.h`,
   `ProfilerReadout.h`, `TerrainReadout.h`, `ProfilerCapture.h`, `EditorConnectionState.h`, `DockLayoutFit.h`,
-  `DefaultDockLayout.h`) so the
+  `DefaultDockLayout.h`, `PickClick.h`) so the
   test suite compiles them without ImGui. The ImGui code draws.
 - Numeric widgets come from `GuiComponents`, which refuse a non-finite entry.
 - Preferences read and write `ECS3DSettings` directly; they are local, not replicated.

@@ -22,6 +22,7 @@ add_library(${PROJECT_NAME}
   PrefabBodyEdits.h
   AssetDisplay.h
   Selection.h
+  PickClick.h
   AssetBrowserPanel.cpp
   AssetBrowserPanel.h
   AssetDragDrop.h

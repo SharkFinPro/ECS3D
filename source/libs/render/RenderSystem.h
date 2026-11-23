@@ -5,6 +5,8 @@
 #include "TerrainShadowVotes.h"
 #include "TerrainSideVotes.h"
 #include <glm/mat4x4.hpp>
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -32,10 +34,10 @@ public:
 
   // Editor-only: draws a camera-facing, constant-screen-size sprite at every light. Call it each frame after
   // the camera update (updateCamera/useFreeFlyCamera) so the sprites face this frame's view. The client never
-  // calls it, so it never shows them. Every light in highlightUUIDs is outlined in the selection color, as a selected model is.
-  // A click on a sprite reports through isSelected(light uuid). In free-fly
-  // the view is the camera's pose before this frame's render() moves it, so sprites trail a moving camera by
-  // one frame (the viewport transform gizmo behaves the same).
+  // calls it, so it never shows them. Every light in highlightUUIDs is outlined in the selection color, as a
+  // selected model is. A pick of a sprite reports the light's uuid through requestPick. In free-fly the view is
+  // the camera's pose before this frame's render() moves it, so sprites trail a moving camera by one frame (the
+  // viewport transform gizmo behaves the same).
   void drawLightGizmos(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                        std::span<const uuids::uuid> highlightUUIDs = {});
 
@@ -56,9 +58,13 @@ public:
   // Shows or hides the renderer's ground grid. Cheap enough to call every frame.
   static void setGridVisible(GpuAssetCache& assetCache, bool visible);
 
-  // True for the object under the cursor (a model, a light sprite or a terrain); the editor reads it to drive
-  // Ctrl-click selection. Only an object drawn last frame can report true.
-  [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;
+  // Asks the renderer what is under the cursor and calls onPicked once, from inside the render() that resolves it
+  // (a few frames after the next render()), with the uuid of the object that owns the picked model, light sprite
+  // or terrain. It receives nullopt over empty space, off the scene, or for an object that was destroyed meanwhile.
+  // The renderer picks only while a request is pending, and the draws of those frames are the only ones that
+  // record an owner, so an idle frame pays nothing. The result names an owner as of the picked frame: it can be
+  // gone from the scene by the time the callback runs.
+  void requestPick(GpuAssetCache& assetCache, std::function<void(std::optional<uuids::uuid>)> onPicked);
 
   // What the viewport is currently looking through: the last view matrix updateCamera pushed for a
   // component camera, or the free-fly camera's own live view matrix when no component camera is active.
@@ -107,7 +113,19 @@ private:
   // lighting manager, updated each frame from the LightRenderer data).
   std::unordered_map<uuids::uuid, CachedLight> m_lights;
 
-  std::unordered_map<uuids::uuid, bool> m_selected;
+  // Which object each drawn render object or surface belongs to, recorded only while a pick request is in flight.
+  // Shared with the request callbacks, which clear it when the last one resolves.
+  struct PickOwners {
+    std::unordered_map<const void*, uuids::uuid> owners;
+    std::size_t requestsInFlight = 0;
+  };
+
+  void notePickOwner(const void* drawn, const uuids::uuid& owner) const;
+
+  std::shared_ptr<PickOwners> m_pickOwners = std::make_shared<PickOwners>();
+
+  // renderVolumeSurface only makes a surface pickable when given a flag; the engine writes it, nothing reads it.
+  bool m_pickSink = false;
 
   std::optional<ProjectionParams> m_appliedProjection;
   std::optional<ProjectionParams> m_rejectedProjection;
@@ -117,7 +135,7 @@ private:
   bool m_freeFlyActive = true;
   glm::mat4 m_componentCameraView{ 1.0f };
 
-  // variableUpdate adds every uuid it draws; m_lights, m_selected and GpuAssetCache's per-object caches are
+  // variableUpdate adds every uuid it draws; m_lights and GpuAssetCache's per-object caches are
   // pruned of absent uuids (object deleted, scene switched, project reloaded) only when that set changes.
   LiveObjectTracker m_liveObjects;
 

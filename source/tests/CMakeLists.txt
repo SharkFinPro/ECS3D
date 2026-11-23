@@ -174,6 +174,7 @@ add_executable(${PROJECT_NAME}
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
   EditorSelectionTest.cpp
+  PickClickTest.cpp
   TransientObjectTest.cpp
   PrefabBodyEditsTest.cpp
   ObjectSpawnTest.cpp
