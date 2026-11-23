@@ -36,6 +36,7 @@
 #include <VulkanEngine/components/lighting/lights/SpotLight.h>
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
 namespace {
@@ -104,13 +105,6 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
   assetCache.applyPendingReset();
 
-  // The picker only rewrites the flags of objects submitted this frame, so an object that stops being
-  // drawn (a light sprite in play mode, a hidden model) would otherwise stay picked.
-  for (auto& entry : m_selected)
-  {
-    entry.second = false;
-  }
-
   m_liveObjects.beginFrame();
   m_selectionOutlines.clear();
   m_drawnTerrains.clear();
@@ -172,12 +166,12 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         renderObject->setReflectivity(modelRenderer->getReflectivity());
 
-        // pointer is stable: unordered_map keeps element references valid across rehash.
         renderer->getRenderingManager()->getRenderer3D()->renderObject(
           renderObject,
-          modelRenderer->getUseStandardPipeline() ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,
-          &m_selected[uuid]
+          modelRenderer->getUseStandardPipeline() ? vke::PipelineType::object : vke::PipelineType::ellipticalDots
         );
+
+        notePickOwner(renderObject.get(), uuid);
 
         // The editor's selected objects get a screen-space outline in the selection color, submitted
         // after the loop (see below).
@@ -324,7 +318,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   for (const auto& draw : m_terrainDraws)
   {
     draw.surface->setCastsShadows(m_terrainShadowVotes.castsShadows(draw.terrainUUID));
-    renderer3D->renderVolumeSurface(draw.surface, draw.model, &m_selected[draw.objectUUID]);
+    renderer3D->renderVolumeSurface(draw.surface, draw.model);
+    notePickOwner(draw.surface.get(), draw.objectUUID);
   }
 
   // The later submission owns an overlap in the outline mask, so selection outlines go last to win over
@@ -358,7 +353,6 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     const auto& liveUUIDs = m_liveObjects.liveUUIDs();
 
     std::erase_if(m_lights, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
-    std::erase_if(m_selected, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
 
     assetCache.pruneStale(liveUUIDs);
   }
@@ -402,9 +396,9 @@ void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetC
     gizmo->setOrientationQuat(orientation);
     gizmo->setScale(*size);
 
-    // Reports through the light object's own pick flag, so the editor selects the light the same way it
-    // selects a model. The pointer is stable: unordered_map keeps element references valid across rehash.
-    renderer3D->renderObject(gizmo, vke::PipelineType::texturedPlane, &m_selected[uuid]);
+    // A pick of the sprite names the light's object, so the editor selects the light the way it selects a model.
+    renderer3D->renderObject(gizmo, vke::PipelineType::texturedPlane);
+    notePickOwner(gizmo.get(), uuid);
 
     if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
     {
@@ -498,11 +492,42 @@ void RenderSystem::setGridVisible(GpuAssetCache& assetCache, const bool visible)
   }
 }
 
-bool RenderSystem::isSelected(const uuids::uuid& uuid) const
+void RenderSystem::notePickOwner(const void* drawn, const uuids::uuid& owner) const
 {
-  const auto it = m_selected.find(uuid);
+  if (m_pickOwners->requestsInFlight > 0)
+  {
+    m_pickOwners->owners[drawn] = owner;
+  }
+}
 
-  return it != m_selected.end() && it->second;
+void RenderSystem::requestPick(GpuAssetCache& assetCache, std::function<void(std::optional<uuids::uuid>)> onPicked)
+{
+  const auto picker = assetCache.getRenderer()->getRenderingManager()->getRenderer3D()->getMousePicker();
+
+  ++m_pickOwners->requestsInFlight;
+
+  picker->requestPick([state = m_pickOwners, onPicked = std::move(onPicked)](const std::optional<vke::PickResult>& result)
+  {
+    std::optional<uuids::uuid> owner;
+
+    if (result.has_value())
+    {
+      const void* drawn = result->renderObject ? static_cast<const void*>(result->renderObject.get())
+                                               : static_cast<const void*>(result->volumeSurface.get());
+
+      if (const auto it = state->owners.find(drawn); it != state->owners.end())
+      {
+        owner = it->second;
+      }
+    }
+
+    if (--state->requestsInFlight == 0)
+    {
+      state->owners.clear();
+    }
+
+    onPicked(owner);
+  });
 }
 
 RenderSystem::ViewParams RenderSystem::viewParams(const GpuAssetCache& assetCache) const

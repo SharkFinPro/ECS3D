@@ -14,7 +14,8 @@ full notes are in [docs/architecture/apps.md](../../../docs/architecture/apps.md
 - Do not gate forwarded mouse input on `io.WantCaptureMouse`. The 3D viewport is itself an ImGui window, so that flag
   is set whenever the cursor is over the scene. `captureGatedInput` forwards the mouse only while the viewport looks
   through a scene camera and the scene is focused.
-- Picking runs from `run()` after `sendInput()`, not from the scene overlay, because the pick flags are set only
-  inside `render()`. `ViewportGizmo::capturesMouseAt` answers whether a click lands on a gizmo handle.
+- Picking runs from `run()` after `sendInput()`, not from the scene overlay, and asks the renderer for a pick only
+  on a Ctrl+click (`PickClick.h`); the result arrives in a callback during a later `render()`.
+  `ViewportGizmo::capturesMouseAt` answers whether a click lands on a gizmo handle.
 - `setupImGuiStyle` sets `ConfigWindowsMoveFromTitleBarOnly`, so a drag inside a detached scene window drives the
   gizmo instead of moving the window.

@@ -13,6 +13,9 @@
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <VulkanEngine/components/assets/volume/VolumeSource.h>
 #include <VulkanEngine/components/assets/volume/VolumeSurface.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 #include <array>
 #include <cstddef>
 #include <exception>
@@ -23,7 +26,10 @@
 
 GpuAssetCache::GpuAssetCache(std::shared_ptr<vke::VulkanEngine> renderer, const AssetRegistry* assetRegistry)
   : m_renderer(std::move(renderer)), m_assetRegistry(assetRegistry)
-{}
+{
+  // Both apps build their cache once from the renderer, and RenderSystem::requestPick is the only pick path.
+  m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->setPickMode(vke::PickMode::onRequest);
+}
 
 std::shared_ptr<vke::VulkanEngine> GpuAssetCache::getRenderer() const
 {

@@ -133,7 +133,7 @@ higher than the drawn surface's (so a terrain whose chunks change every frame st
 `maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are reported once per frame per terrain.
 Surfaces are released through the engine's deferred release on a new voxel size, a project reset, or when no object
 draws the terrain. The decisions are the headless `TerrainSurfacePlan.h`, and the model matrix has no scale because
-terrain space is metric. A terrain is pickable through `isSelected(object uuid)` and outlined when its object is
+terrain space is metric. A terrain is pickable (`RenderSystem::requestPick` answers with its object uuid) and outlined when its object is
 selected; the engine matches a pick to the surface it was drawn with, so a click on the frame a larger surface is
 promoted selects nothing. Submissions wait until every object has voted, and the surface casts shadows when any
 object drawing it has `castShadows` on (the headless `TerrainShadowVotes.h`). `openSides` is a mask of `terrain::TerrainSide` bits (-X, +X, -Z,
