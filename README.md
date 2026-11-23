@@ -137,5 +137,9 @@ Run the apps from `cmake-build-ecs3d-profile/bin`, as with any other preset.
 - **Linux:** `perf record --call-graph fp ./ECS3DServer`, then `perf report`.
 - **macOS:** profile the executable with Instruments.
 
+The preset also compiles the engine's shaders with debug info (`VKE_SHADER_DEBUG_INFO`), so a GPU profiler or
+capture tool such as RenderDoc or Nsight can show shader source and attribute GPU time to lines. It makes the
+`.spv` files larger; `-DVKE_SHADER_DEBUG_INFO=OFF` turns it off.
+
 The managed assemblies (scripts and the network transport) are always built in Release, whatever the
 preset.
