@@ -109,6 +109,10 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
       message(WARNING "ECS3D_PROFILE is meant for the RelWithDebInfo build type, not '${CMAKE_BUILD_TYPE}'.")
     endif()
 
+    # Shader debug info lets GPU profilers and capture tools attribute cost to shader source lines. It is
+    # a cache default so it must be set before VulkanEngine is fetched; -DVKE_SHADER_DEBUG_INFO=OFF still wins.
+    set(VKE_SHADER_DEBUG_INFO ON CACHE BOOL "Compile shaders with debug info for GPU profilers and capture tools")
+
     if (MSVC)
       # /DEBUG turns /OPT:REF off, leaving a larger and slower binary than Release, so REF is set back
       # on. /DEBUG already implies NOICF; it is stated to keep ICF off, since folding identical functions

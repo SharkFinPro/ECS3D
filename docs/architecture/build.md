@@ -11,7 +11,9 @@ MSVC (the Microsoft Visual C++ compiler) export-all-symbols. `compile_commands.j
 Ninja and Makefile generators, and an explicit false value such as `-DCMAKE_EXPORT_COMPILE_COMMANDS=OFF` opts out. Then `add_subdirectory(source)`.
 
 `ECS3D_PROFILER_SCOPES` (default ON, defined by `ECS3DProfile`) compiles the `ECS3D_PROFILE_SCOPE` timers in; it is
-separate from `ECS3D_PROFILE`, which only sets flags for external profilers.
+separate from `ECS3D_PROFILE`, which only sets flags for external profilers. `ECS3D_PROFILE` also defaults
+`VKE_SHADER_DEBUG_INFO` to ON (a cache default set before VulkanEngine is fetched), so shaders carry source and line
+info for GPU profilers.
 
 Module scanning is off (`CMAKE_CXX_SCAN_FOR_MODULES`, root `CMakeLists.txt`). Nothing uses C++20
 modules, and on MSVC the scan cost about an eighth of a clean build.
