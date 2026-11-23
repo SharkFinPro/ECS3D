@@ -166,7 +166,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         renderObject->setReflectivity(modelRenderer->getReflectivity());
 
-        renderer->getRenderingManager()->getRenderer3D()->renderObject(
+        renderer->getRenderingManager()->getRenderer3D()->renderPickableObject(
           renderObject,
           modelRenderer->getUseStandardPipeline() ? vke::PipelineType::object : vke::PipelineType::ellipticalDots
         );
@@ -318,7 +318,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   for (const auto& draw : m_terrainDraws)
   {
     draw.surface->setCastsShadows(m_terrainShadowVotes.castsShadows(draw.terrainUUID));
-    renderer3D->renderVolumeSurface(draw.surface, draw.model);
+    renderer3D->renderVolumeSurface(draw.surface, draw.model, &m_pickSink);
     notePickOwner(draw.surface.get(), draw.objectUUID);
   }
 
@@ -397,7 +397,7 @@ void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetC
     gizmo->setScale(*size);
 
     // A pick of the sprite names the light's object, so the editor selects the light the way it selects a model.
-    renderer3D->renderObject(gizmo, vke::PipelineType::texturedPlane);
+    renderer3D->renderPickableObject(gizmo, vke::PipelineType::texturedPlane);
     notePickOwner(gizmo.get(), uuid);
 
     if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
@@ -496,7 +496,7 @@ void RenderSystem::notePickOwner(const void* drawn, const uuids::uuid& owner) co
 {
   if (m_pickOwners->requestsInFlight > 0)
   {
-    m_pickOwners->owners[drawn] = owner;
+    m_pickOwners->owners.try_emplace(drawn, owner);
   }
 }
 

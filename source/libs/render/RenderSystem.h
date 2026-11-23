@@ -34,10 +34,10 @@ public:
 
   // Editor-only: draws a camera-facing, constant-screen-size sprite at every light. Call it each frame after
   // the camera update (updateCamera/useFreeFlyCamera) so the sprites face this frame's view. The client never
-  // calls it, so it never shows them. Every light in highlightUUIDs is outlined in the selection color, as a selected model is.
-  // A pick of a sprite reports the light's uuid through requestPick. In free-fly
-  // the view is the camera's pose before this frame's render() moves it, so sprites trail a moving camera by
-  // one frame (the viewport transform gizmo behaves the same).
+  // calls it, so it never shows them. Every light in highlightUUIDs is outlined in the selection color, as a
+  // selected model is. A pick of a sprite reports the light's uuid through requestPick. In free-fly the view is
+  // the camera's pose before this frame's render() moves it, so sprites trail a moving camera by one frame (the
+  // viewport transform gizmo behaves the same).
   void drawLightGizmos(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                        std::span<const uuids::uuid> highlightUUIDs = {});
 
@@ -123,6 +123,9 @@ private:
   void notePickOwner(const void* drawn, const uuids::uuid& owner) const;
 
   std::shared_ptr<PickOwners> m_pickOwners = std::make_shared<PickOwners>();
+
+  // renderVolumeSurface only makes a surface pickable when given a flag; the engine writes it, nothing reads it.
+  bool m_pickSink = false;
 
   std::optional<ProjectionParams> m_appliedProjection;
   std::optional<ProjectionParams> m_rejectedProjection;
