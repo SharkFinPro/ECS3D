@@ -55,6 +55,18 @@ namespace {
       return ImGui::GetDrawData()->TotalVtxCount;
     }
 
+    // As renderFrame, plus a second window the test can focus.
+    void renderFrameWithOtherWindow()
+    {
+      ImGui::NewFrame();
+      ImGui::Begin("Other");
+      ImGui::End();
+      ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+      ImGui::SetNextWindowSize(ImVec2(windowWidth, windowHeight), ImGuiCond_Always);
+      m_gui.displayGui(m_scene.objectManager.get());
+      ImGui::Render();
+    }
+
     // Two frames, so layout and scroll limits have settled before the count is read.
     int settledVertexCount()
     {
@@ -124,6 +136,8 @@ TEST_F(ObjectTreeRowCullingTest, ScrollingBringsRowsBackIntoView)
 TEST_F(ObjectTreeRowCullingTest, CtrlAInTheFocusedPanelSelectsEveryObject)
 {
   addRoots(3);
+  const auto parent = m_scene.objectManager->getObjects().front();
+  objectManagerFixtures::addChildObject(m_scene, "Child", parent);
   const auto selection = std::make_shared<EditorSelection>();
   m_gui.setSelection(selection);
   renderFrame();
@@ -137,10 +151,24 @@ TEST_F(ObjectTreeRowCullingTest, CtrlAInTheFocusedPanelSelectsEveryObject)
   ImGui::GetIO().AddKeyEvent(ImGuiKey_A, false);
   renderFrame();
 
+  // Guard: another window holds focus, so Ctrl+A must not select.
+  renderFrameWithOtherWindow();
+  ImGui::SetWindowFocus("Other");
+  renderFrameWithOtherWindow();
+  ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+  ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
+  renderFrameWithOtherWindow();
+  EXPECT_TRUE(selection->empty());
+  ImGui::GetIO().AddKeyEvent(ImGuiKey_A, false);
+  ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+  renderFrameWithOtherWindow();
+
+  ImGui::SetWindowFocus("Objects");
+  renderFrame();
   ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
   ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
   renderFrame();
 
   EXPECT_EQ(selection->kind(), EditorSelection::Kind::Object);
-  EXPECT_EQ(selection->size(), 3u);
+  EXPECT_EQ(selection->size(), 4u);
 }

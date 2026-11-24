@@ -38,10 +38,10 @@ Inspector/gizmo show; in the tree, a plain click replaces it, Ctrl-click toggles
 selects the contiguous range between an anchor uuid and the clicked row in the tree's current on-screen order,
 which `ObjectGUIManager` tracks itself each frame since collapsed nodes and the sort mode both affect what "on
 screen order" means; Ctrl+A in the focused panel selects the whole scene depth-first in the current sort mode, and
-the header shows the selected count (the label and the depth-first order are in `ObjectTreeOrder.h`, and Ctrl+A is
-panel-local, not a `KeybindTable` action); the range, row-action targets and sort rules live in the headless
-`ObjectTreeOrder.h`; the
-viewport has its own rule, described under Viewport gizmos below), `SettingsPanel` (the "Settings" window — a
+the header shows the selected count unless the panel is too narrow to fit it beside the label; Ctrl+A is
+panel-local, not a `KeybindTable` action; the range, row-action targets, depth-first order, count label and
+sort rules live in the headless `ObjectTreeOrder.h`; the viewport has its own rule, described under Viewport
+gizmos below), `SettingsPanel` (the "Settings" window — a
 section nav beside the selected section's content, opening centered at a font-relative default size on first use
 (a saved panel layout wins; `SettingsPanelLayout.h` holds that math) with the Keybinds columns sized from
 their content, reading and writing `ECS3DSettings` directly since
@@ -58,8 +58,9 @@ agreement, and both sides are reconciled before each frame ends (`KeybindCapture
 a hidden GUI), so Cancel, Unbind, Reset, Reset all, closing the window, switching sections or Escape end both),
 `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and
 calls the registered handler, suppressed while ImGui wants the keyboard; also drives the
-Settings panel's rebind capture; actions registered with `KeyHold::repeatWhileHeld` (undo, redo and duplicate, chosen by `defaultKeyHold`) fire again
-while their chord stays held, after `keyHoldInitialDelay` and then every `keyHoldRepeatInterval`, driven by the
+Settings panel's rebind capture; actions registered with `KeyHold::repeatWhileHeld` (undo, redo and duplicate,
+chosen by `defaultKeyHold`) fire again while their chord stays held, after `keyHoldInitialDelay` and then every
+`keyHoldRepeatInterval`, driven by the
 headless `KeyHoldRepeat.h` and polled by `KeybindDispatcher::update()` once per frame; a handler with nothing
 left to do calls `stopRepeat()`), `SceneScriptsPanel` (the "Scene Scripts" window: add, remove, reorder and edit
 the current scene's scripts, docked on the Inspector's side; its pure decisions are the headless

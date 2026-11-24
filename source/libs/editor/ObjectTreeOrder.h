@@ -80,6 +80,13 @@ namespace objectTreeOrder {
     return count == 0 ? std::string() : std::to_string(count) + " selected";
   }
 
+  // Whether a right-aligned pill that starts at `pillStartX` clears the label that ends at `labelEndX` by
+  // at least `spacing`, so a narrow panel drops the pill instead of drawing it over the label.
+  [[nodiscard]] inline bool pillFitsAfterLabel(const float labelEndX, const float pillStartX, const float spacing)
+  {
+    return pillStartX >= labelEndX + spacing;
+  }
+
   // Shift-click range: the contiguous slice of `visibleOrder` (the tree's current on-screen order) from
   // `anchor` to `clicked`, inclusive and ordered anchor-to-clicked so the caller can add it to the
   // selection with `clicked` landing last (the new primary). Either uuid missing from `visibleOrder` (a

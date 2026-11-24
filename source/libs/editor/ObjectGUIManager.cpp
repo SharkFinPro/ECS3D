@@ -317,6 +317,7 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   if (objectManager)
   {
     gc::sectionLabel("Objects");
+    const float labelEndX = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetScrollX();
 
     // Right-aligned items are placed from the far edge inward: the total pill, then the selected count.
     // Every object in the scene, not just the roots - matching the count the apps log on a snapshot.
@@ -329,9 +330,14 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
       : std::string();
     if (!selectedLabel.empty())
     {
+      const float spacing = ImGui::GetStyle().ItemSpacing.x;
       const float selectedWidth = ImGui::CalcTextSize(selectedLabel.c_str()).x + 18.0f;
-      ImGui::SameLine(rightEdge - pillWidth - selectedWidth - ImGui::GetStyle().ItemSpacing.x);
-      gc::pill(selectedLabel.c_str(), theme::accent, theme::accdim);
+      const float selectedStartX = rightEdge - pillWidth - selectedWidth - spacing;
+      if (objectTreeOrder::pillFitsAfterLabel(labelEndX, selectedStartX, spacing))
+      {
+        ImGui::SameLine(selectedStartX);
+        gc::pill(selectedLabel.c_str(), theme::accent, theme::accdim);
+      }
     }
 
     ImGui::SameLine(rightEdge - pillWidth);

@@ -239,3 +239,11 @@ TEST(ObjectTreeSelectedCount, ShowsTheCount)
   EXPECT_EQ(selectedCountLabel(1), "1 selected");
   EXPECT_EQ(selectedCountLabel(3), "3 selected");
 }
+
+TEST(ObjectTreeSelectedPill, FitsOnlyWhenItClearsTheLabelPlusSpacing)
+{
+  EXPECT_TRUE(pillFitsAfterLabel(100.0f, 150.0f, 8.0f));
+  EXPECT_TRUE(pillFitsAfterLabel(100.0f, 108.0f, 8.0f));
+  EXPECT_FALSE(pillFitsAfterLabel(100.0f, 107.0f, 8.0f));
+  EXPECT_FALSE(pillFitsAfterLabel(100.0f, 40.0f, 8.0f));
+}
