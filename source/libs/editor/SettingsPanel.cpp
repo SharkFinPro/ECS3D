@@ -231,6 +231,7 @@ void SettingsPanel::drawWindow()
 
       case Section::display:
         displayFramePacing();
+        displayRendering();
         break;
 
       case Section::keybinds:
@@ -527,6 +528,44 @@ void SettingsPanel::displayFramePacing()
                                      framePacingSettings::defaultMaxFps);
     rendering->setPresentMode(presentModeFor(framePacingSettings::defaultVsync));
     rendering->setFrameRateLimit(static_cast<double>(framePacingSettings::defaultMaxFps));
+  }
+}
+
+void SettingsPanel::displayRendering()
+{
+  const auto rendering = m_renderer->getRenderingManager();
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  gc::sectionLabel("Rendering");
+
+  ImGui::TextColored(theme::t2, "How the editor draws the scene. Applies as you change it.");
+
+  ImGui::Spacing();
+
+  const bool supported = rendering->supportsRayTracing();
+  bool rayTracing = supported && rendering->isRayTracingEnabled();
+
+  ImGui::BeginDisabled(!supported);
+  if (gc::accentCheckbox("Ray tracing", &rayTracing))
+  {
+    editorViewportSettings::writeRayTracing(*m_settings, rayTracing);
+    if (rayTracing)
+    {
+      rendering->enableRayTracing();
+    }
+    else
+    {
+      rendering->disableRayTracing();
+    }
+  }
+  ImGui::EndDisabled();
+
+  if (!supported)
+  {
+    ImGui::TextColored(theme::t2, "This device cannot ray trace.");
   }
 }
 

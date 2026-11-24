@@ -77,6 +77,42 @@ TEST_F(EditorViewportSettings, StatsReadoutOfTheWrongTypeFallsBackToTheDefault)
   EXPECT_FALSE(editorViewportSettings::readStatsReadout(settings));
 }
 
+TEST_F(EditorViewportSettings, RayTracingDefaultsToOnAndRoundTrips)
+{
+  SettingsStore settings(m_file);
+
+  EXPECT_TRUE(editorViewportSettings::defaultRayTracing);
+  EXPECT_TRUE(editorViewportSettings::readRayTracing(settings));
+
+  editorViewportSettings::writeRayTracing(settings, false);
+  EXPECT_FALSE(editorViewportSettings::readRayTracing(settings));
+
+  editorViewportSettings::writeRayTracing(settings, true);
+  EXPECT_TRUE(editorViewportSettings::readRayTracing(settings));
+}
+
+TEST_F(EditorViewportSettings, RayTracingIsStoredUnderItsPersistedKey)
+{
+  {
+    SettingsStore settings(m_file);
+    editorViewportSettings::writeRayTracing(settings, false);
+    settings.flush();
+  }
+
+  std::ifstream in(m_file);
+  const auto contents = std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+
+  EXPECT_NE(contents.find("\"editor.display.rayTracing\": false"), std::string::npos) << contents;
+}
+
+TEST(RayTracingAtStartup, AppliesOnlyWhenStoredAndSupported)
+{
+  EXPECT_TRUE(editorViewportSettings::rayTracingAtStartup(true, true));
+  EXPECT_FALSE(editorViewportSettings::rayTracingAtStartup(true, false));
+  EXPECT_FALSE(editorViewportSettings::rayTracingAtStartup(false, true));
+  EXPECT_FALSE(editorViewportSettings::rayTracingAtStartup(false, false));
+}
+
 TEST_F(EditorViewportSettings, ShowGridRoundTripsBothValues)
 {
   SettingsStore settings(m_file);

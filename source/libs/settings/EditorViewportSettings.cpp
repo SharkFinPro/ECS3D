@@ -21,4 +21,19 @@ namespace editorViewportSettings {
   {
     settings.set(statsReadoutKey, show);
   }
+
+  bool readRayTracing(const SettingsStore& settings)
+  {
+    return settings.get<bool>(rayTracingKey, defaultRayTracing);
+  }
+
+  void writeRayTracing(SettingsStore& settings, const bool enabled)
+  {
+    settings.set(rayTracingKey, enabled);
+  }
+
+  bool rayTracingAtStartup(const bool stored, const bool supported)
+  {
+    return stored && supported;
+  }
 }

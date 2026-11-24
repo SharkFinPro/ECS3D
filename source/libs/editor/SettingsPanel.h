@@ -85,6 +85,8 @@ private:
 
   void displayFramePacing();
 
+  void displayRendering();
+
   void displayKeybinds();
 
   void displayKeybindConflictModal();

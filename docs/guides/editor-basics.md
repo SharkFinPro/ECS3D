@@ -75,7 +75,6 @@ controls wrap onto more rows and the panel grows to fit.
 - The play, pause and stop icon buttons. Play also resumes a paused scene. Buttons that do not apply are
   grayed out.
 - A readout of the scene name and its state: Stopped, Running or Paused.
-- A Ray Tracing checkbox. This is a local rendering setting, grayed out if the device cannot ray trace.
 - The View combo chooses what the viewport looks through: Editor Camera, or any object in the scene that has
   a Camera component. A player's camera is labeled with its Player Controller slot. If the chosen object goes
   away, the view falls back to the Editor Camera.
@@ -139,7 +138,8 @@ Open Window, then Settings. It has four sections.
   corner) and the gizmo snap options. The grid shows only through the Editor Camera.
 - Display: Vertical sync and a frame rate limit (10 to 1000 fps, or Unlimited frame rate). Type a limit and press
   Enter or click away to apply it. The section shows the present mode in use; if the display cannot turn vsync off,
-  it says so.
+  it says so. Below that, Rendering has a Ray tracing checkbox. It is a local setting the editor remembers, grayed
+  out if the device cannot ray trace.
 - Keybinds: every action with its current key, plus Rebind, Unbind and Reset buttons, and Reset all to
   defaults. Rebinding to a key another action already uses is refused and names that action.
 

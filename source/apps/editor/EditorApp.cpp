@@ -527,6 +527,18 @@ void EditorApp::createRenderer()
 
   m_sceneViewName = engineConfig.imGui.sceneViewName;
 
+  const auto rendering = m_renderer->getRenderingManager();
+  const bool rayTracing = editorViewportSettings::rayTracingAtStartup(
+    editorViewportSettings::readRayTracing(*m_settings), rendering->supportsRayTracing());
+  if (rayTracing)
+  {
+    rendering->enableRayTracing();
+  }
+  else
+  {
+    rendering->disableRayTracing();
+  }
+
   Log::info(LogCategory::editor, "Frame pacing: vsync " + std::string(vsync ? "on" : "off") + " (present mode " +
             vke::toString(m_renderer->getRenderingManager()->getActivePresentMode()) + "), " +
             (maxFps > 0 ? std::to_string(maxFps) + " fps limit" : std::string("no frame rate limit")));
