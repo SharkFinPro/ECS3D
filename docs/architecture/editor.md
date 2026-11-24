@@ -23,7 +23,8 @@ on the single-selection path) so each differing field's own widget shows a disti
 instead of silently displaying the primary object's value, via ImGui's `ImGuiItemFlags_MixedValue` for the stock
 Drag/Checkbox/ColorEdit3 widgets this wraps (a Script field's bool still resolves a mixed click to true itself,
 since the flag only changes the rendering), and hand-drawn for `accentCheckbox`/`accentSlider`, which are not
-built on a stock widget; a residual "Mixed values" line still names the few fields with no per-widget indicator
+built on a stock widget (`accentSlider` draws its value, or the mixed dash, in the primary text color in a
+fixed-width column right of the track, laid out by the headless `AccentSliderLayout.h`); a residual "Mixed values" line still names the few fields with no per-widget indicator
 (an asset reference slot, the collider mask popup, a non-numeric script field), and each object's edit still
 goes out and is recorded through the normal single-object path, so undo records one entry per object; Add/Remove
 Component and the name field are left out of this view for now, since wiring them up would mean deciding which

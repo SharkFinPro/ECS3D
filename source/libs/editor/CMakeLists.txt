@@ -28,6 +28,7 @@ add_library(${PROJECT_NAME}
   AssetDragDrop.h
   AssetFilter.h
   DashedBoxLayout.h
+  AccentSliderLayout.h
   SaveUI.cpp
   SaveUI.h
   TerrainSaving.cpp
