@@ -17,13 +17,18 @@ TEST(AccentSliderLayoutTest, TrackEndsBeforeTheValueColumn)
   }
 }
 
-TEST(AccentSliderLayoutTest, EveryRowOfTheSameWidthSharesTheTrackEnd)
+TEST(AccentSliderLayoutTest, RowsWithTheSameRightEdgeShareTheTrackEnd)
 {
-  const SliderLayout a = sliderLayout(4.0f, 250.0f, 60.0f);
-  const SliderLayout b = sliderLayout(4.0f, 250.0f, 60.0f);
+  constexpr float rightEdge = 400.0f;
+  constexpr float column = 60.0f;
 
-  EXPECT_FLOAT_EQ(a.trackEnd, b.trackEnd);
-  EXPECT_FLOAT_EQ(a.trackEnd, 4.0f + 250.0f - 60.0f - sliderValueGap);
+  const SliderLayout shortLabel = sliderLayout(80.0f, rightEdge - 80.0f, column);
+  const SliderLayout longLabel = sliderLayout(140.0f, rightEdge - 140.0f, column);
+
+  EXPECT_NE(shortLabel.trackStart, longLabel.trackStart);
+  EXPECT_FLOAT_EQ(shortLabel.trackEnd, longLabel.trackEnd);
+  EXPECT_FLOAT_EQ(shortLabel.valueRight, longLabel.valueRight);
+  EXPECT_FLOAT_EQ(shortLabel.trackEnd, rightEdge - column - sliderValueGap);
 }
 
 TEST(AccentSliderLayoutTest, MouseMapsAcrossTheTrack)

@@ -742,7 +742,9 @@ namespace gc {
     }
 
     const ImVec2 vts = ImGui::CalcTextSize(buf);
+    dl->PushClipRect(ImVec2(layout.trackEnd + sliderValueGap, pos.y), ImVec2(layout.valueRight, pos.y + h), true);
     dl->AddText(ImVec2(layout.valueRight - vts.x, cy - vts.y * 0.5f), theme::u32(theme::t1), buf);
+    dl->PopClipRect();
 
     return edited;
   }
