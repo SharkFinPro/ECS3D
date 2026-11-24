@@ -4,6 +4,7 @@
 #include "FramePacing.h"
 #include "FramePacingNotes.h"
 #include "KeybindDispatcher.h"
+#include "RayTracingApply.h"
 #include "SettingsPanelLayout.h"
 #include <EditorCameraSettings.h>
 #include <EditorGizmoSettings.h>
@@ -552,14 +553,7 @@ void SettingsPanel::displayRendering()
   if (gc::accentCheckbox("Ray tracing", &rayTracing))
   {
     editorViewportSettings::writeRayTracing(*m_settings, rayTracing);
-    if (rayTracing)
-    {
-      rendering->enableRayTracing();
-    }
-    else
-    {
-      rendering->disableRayTracing();
-    }
+    applyRayTracing(*rendering, rayTracing);
   }
   ImGui::EndDisabled();
 

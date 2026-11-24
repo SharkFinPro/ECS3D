@@ -46,6 +46,7 @@ add_library(${PROJECT_NAME}
   SettingsPanelLayout.h
   FramePacing.h
   FramePacingNotes.h
+  RayTracingApply.h
   ConsolePanel.cpp
   ConsolePanel.h
   ConsolePanelLayout.h

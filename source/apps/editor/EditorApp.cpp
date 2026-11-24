@@ -19,6 +19,7 @@
 #include <GridVisibility.h>
 #include <EditorViewportSettings.h>
 #include <FramePacing.h>
+#include <RayTracingApply.h>
 #include <FramePacingSettings.h>
 #include <RenderSystem.h>
 #include <ComponentEditor.h>
@@ -528,19 +529,11 @@ void EditorApp::createRenderer()
   m_sceneViewName = engineConfig.imGui.sceneViewName;
 
   const auto rendering = m_renderer->getRenderingManager();
-  const bool rayTracing = editorViewportSettings::rayTracingAtStartup(
-    editorViewportSettings::readRayTracing(*m_settings), rendering->supportsRayTracing());
-  if (rayTracing)
-  {
-    rendering->enableRayTracing();
-  }
-  else
-  {
-    rendering->disableRayTracing();
-  }
+  applyRayTracing(*rendering, editorViewportSettings::rayTracingAtStartup(
+    editorViewportSettings::readRayTracing(*m_settings), rendering->supportsRayTracing()));
 
   Log::info(LogCategory::editor, "Frame pacing: vsync " + std::string(vsync ? "on" : "off") + " (present mode " +
-            vke::toString(m_renderer->getRenderingManager()->getActivePresentMode()) + "), " +
+            vke::toString(rendering->getActivePresentMode()) + "), " +
             (maxFps > 0 ? std::to_string(maxFps) + " fps limit" : std::string("no frame rate limit")));
 
   // The title bar is native chrome ImGui never touches; follow the theme by luminance of the panel

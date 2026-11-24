@@ -444,7 +444,6 @@ private:
 
   void displayPlayControls();
 
-
   // The readout's width, so it can be placed before it is drawn.
   [[nodiscard]] float sceneReadoutWidth() const;
 
