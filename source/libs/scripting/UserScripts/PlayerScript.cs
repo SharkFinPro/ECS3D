@@ -49,12 +49,13 @@ public class PlayerScript : ScriptBase
     [ExposeToEditor("Jump Key")]
     private string m_jump = "Space";
 
+    [ExposeToEditor("Sprint Key")]
+    private string m_sprint = "LeftShift";
+
     private readonly KeyBinding m_forwardBinding = new KeyBinding("PlayerScript Forward Key");
     private readonly KeyBinding m_backBinding = new KeyBinding("PlayerScript Back Key");
     private readonly KeyBinding m_leftBinding = new KeyBinding("PlayerScript Left Key");
     private readonly KeyBinding m_rightBinding = new KeyBinding("PlayerScript Right Key");
-    [ExposeToEditor("Sprint Key")]
-    private string m_sprint = "LeftShift";
 
     private readonly KeyBinding m_jumpBinding = new KeyBinding("PlayerScript Jump Key");
     private readonly KeyBinding m_sprintBinding = new KeyBinding("PlayerScript Sprint Key");
@@ -97,7 +98,8 @@ public class PlayerScript : ScriptBase
             m_rising = false;
         }
 
-        Vector3 steer = (m_heading * ((m_sprinting ? m_sprintSpeed : m_topSpeed) * dt) - new Vector3(velocity.X, 0.0f, velocity.Z)) * Grip;
+        float speed = m_sprinting ? m_sprintSpeed : m_topSpeed;
+        Vector3 steer = (m_heading * (speed * dt) - new Vector3(velocity.X, 0.0f, velocity.Z)) * Grip;
         if (m_jumpRequested)
         {
             // Replaces the vertical velocity rather than adding to it, so every jump leaves at the same speed

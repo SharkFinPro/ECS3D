@@ -198,7 +198,7 @@ bodies it hit.
 | Cooldown | float (seconds) | 1.5 |
 | Fire Every | float (seconds) | 0 |
 
-Key accepts a letter A to Z, Space, Left, Right, Up or Down (not case sensitive); an unknown name logs one
+Key accepts a letter A to Z, Space, LeftShift, RightShift, Left, Right, Up or Down (not case sensitive); an unknown name logs one
 warning and leaves the key unbound. A Fire Every of 0 turns the timer off. Cooldown applies to both triggers.
 
 Events: none. Showcase use: used by Physics Playground (the explosion pit).
