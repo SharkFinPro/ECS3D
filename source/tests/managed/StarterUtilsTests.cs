@@ -353,6 +353,70 @@ public unsafe class StarterUtilsTests : IDisposable
     Assert.Empty(Warnings());
   }
 
+  [Fact]
+  public void PlayerScript_HoldingSprintSteersTowardTwiceTheWalkingSpeed()
+  {
+    var walking = NewPlayer();
+    Press(Key.W);
+    Step(walking);
+    AssertVec(new Vector3(0f, 0f, -0.09f), LastSteer());
+
+    FakeNatives.Calls.Clear();
+    var sprinting = NewPlayer();
+    Press(Key.W);
+    Press(Key.LEFTSHIFT);
+    Step(sprinting);
+    AssertVec(new Vector3(0f, 0f, -0.18f), LastSteer());
+    Assert.Empty(Warnings());
+  }
+
+  [Fact]
+  public void PlayerScript_RightShiftSprintsToo()
+  {
+    var player = NewPlayer();
+    Press(Key.W);
+    Press(Key.RIGHTSHIFT);
+    Step(player);
+
+    AssertVec(new Vector3(0f, 0f, -0.18f), LastSteer());
+  }
+
+  [Fact]
+  public void PlayerScript_SprintAloneDoesNotMoveThePlayer()
+  {
+    var player = NewPlayer();
+    Press(Key.LEFTSHIFT);
+    Step(player);
+    AssertVec(Vector3.Zero, LastSteer());
+
+    FakeNatives.Calls.Clear();
+    Press(Key.W);
+    Step(player);
+    AssertVec(new Vector3(0f, 0f, -0.18f), LastSteer());
+  }
+
+  [Fact]
+  public void PlayerScript_ReleasingSprintReturnsToWalkingSpeed()
+  {
+    var player = NewPlayer();
+    Press(Key.W);
+    Press(Key.LEFTSHIFT);
+    Step(player);
+    AssertVec(new Vector3(0f, 0f, -0.18f), LastSteer());
+
+    FakeNatives.Set($"InputUtils.keyIsPressedForObject:{(int)Key.LEFTSHIFT}", false);
+    Step(player);
+    AssertVec(new Vector3(0f, 0f, -0.09f), LastSteer());
+  }
+
+  [Theory]
+  [InlineData("leftshift", Key.LEFTSHIFT)]
+  [InlineData("RightShift", Key.RIGHTSHIFT)]
+  public void ParseKey_AcceptsTheShiftKeys(string name, Key expected)
+  {
+    Assert.Equal(expected, StarterUtils.parseKey(name));
+  }
+
   [Theory]
   [InlineData(Key.S, 0f, 0f, 0.09f)]
   [InlineData(Key.DOWN, 0f, 0f, 0.09f)]
@@ -468,7 +532,7 @@ public unsafe class StarterUtilsTests : IDisposable
   [InlineData(-0.5f)]
   [InlineData(0f)]
   [InlineData(0.2f)]
-  public void PlayerScript_JumpLeavesAtJumpSpeedWhateverTheVerticalVelocity(float verticalVelocity)
+  public void PlayerScript_JumpLeavesAtJumpForceWhateverTheVerticalVelocity(float verticalVelocity)
   {
     var player = NewPlayer();
     FakeNatives.Set("RigidBody.getVelocity", new Vector3(0f, verticalVelocity, 0f));

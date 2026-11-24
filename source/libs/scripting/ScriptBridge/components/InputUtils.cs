@@ -20,6 +20,9 @@ public enum Key
     UP     = 265,
 
     SPACE  = 32,
+
+    LEFTSHIFT  = 340,
+    RIGHTSHIFT = 344,
     
     A = 65, B = 66, C = 67, D = 68, E = 69, F = 70,
     G = 71, H = 72, I = 73, J = 74, K = 75, L = 76,

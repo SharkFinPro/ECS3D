@@ -239,7 +239,7 @@
                   "value": 9.0
                 },
                 {
-                  "name": "m_jumpSpeed",
+                  "name": "m_jumpForce",
                   "type": "float",
                   "value": 15.0
                 }
@@ -8577,7 +8577,7 @@
                     "value": 9.0
                   },
                   {
-                    "name": "m_jumpSpeed",
+                    "name": "m_jumpForce",
                     "type": "float",
                     "value": 15.0
                   }

@@ -188,5 +188,8 @@ Example gameplay scripts live in `UserScripts/Starters/`, one public class per f
 `StarterUtils` holds their shared helpers (throttled lookup by name, `findPlayerBody`, `parseKey`, the Euler
 rotation mirror of `RotationConvention.h`) and `StarterEvents` the event names and payload classes. Objects are
 referenced by name, assets and prefabs by uuid string. `PlayerScript` exposes its keys as string fields
-(W, A, S and D to move and the space bar to jump by default) that `parseKey` reads, re-parsing when a
-value changes; the managed `Key` enum gained a space bar value for that.
+(W, A, S and D to move, Left Shift to sprint and the space bar to jump by default) that `parseKey` reads,
+re-parsing when a value changes. Holding the sprint key (or Right Shift, as the arrow keys are for movement)
+steers toward `m_sprintSpeed` instead of `m_topSpeed`, on the ground and in the air alike, and `m_jumpForce` is the
+vertical speed a jump leaves at. The managed `Key` enum carries the space bar and both shift keys for this, and
+`InputCapture` polls them so they reach the server.

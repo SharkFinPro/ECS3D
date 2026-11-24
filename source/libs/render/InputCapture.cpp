@@ -45,7 +45,7 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
   const bool focused = anyWindowFocused(glfwGetWindowAttrib(window->getWindow(), GLFW_FOCUSED) == GLFW_TRUE,
                                         detachedWindowFocused());
 
-  // Poll the keys the ScriptBridge Key enum exposes: space, the arrow keys, and A-Z. The window only
+  // Poll the keys the ScriptBridge Key enum exposes: space, the shift keys, the arrow keys, and A-Z. The window only
   // reports a key as pressed while it has focus, so this naturally goes quiet when the user tabs away.
   const auto poll = [&](const int low, const int high) {
     for (int key = low; key <= high; ++key)
@@ -59,6 +59,8 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
 
   poll(32, 32);    // space
   poll(65, 90);    // A-Z
+  poll(340, 340);  // left shift
+  poll(344, 344);  // right shift
   poll(262, 265);  // right/left/down/up arrows
 
   // Mouse: absolute cursor position, this frame's movement (current - previous cursor, both cached by

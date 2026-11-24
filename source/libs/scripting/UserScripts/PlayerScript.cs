@@ -8,9 +8,13 @@ public class PlayerScript : ScriptBase
     [ExposeToEditor("Top Speed")]
     private float m_topSpeed = 9.0f;
 
-    // Units per second, straight up.
-    [ExposeToEditor("Jump Speed")]
-    private float m_jumpSpeed = 15.0f;
+    // Units per second at a full stride while the sprint key is held.
+    [ExposeToEditor("Sprint Speed")]
+    private float m_sprintSpeed = 18.0f;
+
+    // The vertical speed, in units per second, a jump leaves at.
+    [ExposeToEditor("Jump Force")]
+    private float m_jumpForce = 15.0f;
 
     [ExposeToEditor("Look Sensitivity")]
     private float m_lookSensitivity = 0.15f;
@@ -28,7 +32,8 @@ public class PlayerScript : ScriptBase
     // Degrees per component by which the Transform may stray from the look angles before they are written back.
     private const float RotationTolerance = 1e-3f;
 
-    // Key names, read with StarterUtils.parseKey. The arrow keys always move too.
+    // Key names, read with StarterUtils.parseKey. The arrow keys always move too, and the right shift key always
+    // sprints.
     [ExposeToEditor("Forward Key")]
     private string m_forward = "W";
 
@@ -48,10 +53,16 @@ public class PlayerScript : ScriptBase
     private readonly KeyBinding m_backBinding = new KeyBinding("PlayerScript Back Key");
     private readonly KeyBinding m_leftBinding = new KeyBinding("PlayerScript Left Key");
     private readonly KeyBinding m_rightBinding = new KeyBinding("PlayerScript Right Key");
+    [ExposeToEditor("Sprint Key")]
+    private string m_sprint = "LeftShift";
+
     private readonly KeyBinding m_jumpBinding = new KeyBinding("PlayerScript Jump Key");
+    private readonly KeyBinding m_sprintBinding = new KeyBinding("PlayerScript Sprint Key");
 
     // The way the player steers this tick, of unit length or zero, read from input.
     private Vector3 m_heading = Vector3.Zero;
+
+    private bool m_sprinting = false;
 
     private bool m_jumpRequested = false;
 
@@ -86,20 +97,21 @@ public class PlayerScript : ScriptBase
             m_rising = false;
         }
 
-        Vector3 steer = (m_heading * (m_topSpeed * dt) - new Vector3(velocity.X, 0.0f, velocity.Z)) * Grip;
+        Vector3 steer = (m_heading * ((m_sprinting ? m_sprintSpeed : m_topSpeed) * dt) - new Vector3(velocity.X, 0.0f, velocity.Z)) * Grip;
         if (m_jumpRequested)
         {
             // Replaces the vertical velocity rather than adding to it, so every jump leaves at the same speed
             // whatever the player was moving at when it pressed the key.
             // A support already rising faster than a jump leaves carries the player on untouched, and must not lock
             // out the next jump while it does.
-            steer.Y = MathF.Max(m_jumpSpeed * dt - velocity.Y, 0.0f);
+            steer.Y = MathF.Max(m_jumpForce * dt - velocity.Y, 0.0f);
             m_rising = steer.Y > 0.0f;
         }
 
         rigidBody.applyForce(steer, transform.getPosition(), ForceMode.VelocityChange);
 
         m_heading = Vector3.Zero;
+        m_sprinting = false;
         m_jumpRequested = false;
 
         // Mouse-look owns rotation, so cancel any physics spin (e.g. from a collision) before physics
@@ -239,6 +251,8 @@ public class PlayerScript : ScriptBase
                 m_heading = Vector3.Normalize(move);
             }
         }
+
+        m_sprinting = isHeld(m_sprintBinding.refresh(m_sprint), Key.RIGHTSHIFT);
 
         Key? jumpKey = m_jumpBinding.refresh(m_jump);
         if (!m_rising && !rigidBody.isFalling() && jumpKey.HasValue && input.keyIsPressed(jumpKey.Value))
