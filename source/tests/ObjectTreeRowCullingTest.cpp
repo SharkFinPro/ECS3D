@@ -24,6 +24,8 @@ namespace {
       io.DisplaySize = ImVec2(800.0f, 600.0f);
       io.DeltaTime = 1.0f / 60.0f;
       io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+      // On macOS ImGui swaps Ctrl and Cmd by default, so a posted Ctrl would arrive as Super.
+      io.ConfigMacOSXBehaviors = false;
 
       m_gui.setSelection(std::make_shared<EditorSelection>());
       m_gui.setEditable(true);
