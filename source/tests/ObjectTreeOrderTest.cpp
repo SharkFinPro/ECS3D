@@ -192,3 +192,50 @@ TEST(ObjectTreeSort, UnknownStringParsesToAuthored)
   EXPECT_EQ(parseSortMode("sideways"), SortMode::authored);
   EXPECT_EQ(parseSortMode(""), SortMode::authored);
 }
+
+TEST(ObjectTreeDepthFirst, AuthoredOrderListsChildrenRightAfterTheirParent)
+{
+  const auto scene = fixtures::makeScene();
+  const auto a = addObject(scene, "a");
+  const auto a1 = addChildObject(scene, "a1", a);
+  const auto a1x = addChildObject(scene, "a1x", a1);
+  const auto a2 = addChildObject(scene, "a2", a);
+  const auto b = addObject(scene, "b");
+
+  const auto order = depthFirstOrder(scene.objectManager->getObjects(), SortMode::authored);
+
+  EXPECT_EQ(order, (std::vector { a->getUUID(), a1->getUUID(), a1x->getUUID(), a2->getUUID(), b->getUUID() }));
+}
+
+TEST(ObjectTreeDepthFirst, AlphabeticalSortsEachSiblingListSeparately)
+{
+  const auto scene = fixtures::makeScene();
+  const auto z = addObject(scene, "z");
+  const auto zb = addChildObject(scene, "b", z);
+  const auto za = addChildObject(scene, "a", z);
+  const auto m = addObject(scene, "m");
+
+  const auto alphabetical = depthFirstOrder(scene.objectManager->getObjects(), SortMode::alphabetical);
+  const auto authored = depthFirstOrder(scene.objectManager->getObjects(), SortMode::authored);
+
+  EXPECT_EQ(alphabetical, (std::vector { m->getUUID(), z->getUUID(), za->getUUID(), zb->getUUID() }));
+  EXPECT_EQ(authored, (std::vector { z->getUUID(), zb->getUUID(), za->getUUID(), m->getUUID() }));
+}
+
+TEST(ObjectTreeDepthFirst, EmptySceneIsEmpty)
+{
+  const auto scene = fixtures::makeScene();
+
+  EXPECT_TRUE(depthFirstOrder(scene.objectManager->getObjects(), SortMode::authored).empty());
+}
+
+TEST(ObjectTreeSelectedCount, NothingSelectedShowsNoLabel)
+{
+  EXPECT_TRUE(selectedCountLabel(0).empty());
+}
+
+TEST(ObjectTreeSelectedCount, ShowsTheCount)
+{
+  EXPECT_EQ(selectedCountLabel(1), "1 selected");
+  EXPECT_EQ(selectedCountLabel(3), "3 selected");
+}

@@ -120,3 +120,27 @@ TEST_F(ObjectTreeRowCullingTest, ScrollingBringsRowsBackIntoView)
   EXPECT_GT(middle, 0);
   EXPECT_NEAR(static_cast<double>(middle), static_cast<double>(quarter), quarter * 0.15);
 }
+
+TEST_F(ObjectTreeRowCullingTest, CtrlAInTheFocusedPanelSelectsEveryObject)
+{
+  addRoots(3);
+  const auto selection = std::make_shared<EditorSelection>();
+  m_gui.setSelection(selection);
+  renderFrame();
+  ImGui::SetWindowFocus("Objects");
+  renderFrame();
+
+  // Control: A alone selects nothing.
+  ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
+  renderFrame();
+  EXPECT_TRUE(selection->empty());
+  ImGui::GetIO().AddKeyEvent(ImGuiKey_A, false);
+  renderFrame();
+
+  ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+  ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
+  renderFrame();
+
+  EXPECT_EQ(selection->kind(), EditorSelection::Kind::Object);
+  EXPECT_EQ(selection->size(), 3u);
+}

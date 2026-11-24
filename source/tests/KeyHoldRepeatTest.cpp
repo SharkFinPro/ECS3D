@@ -162,3 +162,16 @@ TEST_F(KeyHoldRepeatTest, ALongGapYieldsOneStepNotABurst)
   advance(milliseconds(1));
   EXPECT_EQ(m_hold.poll(), EditorAction::undo);
 }
+
+TEST(DefaultKeyHold, UndoRedoAndDuplicateRepeatWhileHeld)
+{
+  EXPECT_EQ(defaultKeyHold(EditorAction::undo), KeyHold::repeatWhileHeld);
+  EXPECT_EQ(defaultKeyHold(EditorAction::redo), KeyHold::repeatWhileHeld);
+  EXPECT_EQ(defaultKeyHold(EditorAction::duplicateSelection), KeyHold::repeatWhileHeld);
+}
+
+TEST(DefaultKeyHold, OtherActionsFireOnce)
+{
+  EXPECT_EQ(defaultKeyHold(EditorAction::deleteSelection), KeyHold::once);
+  EXPECT_EQ(defaultKeyHold(EditorAction::toggleGui), KeyHold::once);
+}
