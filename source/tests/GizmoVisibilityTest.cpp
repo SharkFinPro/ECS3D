@@ -21,7 +21,6 @@ TEST(GizmoDefaultsTest, StateStartsInLocalSpace)
 
   EXPECT_EQ(state.space, gizmo::Space::local);
   EXPECT_EQ(state.dragSpace, gizmo::Space::local);
-  EXPECT_NE(state.space, gizmo::Space::world);
 }
 
 TEST(GizmoDefaultsTest, SnapIsOffByDefault)

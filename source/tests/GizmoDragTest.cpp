@@ -666,3 +666,102 @@ TEST(GizmoDragTest, AZAxisPointingAtTheCameraProducesOnlyFinitePrimitives)
   // Positive control: the other axes still draw, so finiteness is not an empty frame.
   EXPECT_TRUE(xHasTriangles);
 }
+
+namespace {
+  constexpr float rotatedAboutYDegrees = 90.0f;
+
+  [[nodiscard]] GizmoFixture makeRotatedObjectFixture()
+  {
+    GizmoFixture f = makeOffAxisFixture();
+    f.state.mode = gizmo::Mode::translate;
+    f.input.local.rotation = glm::vec3(0.0f, rotatedAboutYDegrees, 0.0f);
+    f.input.world.rotation = f.input.local.rotation;
+    return f;
+  }
+
+  [[nodiscard]] glm::vec3 handleDirection(const gizmo::Frame& frame, const gizmo::Handle handle)
+  {
+    const auto* line = findLine(frame, handle);
+    return line ? glm::normalize(line->b - line->a) : glm::vec3(std::numeric_limits<float>::quiet_NaN());
+  }
+
+  // Drags the X handle until the mouse sits on the point one unit further along `expectedAxis` from the
+  // handle's tip, and returns the resulting local position.
+  [[nodiscard]] glm::vec3 dragXHandleOneUnit(GizmoFixture& f, const glm::vec3& expectedAxis)
+  {
+    const auto initial = gizmo::update(f.state, f.input);
+    const auto* xLine = findLine(initial, gizmo::Handle::x);
+    EXPECT_NE(xLine, nullptr);
+    if (!xLine)
+    {
+      return glm::vec3(std::numeric_limits<float>::quiet_NaN());
+    }
+
+    const glm::vec3 tip = xLine->b;
+    const auto tipScreen = gizmo::project(f.view, tip);
+    const auto movedScreen = gizmo::project(f.view, tip + expectedAxis);
+    EXPECT_TRUE(tipScreen.has_value());
+    EXPECT_TRUE(movedScreen.has_value());
+    if (!tipScreen || !movedScreen)
+    {
+      return glm::vec3(std::numeric_limits<float>::quiet_NaN());
+    }
+
+    const auto pressFrame = beginDragOnHandle(f, *tipScreen);
+    EXPECT_EQ(pressFrame.active, gizmo::Handle::x);
+
+    f.input.mouse = *movedScreen;
+    const auto frame = gizmo::update(f.state, f.input);
+    EXPECT_TRUE(frame.local.has_value());
+
+    return frame.local ? frame.local->position : glm::vec3(std::numeric_limits<float>::quiet_NaN());
+  }
+}
+
+TEST(GizmoDragTest, LocalSpaceTranslateMovesAlongTheRotatedObjectsOwnXAxis)
+{
+  GizmoFixture f = makeRotatedObjectFixture();
+  f.state = gizmo::State{};
+  f.state.mode = gizmo::Mode::translate;
+  ASSERT_EQ(f.state.space, gizmo::Space::local);
+
+  // Ry(90) carries the object's X axis onto world -Z.
+  const glm::vec3 position = dragXHandleOneUnit(f, glm::vec3(0.0f, 0.0f, -1.0f));
+
+  EXPECT_NEAR(position.x, 0.0f, 1e-3f);
+  EXPECT_NEAR(position.y, 0.0f, 1e-3f);
+  EXPECT_NEAR(position.z, -1.0f, 1e-3f);
+}
+
+TEST(GizmoDragTest, WorldSpaceTranslateOfTheSameRotatedObjectStillMovesAlongWorldX)
+{
+  GizmoFixture f = makeRotatedObjectFixture();
+  f.state.space = gizmo::Space::world;
+
+  const glm::vec3 position = dragXHandleOneUnit(f, glm::vec3(1.0f, 0.0f, 0.0f));
+
+  EXPECT_NEAR(position.x, 1.0f, 1e-3f);
+  EXPECT_NEAR(position.y, 0.0f, 1e-3f);
+  EXPECT_NEAR(position.z, 0.0f, 1e-3f);
+}
+
+TEST(GizmoDragTest, LocalSpaceHandleAxesFollowTheObjectsRotation)
+{
+  GizmoFixture local = makeRotatedObjectFixture();
+  local.state = gizmo::State{};
+  local.state.mode = gizmo::Mode::translate;
+
+  const auto localFrame = gizmo::update(local.state, local.input);
+  fixtures::expectNear(handleDirection(localFrame, gizmo::Handle::x), glm::vec3(0.0f, 0.0f, -1.0f), 1e-4f);
+  fixtures::expectNear(handleDirection(localFrame, gizmo::Handle::y), glm::vec3(0.0f, 1.0f, 0.0f), 1e-4f);
+  fixtures::expectNear(handleDirection(localFrame, gizmo::Handle::z), glm::vec3(1.0f, 0.0f, 0.0f), 1e-4f);
+
+  // Positive control: the same object in world space keeps the world axes, so the rotation is what moved
+  // the handles above.
+  GizmoFixture world = makeRotatedObjectFixture();
+  world.state.space = gizmo::Space::world;
+
+  const auto worldFrame = gizmo::update(world.state, world.input);
+  fixtures::expectNear(handleDirection(worldFrame, gizmo::Handle::x), glm::vec3(1.0f, 0.0f, 0.0f), 1e-4f);
+  fixtures::expectNear(handleDirection(worldFrame, gizmo::Handle::z), glm::vec3(0.0f, 0.0f, 1.0f), 1e-4f);
+}
