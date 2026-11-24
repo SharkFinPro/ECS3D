@@ -18,6 +18,9 @@ namespace gizmoFixtures {
 
     GizmoFixture()
     {
+      // The drag math tests are written against world axes; the State default is local.
+      state.space = gizmo::Space::world;
+
       view.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
       view.fovDegrees = 60.0f;
       view.nearPlane = 0.1f;

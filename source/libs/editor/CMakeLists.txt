@@ -72,6 +72,7 @@ add_library(${PROJECT_NAME}
   KeyHoldRepeat.h
   Gizmo.cpp
   Gizmo.h
+  GizmoVisibility.h
   GizmoRenderer.h
   ImGuiGizmoRenderer.cpp
   ImGuiGizmoRenderer.h

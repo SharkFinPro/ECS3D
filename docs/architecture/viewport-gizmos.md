@@ -13,7 +13,11 @@ parent's world frame, which `Input` carries), and draws the result through `Gizm
 an interface so a native backend could replace `ImGuiGizmoRenderer` later without `ViewportGizmo` changing.
 A drag sends a per-frame `editComponent` while it moves (matching the Inspector's own slider drags, so
 other connected views see it move smoothly) and one committed edit - one undo entry - on release; a click on a
-handle without movement sends nothing. That bookkeeping is `GizmoEditSending` (headless, in `ECS3DTests`):
+handle without movement sends nothing.
+A new `gizmo::State` is in local space and snapping defaults off (a stored preference wins). While the editor views
+the scene through a scene camera (`shouldDrawTransformGizmo`, `GizmoVisibility.h`), `EditorApp` hands
+`ViewportGizmo::update` no target, so it draws nothing, `capturesMouseAt` reports false and an in-flight drag ends
+through the same abandon path as a vanished target (commit and gesture-ended callbacks fire, nothing resumes). That bookkeeping is `GizmoEditSending` (headless, in `ECS3DTests`):
 a frame sends only when it changed the Transform's live local pose, and the commit fires only
 when the final `serialize()` differs from the drag's start.
 `EditorApp::handlePicking` runs from `run()` after `sendInput()`, not from the overlay callback: a mouse that

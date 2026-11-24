@@ -7,7 +7,7 @@ class SettingsStore;
 // settings must not depend on the editor lib (settings -> log + json only), so the caller builds the
 // gizmo type from these.
 namespace editorGizmoSettings {
-  inline constexpr bool defaultSnapEnabled = true;
+  inline constexpr bool defaultSnapEnabled = false;
 
   inline constexpr float defaultTranslateStep = 0.5f;
   inline constexpr float minTranslateStep = 0.001f;

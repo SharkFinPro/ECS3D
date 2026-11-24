@@ -119,7 +119,7 @@ namespace gizmo {
   // drag bookkeeping update() maintains for itself.
   struct State {
     Mode mode = Mode::translate;
-    Space space = Space::world;
+    Space space = Space::local;
 
     bool dragging = false;
     Handle activeHandle = Handle::none;
@@ -129,7 +129,7 @@ namespace gizmo {
     // caller mutating mode/space mid-drag cannot run one mode's math against another's bookkeeping - the
     // change only takes effect on the next drag.
     Mode dragMode = Mode::translate;
-    Space dragSpace = Space::world;
+    Space dragSpace = Space::local;
 
     Pose dragStartLocal;
     Pose dragStartWorld;

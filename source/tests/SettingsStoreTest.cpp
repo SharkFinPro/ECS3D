@@ -631,6 +631,17 @@ TEST_F(SettingsStoreTest, GizmoSettingsFallBackToTheCompiledInDefaults)
   EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::defaultScaleStep);
 }
 
+TEST_F(SettingsStoreTest, SnapIsOffUntilTheUserTurnsItOn)
+{
+  SettingsStore store(m_file);
+
+  EXPECT_FALSE(editorGizmoSettings::readSnapEnabled(store));
+
+  editorGizmoSettings::writeSnapEnabled(store, true);
+
+  EXPECT_TRUE(editorGizmoSettings::readSnapEnabled(store));
+}
+
 TEST_F(SettingsStoreTest, GizmoSettingsRoundTripThroughTheFile)
 {
   {
