@@ -232,7 +232,7 @@ public static class StarterUtils
         return "";
     }
 
-    // Case-insensitive; accepts A-Z, Space, Left, Right, Up and Down. Anything else is null.
+    // Case-insensitive; accepts A-Z, Space, LeftShift, RightShift, Left, Right, Up and Down. Anything else is null.
     public static Key? parseKey(string name)
     {
         string trimmed = name?.Trim() ?? "";

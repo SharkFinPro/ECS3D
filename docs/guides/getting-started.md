@@ -78,6 +78,7 @@ while playing is thrown away, and the scene returns to what you authored.
 | Action | Default |
 |--------|---------|
 | Move | W, A, S, D (the arrow keys also move) |
+| Sprint | Left Shift (Right Shift also sprints) |
 | Jump | Space |
 | Look | Hold the right mouse button and drag |
 
