@@ -74,6 +74,7 @@ add_executable(${PROJECT_NAME}
   SettingsPanelLayoutTest.cpp
   FramePacingNotesTest.cpp
   DashedBoxLayoutTest.cpp
+  AccentSliderLayoutTest.cpp
   ObjectTreeOrderTest.cpp
   ObjectTreeRowCullingTest.cpp
   OutlineColorsTest.cpp

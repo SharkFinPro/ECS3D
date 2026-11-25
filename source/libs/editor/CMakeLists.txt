@@ -23,6 +23,7 @@ add_library(${PROJECT_NAME}
   AssetDisplay.h
   Selection.h
   PickClick.h
+  AccentSliderLayout.h
   AssetBrowserPanel.cpp
   AssetBrowserPanel.h
   AssetDragDrop.h

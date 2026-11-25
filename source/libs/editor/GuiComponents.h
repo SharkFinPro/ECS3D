@@ -1,6 +1,7 @@
 #ifndef ECS3D_GUICOMPONENTS_H
 #define ECS3D_GUICOMPONENTS_H
 
+#include "AccentSliderLayout.h"
 #include "DashedBoxLayout.h"
 #include "EditorTheme.h"
 #include <imgui.h>
@@ -668,45 +669,14 @@ namespace gc {
     return edited;
   }
 
-  // Relative luminance of `c` (WCAG formula, sRGB gamma removed), used to pick a legible text color
-  // against an arbitrary background - the theme's colors are user-editable, so a fixed text color would
-  // go illegible under some palettes.
-  inline float relativeLuminance(const ImVec4& c)
-  {
-    const auto linearize = [](const float u)
-    {
-      return u <= 0.03928f ? u / 12.92f : std::pow((u + 0.055f) / 1.055f, 2.4f);
-    };
-    return 0.2126f * linearize(c.x) + 0.7152f * linearize(c.y) + 0.0722f * linearize(c.z);
-  }
-
-  // Composites `fg` (using its alpha) over the opaque `bg`. The theme tokens are user-editable and some
-  // carry alpha (e.g. accdim), so the color actually visible on screen is this blend, not the token
-  // value itself.
-  inline ImVec4 blendOver(const ImVec4& fg, const ImVec4& bg)
-  {
-    const float a = fg.w;
-    return { fg.x * a + bg.x * (1.0f - a), fg.y * a + bg.y * (1.0f - a), fg.z * a + bg.z * (1.0f - a), 1.0f };
-  }
-
-  // Black or white, whichever reads better on top of `bg`. Compares the two contrast ratios directly
-  // instead of using a luminance cutoff: black and white give equal WCAG contrast at L ~= 0.179, not at
-  // L = 0.5, so a 0.5 cutoff picks the worse color for every background between the two.
-  inline ImVec4 contrastOn(const ImVec4& bg)
-  {
-    const float l = relativeLuminance(bg);
-    const float contrastWithBlack = (l + 0.05f) / 0.05f;
-    const float contrastWithWhite = 1.05f / (l + 0.05f);
-    return contrastWithBlack > contrastWithWhite ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-  }
-
   // An accent track slider with a glowing thumb (Friction / Mass / Scale All in the mockup).
-  // Label sits in the left column; the value is drawn right-aligned inside the track. `mixed` (the
-  // selected objects disagree on this field) draws an empty track with a neutral thumb and "-" instead of
-  // a fill/thumb position derived from `*v`, which would otherwise misrepresent it as the settled value -
-  // this widget is hand-drawn rather than a stock ImGui slider, so it has no ImGuiItemFlags_MixedValue to
-  // lean on and renders its own mixed state instead. Dragging still sets a concrete value for the whole
-  // selection, same as any other edit here.
+  // Label sits in the left column; the value sits right-aligned in a fixed-width column after the track, in
+  // the primary text color, so every slider's track ends at the same x. `mixed` (the selected objects
+  // disagree on this field) draws an empty track with a neutral thumb and "-" instead of a fill/thumb
+  // position derived from `*v`, which would otherwise misrepresent it as the settled value - this widget is
+  // hand-drawn rather than a stock ImGui slider, so it has no ImGuiItemFlags_MixedValue to lean on and
+  // renders its own mixed state instead. Dragging still sets a concrete value for the whole selection, same
+  // as any other edit here.
   inline bool accentSlider(const char* label, float* v, const float min, const float max,
                            const bool mixed = false)
   {
@@ -715,19 +685,17 @@ namespace gc {
     const float width = ImGui::GetContentRegionAvail().x;
     const float h = 28.0f;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const SliderLayout layout = sliderLayout(pos.x, width, ImGui::CalcTextSize("-1000.000").x);
 
     ImGui::PushID(label);
-    ImGui::InvisibleButton("##slider", ImVec2(width, h));
+    ImGui::InvisibleButton("##slider", ImVec2(std::max(1.0f, layout.trackLength()), h));
     const bool active = ImGui::IsItemActive();
     ImGui::PopID();
 
     bool edited = false;
     if (active)
     {
-      const float mouseX = ImGui::GetIO().MousePos.x;
-      float t = (mouseX - pos.x) / width;
-      t = std::clamp(t, 0.0f, 1.0f);
-      const float nv = min + (max - min) * t;
+      const float nv = sliderValueAt(ImGui::GetIO().MousePos.x, layout, min, max);
       if (nv != *v)
       {
         const float previous = *v;
@@ -743,65 +711,39 @@ namespace gc {
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     // Track (background).
-    dl->AddRectFilled(ImVec2(pos.x, trackTop), ImVec2(pos.x + width, trackBottom),
+    dl->AddRectFilled(ImVec2(layout.trackStart, trackTop), ImVec2(layout.trackEnd, trackBottom),
                       theme::u32(theme::inset), trackH * 0.5f);
-    dl->AddRect(ImVec2(pos.x, trackTop), ImVec2(pos.x + width, trackBottom),
+    dl->AddRect(ImVec2(layout.trackStart, trackTop), ImVec2(layout.trackEnd, trackBottom),
                 theme::u32(theme::line), trackH * 0.5f);
 
+    char buf[32];
     if (mixed)
     {
       // A centered, neutral thumb - not at any particular fraction of [min, max], since there is no one
       // value to place it at - and "-" where the number would read.
-      const ImVec2 center(pos.x + width * 0.5f, cy);
+      const ImVec2 center((layout.trackStart + layout.trackEnd) * 0.5f, cy);
       dl->AddCircleFilled(center, 9.0f, theme::u32(theme::line2));
       dl->AddCircleFilled(center, 7.0f, theme::u32(theme::inset));
 
-      const ImVec2 vts = ImGui::CalcTextSize("-");
-      const ImVec2 textPos(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f);
-      dl->AddText(textPos, theme::u32(contrastOn(theme::panel)), "-");
+      std::snprintf(buf, sizeof(buf), "-");
+    }
+    else
+    {
+      const float t = std::clamp((*v - min) / (max - min), 0.0f, 1.0f);
+      const float fillX = layout.trackStart + layout.trackLength() * t;
+      dl->AddRectFilled(ImVec2(layout.trackStart, trackTop), ImVec2(fillX, trackBottom),
+                        theme::u32(theme::accent), trackH * 0.5f);
 
-      return edited;
+      // Thumb with accent glow ring.
+      dl->AddCircleFilled(ImVec2(fillX, cy), 9.0f, theme::u32(theme::accdim));
+      dl->AddCircleFilled(ImVec2(fillX, cy), 7.0f, theme::u32(theme::accent));
+
+      std::snprintf(buf, sizeof(buf), "%.3f", *v);
     }
 
-    const float t = std::clamp((*v - min) / (max - min), 0.0f, 1.0f);
-    const float fillX = pos.x + width * t;
-    dl->AddRectFilled(ImVec2(pos.x, trackTop), ImVec2(fillX, trackBottom), theme::u32(theme::accent),
-                      trackH * 0.5f);
-
-    // Thumb with accent glow ring.
-    dl->AddCircleFilled(ImVec2(fillX, cy), 9.0f, theme::u32(theme::accdim));
-    dl->AddCircleFilled(ImVec2(fillX, cy), 7.0f, theme::u32(theme::accent));
-
-    // Value, right-aligned inside the track. The track's painted band (trackH) is thinner than the text,
-    // so most of each glyph actually sits above/below it on the window panel, not on the track - each of
-    // the three backgrounds a pixel can land on (fill, empty track, panel) gets its own clipped pass with
-    // contrast computed against what is really visible there (blended, since accent/inset can carry
-    // alpha as user-editable tokens).
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%.3f", *v);
     const ImVec2 vts = ImGui::CalcTextSize(buf);
-    const ImVec2 textPos(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f);
-
-    const ImVec4 trackVisible = blendOver(theme::inset, theme::panel);
-    const ImVec4 fillVisible = blendOver(theme::accent, trackVisible);
-    const ImU32 colOnFill = theme::u32(contrastOn(fillVisible));
-    const ImU32 colOnTrack = theme::u32(contrastOn(trackVisible));
-    const ImU32 colOnPanel = theme::u32(contrastOn(theme::panel));
-
-    dl->PushClipRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + width, trackTop), true);
-    dl->AddText(textPos, colOnPanel, buf);
-    dl->PopClipRect();
-
-    dl->PushClipRect(ImVec2(pos.x, trackBottom), ImVec2(pos.x + width, pos.y + h), true);
-    dl->AddText(textPos, colOnPanel, buf);
-    dl->PopClipRect();
-
-    dl->PushClipRect(ImVec2(pos.x, trackTop), ImVec2(fillX, trackBottom), true);
-    dl->AddText(textPos, colOnFill, buf);
-    dl->PopClipRect();
-
-    dl->PushClipRect(ImVec2(fillX, trackTop), ImVec2(pos.x + width, trackBottom), true);
-    dl->AddText(textPos, colOnTrack, buf);
+    dl->PushClipRect(ImVec2(layout.trackEnd + sliderValueGap, pos.y), ImVec2(layout.valueRight, pos.y + h), true);
+    dl->AddText(ImVec2(layout.valueRight - vts.x, cy - vts.y * 0.5f), theme::u32(theme::t1), buf);
     dl->PopClipRect();
 
     return edited;
