@@ -128,11 +128,16 @@ public class DayNightCycle : SceneScript
         float ambient = lerp(m_nightAmbient, m_dayAmbient, saturate(height));
         float diffuseScale = m_dayAmbient > 0.0f ? saturate(ambient / m_dayAmbient) : 1.0f;
 
+        LightType type = light.getLightType();
+
+        // A directional sun below the horizon would shine upward and light surfaces from underneath.
+        bool sunBelowHorizon = type == LightType.Directional && height < 0.0f;
+
         light.setColor(colorAt(height));
         light.setAmbient(ambient);
-        light.setDiffuse(baseDiffuse * diffuseScale);
+        light.setDiffuse(sunBelowHorizon ? 0.0f : baseDiffuse * diffuseScale);
 
-        if (light.getLightType() != LightType.Point)
+        if (type != LightType.Point)
         {
             Vector3 toCenter = m_arcCenter - position;
             if (toCenter.LengthSquared() > 1e-8f)

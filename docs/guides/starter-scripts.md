@@ -342,7 +342,8 @@ Publishes: `roundTick`, `roundOver` and `roundStarted`. Showcase use: used by Co
 Scene script. Moves a named light along an east-west arc (in the X and Y plane unless tilted) around a center,
 one full cycle per period. The color blends from night to dusk to day with the light's height, ambient and
 diffuse scale with it (so the scene is never fully dark), and a spot or directional light is pointed at the
-arc's center (for a directional sun, that is the way its light travels). It
+arc's center (for a directional sun, that is the way its light travels). A directional sun below the horizon
+gets no diffuse, so it never lights the scene from underneath. It
 warns if the light has no `LightRenderer` (only the position then changes) or has a `RigidBody`. On stop it
 puts the light's diffuse back.
 

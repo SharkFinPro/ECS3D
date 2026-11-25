@@ -92,6 +92,27 @@ public class DayNightCycleTests : StarterWorldFixture
   }
 
   [Fact]
+  public void AtMidnight_ADirectionalSunHasNoDiffuse_SoItDoesNotLightFromBelow()
+  {
+    var cycle = NewCycle(0.75f, lightType: 2);
+
+    cycle.fixedUpdate(0.0f);
+
+    Assert.Equal(0.0f, ArgsOf("LightRenderer.setDiffuse")[0]);
+    Assert.Equal(0.06f, ArgsOf("LightRenderer.setAmbient")[0], 1e-4f);
+  }
+
+  [Fact]
+  public void AtNoon_ADirectionalSunKeepsItsFullDiffuse()
+  {
+    var cycle = NewCycle(0.25f, lightType: 2);
+
+    cycle.fixedUpdate(0.0f);
+
+    Assert.Equal(0.8f, ArgsOf("LightRenderer.setDiffuse")[0], 1e-4f);
+  }
+
+  [Fact]
   public void AtTheHorizon_TheColorIsDusk_AndTheAmbientStaysAtTheNightFloor()
   {
     var cycle = NewCycle(0.5f);

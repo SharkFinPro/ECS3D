@@ -39,8 +39,9 @@ public enum LightType
 }
 
 // How an object lights the scene: color, the ambient/diffuse/specular strengths, its type (point, spot or
-// directional), range (0 is unbounded), shadow distance, and the spot direction/cone angle. Reached via World.tryGetLightRenderer like Transform/
-// ModelRenderer, since a script typically changes another object's light rather than its own.
+// directional), range (0 is unbounded), shadow distance, and the spot direction/cone angle. Reached via
+// World.tryGetLightRenderer like Transform/ModelRenderer, since a script typically changes another object's
+// light rather than its own.
 //
 // Every setter goes through the native component's own setter, so its rules still apply: a non-finite
 // color/strength/direction is ignored, setConeAngle clamps to the component's configured range, setRange and

@@ -13,10 +13,11 @@
 //
 // Every setter goes through the component's own setter, so its rules still apply here: a non-finite
 // color/strength/direction is ignored, and coneAngle is clamped to [minConeAngleDegrees,
-// maxConeAngleDegrees], and range and shadow distance take the component's clamps. A set is only replicated when it actually changed the component's value (read
-// back through the matching getter) - a rejected non-finite input and a set to the value already there
-// both leave nothing to replicate, so neither records an edit on BindingContext (LightRenderer isn't
-// covered by the per-tick state delta, unlike Transform, so replication is opt-in per edit).
+// maxConeAngleDegrees], and range and shadow distance take the component's clamps. A set is only
+// replicated when it actually changed the component's value (read back through the matching getter) - a
+// rejected non-finite input and a set to the value already there both leave nothing to replicate, so
+// neither records an edit on BindingContext (LightRenderer isn't covered by the per-tick state delta,
+// unlike Transform, so replication is opt-in per edit).
 struct LightRendererBindings
 {
   bool(*getIsSpotLight)(const char* uuid);
