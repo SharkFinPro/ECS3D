@@ -16,8 +16,6 @@ namespace vke {
 
 class KeybindTable;
 
-enum class KeyHold { once, repeatWhileHeld };
-
 // Owns the one vke::KeyCallbackEvent listener that resolves key presses against a KeybindTable and
 // invokes the registered handler for the matching action. Suppresses dispatch while ImGui owns the
 // keyboard, so typing "s" into a text field cannot fire Save.

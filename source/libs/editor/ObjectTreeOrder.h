@@ -53,6 +53,40 @@ namespace objectTreeOrder {
     return scratch;
   }
 
+  // Every uuid under `roots`, depth-first with each sibling list in `mode`'s display order - the order the
+  // tree draws with every node expanded.
+  inline void appendDepthFirst(const std::vector<std::shared_ptr<Object>>& roots, const SortMode mode,
+                               std::vector<uuids::uuid>& out)
+  {
+    std::vector<std::shared_ptr<Object>> scratch;
+    for (const auto& object : sortedForDisplay(roots, mode, scratch))
+    {
+      out.push_back(object->getUUID());
+      appendDepthFirst(object->getChildren(), mode, out);
+    }
+  }
+
+  [[nodiscard]] inline std::vector<uuids::uuid> depthFirstOrder(const std::vector<std::shared_ptr<Object>>& roots,
+                                                                 const SortMode mode)
+  {
+    std::vector<uuids::uuid> order;
+    appendDepthFirst(roots, mode, order);
+    return order;
+  }
+
+  // The header text beside the Objects label; empty when nothing is selected.
+  [[nodiscard]] inline std::string selectedCountLabel(const std::size_t count)
+  {
+    return count == 0 ? std::string() : std::to_string(count) + " selected";
+  }
+
+  // Whether a right-aligned pill that starts at `pillStartX` clears the label that ends at `labelEndX` by
+  // at least `spacing`, so a narrow panel drops the pill instead of drawing it over the label.
+  [[nodiscard]] inline bool pillFitsAfterLabel(const float labelEndX, const float pillStartX, const float spacing)
+  {
+    return pillStartX >= labelEndX + spacing;
+  }
+
   // Shift-click range: the contiguous slice of `visibleOrder` (the tree's current on-screen order) from
   // `anchor` to `clicked`, inclusive and ordered anchor-to-clicked so the caller can add it to the
   // selection with `clicked` landing last (the new primary). Either uuid missing from `visibleOrder` (a

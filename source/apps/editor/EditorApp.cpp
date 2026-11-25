@@ -566,19 +566,22 @@ void EditorApp::setupKeybinds()
     {
       m_keybindDispatcher->stopRepeat();
     }
-  }, KeyHold::repeatWhileHeld);
+  }, defaultKeyHold(EditorAction::undo));
   m_keybindDispatcher->on(EditorAction::redo, [this] {
     if (!requestRedo())
     {
       m_keybindDispatcher->stopRepeat();
     }
-  }, KeyHold::repeatWhileHeld);
+  }, defaultKeyHold(EditorAction::redo));
 
   m_keybindDispatcher->on(EditorAction::deleteSelection, [this] { m_objectGUIManager->requestDeleteSelection(); });
   m_keybindDispatcher->on(EditorAction::duplicateSelection, [this] {
     const auto scene = m_sceneManager->getCurrentScene();
-    m_objectGUIManager->duplicateSelection(scene ? scene->getObjectManager().get() : nullptr);
-  });
+    if (!m_objectGUIManager->duplicateSelection(scene ? scene->getObjectManager().get() : nullptr))
+    {
+      m_keybindDispatcher->stopRepeat();
+    }
+  }, defaultKeyHold(EditorAction::duplicateSelection));
 
   // gizmo::State snapshots mode/space at drag start, so switching mode mid-drag is safe - it just applies
   // to the next drag.

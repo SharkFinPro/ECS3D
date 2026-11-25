@@ -158,24 +158,24 @@ void ObjectGUIManager::performDelete(const std::vector<uuids::uuid>& targets)
   }
 }
 
-void ObjectGUIManager::performDuplicate(const ObjectManager* objectManager,
+bool ObjectGUIManager::performDuplicate(const ObjectManager* objectManager,
                                         const std::vector<uuids::uuid>& targets)
 {
   if (targets.empty() || !m_sceneEditCallback)
   {
-    return;
+    return false;
   }
 
   if (targets.size() == 1)
   {
     const auto duplicate = newObjectUUID();
     m_sceneEditCallback(replication::buildDuplicateObject(targets.front(), &duplicate));
-    return;
+    return true;
   }
 
   if (!objectManager)
   {
-    return;
+    return false;
   }
 
   // Drop a target whose ancestor is also a target: duplicating the ancestor already copies it, so
@@ -209,10 +209,13 @@ void ObjectGUIManager::performDuplicate(const ObjectManager* objectManager,
     ops.push_back(replication::buildDuplicateObject(targetUUID, &duplicate));
   }
 
-  if (!ops.empty())
+  if (ops.empty())
   {
-    m_sceneEditCallback(replication::buildBatch(ops));
+    return false;
   }
+
+  m_sceneEditCallback(replication::buildBatch(ops));
+  return true;
 }
 
 void ObjectGUIManager::requestDeleteSelection()
@@ -225,14 +228,14 @@ void ObjectGUIManager::requestDeleteSelection()
   performDelete({ m_selection->items().begin(), m_selection->items().end() });
 }
 
-void ObjectGUIManager::duplicateSelection(const ObjectManager* objectManager)
+bool ObjectGUIManager::duplicateSelection(const ObjectManager* objectManager)
 {
   if (!m_editable || m_selection->kind() != EditorSelection::Kind::Object || m_selection->empty())
   {
-    return;
+    return false;
   }
 
-  performDuplicate(objectManager, { m_selection->items().begin(), m_selection->items().end() });
+  return performDuplicate(objectManager, { m_selection->items().begin(), m_selection->items().end() });
 }
 
 void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
@@ -314,11 +317,30 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   if (objectManager)
   {
     gc::sectionLabel("Objects");
+    const float labelEndX = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetScrollX();
 
+    // Right-aligned items are placed from the far edge inward: the total pill, then the selected count.
     // Every object in the scene, not just the roots - matching the count the apps log on a snapshot.
     const auto count = std::to_string(objectManager->getAllObjects().size());
     const float pillWidth = ImGui::CalcTextSize(count.c_str()).x + 18.0f;
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - pillWidth);
+    const float rightEdge = ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX();
+
+    const auto selectedLabel = m_selection->kind() == EditorSelection::Kind::Object
+      ? objectTreeOrder::selectedCountLabel(m_selection->size())
+      : std::string();
+    if (!selectedLabel.empty())
+    {
+      const float spacing = ImGui::GetStyle().ItemSpacing.x;
+      const float selectedWidth = ImGui::CalcTextSize(selectedLabel.c_str()).x + 18.0f;
+      const float selectedStartX = rightEdge - pillWidth - selectedWidth - spacing;
+      if (objectTreeOrder::pillFitsAfterLabel(labelEndX, selectedStartX, spacing))
+      {
+        ImGui::SameLine(selectedStartX);
+        gc::pill(selectedLabel.c_str(), theme::accent, theme::accdim);
+      }
+    }
+
+    ImGui::SameLine(rightEdge - pillWidth);
     gc::pill(count.c_str(), theme::t3);
 
     ImGui::Spacing();
@@ -358,6 +380,7 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
     // A Shift-click range needs the full on-screen order, which isn't known until every row above has
     // been visited - so the click a row registered this frame is only resolved now.
     applyPendingClick();
+    handleSelectAll(objectManager);
 
     // The empty area below the tree is the scene root: drop an object there to reparent it to the root,
     // or a prefab from the asset browser to instantiate it.
@@ -724,6 +747,28 @@ void ObjectGUIManager::applyPendingClick()
     m_selection->selectObject(uuid);
   }
   m_rangeAnchor = uuid;
+}
+
+void ObjectGUIManager::handleSelectAll(const ObjectManager* objectManager)
+{
+  if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) || ImGui::GetIO().WantTextInput ||
+      !ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A))
+  {
+    return;
+  }
+
+  const auto all = objectTreeOrder::depthFirstOrder(objectManager->getObjects(), m_sortMode);
+  if (all.empty())
+  {
+    return;
+  }
+
+  m_selection->clear();
+  for (const auto& id : all)
+  {
+    m_selection->addObject(id);
+  }
+  m_rangeAnchor = all.front();
 }
 
 void ObjectGUIManager::saveAsPrefab(const std::shared_ptr<Object>& object) const

@@ -21,6 +21,8 @@ The "Objects" panel is the hierarchy: every object in the current scene, as a tr
 - A plain click selects one object. Ctrl+click adds or removes one object from the selection. Shift+click
   selects every row between the last clicked row and this one, as the tree is currently displayed.
 - With two or more objects selected, Delete and Ctrl+D act on all of them as a single undoable step.
+- Ctrl+A, while the Objects panel is the focused window, selects every object in the scene.
+- The panel header shows how many objects are selected, beside the total object count.
 
 Renaming is done in the Inspector (below), not in the tree. Moving an object under a parent keeps it in the
 same place in the world.
@@ -162,8 +164,10 @@ The default keybinds are:
 | Gizmo: Scale | 3 |
 | Toggle Profiler | F3 |
 
-Focus Selection can be bound, but it has no behavior yet. Keybinds are ignored while a text field wants
-keyboard input.
+Holding Ctrl+Z, Ctrl+Shift+Z or Ctrl+D repeats the action; holding Ctrl+D adds a copy on each repeat, and each
+copy is its own undo step. Ctrl+A in the Objects panel is local to that panel and is not a rebindable action.
+Focus Selection can be bound, but it has no behavior yet. Keybinds are ignored while a text field wants keyboard
+input.
 
 ## Saving and opening
 

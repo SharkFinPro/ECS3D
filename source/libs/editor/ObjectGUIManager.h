@@ -70,8 +70,9 @@ public:
   // requestDeleteSelection(). A single selected object sends a plain duplicateObject op; several send one
   // batch of duplicateObject ops for the top-most selected objects (an object whose ancestor is also
   // selected is skipped - duplicating the ancestor already copies it). The selection itself is unchanged.
-  // objectManager resolves the selection's uuids to Objects to find those top-most ancestors.
-  void duplicateSelection(const ObjectManager* objectManager);
+  // objectManager resolves the selection's uuids to Objects to find those top-most ancestors. Returns
+  // whether any edit was sent, so a held Ctrl+D can stop repeating once there is nothing to duplicate.
+  [[nodiscard]] bool duplicateSelection(const ObjectManager* objectManager);
 
 private:
   SceneEditCallback m_sceneEditCallback;
@@ -127,6 +128,10 @@ private:
   // m_pendingClick for why this waits until after the whole tree has been traversed.
   void applyPendingClick();
 
+  // Ctrl+A while this window has focus and no text field is editing: selects every object in the scene
+  // in the tree's depth-first display order. Selecting is not an edit, so it works while read-only.
+  void handleSelectAll(const ObjectManager* objectManager);
+
   // False for a target (a row, for a reparent-onto-it drop, or a sibling list's own parent - null for the
   // scene root - for a reorder-between-siblings drop) the current drag must not be dropped onto, so it
   // registers no drop target and ImGui shows the drag its own "not allowed" cursor instead of a silent
@@ -159,7 +164,7 @@ private:
   // Sends targets as one duplicateObject op (a single target) or one batch of them (several, after
   // dropping any target whose ancestor is also a target) - the shared tail of duplicateSelection() and
   // the context-menu Duplicate path.
-  void performDuplicate(const ObjectManager* objectManager, const std::vector<uuids::uuid>& targets);
+  bool performDuplicate(const ObjectManager* objectManager, const std::vector<uuids::uuid>& targets);
 };
 
 

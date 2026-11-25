@@ -11,6 +11,22 @@
 inline constexpr std::chrono::milliseconds keyHoldInitialDelay{400};
 inline constexpr std::chrono::milliseconds keyHoldRepeatInterval{125};
 
+enum class KeyHold { once, repeatWhileHeld };
+
+// Undo, redo and duplicate are steps worth repeating while the chord stays down; every other action fires once.
+[[nodiscard]] inline KeyHold defaultKeyHold(const EditorAction action)
+{
+  switch (action)
+  {
+    case EditorAction::undo:
+    case EditorAction::redo:
+    case EditorAction::duplicateSelection:
+      return KeyHold::repeatWhileHeld;
+    default:
+      return KeyHold::once;
+  }
+}
+
 // Tracks one held key and reports when its action is due to fire again. Polled once per frame rather
 // than driven by the OS key repeat, whose rate varies by machine. The clock is injectable so the timing
 // is testable without sleeping.
