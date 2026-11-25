@@ -8,6 +8,23 @@
 #include <imgui.h>
 #include <memory>
 
+namespace {
+  const char* lightTypeLabel(const LightType type)
+  {
+    switch (type)
+    {
+      case LightType::spot:
+        return "Spot";
+      case LightType::directional:
+        return "Directional";
+      case LightType::point:
+        break;
+    }
+
+    return "Point";
+  }
+}
+
 void registerLightRendererEditor(ComponentEditor& componentEditor)
 {
   componentEditor.registerHandler("Light Renderer",
@@ -22,21 +39,41 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
 
     if (ComponentEditor::displayHeader(component))
     {
-      bool isSpotLight = light->isSpotLight();
+      const LightType type = light->getLightType();
       glm::vec3 color = light->getColor();
       float ambient = light->getAmbient();
       float diffuse = light->getDiffuse();
       float specular = light->getSpecular();
       glm::vec3 direction = light->getDirection();
       float coneAngle = light->getConeAngle();
+      float range = light->getRange();
+      float shadowDistance = light->getShadowDistance();
 
-      // These write the plain light data directly; the vke::PointLight/SpotLight are built by the
-      // RenderSystem from these values each frame.
-      if (gc::accentCheckbox("Spot Light", &isSpotLight, mixed.contains("isSpotlight")))
+      // These write the plain light data directly; the vke lights are built by the RenderSystem from
+      // these values each frame.
+      gc::rowLabel("Type");
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+      ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed.contains("lightType"));
+      const bool typeOpen = ImGui::BeginCombo("##LightType", lightTypeLabel(type));
+      ImGui::PopItemFlag();
+      if (typeOpen)
       {
-        light->setSpotLight(isSpotLight);
-        edited = true;
+        for (const LightType choice : { LightType::point, LightType::spot, LightType::directional })
+        {
+          if (ImGui::Selectable(lightTypeLabel(choice), choice == type && !mixed.contains("lightType")))
+          {
+            light->setLightType(choice);
+            edited = true;
+          }
+        }
+
+        ImGui::EndCombo();
       }
+
+      // Rows follow the type shown here, so a mixed selection lays out for its primary object.
+      const LightType shownType = light->getLightType();
+      const bool isSpot = shownType == LightType::spot;
+      const bool isDirectional = shownType == LightType::directional;
 
       gc::rowLabel("Color");
       ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
@@ -49,39 +86,56 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
         edited = true;
       }
 
+      // A ranged light is attenuated hard, so it needs headroom well past 1 to light anything a few
+      // units away.
+      const float intensityMax = !isDirectional && range > 0.0f ? 100.0f : 1.0f;
+
       if (gc::accentSlider("Ambient", &ambient, 0.0f, 1.0f, mixed.contains("ambient")))
       {
         light->setAmbient(ambient);
         edited = true;
       }
 
-      if (gc::accentSlider("Diffuse", &diffuse, 0.0f, 1.0f, mixed.contains("diffuse")))
+      if (gc::accentSlider("Diffuse", &diffuse, 0.0f, intensityMax, mixed.contains("diffuse")))
       {
         light->setDiffuse(diffuse);
         edited = true;
       }
 
-      if (gc::accentSlider("Specular", &specular, 0.0f, 1.0f, mixed.contains("specular")))
+      if (gc::accentSlider("Specular", &specular, 0.0f, intensityMax, mixed.contains("specular")))
       {
         light->setSpecular(specular);
         edited = true;
       }
 
-      if (gc::xyzGuiBoxed("Direction", &direction.x, &direction.y, &direction.z, 0.01f,
+      if (!isDirectional && gc::accentSlider("Range", &range, 0.0f, 100.0f, mixed.contains("range")))
+      {
+        light->setRange(range);
+        edited = true;
+      }
+
+      if ((isSpot || isDirectional) &&
+          gc::xyzGuiBoxed("Direction", &direction.x, &direction.y, &direction.z, 0.01f,
                           mixed.contains("direction")))
       {
         light->setDirection(direction);
         edited = true;
       }
 
-      if (gc::accentSlider("Cone Angle", &coneAngle, LightRenderer::minConeAngleDegrees,
-                           LightRenderer::maxConeAngleDegrees, mixed.contains("coneAngle")))
+      if (isSpot && gc::accentSlider("Cone Angle", &coneAngle, LightRenderer::minConeAngleDegrees,
+                                     LightRenderer::maxConeAngleDegrees, mixed.contains("coneAngle")))
       {
         light->setConeAngle(coneAngle);
         edited = true;
       }
-    }
 
+      if (isDirectional && gc::accentSlider("Shadow Distance", &shadowDistance, LightRenderer::minShadowDistance,
+                                            500.0f, mixed.contains("shadowDistance")))
+      {
+        light->setShadowDistance(shadowDistance);
+        edited = true;
+      }
+    }
     return edited;
   });
 }

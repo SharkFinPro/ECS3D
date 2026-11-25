@@ -98,7 +98,7 @@ TEST(CoinRushSample, HasExactlyOneSun)
 
   EXPECT_EQ(lights, 1);
   const auto light = componentOf(objectNamed(scene, "Sun"), "LightRenderer");
-  EXPECT_FALSE(light.at("isSpotlight").get<bool>());
+  EXPECT_EQ(light.at("lightType").get<std::string>(), "point");
   EXPECT_NEAR(light.at("ambient").get<float>(), 0.25f, 1e-6f);
 }
 
