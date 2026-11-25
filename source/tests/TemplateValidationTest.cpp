@@ -52,7 +52,8 @@ TEST(TemplateValidationShipped, EveryShippedSceneHasOneSunAndOnlyRangedLocalLigh
     ASSERT_FALSE(text.empty());
     EXPECT_EQ(text.find("isSpotlight"), std::string::npos);
 
-    for (const auto& scene : nlohmann::json::parse(text).at("assets").at("scenes"))
+    const auto project = nlohmann::json::parse(text);
+    for (const auto& scene : project.at("assets").at("scenes"))
     {
       SCOPED_TRACE(scene.at("name").get<std::string>());
       lightingcheck::expectSunRig(scene.at("objects"));
