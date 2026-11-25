@@ -2,6 +2,7 @@
 
 #include "DefaultProject.h"
 #include "DefaultWelcomeTestHelpers.h"
+#include "SceneLightingCheck.h"
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -9,6 +10,7 @@
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -20,6 +22,7 @@
 #include <memory>
 #include <regex>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -268,6 +271,98 @@ TEST(DefaultWelcome, ObjectsScriptsLookUpByNameExistOnce)
 
   // Positive control for the counter: the tower has many blocks of one name.
   EXPECT_EQ(countNamed(objects, "Tower Block"), 24u);
+}
+
+namespace {
+  const nlohmann::json& lightOf(const nlohmann::json& object)
+  {
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type") == "LightRenderer")
+      {
+        return component;
+      }
+    }
+
+    throw std::runtime_error(object.at("name").get<std::string>() + " has no LightRenderer");
+  }
+
+  const nlohmann::json& objectNamedIn(const nlohmann::json& objects, const std::string& name)
+  {
+    for (const auto& object : objects)
+    {
+      if (object.at("name") == name)
+      {
+        return object;
+      }
+    }
+
+    throw std::runtime_error("no object named " + name);
+  }
+
+  glm::vec3 vec3At(const nlohmann::json& value)
+  {
+    return { value.at(0).get<float>(), value.at(1).get<float>(), value.at(2).get<float>() };
+  }
+
+  // The renderer's falloff for a ranged light.
+  float attenuation(const float distance, const float range)
+  {
+    const float ratio = distance / range;
+    const float window = std::clamp(1.0f - ratio * ratio * ratio * ratio, 0.0f, 1.0f);
+
+    return window * window / (distance * distance + 1.0f);
+  }
+}
+
+TEST(DefaultWelcome, LightingIsADirectionalSunPlusRangedAccents)
+{
+  const auto project = buildDefaultProject();
+  const auto& objects = sceneNamed(project, "Welcome").at("objects");
+
+  const auto tally = lightingcheck::expectSunRig(objects);
+  EXPECT_EQ(tally.point, 3);
+  EXPECT_EQ(tally.spot, 0);
+}
+
+TEST(DefaultWelcome, TheSunStartsOnItsArcAimedAtTheArcCenter)
+{
+  const auto project = buildDefaultProject();
+  const auto& sun = objectNamedIn(sceneNamed(project, "Welcome").at("objects"), "Sun");
+
+  const auto position = vec3At(sun.at("components").at(0).at("position"));
+  const auto direction = vec3At(lightOf(sun).at("direction"));
+
+  EXPECT_NEAR(glm::length(position), 40.0f, 1e-3f);
+  EXPECT_NEAR(glm::length(direction), 1.0f, 1e-4f);
+  EXPECT_NEAR(glm::distance(direction, glm::normalize(-position)), 0.0f, 1e-4f);
+  EXPECT_EQ(lightOf(sun).at("lightType").get<std::string>(), "directional");
+  EXPECT_GT(lightOf(sun).at("shadowDistance").get<float>(), 1.0f);
+}
+
+TEST(DefaultWelcome, EachAccentLightsTheGroundAtAboutHalfToFullBrightness)
+{
+  const auto project = buildDefaultProject();
+  const auto& objects = sceneNamed(project, "Welcome").at("objects");
+
+  for (const char* name : { "Light Red", "Light Green", "Light Blue" })
+  {
+    SCOPED_TRACE(name);
+    const auto& accent = objectNamedIn(objects, name);
+    const auto& light = lightOf(accent);
+    const float height = vec3At(accent.at("components").at(0).at("position")).y;
+
+    EXPECT_EQ(light.at("lightType").get<std::string>(), "point");
+    EXPECT_LE(light.at("diffuse").get<float>(), 100.0f);
+
+    const float lit = light.at("diffuse").get<float>() * attenuation(height, light.at("range").get<float>());
+    EXPECT_GT(lit, 0.6f);
+    EXPECT_LT(lit, 1.0f);
+  }
+
+  // Positive control for the falloff: it is steep and zero at the range.
+  EXPECT_NEAR(attenuation(5.0f, 1000.0f), 1.0f / 26.0f, 1e-3f);
+  EXPECT_FLOAT_EQ(attenuation(30.0f, 30.0f), 0.0f);
 }
 
 TEST(DefaultWelcome, EveryAssetItReferencesIsRegistered)

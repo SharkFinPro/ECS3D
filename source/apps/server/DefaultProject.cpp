@@ -5,6 +5,7 @@
 #include <assets/AssetRegistry.h>
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
+#include <glm/geometric.hpp>
 #include <algorithm>
 #include <map>
 #include <numbers>
@@ -416,26 +417,78 @@ json player(const glm::vec3& position, const int slot,
 }
 
 // Lights are parameterized well past what a prefab would capture (color/ambient/diffuse/specular all vary
-// per instance), so they stay a plain builder rather than a prefab.
-json light(const glm::vec3& position,
-           const glm::vec3& color,
-           const float ambient,
-           const float diffuse,
-           const float specular)
+// per instance), so they stay plain builders rather than prefabs. Only the sun carries ambient; a ranged light
+// is attenuated to nothing at its range, so it never doubles as a fill light.
+namespace {
+
+json lightObject(const char* name,
+                 const glm::vec3& position,
+                 const char* lightType,
+                 const glm::vec3& direction,
+                 const glm::vec3& color,
+                 const float ambient,
+                 const float diffuse,
+                 const float specular,
+                 const float coneAngle,
+                 const float range,
+                 const float shadowDistance)
 {
-  return makeObject("Light", json::array({
+  return makeObject(name, json::array({
     transform(position),
     {
       { "type", "LightRenderer" },
       { "color", vec(color) },
-      { "direction", vec(glm::vec3(0, -1, 0)) },
-      { "isSpotlight", false },
+      { "direction", vec(direction) },
+      { "lightType", lightType },
       { "ambient", ambient },
       { "diffuse", diffuse },
       { "specular", specular },
-      { "coneAngle", 0.0 }
+      { "coneAngle", coneAngle },
+      { "range", range },
+      { "shadowDistance", shadowDistance }
     }
   }));
+}
+
+}
+
+// The transform only places the editor icon; a directional light shines along its direction from infinitely far.
+json sun(const glm::vec3& direction,
+         const glm::vec3& color,
+         const float ambient,
+         const float diffuse,
+         const float specular,
+         const float shadowDistance)
+{
+  return lightObject("Sun", -glm::normalize(direction) * 40.0f, "directional", direction, color, ambient, diffuse, specular,
+                     0.0f, 0.0f, shadowDistance);
+}
+
+json daySun(const float shadowDistance)
+{
+  return sun(glm::vec3(-0.4f, -1.0f, -0.3f), glm::vec3(1.0f, 0.97f, 0.9f), 0.25f, 0.8f, 0.5f, shadowDistance);
+}
+
+json pointLight(const glm::vec3& position,
+                const glm::vec3& color,
+                const float diffuse,
+                const float specular,
+                const float range)
+{
+  return lightObject("Light", position, "point", glm::vec3(0, -1, 0), color, 0.0f, diffuse, specular, 0.0f, range,
+                     100.0f);
+}
+
+json spotLight(const glm::vec3& position,
+               const glm::vec3& direction,
+               const float coneAngle,
+               const glm::vec3& color,
+               const float diffuse,
+               const float specular,
+               const float range)
+{
+  return lightObject("Light", position, "spot", direction, color, 0.0f, diffuse, specular, coneAngle, range,
+                     100.0f);
 }
 
 }

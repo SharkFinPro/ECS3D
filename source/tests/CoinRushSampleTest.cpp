@@ -98,7 +98,13 @@ TEST(CoinRushSample, HasExactlyOneSun)
 
   EXPECT_EQ(lights, 1);
   const auto light = componentOf(objectNamed(scene, "Sun"), "LightRenderer");
-  EXPECT_EQ(light.at("lightType").get<std::string>(), "point");
+  EXPECT_EQ(light.at("lightType").get<std::string>(), "directional");
+  const auto direction = vec3Of(light.at("direction"));
+  EXPECT_NEAR(glm::length(direction), 1.0f, 1e-3f);
+  EXPECT_LT(direction.y, -0.5f);
+  EXPECT_GT(std::abs(direction.x) + std::abs(direction.z), 0.1f);
+  EXPECT_FLOAT_EQ(light.at("range").get<float>(), 0.0f);
+  EXPECT_FLOAT_EQ(light.at("shadowDistance").get<float>(), 60.0f);
   EXPECT_NEAR(light.at("ambient").get<float>(), 0.25f, 1e-6f);
 }
 

@@ -152,10 +152,10 @@ namespace {
     return parent;
   }
 
-  json sceneLight(const std::string& name, const glm::vec3& position, const glm::vec3& color,
-                  const float ambient, const float diffuse, const float specular)
+  json accentLight(const std::string& name, const glm::vec3& position, const glm::vec3& color)
   {
-    return named(light(position, color, ambient, diffuse, specular), name);
+    // The accents bob 5.5 to 8.5 above the ground they light, where this brightness attenuates to about 0.8.
+    return named(pointLight(position, color, 40.0f, 20.0f, 30.0f), name);
   }
 
   void append(json& objects, const json& more)
@@ -232,8 +232,9 @@ namespace {
     const float angle = 2.0f * std::numbers::pi_v<float> * startTime;
     const glm::vec3 sunPosition(arcRadius * std::cos(angle), arcRadius * std::sin(angle), 0.0f);
 
+    // Its icon sits at the arc point, which is 40 units from the arc center, so aiming at the center puts it there.
     json objects = json::array({
-      sceneLight("Sun", sunPosition, { 1.0f, 0.97f, 0.9f }, 0.25f, 0.8f, 0.5f)
+      sun(glm::normalize(-sunPosition), { 1.0f, 0.97f, 0.9f }, 0.25f, 0.8f, 0.5f, 100.0f)
     });
 
     struct Accent
@@ -252,7 +253,7 @@ namespace {
 
     for (const auto& accent : accents)
     {
-      objects.push_back(withScripts(sceneLight(accent.name, accent.position, accent.color, 0.0f, 0.75f, 0.75f), {
+      objects.push_back(withScripts(accentLight(accent.name, accent.position, accent.color), {
         script("Bobber", json::array({
           floatField("m_amplitude", 1.5f),
           floatField("m_frequencyHz", 0.2f),

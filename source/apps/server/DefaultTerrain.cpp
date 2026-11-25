@@ -299,7 +299,7 @@ json buildTerrainShowcase()
       terrainCollider(showcaseTerrain)
     })),
     player(showcase::playerSpawn(), 0, glm::vec3(0.0f, 0.0f, -1.0f), 180.0f),
-    light({ 0.0f, 300.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 0.35f, 0.8f, 0.4f)
+    daySun(250.0f)
   });
 }
 

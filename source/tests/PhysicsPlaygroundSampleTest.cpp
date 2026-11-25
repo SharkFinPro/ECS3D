@@ -156,6 +156,14 @@ TEST(PhysicsPlaygroundSample, ExactlyOneSunAbovePlaygroundCenter)
   ASSERT_EQ(sun.size(), 1u);
   EXPECT_GE(positionOfJson(*sun.front()).y, 20.0f);
   EXPECT_LE(positionOfJson(*sun.front()).y, 40.0f);
+
+  const auto light = componentOf(*sun.front(), "LightRenderer");
+  EXPECT_EQ(light.at("lightType").get<std::string>(), "directional");
+  EXPECT_LT(light.at("direction").at(1).get<float>(), -0.5f);
+  EXPECT_GT(std::abs(light.at("direction").at(0).get<float>()) + std::abs(light.at("direction").at(2).get<float>()),
+            0.1f);
+  EXPECT_FLOAT_EQ(light.at("range").get<float>(), 0.0f);
+  EXPECT_FLOAT_EQ(light.at("shadowDistance").get<float>(), 100.0f);
 }
 
 TEST(PhysicsPlaygroundSample, EveryStationRootHoldsItsFlatPad)

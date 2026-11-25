@@ -677,12 +677,14 @@
               {
                 "type": "LightRenderer",
                 "color": [1, 0.97, 0.9],
-                "direction": [0, -1, 0],
-                "isSpotlight": false,
+                "direction": [-0.2649, -0.9272, -0.2649],
+                "lightType": "directional",
                 "ambient": 0.25,
                 "diffuse": 0.8,
                 "specular": 0.5,
-                "coneAngle": 0
+                "coneAngle": 0,
+                "range": 0,
+                "shadowDistance": 60
               }
             ],
             "scripts": [],

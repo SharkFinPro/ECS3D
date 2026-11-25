@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "SceneLightingCheck.h"
 #include "TemplateValidation.h"
 
 #include <nlohmann/json.hpp>
@@ -9,6 +10,7 @@
 #include <set>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 
 namespace
@@ -31,6 +33,34 @@ namespace
       return problem.rfind(tag, 0) == 0;
     });
   }
+}
+
+TEST(TemplateValidationShipped, EveryShippedSceneHasOneSunAndOnlyRangedLocalLights)
+{
+  int scenesChecked = 0;
+  for (const auto& entry : std::filesystem::directory_iterator(sourceDir / "templates"))
+  {
+    if (!entry.is_directory())
+    {
+      continue;
+    }
+
+    SCOPED_TRACE(entry.path().filename().string());
+
+    std::ifstream file(entry.path() / "project.ecs3d");
+    const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    ASSERT_FALSE(text.empty());
+    EXPECT_EQ(text.find("isSpotlight"), std::string::npos);
+
+    for (const auto& scene : nlohmann::json::parse(text).at("assets").at("scenes"))
+    {
+      SCOPED_TRACE(scene.at("name").get<std::string>());
+      lightingcheck::expectSunRig(scene.at("objects"));
+      ++scenesChecked;
+    }
+  }
+
+  EXPECT_GE(scenesChecked, 4);
 }
 
 class TemplateValidation : public ::testing::Test {

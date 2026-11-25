@@ -144,7 +144,13 @@ TEST(FirstPersonTemplate, HasExactlyOneSunFromTheLightingRig)
   EXPECT_EQ(positionOfJson(sun), glm::vec3(10, 25, 10));
 
   const auto light = componentOf(sun, "LightRenderer");
-  EXPECT_EQ(light.at("lightType").get<std::string>(), "point");
+  EXPECT_EQ(light.at("lightType").get<std::string>(), "directional");
+  const auto direction = vec3Of(light.at("direction"));
+  EXPECT_NEAR(glm::length(direction), 1.0f, 1e-3f);
+  EXPECT_LT(direction.y, -0.5f);
+  EXPECT_GT(std::abs(direction.x) + std::abs(direction.z), 0.1f);
+  EXPECT_FLOAT_EQ(light.at("range").get<float>(), 0.0f);
+  EXPECT_FLOAT_EQ(light.at("shadowDistance").get<float>(), 60.0f);
   EXPECT_NEAR(glm::distance(vec3Of(light.at("color")), glm::vec3(1.0f, 0.97f, 0.9f)), 0.0f, 1e-5f);
   EXPECT_NEAR(light.at("ambient").get<float>(), 0.25f, 1e-6f);
   EXPECT_NEAR(light.at("diffuse").get<float>(), 0.8f, 1e-6f);

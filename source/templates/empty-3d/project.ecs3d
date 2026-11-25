@@ -259,15 +259,17 @@
                   0.9
                 ],
                 "direction": [
-                  0,
-                  -1,
-                  0
+                  -0.3482,
+                  -0.8704,
+                  -0.3482
                 ],
-                "isSpotlight": false,
+                "lightType": "directional",
                 "ambient": 0.25,
                 "diffuse": 0.8,
                 "specular": 0.5,
-                "coneAngle": 0.0
+                "coneAngle": 0.0,
+                "range": 0.0,
+                "shadowDistance": 60.0
               }
             ],
             "scripts": [],
