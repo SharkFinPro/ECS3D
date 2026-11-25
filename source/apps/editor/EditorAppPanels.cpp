@@ -475,7 +475,7 @@ void EditorApp::displayGizmoOptions() const
   ImGui::SameLine(0.0f, 14.0f);
 
   bool snap = editorGizmoSettings::readSnapEnabled(*m_settings);
-  if (gc::accentCheckboxCompact("Snap", &snap))
+  if (ImGui::Checkbox("Snap", &snap))
   {
     editorGizmoSettings::writeSnapEnabled(*m_settings, snap);
   }
