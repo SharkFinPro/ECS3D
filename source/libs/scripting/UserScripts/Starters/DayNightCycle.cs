@@ -1,4 +1,6 @@
-// Scene script: moves a point light over a vertical arc and blends its color and ambient through a day.
+// Scene script: moves a light over an arc and blends its color and ambient through a day. A spot or
+// directional light is aimed at the arc's center, which is the way a directional sun's light travels. The
+// arc tilts about the X axis toward +Z so a scene can put the sun behind a camera looking toward -Z.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -21,6 +23,9 @@ public class DayNightCycle : SceneScript
     // 0-1 through the day: 0 is sunrise in the east (+X), 0.25 noon, 0.5 sunset in the west, 0.75 midnight.
     [ExposeToEditor("Start Time")]
     private float m_startTime = 0.3f;
+
+    [ExposeToEditor("Arc Tilt Degrees")]
+    private float m_arcTiltDegrees = 0.0f;
 
     [ExposeToEditor("Day Color")]
     private Vector3 m_dayColor = new Vector3(1.0f, 0.96f, 0.88f);
@@ -69,7 +74,9 @@ public class DayNightCycle : SceneScript
 
         float angle = 2.0f * MathF.PI * currentPhase();
         float height = MathF.Sin(angle);
-        Vector3 position = m_arcCenter + m_arcRadius * new Vector3(MathF.Cos(angle), height, 0.0f);
+        float tilt = m_arcTiltDegrees * MathF.PI / 180.0f;
+        Vector3 position = m_arcCenter + m_arcRadius *
+            new Vector3(MathF.Cos(angle), height * MathF.Cos(tilt), height * MathF.Sin(tilt));
         transform.setPosition(position);
 
         if (!World.tryGetLightRenderer(uuid, out LightRenderer light))
@@ -125,7 +132,7 @@ public class DayNightCycle : SceneScript
         light.setAmbient(ambient);
         light.setDiffuse(baseDiffuse * diffuseScale);
 
-        if (light.getIsSpotLight())
+        if (light.getLightType() != LightType.Point)
         {
             Vector3 toCenter = m_arcCenter - position;
             if (toCenter.LengthSquared() > 1e-8f)

@@ -21,6 +21,7 @@ namespace {
   const glm::vec3 shelfCenter(-17.0f, 0.5f, 22.0f);
   const glm::vec3 shelfScale(1.5f, 0.5f, 4.0f);
   constexpr float shapeScale = 0.5f;
+  constexpr float welcomeSunArcTiltDegrees = 30.0f;
 
   json named(json object, const std::string& name)
   {
@@ -230,7 +231,9 @@ namespace {
     constexpr float startTime = 0.3f;
     constexpr float arcRadius = 40.0f;
     const float angle = 2.0f * std::numbers::pi_v<float> * startTime;
-    const glm::vec3 sunPosition(arcRadius * std::cos(angle), arcRadius * std::sin(angle), 0.0f);
+    const float tilt = welcomeSunArcTiltDegrees * std::numbers::pi_v<float> / 180.0f;
+    const glm::vec3 sunPosition(arcRadius * std::cos(angle), arcRadius * std::sin(angle) * std::cos(tilt),
+                                arcRadius * std::sin(angle) * std::sin(tilt));
 
     json objects = json::array({
       sceneLight("Sun", sunPosition, { 1.0f, 0.97f, 0.9f }, 0.25f, 0.8f, 0.5f)
@@ -457,7 +460,8 @@ json buildWelcomeSceneScripts()
   return json::array({
     script("DayNightCycle", json::array({
       stringField("m_light", "Sun"),
-      floatField("m_periodSeconds", 120.0f)
+      floatField("m_periodSeconds", 120.0f),
+      floatField("m_arcTiltDegrees", welcomeSunArcTiltDegrees)
     })),
     script("PlayerSpawnManager", json::array())
   });

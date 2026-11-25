@@ -2,8 +2,9 @@
 #define LIGHTRENDERERBINDINGS_H
 
 // LightRenderer script bindings: read/change how an object lights the scene (color, the three light
-// strengths, whether it is a spot light, its spot direction/cone angle, and enable/disable). Setting the
-// spot flag false demotes a spot light to a point light and leaves a point or directional light alone. Mirrors the
+// strengths, whether it is a spot light, its spot direction/cone angle, its type (0 point, 1 spot, 2
+// directional), range and shadow distance). Setting the spot flag false demotes a spot light to a point
+// light and leaves a point or directional light alone; a type outside 0..2 is ignored. Mirrors the
 // TransformBindings/ModelRendererBindings pattern: a C-ABI struct of function pointers, resolved against
 // the server's current ObjectManager via BindingContext.
 //
@@ -12,7 +13,7 @@
 //
 // Every setter goes through the component's own setter, so its rules still apply here: a non-finite
 // color/strength/direction is ignored, and coneAngle is clamped to [minConeAngleDegrees,
-// maxConeAngleDegrees]. A set is only replicated when it actually changed the component's value (read
+// maxConeAngleDegrees], and range and shadow distance take the component's clamps. A set is only replicated when it actually changed the component's value (read
 // back through the matching getter) - a rejected non-finite input and a set to the value already there
 // both leave nothing to replicate, so neither records an edit on BindingContext (LightRenderer isn't
 // covered by the per-tick state delta, unlike Transform, so replication is opt-in per edit).
@@ -33,6 +34,12 @@ struct LightRendererBindings
   void(*setDirection)(const char* uuid, float x, float y, float z);
   void(*setConeAngle)(const char* uuid, float coneAngle);
   bool(*has)(const char* uuid);
+  int(*getLightType)(const char* uuid);
+  void(*setLightType)(const char* uuid, int type);
+  float(*getRange)(const char* uuid);
+  void(*setRange)(const char* uuid, float range);
+  float(*getShadowDistance)(const char* uuid);
+  void(*setShadowDistance)(const char* uuid, float distance);
 };
 
 class LightRendererBindingsProvider {
@@ -48,6 +55,9 @@ private:
   static float bindGetSpecular(const char* uuid);
   static void bindGetDirection(const char* uuid, float* x, float* y, float* z);
   static float bindGetConeAngle(const char* uuid);
+  static int bindGetLightType(const char* uuid);
+  static float bindGetRange(const char* uuid);
+  static float bindGetShadowDistance(const char* uuid);
 
   // Each setter defers its validation to the component's own setter (non-finite input, cone angle
   // clamping) and records the edit on BindingContext for replication when the component was found.
@@ -58,6 +68,9 @@ private:
   static void bindSetSpecular(const char* uuid, float specular);
   static void bindSetDirection(const char* uuid, float x, float y, float z);
   static void bindSetConeAngle(const char* uuid, float coneAngle);
+  static void bindSetLightType(const char* uuid, int type);
+  static void bindSetRange(const char* uuid, float range);
+  static void bindSetShadowDistance(const char* uuid, float distance);
 
   // Whether the object identified by uuid currently has a LightRenderer (backs World.tryGetLightRenderer).
   static bool bindHas(const char* uuid);

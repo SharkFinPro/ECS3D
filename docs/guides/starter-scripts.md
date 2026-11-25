@@ -339,9 +339,10 @@ Publishes: `roundTick`, `roundOver` and `roundStarted`. Showcase use: used by Co
 
 ### DayNightCycle
 
-Scene script. Moves a named light along a vertical east-west arc (in the X and Y plane) around a center, one
-full cycle per period. The color blends from night to dusk to day with the light's height, ambient and
-diffuse scale with it (so the scene is never fully dark), and a spot light is pointed at the arc's center. It
+Scene script. Moves a named light along an east-west arc (in the X and Y plane unless tilted) around a center,
+one full cycle per period. The color blends from night to dusk to day with the light's height, ambient and
+diffuse scale with it (so the scene is never fully dark), and a spot or directional light is pointed at the
+arc's center (for a directional sun, that is the way its light travels). It
 warns if the light has no `LightRenderer` (only the position then changes) or has a `RigidBody`. On stop it
 puts the light's diffuse back.
 
@@ -352,6 +353,7 @@ puts the light's diffuse back.
 | Arc Radius | float | 40 |
 | Arc Center | vector | (0, 0, 0) |
 | Start Time | float (0 to 1) | 0.3 |
+| Arc Tilt Degrees | float | 0 |
 | Day Color | color vector | (1, 0.96, 0.88) |
 | Dusk Color | color vector | (1, 0.5, 0.2) |
 | Night Color | color vector | (0.1, 0.15, 0.4) |
@@ -359,7 +361,9 @@ puts the light's diffuse back.
 | Night Ambient | float | 0.06 |
 
 Start Time is the point in the day: 0 is sunrise in the east (+X), 0.25 noon, 0.5 sunset in the west and
-0.75 midnight.
+0.75 midnight. Arc Tilt Degrees tilts the arc plane about the X axis toward +Z, which lets a scene put the sun
+behind a camera that looks toward -Z so the faces toward the camera are lit; the timing of day, dusk and night
+does not change with it.
 
 Events: none. Showcase use: used by Welcome.
 
