@@ -16,6 +16,12 @@ other connected views see it move smoothly) and one committed edit - one undo en
 handle without movement sends nothing. That bookkeeping is `GizmoEditSending` (headless, in `ECS3DTests`):
 a frame sends only when it changed the Transform's live local pose, and the commit fires only
 when the final `serialize()` differs from the drag's start.
+
+A new `gizmo::State` is in local space and snapping defaults off (a stored preference wins). While the editor views
+the scene through a scene camera (`shouldDrawTransformGizmo`, `GizmoVisibility.h`), `EditorApp` hands
+`ViewportGizmo::update` no target, so it draws nothing, `capturesMouseAt` reports false and an in-flight drag ends
+through the same abandon path as a vanished target (commit and gesture-ended callbacks fire, nothing resumes).
+
 `EditorApp::handlePicking` runs from `run()` after `sendInput()`, not from the overlay callback: a mouse that
 moves onto a handle and presses in the same frame is handled by `ViewportGizmo::capturesMouseAt(mouse)`, which
 re-runs the headless core on copies of the last frame it actually drew (no side effects) with the given mouse

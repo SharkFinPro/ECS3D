@@ -62,12 +62,14 @@ The selected object shows a gizmo for moving, rotating or scaling it.
 
 - Switch modes with the Move, Rotate and Scale buttons in the Scene Status panel, or with the keys 1, 2
   and 3 (the default keybinds, listed under Settings below).
-- The Local checkbox in Scene Status picks the object's own axes instead of world axes. It is disabled in
-  Scale mode, which always uses the object's own axes.
-- Snapping is set in Settings, under Viewport: a Snap checkbox (on by default) and step sizes for
+- The Local checkbox in Scene Status (on by default) picks the object's own axes instead of world axes. It is
+  disabled in Scale mode, which always uses the object's own axes.
+- Snapping is set in Settings, under Viewport: a Snap checkbox (off by default) and step sizes for
   translate (0.5), rotate (15 degrees) and scale (0.1).
 - Dragging a handle sends updates while you drag, so other connected views see it move. Releasing the
   handle records one undo step.
+- The gizmo is hidden, and takes no clicks, while the View is set to a scene camera instead of the Editor
+  Camera. Its mode and option controls stay usable for when you switch back.
 
 ## Scene Status
 

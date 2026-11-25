@@ -165,6 +165,7 @@ add_executable(${PROJECT_NAME}
   DockLayoutFitTest.cpp
   DefaultDockLayoutTest.cpp
   GridVisibilityTest.cpp
+  GizmoVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
   ClientDisplaySettingsTest.cpp
   FramePacingSettingsTest.cpp

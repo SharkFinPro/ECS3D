@@ -42,6 +42,7 @@
 #include <EditorGizmoSettings.h>
 #include <EditorLayoutSettings.h>
 #include <KeybindDispatcher.h>
+#include <GizmoVisibility.h>
 #include <ViewportGizmo.h>
 #include <Gizmo.h>
 #include <objects/components/Component.h>
@@ -201,8 +202,11 @@ void EditorApp::setupSceneOverlay()
 
       const bool sceneHovered = m_renderer->getRenderingManager()->isSceneHovered();
 
-      m_viewportGizmo->update(objectManager, m_selection->objectUUID(), view, drawList, m_serverEditable,
-                              snap, sceneHovered);
+      const auto gizmoTarget = shouldDrawTransformGizmo(m_viewCameraObject.has_value())
+        ? m_selection->objectUUID()
+        : std::nullopt;
+
+      m_viewportGizmo->update(objectManager, gizmoTarget, view, drawList, m_serverEditable, snap, sceneHovered);
 
       acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
 
