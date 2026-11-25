@@ -50,7 +50,10 @@ the free-fly camera speed (`EditorCameraSettings`, applied to `vke::Camera::setS
 viewport gizmo's Snap toggle + translate/rotate/scale step sizes (`EditorGizmoSettings`); Display holds vsync and the
 frame rate limit (`editor.display.vsync`/`editor.display.maxFps`, applied at renderer creation and live through
 `RenderingManager`; the numeric field commits on deactivation only, and `FramePacingNotes.h` decides the
-explanatory notes); Keybinds lists every
+explanatory notes; its Reset to defaults covers frame pacing only), then a Rendering block with the Ray tracing checkbox (`editor.display.rayTracing`, default on like
+the engine's; `EditorViewportSettings.h` holds the read/write helpers and `rayTracingAtStartup`, which keeps a stored
+true off on a device that cannot ray trace; applied after renderer creation and live, greyed out when unsupported);
+Keybinds lists every
 `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode
 and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an
 already-held chord; `KeybindRebindFlow::reconcileCapture` keeps the flow and the dispatcher's capture in

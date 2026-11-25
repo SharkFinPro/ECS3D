@@ -218,7 +218,6 @@ void EditorApp::displaySceneStatus()
   constexpr float optionsGap = 8.0f;
 
   drawGroup(groupGap, [&] { displayPlayControls(); });
-  drawGroup(groupGap, [&] { displayRayTracingToggle(); });
   drawGroup(groupGap, [&] { displayCameraSelector(); });
   drawGroup(groupGap, [&] { displayPlayerSelector(); });
   drawGroup(groupGap, [&] { displayGizmoModeControls(); });
@@ -293,27 +292,6 @@ void EditorApp::displayPlayControls()
 
     sendSceneControl(net::SceneControlOp::stop);
   }
-}
-
-void EditorApp::displayRayTracingToggle() const
-{
-  // Ray tracing toggle: a local render setting (this view's vke renderer only, never replicated), so
-  // it stays enabled on a read-only server. Greyed out when the device can't ray trace.
-  const auto renderingManager = m_renderer->getRenderingManager();
-  ImGui::BeginDisabled(!renderingManager->supportsRayTracing());
-  bool rayTracing = renderingManager->isRayTracingEnabled();
-  if (gc::accentCheckboxCompact("Ray Tracing", &rayTracing))
-  {
-    if (rayTracing)
-    {
-      renderingManager->enableRayTracing();
-    }
-    else
-    {
-      renderingManager->disableRayTracing();
-    }
-  }
-  ImGui::EndDisabled();
 }
 
 namespace {

@@ -276,7 +276,7 @@ private:
   bool m_mouseWasPressed = false;
 
   // The groups drawn through drawGroup in displaySceneStatus; the readout is placed separately.
-  static constexpr std::size_t sceneStatusGroupCount = 6;
+  static constexpr std::size_t sceneStatusGroupCount = 5;
 
   // Each control group's width as drawn last frame, which is what decides this frame's wrapping. Zero until
   // measured, so the first frame draws on one row.
@@ -443,8 +443,6 @@ private:
   void displaySceneStatus();
 
   void displayPlayControls();
-
-  void displayRayTracingToggle() const;
 
   // The readout's width, so it can be placed before it is drawn.
   [[nodiscard]] float sceneReadoutWidth() const;
