@@ -97,6 +97,9 @@ TEST_F(LightRendererBindingsTest, GetRecordsNoComponentEdit)
   m_bindings.getSpecular(id.c_str());
   m_bindings.getDirection(id.c_str(), &a, &b, &c);
   m_bindings.getConeAngle(id.c_str());
+  m_bindings.getLightType(id.c_str());
+  m_bindings.getRange(id.c_str());
+  m_bindings.getShadowDistance(id.c_str());
 
   EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
 }
@@ -121,6 +124,144 @@ TEST_F(LightRendererBindingsTest, SetSpotLightChangesTheComponentAndRecordsOneEd
 
   EXPECT_EQ(m_light->getLightType(), LightType::point);
   EXPECT_FALSE(m_bindings.getIsSpotLight(id.c_str()));
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+}
+
+TEST_F(LightRendererBindingsTest, NewGettersReturnTheComponentsValues)
+{
+  const auto id = uuid();
+  EXPECT_EQ(m_bindings.getLightType(id.c_str()), 0);
+
+  m_light->setLightType(LightType::directional);
+  m_light->setRange(12.5f);
+  m_light->setShadowDistance(150.0f);
+
+  EXPECT_EQ(m_bindings.getLightType(id.c_str()), 2);
+  EXPECT_NEAR(m_bindings.getRange(id.c_str()), 12.5f, 1e-5f);
+  EXPECT_NEAR(m_bindings.getShadowDistance(id.c_str()), 150.0f, 1e-5f);
+
+  m_light->setLightType(LightType::spot);
+  EXPECT_EQ(m_bindings.getLightType(id.c_str()), 1);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(LightRendererBindingsTest, NewGettersReturnNeutralDefaultsForAnUnknownUuid)
+{
+  const std::string unknown = "12345678-1234-1234-1234-123456789abc";
+  m_light->setLightType(LightType::directional);
+  m_light->setRange(12.5f);
+  m_light->setShadowDistance(150.0f);
+
+  EXPECT_EQ(m_bindings.getLightType(unknown.c_str()), 0);
+  EXPECT_NEAR(m_bindings.getRange(unknown.c_str()), 0.0f, 1e-5f);
+  EXPECT_NEAR(m_bindings.getShadowDistance(unknown.c_str()), 0.0f, 1e-5f);
+
+  // Positive control: the real uuid does return the non-default values.
+  EXPECT_EQ(m_bindings.getLightType(uuid().c_str()), 2);
+}
+
+TEST_F(LightRendererBindingsTest, SetLightTypeChangesTheTypeAndRecordsOneEdit)
+{
+  const auto id = uuid();
+
+  m_bindings.setLightType(id.c_str(), 2);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::directional);
+  const auto edits = BindingContext::takeComponentEdits();
+  ASSERT_EQ(edits.size(), 1u);
+  EXPECT_EQ(edits[0].first, m_object->getUUID());
+
+  m_bindings.setLightType(id.c_str(), 2);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::directional);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(LightRendererBindingsTest, SetLightTypeIgnoresAValueOutsideTheEnum)
+{
+  const auto id = uuid();
+
+  m_bindings.setLightType(id.c_str(), 7);
+  m_bindings.setLightType(id.c_str(), -1);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::point);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // Positive control: an in-range value on the same light is applied and recorded.
+  m_bindings.setLightType(id.c_str(), 1);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::spot);
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+}
+
+TEST_F(LightRendererBindingsTest, SetRangePassesThroughTheComponentsClampsAndRecordsOneEdit)
+{
+  const auto id = uuid();
+
+  m_bindings.setRange(id.c_str(), 0.2f);
+  EXPECT_NEAR(m_light->getRange(), 0.5f, 1e-5f);
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  m_bindings.setRange(id.c_str(), 30.0f);
+  EXPECT_NEAR(m_light->getRange(), 30.0f, 1e-5f);
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  m_bindings.setRange(id.c_str(), 30.0f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(LightRendererBindingsTest, SetRangeIgnoresNonFiniteInput)
+{
+  const auto id = uuid();
+  m_bindings.setRange(id.c_str(), 20.0f);
+  ASSERT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  m_bindings.setRange(id.c_str(), std::nanf(""));
+
+  EXPECT_NEAR(m_light->getRange(), 20.0f, 1e-5f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(LightRendererBindingsTest, SetShadowDistancePassesThroughTheComponentsClampsAndRecordsOneEdit)
+{
+  const auto id = uuid();
+
+  m_bindings.setShadowDistance(id.c_str(), 5000.0f);
+  EXPECT_NEAR(m_light->getShadowDistance(), 1000.0f, 1e-5f);
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  m_bindings.setShadowDistance(id.c_str(), 0.2f);
+  EXPECT_NEAR(m_light->getShadowDistance(), 1.0f, 1e-5f);
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  m_bindings.setShadowDistance(id.c_str(), 1.0f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(LightRendererBindingsTest, SetShadowDistanceIgnoresNonFiniteInput)
+{
+  const auto id = uuid();
+  m_bindings.setShadowDistance(id.c_str(), 200.0f);
+  ASSERT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  m_bindings.setShadowDistance(id.c_str(), std::nanf(""));
+
+  EXPECT_NEAR(m_light->getShadowDistance(), 200.0f, 1e-5f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(LightRendererBindingsTest, NewSettersOnAnUnknownUuidChangeNothingAndRecordNothing)
+{
+  const std::string unknown = "12345678-1234-1234-1234-123456789abc";
+
+  m_bindings.setLightType(unknown.c_str(), 2);
+  m_bindings.setRange(unknown.c_str(), 25.0f);
+  m_bindings.setShadowDistance(unknown.c_str(), 10.0f);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::point);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  m_bindings.setRange(uuid().c_str(), 25.0f);
   EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
 }
 

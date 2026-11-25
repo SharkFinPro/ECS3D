@@ -22,14 +22,31 @@ public unsafe struct LightRendererBindings
     public delegate* unmanaged<IntPtr, float, float, float, void> setDirection;
     public delegate* unmanaged<IntPtr, float, void> setConeAngle;
     public delegate* unmanaged<IntPtr, bool> has;
+    public delegate* unmanaged<IntPtr, int> getLightType;
+    public delegate* unmanaged<IntPtr, int, void> setLightType;
+    public delegate* unmanaged<IntPtr, float> getRange;
+    public delegate* unmanaged<IntPtr, float, void> setRange;
+    public delegate* unmanaged<IntPtr, float> getShadowDistance;
+    public delegate* unmanaged<IntPtr, float, void> setShadowDistance;
 }
 
-// How an object lights the scene: color, the ambient/diffuse/specular strengths, whether it's a spot
-// light, and the spot direction/cone angle. Reached via World.tryGetLightRenderer like Transform/
-// ModelRenderer, since a script typically changes another object's light rather than its own.
+// Values match the native LightType enum.
+public enum LightType
+{
+    Point = 0,
+    Spot = 1,
+    Directional = 2
+}
+
+// How an object lights the scene: color, the ambient/diffuse/specular strengths, its type (point, spot or
+// directional), range (0 is unbounded), shadow distance, and the spot direction/cone angle. Reached via
+// World.tryGetLightRenderer like Transform/ModelRenderer, since a script typically changes another object's
+// light rather than its own.
 //
 // Every setter goes through the native component's own setter, so its rules still apply: a non-finite
-// color/strength/direction is ignored, and setConeAngle clamps to the component's configured range.
+// color/strength/direction is ignored, setConeAngle clamps to the component's configured range, setRange and
+// setShadowDistance clamp too, and an unknown type is ignored. getIsSpotLight and setSpotLight only see the
+// spot/point pair; setSpotLight(false) leaves a directional light alone.
 public unsafe class LightRenderer
 {
     private readonly IntPtr _uuid;
@@ -70,6 +87,12 @@ public unsafe class LightRenderer
 
     public float getConeAngle() => NativeBindings.LightRenderer.getConeAngle(_uuid);
 
+    public LightType getLightType() => (LightType)NativeBindings.LightRenderer.getLightType(_uuid);
+
+    public float getRange() => NativeBindings.LightRenderer.getRange(_uuid);
+
+    public float getShadowDistance() => NativeBindings.LightRenderer.getShadowDistance(_uuid);
+
     public void setSpotLight(bool isSpotLight) =>
         NativeBindings.LightRenderer.setSpotLight(_uuid, isSpotLight);
 
@@ -90,4 +113,11 @@ public unsafe class LightRenderer
     public void setDirection(Vector3 direction) => setDirection(direction.X, direction.Y, direction.Z);
 
     public void setConeAngle(float coneAngle) => NativeBindings.LightRenderer.setConeAngle(_uuid, coneAngle);
+
+    public void setLightType(LightType type) => NativeBindings.LightRenderer.setLightType(_uuid, (int)type);
+
+    public void setRange(float range) => NativeBindings.LightRenderer.setRange(_uuid, range);
+
+    public void setShadowDistance(float distance) =>
+        NativeBindings.LightRenderer.setShadowDistance(_uuid, distance);
 }

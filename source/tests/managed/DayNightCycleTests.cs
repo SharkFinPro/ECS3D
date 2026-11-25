@@ -15,12 +15,13 @@ namespace ECS3DManagedTests;
 [Collection("BridgeInstances")]
 public class DayNightCycleTests : StarterWorldFixture
 {
-  private DayNightCycle NewCycle(float startTime, bool spot = false, float diffuse = 0.8f)
+  private DayNightCycle NewCycle(float startTime, bool spot = false, float diffuse = 0.8f, int lightType = -1)
   {
     _world.Add("sun", "Sun", new Vector3(1f, 2f, 3f));
     FakeNatives.Set("LightRenderer.has", true);
     FakeNatives.Set("LightRenderer.getDiffuse", diffuse);
     FakeNatives.Set("LightRenderer.getIsSpotLight", spot);
+    FakeNatives.Set("LightRenderer.getLightType", lightType >= 0 ? lightType : (spot ? 1 : 0));
     var cycle = new DayNightCycle();
     SetField(cycle, "m_startTime", startTime);
     return cycle;
@@ -91,6 +92,27 @@ public class DayNightCycleTests : StarterWorldFixture
   }
 
   [Fact]
+  public void AtMidnight_ADirectionalSunHasNoDiffuse_SoItDoesNotLightFromBelow()
+  {
+    var cycle = NewCycle(0.75f, lightType: 2);
+
+    cycle.fixedUpdate(0.0f);
+
+    Assert.Equal(0.0f, ArgsOf("LightRenderer.setDiffuse")[0]);
+    Assert.Equal(0.06f, ArgsOf("LightRenderer.setAmbient")[0], 1e-4f);
+  }
+
+  [Fact]
+  public void AtNoon_ADirectionalSunKeepsItsFullDiffuse()
+  {
+    var cycle = NewCycle(0.25f, lightType: 2);
+
+    cycle.fixedUpdate(0.0f);
+
+    Assert.Equal(0.8f, ArgsOf("LightRenderer.setDiffuse")[0], 1e-4f);
+  }
+
+  [Fact]
   public void AtTheHorizon_TheColorIsDusk_AndTheAmbientStaysAtTheNightFloor()
   {
     var cycle = NewCycle(0.5f);
@@ -148,9 +170,59 @@ public class DayNightCycleTests : StarterWorldFixture
 
     FakeNatives.Calls.Clear();
     FakeNatives.Set("LightRenderer.getIsSpotLight", false);
+    FakeNatives.Set("LightRenderer.getLightType", 0);
     spot.fixedUpdate(0.0f);
     Assert.True(FakeNatives.Calls.Any(c => c.StartsWith("LightRenderer.setAmbient(", StringComparison.Ordinal)));
     Assert.False(FakeNatives.Calls.Any(c => c.StartsWith("LightRenderer.setDirection(", StringComparison.Ordinal)));
+  }
+
+  [Fact]
+  public void ADirectionalLight_IsAimedAtTheCenter_AndAPointLightIsNot()
+  {
+    var sun = NewCycle(0.25f, lightType: 2);
+    sun.fixedUpdate(0.0f);
+    var down = ArgsOf("LightRenderer.setDirection");
+    AssertVec(new Vector3(0f, -1f, 0f), new Vector3(down[0], down[1], down[2]), 1e-4f);
+
+    FakeNatives.Calls.Clear();
+    FakeNatives.Set("LightRenderer.getLightType", 0);
+    sun.fixedUpdate(0.0f);
+    Assert.True(FakeNatives.Calls.Any(c => c.StartsWith("LightRenderer.setAmbient(", StringComparison.Ordinal)));
+    Assert.False(FakeNatives.Calls.Any(c => c.StartsWith("LightRenderer.setDirection(", StringComparison.Ordinal)));
+  }
+
+  [Fact]
+  public void ATiltedArcLeansTowardPositiveZ_AndAimsTheLightBackAlongIt()
+  {
+    var sun = NewCycle(0.25f, lightType: 2);
+    SetField(sun, "m_arcTiltDegrees", 30.0f);
+
+    sun.fixedUpdate(0.0f);
+
+    var position = _world.PositionOf("sun");
+    Assert.Equal(40f * MathF.Sin(30f * MathF.PI / 180f), position.Z, 1e-3f);
+    Assert.Equal(40f * MathF.Cos(30f * MathF.PI / 180f), position.Y, 1e-3f);
+    var direction = ArgsOf("LightRenderer.setDirection");
+    Assert.True(direction[2] < 0f);
+    AssertVec(Vector3.Normalize(-position), new Vector3(direction[0], direction[1], direction[2]), 1e-4f);
+  }
+
+  [Theory]
+  [InlineData(0.0f)]
+  [InlineData(30.0f)]
+  public void TheColorTimingIsTheSameWithAndWithoutATilt(float tilt)
+  {
+    // Height 0.15 is halfway between the dusk and day thresholds whatever the tilt.
+    var phase = MathF.Asin(0.15f) / (2.0f * MathF.PI);
+    var cycle = NewCycle(phase);
+    SetField(cycle, "m_arcTiltDegrees", tilt);
+
+    cycle.fixedUpdate(0.0f);
+
+    var color = ArgsOf("LightRenderer.setColor");
+    var expected = Vector3.Lerp(new Vector3(1.0f, 0.5f, 0.2f), new Vector3(1.0f, 0.96f, 0.88f), 0.5f);
+    AssertVec(expected, new Vector3(color[0], color[1], color[2]));
+    Assert.Equal(0.06f + (0.3f - 0.06f) * 0.15f, ArgsOf("LightRenderer.setAmbient")[0], 1e-3f);
   }
 
   [Fact]

@@ -87,6 +87,37 @@ internal static unsafe class FakeLightRendererNatives
     return Flag("LightRenderer.has");
   }
 
+  [UnmanagedCallersOnly]
+  private static int LightGetLightType(IntPtr u)
+  {
+    Rec("LightRenderer.getLightType", u);
+    return Get<int>("LightRenderer.getLightType");
+  }
+
+  [UnmanagedCallersOnly]
+  private static void LightSetLightType(IntPtr u, int value) => Rec("LightRenderer.setLightType", u, value);
+
+  [UnmanagedCallersOnly]
+  private static float LightGetRange(IntPtr u)
+  {
+    Rec("LightRenderer.getRange", u);
+    return Get<float>("LightRenderer.getRange");
+  }
+
+  [UnmanagedCallersOnly]
+  private static void LightSetRange(IntPtr u, float value) => Rec("LightRenderer.setRange", u, value);
+
+  [UnmanagedCallersOnly]
+  private static float LightGetShadowDistance(IntPtr u)
+  {
+    Rec("LightRenderer.getShadowDistance", u);
+    return Get<float>("LightRenderer.getShadowDistance");
+  }
+
+  [UnmanagedCallersOnly]
+  private static void LightSetShadowDistance(IntPtr u, float value) =>
+    Rec("LightRenderer.setShadowDistance", u, value);
+
   internal static LightRendererBindings Make() => new()
   {
     getIsSpotLight =
@@ -105,6 +136,12 @@ internal static unsafe class FakeLightRendererNatives
     setSpecular = &LightSetSpecular,
     setDirection = &LightSetDirection,
     setConeAngle = &LightSetConeAngle,
-    has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&LightHas
+    has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&LightHas,
+    getLightType = &LightGetLightType,
+    setLightType = &LightSetLightType,
+    getRange = &LightGetRange,
+    setRange = &LightSetRange,
+    getShadowDistance = &LightGetShadowDistance,
+    setShadowDistance = &LightSetShadowDistance
   };
 }

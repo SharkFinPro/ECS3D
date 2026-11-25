@@ -78,7 +78,13 @@ LightRendererBindings LightRendererBindingsProvider::getBindings()
     .setSpecular = &bindSetSpecular,
     .setDirection = &bindSetDirection,
     .setConeAngle = &bindSetConeAngle,
-    .has = &bindHas
+    .has = &bindHas,
+    .getLightType = &bindGetLightType,
+    .setLightType = &bindSetLightType,
+    .getRange = &bindGetRange,
+    .setRange = &bindSetRange,
+    .getShadowDistance = &bindGetShadowDistance,
+    .setShadowDistance = &bindSetShadowDistance
   };
 }
 
@@ -264,6 +270,83 @@ void LightRendererBindingsProvider::bindSetConeAngle(const char* uuid, const flo
 
   applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getConeAngle,
                           [&] { lightRenderer->setConeAngle(coneAngle); });
+}
+
+int LightRendererBindingsProvider::bindGetLightType(const char* uuid)
+{
+  const auto lightRenderer = find(uuid);
+  if (!lightRenderer)
+  {
+    return static_cast<int>(LightType::point);
+  }
+
+  return static_cast<int>(lightRenderer->getLightType());
+}
+
+float LightRendererBindingsProvider::bindGetRange(const char* uuid)
+{
+  const auto lightRenderer = find(uuid);
+  if (!lightRenderer)
+  {
+    return 0.0f;
+  }
+
+  return lightRenderer->getRange();
+}
+
+float LightRendererBindingsProvider::bindGetShadowDistance(const char* uuid)
+{
+  const auto lightRenderer = find(uuid);
+  if (!lightRenderer)
+  {
+    return 0.0f;
+  }
+
+  return lightRenderer->getShadowDistance();
+}
+
+void LightRendererBindingsProvider::bindSetLightType(const char* uuid, const int type)
+{
+  if (type < static_cast<int>(LightType::point) || type > static_cast<int>(LightType::directional))
+  {
+    return;
+  }
+
+  uuids::uuid objectUUID;
+  const auto lightRenderer = find(uuid, &objectUUID);
+  if (!lightRenderer)
+  {
+    return;
+  }
+
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getLightType,
+                          [&] { lightRenderer->setLightType(static_cast<LightType>(type)); });
+}
+
+void LightRendererBindingsProvider::bindSetRange(const char* uuid, const float range)
+{
+  uuids::uuid objectUUID;
+  const auto lightRenderer = find(uuid, &objectUUID);
+  if (!lightRenderer)
+  {
+    return;
+  }
+
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getRange,
+                          [&] { lightRenderer->setRange(range); });
+}
+
+void LightRendererBindingsProvider::bindSetShadowDistance(const char* uuid, const float distance)
+{
+  uuids::uuid objectUUID;
+  const auto lightRenderer = find(uuid, &objectUUID);
+  if (!lightRenderer)
+  {
+    return;
+  }
+
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getShadowDistance,
+                          [&] { lightRenderer->setShadowDistance(distance); });
 }
 
 bool LightRendererBindingsProvider::bindHas(const char* uuid)

@@ -76,6 +76,9 @@ public class RendererWrapperTests : IDisposable
     FakeNatives.Set("LightRenderer.getSpecular", 2f);
     FakeNatives.Set("LightRenderer.getDirection", new Vector3(1f, -2f, 3f));
     FakeNatives.Set("LightRenderer.getConeAngle", 30f);
+    FakeNatives.Set("LightRenderer.getLightType", 2);
+    FakeNatives.Set("LightRenderer.getRange", 12.5f);
+    FakeNatives.Set("LightRenderer.getShadowDistance", 150f);
 
     Assert.True(light.getIsSpotLight());
     Assert.Equal(new Vector3(0.25f, 0.5f, 0.75f), light.getColor());
@@ -84,9 +87,25 @@ public class RendererWrapperTests : IDisposable
     Assert.Equal(2f, light.getSpecular());
     Assert.Equal(new Vector3(1f, -2f, 3f), light.getDirection());
     Assert.Equal(30f, light.getConeAngle());
+    Assert.Equal(LightType.Directional, light.getLightType());
+    Assert.Equal(12.5f, light.getRange());
+    Assert.Equal(150f, light.getShadowDistance());
 
     FakeNatives.Set("LightRenderer.getIsSpotLight", false);
     Assert.False(light.getIsSpotLight());
+  }
+
+  [Theory]
+  [InlineData(0, LightType.Point)]
+  [InlineData(1, LightType.Spot)]
+  [InlineData(2, LightType.Directional)]
+  public void LightRenderer_MapsTheNativeTypeCodeToTheEnum(int code, LightType expected)
+  {
+    var light = new LightRenderer(Id);
+    FakeNatives.Set("LightRenderer.getLightType", code);
+
+    Assert.Equal(expected, light.getLightType());
+    Assert.Equal(code, (int)expected);
   }
 
   [Fact]
@@ -104,6 +123,11 @@ public class RendererWrapperTests : IDisposable
     light.setDirection(1f, 2f, 3f);
     light.setDirection(new Vector3(4f, 5f, 6f));
     light.setConeAngle(45f);
+    light.setLightType(LightType.Point);
+    light.setLightType(LightType.Spot);
+    light.setLightType(LightType.Directional);
+    light.setRange(12.5f);
+    light.setShadowDistance(150f);
 
     Assert.Equal(new[]
     {
@@ -116,7 +140,12 @@ public class RendererWrapperTests : IDisposable
       "LightRenderer.setSpecular(obj-1,2)",
       "LightRenderer.setDirection(obj-1,1,2,3)",
       "LightRenderer.setDirection(obj-1,4,5,6)",
-      "LightRenderer.setConeAngle(obj-1,45)"
+      "LightRenderer.setConeAngle(obj-1,45)",
+      "LightRenderer.setLightType(obj-1,0)",
+      "LightRenderer.setLightType(obj-1,1)",
+      "LightRenderer.setLightType(obj-1,2)",
+      "LightRenderer.setRange(obj-1,12.5)",
+      "LightRenderer.setShadowDistance(obj-1,150)"
     }, FakeNatives.Calls);
   }
 }
