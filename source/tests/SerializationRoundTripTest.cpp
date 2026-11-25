@@ -247,7 +247,8 @@ namespace {
     light->setAmbient(0.1f);
     light->setDiffuse(0.2f);
     light->setSpecular(0.9f);
-    light->setSpotLight(true);
+    light->setLightType(LightType::spot);
+    light->setRange(18.0f);
     light->setConeAngle(25.0f);
     lamp->addComponent(light);
   }

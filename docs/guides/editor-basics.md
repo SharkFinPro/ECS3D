@@ -54,6 +54,7 @@ The scene window is the viewport. By default it looks through the Editor Camera,
 - Ctrl+click an object to select it, or Ctrl+click empty space to clear the selection. Ctrl+Shift+click
   toggles the object in or out of the current selection. A plain click only focuses the viewport or grabs a
   gizmo handle.
+- A Light Renderer's Type is Point, Spot or Directional. A directional light is a sun: it shines along its Direction from everywhere, so its position does not matter. Point and spot lights have a Range (0 means unlimited); a ranged light fades out, so raise Diffuse above 1 to light anything far away. Only a directional light has a Shadow Distance.
 - Lights show a small icon at their position while the scene is stopped. Ctrl+click it to select the light.
 
 ### The transform gizmo

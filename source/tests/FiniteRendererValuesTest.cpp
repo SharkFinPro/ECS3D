@@ -9,6 +9,7 @@
 
 #include <Protocol.h>
 #include <glm/vec3.hpp>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -37,13 +38,15 @@ namespace {
   {
     net::Message message(net::MessageType::undefined);
     message.write(ComponentType::lightRenderer);
-    message.write(true);
+    message.write(static_cast<uint8_t>(LightType::spot));
     message.write(color);
     message.write(ambient);
     message.write(0.5f);
     message.write(0.25f);
     message.write(direction);
     message.write(30.0f);
+    message.write(10.0f);
+    message.write(100.0f);
     return message;
   }
 
@@ -79,7 +82,7 @@ namespace {
       { "diffuse", 0.5f },
       { "specular", 0.25f },
       { "coneAngle", 30.0f },
-      { "isSpotlight", true }
+      { "lightType", "spot" }
     };
   }
 
@@ -114,7 +117,7 @@ TEST(FiniteRendererValues, LightUnpackKeepsPriorValuesForNonFiniteInput)
     EXPECT_FLOAT_EQ(light->getDiffuse(), 0.5f);
     EXPECT_FLOAT_EQ(light->getSpecular(), 0.25f);
     EXPECT_FLOAT_EQ(light->getConeAngle(), 30.0f);
-    EXPECT_TRUE(light->isSpotLight());
+    EXPECT_EQ(light->getLightType(), LightType::spot);
   }
 }
 
@@ -152,7 +155,7 @@ TEST(FiniteRendererValues, LightLoadFromJSONKeepsPriorValuesForNonFiniteInput)
   EXPECT_FLOAT_EQ(light->getDiffuse(), 0.5f);
   EXPECT_FLOAT_EQ(light->getSpecular(), 0.25f);
   EXPECT_FLOAT_EQ(light->getConeAngle(), 30.0f);
-  EXPECT_TRUE(light->isSpotLight());
+  EXPECT_EQ(light->getLightType(), LightType::spot);
 }
 
 TEST(FiniteRendererValues, LightLoadFromJSONAppliesFiniteInput)

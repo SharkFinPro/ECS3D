@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 #include <algorithm>
+#include <string>
 
 LightRenderer::LightRenderer()
   : Component(ComponentType::lightRenderer)
@@ -17,14 +18,14 @@ LightRenderer::LightRenderer(const glm::vec3 color, const float ambient, const f
     m_specular(specular)
 {}
 
-bool LightRenderer::isSpotLight() const
+LightType LightRenderer::getLightType() const
 {
-  return m_isSpotLight;
+  return m_lightType;
 }
 
-void LightRenderer::setSpotLight(const bool isSpotLight)
+void LightRenderer::setLightType(const LightType type)
 {
-  m_isSpotLight = isSpotLight;
+  m_lightType = type;
 }
 
 glm::vec3 LightRenderer::getColor() const
@@ -118,17 +119,86 @@ void LightRenderer::setConeAngle(const float coneAngle)
   m_coneAngle = std::clamp(coneAngle, minConeAngleDegrees, maxConeAngleDegrees);
 }
 
+float LightRenderer::getRange() const
+{
+  return m_range;
+}
+
+void LightRenderer::setRange(const float range)
+{
+  if (!finiteCheck::isFinite(range))
+  {
+    return;
+  }
+
+  m_range = range <= 0.0f ? 0.0f : std::max(range, minRange);
+}
+
+float LightRenderer::getShadowDistance() const
+{
+  return m_shadowDistance;
+}
+
+void LightRenderer::setShadowDistance(const float distance)
+{
+  if (!finiteCheck::isFinite(distance))
+  {
+    return;
+  }
+
+  m_shadowDistance = std::clamp(distance, minShadowDistance, maxShadowDistance);
+}
+
+namespace {
+  const char* lightTypeToString(const LightType type)
+  {
+    switch (type)
+    {
+      case LightType::spot:
+        return "spot";
+      case LightType::directional:
+        return "directional";
+      case LightType::point:
+        break;
+    }
+
+    return "point";
+  }
+
+  LightType lightTypeFromString(const std::string& name)
+  {
+    if (name == "point")
+    {
+      return LightType::point;
+    }
+
+    if (name == "spot")
+    {
+      return LightType::spot;
+    }
+
+    if (name == "directional")
+    {
+      return LightType::directional;
+    }
+
+    throw RefusedPayload("LightRenderer: unknown lightType '" + name + "'");
+  }
+}
+
 nlohmann::json LightRenderer::serialize()
 {
   const nlohmann::json data = {
     { "type", "LightRenderer" },
     { "color", { m_color.x, m_color.y, m_color.z } },
     { "direction", { m_direction.x, m_direction.y, m_direction.z } },
-    { "isSpotlight", m_isSpotLight },
+    { "lightType", lightTypeToString(m_lightType) },
     { "ambient", m_ambient },
     { "diffuse", m_diffuse },
     { "specular", m_specular },
-    { "coneAngle", m_coneAngle }
+    { "coneAngle", m_coneAngle },
+    { "range", m_range },
+    { "shadowDistance", m_shadowDistance }
   };
 
   return data;
@@ -136,22 +206,53 @@ nlohmann::json LightRenderer::serialize()
 
 void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
-  setColor(finiteCheck::readVec3OrNaN(componentData.at("color")));
-  setDirection(finiteCheck::readVec3OrNaN(componentData.at("direction")));
+  LightType type = LightType::point;
+  if (componentData.contains("lightType"))
+  {
+    type = lightTypeFromString(componentData.at("lightType").get<std::string>());
+  }
+  else if (componentData.contains("isSpotlight"))
+  {
+    type = componentData.at("isSpotlight").get<bool>() ? LightType::spot : LightType::point;
+  }
 
-  setAmbient(finiteCheck::readFloatOrNaN(componentData.at("ambient")));
-  setDiffuse(finiteCheck::readFloatOrNaN(componentData.at("diffuse")));
-  setSpecular(finiteCheck::readFloatOrNaN(componentData.at("specular")));
-  setConeAngle(componentData.at("coneAngle"));
+  const glm::vec3 color = finiteCheck::readVec3OrNaN(componentData.at("color"));
+  const glm::vec3 direction = finiteCheck::readVec3OrNaN(componentData.at("direction"));
+  const float ambient = finiteCheck::readFloatOrNaN(componentData.at("ambient"));
+  const float diffuse = finiteCheck::readFloatOrNaN(componentData.at("diffuse"));
+  const float specular = finiteCheck::readFloatOrNaN(componentData.at("specular"));
+  const float coneAngle = componentData.at("coneAngle");
 
-  m_isSpotLight = componentData.at("isSpotlight");
+  // Files written before range existed keep their unattenuated look.
+  float range = 0.0f;
+  if (componentData.contains("range"))
+  {
+    range = finiteCheck::readFloatOrNaN(componentData.at("range"));
+  }
+
+  float shadowDistance = 100.0f;
+  if (componentData.contains("shadowDistance"))
+  {
+    shadowDistance = finiteCheck::readFloatOrNaN(componentData.at("shadowDistance"));
+  }
+
+  setColor(color);
+  setDirection(direction);
+  setAmbient(ambient);
+  setDiffuse(diffuse);
+  setSpecular(specular);
+  setConeAngle(coneAngle);
+  setRange(range);
+  setShadowDistance(shadowDistance);
+
+  m_lightType = type;
 }
 
 void LightRenderer::pack(net::Message& message) const
 {
   message.write(ComponentType::lightRenderer);
 
-  message.write(m_isSpotLight);
+  message.write(static_cast<uint8_t>(m_lightType));
 
   message.write(m_color);
   message.write(m_ambient);
@@ -160,19 +261,36 @@ void LightRenderer::pack(net::Message& message) const
 
   message.write(m_direction);
   message.write(m_coneAngle);
+  message.write(m_range);
+  message.write(m_shadowDistance);
 }
 
 void LightRenderer::unpack(net::MessageReader& messageReader)
 {
-  m_isSpotLight = messageReader.read<bool>();
+  const auto type = messageReader.read<uint8_t>();
+  const auto color = messageReader.read<glm::vec3>();
+  const auto ambient = messageReader.read<float>();
+  const auto diffuse = messageReader.read<float>();
+  const auto specular = messageReader.read<float>();
+  const auto direction = messageReader.read<glm::vec3>();
+  const auto coneAngle = messageReader.read<float>();
+  const auto range = messageReader.read<float>();
+  const auto shadowDistance = messageReader.read<float>();
 
-  // Every value is read unconditionally so the reader stays aligned; a non-finite one is dropped by its
-  // setter, leaving the previous value in place.
-  setColor(messageReader.read<glm::vec3>());
-  setAmbient(messageReader.read<float>());
-  setDiffuse(messageReader.read<float>());
-  setSpecular(messageReader.read<float>());
+  if (type > static_cast<uint8_t>(LightType::directional))
+  {
+    throw RefusedPayload("LightRenderer: unknown light type");
+  }
 
-  setDirection(messageReader.read<glm::vec3>());
-  setConeAngle(messageReader.read<float>());
+  m_lightType = static_cast<LightType>(type);
+
+  // A non-finite value is dropped by its setter, leaving the previous value in place.
+  setColor(color);
+  setAmbient(ambient);
+  setDiffuse(diffuse);
+  setSpecular(specular);
+  setDirection(direction);
+  setConeAngle(coneAngle);
+  setRange(range);
+  setShadowDistance(shadowDistance);
 }

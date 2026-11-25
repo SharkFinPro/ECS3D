@@ -16,6 +16,7 @@
 #include <uuid.h>
 
 namespace vke {
+  class DirectionalLight;
   class PointLight;
   class RenderObject;
   class SpotLight;
@@ -81,11 +82,12 @@ public:
   [[nodiscard]] ViewParams viewParams(const GpuAssetCache& assetCache) const;
 
 private:
-  // Only the kind the LightRenderer currently uses is ever populated; toggling spot/point releases
-  // the old shared_ptr (and its vke light) before creating the new one.
+  // Only the kind the LightRenderer currently uses is ever populated; changing its type releases the
+  // old shared_ptr (and its vke light) before creating the new one.
   struct CachedLight {
     std::shared_ptr<vke::PointLight> pointLight;
     std::shared_ptr<vke::SpotLight> spotLight;
+    std::shared_ptr<vke::DirectionalLight> directionalLight;
   };
 
   // The values last pushed to (or rejected by) Renderer3D::setProjectionParameters, so a per-frame call

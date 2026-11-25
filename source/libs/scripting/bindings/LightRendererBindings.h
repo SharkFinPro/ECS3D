@@ -2,7 +2,8 @@
 #define LIGHTRENDERERBINDINGS_H
 
 // LightRenderer script bindings: read/change how an object lights the scene (color, the three light
-// strengths, whether it is a spot light, its spot direction/cone angle, and enable/disable). Mirrors the
+// strengths, whether it is a spot light, its spot direction/cone angle, and enable/disable). Setting the
+// spot flag false demotes a spot light to a point light and leaves a point or directional light alone. Mirrors the
 // TransformBindings/ModelRendererBindings pattern: a C-ABI struct of function pointers, resolved against
 // the server's current ObjectManager via BindingContext.
 //

@@ -54,7 +54,7 @@ TEST_F(LightRendererBindingsTest, HasIsTrueForAnObjectCarryingALightRenderer)
 
 TEST_F(LightRendererBindingsTest, GetReturnsTheComponentsValues)
 {
-  m_light->setSpotLight(true);
+  m_light->setLightType(LightType::spot);
   m_light->setColor({ 0.25f, 0.5f, 0.75f });
   m_light->setAmbient(0.1f);
   m_light->setDiffuse(0.2f);
@@ -104,11 +104,11 @@ TEST_F(LightRendererBindingsTest, GetRecordsNoComponentEdit)
 TEST_F(LightRendererBindingsTest, SetSpotLightChangesTheComponentAndRecordsOneEdit)
 {
   const auto id = uuid();
-  ASSERT_FALSE(m_light->isSpotLight());
+  ASSERT_EQ(m_light->getLightType(), LightType::point);
 
   m_bindings.setSpotLight(id.c_str(), true);
 
-  EXPECT_TRUE(m_light->isSpotLight());
+  EXPECT_EQ(m_light->getLightType(), LightType::spot);
 
   // Positive control for the recording behavior every setter below relies on: exactly one edit, for this
   // object, after exactly one set call.
@@ -119,8 +119,27 @@ TEST_F(LightRendererBindingsTest, SetSpotLightChangesTheComponentAndRecordsOneEd
 
   m_bindings.setSpotLight(id.c_str(), false);
 
-  EXPECT_FALSE(m_light->isSpotLight());
+  EXPECT_EQ(m_light->getLightType(), LightType::point);
   EXPECT_FALSE(m_bindings.getIsSpotLight(id.c_str()));
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+}
+
+TEST_F(LightRendererBindingsTest, ClearingTheSpotFlagLeavesADirectionalLightDirectionalAndRecordsNoEdit)
+{
+  const auto id = uuid();
+  m_light->setLightType(LightType::directional);
+
+  m_bindings.setSpotLight(id.c_str(), false);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::directional);
+  EXPECT_FALSE(m_bindings.getIsSpotLight(id.c_str()));
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // Positive control: setting the flag on the same light does convert it and records the edit.
+  m_bindings.setSpotLight(id.c_str(), true);
+
+  EXPECT_EQ(m_light->getLightType(), LightType::spot);
+  EXPECT_TRUE(m_bindings.getIsSpotLight(id.c_str()));
   EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
 }
 

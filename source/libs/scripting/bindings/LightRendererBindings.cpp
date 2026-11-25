@@ -90,7 +90,7 @@ bool LightRendererBindingsProvider::bindGetIsSpotLight(const char* uuid)
     return false;
   }
 
-  return lightRenderer->isSpotLight();
+  return lightRenderer->getLightType() == LightType::spot;
 }
 
 void LightRendererBindingsProvider::bindGetColor(const char* uuid, float* r, float* g, float* b)
@@ -174,8 +174,18 @@ void LightRendererBindingsProvider::bindSetSpotLight(const char* uuid, const boo
     return;
   }
 
-  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::isSpotLight,
-                          [&] { lightRenderer->setSpotLight(isSpotLight); });
+  // Only the spot/point pair is reachable through this bool: clearing it demotes a spot light to a point
+  // light but leaves a point or directional light as it is.
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getLightType, [&] {
+    if (isSpotLight)
+    {
+      lightRenderer->setLightType(LightType::spot);
+    }
+    else if (lightRenderer->getLightType() == LightType::spot)
+    {
+      lightRenderer->setLightType(LightType::point);
+    }
+  });
 }
 
 void LightRendererBindingsProvider::bindSetColor(const char* uuid, const float r, const float g, const float b)

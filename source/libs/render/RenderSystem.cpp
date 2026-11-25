@@ -33,6 +33,7 @@
 #include <VulkanEngine/components/assets/volume/VolumeSurface.h>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 #include <VulkanEngine/components/lighting/lights/PointLight.h>
+#include <VulkanEngine/components/lighting/lights/DirectionalLight.h>
 #include <VulkanEngine/components/lighting/lights/SpotLight.h>
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
@@ -186,30 +187,53 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       auto& light = m_lights[uuid];
 
-      // Create only the kind currently in use. A LightRenderer that toggles spot/point releases the
-      // other kind's shared_ptr here first, dropping its own vke light (and shadow map) rather than
-      // keeping both allocated for as long as the object exists.
-      if (lightRenderer->isSpotLight())
+      // Create only the kind currently in use. A LightRenderer that changes type releases the other
+      // kinds' shared_ptrs here first, dropping their vke lights (and shadow maps) rather than keeping
+      // all three allocated for as long as the object exists.
+      const auto lightType = lightRenderer->getLightType();
+
+      if (lightType != LightType::point)
+      {
+        light.pointLight.reset();
+      }
+
+      if (lightType != LightType::spot)
+      {
+        light.spotLight.reset();
+      }
+
+      if (lightType != LightType::directional)
+      {
+        light.directionalLight.reset();
+      }
+
+      if (lightType == LightType::spot)
       {
         if (!light.spotLight)
         {
-          light.pointLight.reset();
-
           light.spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(
             glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
         }
       }
+      else if (lightType == LightType::directional)
+      {
+        if (!light.directionalLight)
+        {
+          light.directionalLight = std::dynamic_pointer_cast<vke::DirectionalLight>(
+            lightingManager->createDirectionalLight(guardDirection(lightRenderer->getDirection(), glm::vec3(0.0f, -1.0f, 0.0f)),
+                                                    lightRenderer->getColor(), lightRenderer->getAmbient(),
+                                                    lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
+        }
+      }
       else if (!light.pointLight)
       {
-        light.spotLight.reset();
-
         light.pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(
           glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
       }
 
       // Push the data values into the engine light each frame (data is the source of truth), then
       // position it from the transform and submit the active one.
-      if (lightRenderer->isSpotLight())
+      if (lightType == LightType::spot)
       {
         light.spotLight->setColor(lightRenderer->getColor());
         light.spotLight->setAmbient(lightRenderer->getAmbient());
@@ -218,8 +242,20 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         light.spotLight->setDirection(guardDirection(lightRenderer->getDirection(), glm::vec3(0.0f, -1.0f, 0.0f)));
         light.spotLight->setConeAngle(lightRenderer->getConeAngle());
         light.spotLight->setPosition(transform->getPosition());
+        light.spotLight->setRange(lightRenderer->getRange());
 
         lightingManager->renderLight(light.spotLight);
+      }
+      else if (lightType == LightType::directional)
+      {
+        light.directionalLight->setColor(lightRenderer->getColor());
+        light.directionalLight->setAmbient(lightRenderer->getAmbient());
+        light.directionalLight->setDiffuse(lightRenderer->getDiffuse());
+        light.directionalLight->setSpecular(lightRenderer->getSpecular());
+        light.directionalLight->setDirection(guardDirection(lightRenderer->getDirection(), glm::vec3(0.0f, -1.0f, 0.0f)));
+        light.directionalLight->setShadowDistance(lightRenderer->getShadowDistance());
+
+        lightingManager->renderLight(light.directionalLight);
       }
       else
       {
@@ -228,6 +264,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         light.pointLight->setDiffuse(lightRenderer->getDiffuse());
         light.pointLight->setSpecular(lightRenderer->getSpecular());
         light.pointLight->setPosition(transform->getPosition());
+        light.pointLight->setRange(lightRenderer->getRange());
 
         lightingManager->renderLight(light.pointLight);
       }

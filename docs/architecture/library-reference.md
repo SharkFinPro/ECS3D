@@ -41,7 +41,7 @@ Development Principles.
 
 ## ECS3DData
 
-`ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders
+`ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer (a `LightType` of point, spot or directional, plus a `range` where 0 is unbounded and unattenuated and a `shadowDistance` that only directional lights read; a file with the old `isSpotlight` flag and no `lightType` still loads), Colliders
 (box, sphere and capsule; their cached bounds, support geometry and box frame key on `Transform::getWorldUpdateID`,
 which also moves when an ancestor does or the object is reparented, plus `Collider::getGeometryRevision` for the
 collider's own fields; a convex mesh collider also holds sim-filled caches: face outlines, world face normals and faces, and its local mass distribution, which the sim carries to the world through the collider's world matrix), Script, PlayerController, Camera) - whose float and
