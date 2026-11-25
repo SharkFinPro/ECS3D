@@ -20,27 +20,33 @@ struct Tally
   int namedSunDirectional = 0;
 };
 
+inline void tallyLight(const nlohmann::json& light, const bool namedSun, Tally& tally)
+{
+  const auto type = light.at("lightType").get<std::string>();
+  const bool directional = type == "directional";
+  const bool hasAmbient = light.at("ambient").get<float>() > 0.0f;
+  const bool ranged = light.at("range").get<float>() > 0.0f;
+
+  ++tally.lights;
+  tally.directional += directional ? 1 : 0;
+  tally.spot += type == "spot" ? 1 : 0;
+  tally.point += type == "point" ? 1 : 0;
+  tally.withAmbient += hasAmbient ? 1 : 0;
+  tally.ambientNotDirectional += (!directional && hasAmbient) ? 1 : 0;
+  tally.localWithoutRange += (!directional && !ranged) ? 1 : 0;
+  tally.namedSunDirectional += (directional && namedSun) ? 1 : 0;
+}
+
 inline void collect(const nlohmann::json& objects, Tally& tally)
 {
   for (const auto& object : objects)
   {
     for (const auto& component : object.at("components"))
     {
-      if (component.at("type") != "LightRenderer")
+      if (component.at("type") == "LightRenderer")
       {
-        continue;
+        tallyLight(component, object.at("name") == "Sun", tally);
       }
-
-      const auto type = component.at("lightType").get<std::string>();
-      const bool directional = type == "directional";
-      ++tally.lights;
-      tally.directional += directional ? 1 : 0;
-      tally.spot += type == "spot" ? 1 : 0;
-      tally.point += type == "point" ? 1 : 0;
-      tally.withAmbient += component.at("ambient").get<float>() > 0.0f ? 1 : 0;
-      tally.ambientNotDirectional += (!directional && component.at("ambient").get<float>() > 0.0f) ? 1 : 0;
-      tally.localWithoutRange += (!directional && !(component.at("range").get<float>() > 0.0f)) ? 1 : 0;
-      tally.namedSunDirectional += (directional && object.at("name") == "Sun") ? 1 : 0;
     }
 
     if (object.contains("children"))

@@ -1564,7 +1564,7 @@
             "components": [
               {
                 "type": "Transform",
-                "position": [0.0, 30, 0.0],
+                "position": [12.0, 30, 9.0],
                 "rotation": [0.0, 0.0, 0.0],
                 "scale": [1, 1, 1]
               },

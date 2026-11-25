@@ -421,31 +421,36 @@ json player(const glm::vec3& position, const int slot,
 // is attenuated to nothing at its range, so it never doubles as a fill light.
 namespace {
 
-json lightObject(const char* name,
-                 const glm::vec3& position,
-                 const char* lightType,
-                 const glm::vec3& direction,
-                 const glm::vec3& color,
-                 const float ambient,
-                 const float diffuse,
-                 const float specular,
-                 const float coneAngle,
-                 const float range,
-                 const float shadowDistance)
+struct LightSpec
 {
-  return makeObject(name, json::array({
-    transform(position),
+  const char* name = "Light";
+  const char* lightType = "point";
+  glm::vec3 position{ 0.0f };
+  glm::vec3 direction{ 0.0f, -1.0f, 0.0f };
+  glm::vec3 color{ 1.0f };
+  float ambient = 0.0f;
+  float diffuse = 0.0f;
+  float specular = 0.0f;
+  float coneAngle = 0.0f;
+  float range = 0.0f;
+  float shadowDistance = 100.0f;
+};
+
+json lightObject(const LightSpec& light)
+{
+  return makeObject(light.name, json::array({
+    transform(light.position),
     {
       { "type", "LightRenderer" },
-      { "color", vec(color) },
-      { "direction", vec(direction) },
-      { "lightType", lightType },
-      { "ambient", ambient },
-      { "diffuse", diffuse },
-      { "specular", specular },
-      { "coneAngle", coneAngle },
-      { "range", range },
-      { "shadowDistance", shadowDistance }
+      { "color", vec(light.color) },
+      { "direction", vec(light.direction) },
+      { "lightType", light.lightType },
+      { "ambient", light.ambient },
+      { "diffuse", light.diffuse },
+      { "specular", light.specular },
+      { "coneAngle", light.coneAngle },
+      { "range", light.range },
+      { "shadowDistance", light.shadowDistance }
     }
   }));
 }
@@ -460,8 +465,9 @@ json sun(const glm::vec3& direction,
          const float specular,
          const float shadowDistance)
 {
-  return lightObject("Sun", -glm::normalize(direction) * 40.0f, "directional", direction, color, ambient, diffuse, specular,
-                     0.0f, 0.0f, shadowDistance);
+  return lightObject({ .name = "Sun", .lightType = "directional", .position = -glm::normalize(direction) * 40.0f,
+                       .direction = direction, .color = color, .ambient = ambient, .diffuse = diffuse,
+                       .specular = specular, .shadowDistance = shadowDistance });
 }
 
 json daySun(const float shadowDistance)
@@ -475,8 +481,8 @@ json pointLight(const glm::vec3& position,
                 const float specular,
                 const float range)
 {
-  return lightObject("Light", position, "point", glm::vec3(0, -1, 0), color, 0.0f, diffuse, specular, 0.0f, range,
-                     100.0f);
+  return lightObject({ .position = position, .color = color, .diffuse = diffuse, .specular = specular,
+                       .range = range });
 }
 
 json spotLight(const glm::vec3& position,
@@ -487,8 +493,8 @@ json spotLight(const glm::vec3& position,
                const float specular,
                const float range)
 {
-  return lightObject("Light", position, "spot", direction, color, 0.0f, diffuse, specular, coneAngle, range,
-                     100.0f);
+  return lightObject({ .lightType = "spot", .position = position, .direction = direction, .color = color,
+                       .diffuse = diffuse, .specular = specular, .coneAngle = coneAngle, .range = range });
 }
 
 }
