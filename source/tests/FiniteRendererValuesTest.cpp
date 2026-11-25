@@ -9,6 +9,7 @@
 
 #include <Protocol.h>
 #include <glm/vec3.hpp>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <nlohmann/json.hpp>

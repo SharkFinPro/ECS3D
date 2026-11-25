@@ -215,17 +215,35 @@ void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
   {
     type = componentData.at("isSpotlight").get<bool>() ? LightType::spot : LightType::point;
   }
-  setColor(finiteCheck::readVec3OrNaN(componentData.at("color")));
-  setDirection(finiteCheck::readVec3OrNaN(componentData.at("direction")));
 
-  setAmbient(finiteCheck::readFloatOrNaN(componentData.at("ambient")));
-  setDiffuse(finiteCheck::readFloatOrNaN(componentData.at("diffuse")));
-  setSpecular(finiteCheck::readFloatOrNaN(componentData.at("specular")));
-  setConeAngle(componentData.at("coneAngle"));
+  const glm::vec3 color = finiteCheck::readVec3OrNaN(componentData.at("color"));
+  const glm::vec3 direction = finiteCheck::readVec3OrNaN(componentData.at("direction"));
+  const float ambient = finiteCheck::readFloatOrNaN(componentData.at("ambient"));
+  const float diffuse = finiteCheck::readFloatOrNaN(componentData.at("diffuse"));
+  const float specular = finiteCheck::readFloatOrNaN(componentData.at("specular"));
+  const float coneAngle = componentData.at("coneAngle");
 
   // Files written before range existed keep their unattenuated look.
-  setRange(componentData.value("range", 0.0f));
-  setShadowDistance(componentData.value("shadowDistance", 100.0f));
+  float range = 0.0f;
+  if (componentData.contains("range"))
+  {
+    range = finiteCheck::readFloatOrNaN(componentData.at("range"));
+  }
+
+  float shadowDistance = 100.0f;
+  if (componentData.contains("shadowDistance"))
+  {
+    shadowDistance = finiteCheck::readFloatOrNaN(componentData.at("shadowDistance"));
+  }
+
+  setColor(color);
+  setDirection(direction);
+  setAmbient(ambient);
+  setDiffuse(diffuse);
+  setSpecular(specular);
+  setConeAngle(coneAngle);
+  setRange(range);
+  setShadowDistance(shadowDistance);
 
   m_lightType = type;
 }

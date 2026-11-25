@@ -269,6 +269,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         lightingManager->renderLight(light.pointLight);
       }
     }
+
     // Collider debug gizmo: draw the collider's shape (offset by its local transform) as an
     // outline only, so the object inside stays visible, when its render flag is on.
     std::size_t gizmoParts = 0;

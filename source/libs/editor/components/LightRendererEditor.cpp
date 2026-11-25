@@ -60,7 +60,8 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
       {
         for (const LightType choice : { LightType::point, LightType::spot, LightType::directional })
         {
-          if (ImGui::Selectable(lightTypeLabel(choice), choice == type && !mixed.contains("lightType")))
+          const bool picked = ImGui::Selectable(lightTypeLabel(choice), choice == type && !mixed.contains("lightType"));
+          if (picked && choice != light->getLightType())
           {
             light->setLightType(choice);
             edited = true;
@@ -130,12 +131,13 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
       }
 
       if (isDirectional && gc::accentSlider("Shadow Distance", &shadowDistance, LightRenderer::minShadowDistance,
-                                            500.0f, mixed.contains("shadowDistance")))
+                                            LightRenderer::maxShadowDistance, mixed.contains("shadowDistance")))
       {
         light->setShadowDistance(shadowDistance);
         edited = true;
       }
     }
+
     return edited;
   });
 }

@@ -8,6 +8,7 @@
 #include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <string>
@@ -438,4 +439,90 @@ TEST(LightRenderer, AWirePayloadWithAnUnknownTypeByteIsRefusedAndChangesNothing)
 
   EXPECT_EQ(light->getLightType(), LightType::directional);
   EXPECT_FLOAT_EQ(light->getRange(), 10.0f);
+}
+
+TEST(LightRenderer, ALightTypeNameWinsOverALegacySpotlightFlag)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  auto both = legacyLightJson(true);
+  both["lightType"] = "directional";
+
+  light->loadFromJSON(both);
+
+  EXPECT_EQ(light->getLightType(), LightType::directional);
+
+  // Positive control: the same payload without a type name falls back to the legacy flag.
+  both.erase("lightType");
+  light->loadFromJSON(both);
+
+  EXPECT_EQ(light->getLightType(), LightType::spot);
+}
+
+TEST(LightRenderer, ANullRangeOrShadowDistanceInJsonIsDroppedWithoutThrowing)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+  light->setRange(12.0f);
+  light->setShadowDistance(300.0f);
+
+  auto withNulls = legacyLightJson(false);
+  withNulls["range"] = nullptr;
+  withNulls["shadowDistance"] = nullptr;
+
+  EXPECT_NO_THROW(light->loadFromJSON(withNulls));
+
+  EXPECT_FLOAT_EQ(light->getRange(), 12.0f);
+  EXPECT_FLOAT_EQ(light->getShadowDistance(), 300.0f);
+
+  // Positive control: numeric values in the same payload load.
+  withNulls["range"] = 25.0f;
+  withNulls["shadowDistance"] = 200.0f;
+
+  EXPECT_NO_THROW(light->loadFromJSON(withNulls));
+
+  EXPECT_FLOAT_EQ(light->getRange(), 25.0f);
+  EXPECT_FLOAT_EQ(light->getShadowDistance(), 200.0f);
+}
+
+TEST(LightRenderer, ANonFiniteRangeOrShadowDistanceOffTheWireKeepsThePriorValues)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+  light->setRange(12.0f);
+  light->setShadowDistance(300.0f);
+
+  const auto packWith = [](const float range, const float shadowDistance) {
+    net::Message message(net::MessageType::undefined);
+    message.write(ComponentType::lightRenderer);
+    message.write(static_cast<uint8_t>(LightType::point));
+    message.write(glm::vec3(1));
+    message.write(0.0f);
+    message.write(0.75f);
+    message.write(0.75f);
+    message.write(glm::vec3(0, -1, 0));
+    message.write(30.0f);
+    message.write(range);
+    message.write(shadowDistance);
+    return message;
+  };
+
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const auto bad = packWith(nan, nan);
+  net::MessageReader badReader(bad);
+  static_cast<void>(badReader.read<ComponentType>());
+  light->unpack(badReader);
+
+  EXPECT_FLOAT_EQ(light->getRange(), 12.0f);
+  EXPECT_FLOAT_EQ(light->getShadowDistance(), 300.0f);
+
+  // Positive control: a finite pair applies.
+  const auto good = packWith(25.0f, 200.0f);
+  net::MessageReader goodReader(good);
+  static_cast<void>(goodReader.read<ComponentType>());
+  light->unpack(goodReader);
+
+  EXPECT_FLOAT_EQ(light->getRange(), 25.0f);
+  EXPECT_FLOAT_EQ(light->getShadowDistance(), 200.0f);
 }
