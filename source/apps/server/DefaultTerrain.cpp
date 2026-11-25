@@ -3,6 +3,7 @@
 #include "DefaultTerrainNoise.h"
 #include "DefaultTerrainPaint.h"
 #include "DefaultTerrainTiles.h"
+#include "objects/components/LightRenderer.h"
 #include <Log.h>
 #include <terrain/TerrainBrush.h>
 #include <terrain/TerrainOps.h>
@@ -299,7 +300,7 @@ json buildTerrainShowcase()
       terrainCollider(showcaseTerrain)
     })),
     player(showcase::playerSpawn(), 0, glm::vec3(0.0f, 0.0f, -1.0f), 180.0f),
-    daySun(250.0f)
+    daySun(LightRenderer::maxShadowDistance)
   });
 }
 

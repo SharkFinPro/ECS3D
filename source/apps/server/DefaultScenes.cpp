@@ -1,6 +1,7 @@
 #include "DefaultProjectParts.h"
 #include "DefaultTerrainCaves.h"
 #include "DefaultTerrainTiles.h"
+#include "objects/components/LightRenderer.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <glm/geometric.hpp>
@@ -60,7 +61,7 @@ json buildScene3()
   constexpr int ballSpacing = 5;
 
   json objects = json::array({
-    daySun(150.0f),
+    daySun(LightRenderer::maxShadowDistance),
     pointLight({ -25, 3.0f, 3 }, { 0.0f, 1.0f, 1.0f }, 40.0f, 20.0f, 40.0f),
     pointLight({ 25, 3.0f, 3 }, { 1.0f, 0.0f, 0.0f }, 40.0f, 20.0f, 40.0f),
     rigidBlock({ 0, -9, 0 }, { 100, 10, 100 })
@@ -293,7 +294,7 @@ json buildTerrainBasin()
     }
   }
 
-  objects.push_back(daySun(250.0f));
+  objects.push_back(daySun(LightRenderer::maxShadowDistance));
   objects.push_back(player({ 0.0f, 3.0f, -60.0f }, 0, glm::vec3(0.0f, 0.0f, -1.0f), 180.0f));
 
   std::random_device rd;

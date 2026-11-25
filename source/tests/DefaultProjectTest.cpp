@@ -17,6 +17,7 @@
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/LightRenderer.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/collisions/ConvexHullValidation.h"
 #include "scenes/SceneAsset.h"
@@ -332,6 +333,41 @@ TEST(DefaultProject, LightsAndPlayersShowsAllThreeLightTypes)
   EXPECT_EQ(tally.directional, 1);
   EXPECT_EQ(tally.spot, 1);
   EXPECT_EQ(tally.point, 2);
+}
+
+// A zoomed-out view of these scenes spans hundreds of units, so a shorter shadow distance drops their shadows.
+TEST(DefaultProject, LargeScenesCastSunShadowsAsFarAsTheComponentAllows)
+{
+  const auto project = buildDefaultProject();
+  int largeScenes = 0;
+  for (const auto& scene : project.at("assets").at("scenes"))
+  {
+    const auto name = scene.at("name").get<std::string>();
+    if (name != "Tower Collapse" && name.rfind("Terrain", 0) != 0)
+    {
+      continue;
+    }
+
+    SCOPED_TRACE(name);
+    ++largeScenes;
+    for (const auto& object : scene.at("objects"))
+    {
+      if (object.at("name") != "Sun")
+      {
+        continue;
+      }
+
+      for (const auto& component : object.at("components"))
+      {
+        if (component.at("type") == "LightRenderer")
+        {
+          EXPECT_FLOAT_EQ(component.at("shadowDistance").get<float>(), LightRenderer::maxShadowDistance);
+        }
+      }
+    }
+  }
+
+  EXPECT_EQ(largeScenes, 3);
 }
 
 TEST(DefaultProject, NoSceneWritesTheLegacySpotlightFlag)
