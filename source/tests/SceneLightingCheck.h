@@ -27,14 +27,16 @@ inline void tallyLight(const nlohmann::json& light, const bool namedSun, Tally& 
   const bool hasAmbient = light.at("ambient").get<float>() > 0.0f;
   const bool ranged = light.at("range").get<float>() > 0.0f;
 
+  const auto count = [](const bool condition) { return static_cast<int>(condition); };
+
   ++tally.lights;
-  tally.directional += directional ? 1 : 0;
-  tally.spot += type == "spot" ? 1 : 0;
-  tally.point += type == "point" ? 1 : 0;
-  tally.withAmbient += hasAmbient ? 1 : 0;
-  tally.ambientNotDirectional += (!directional && hasAmbient) ? 1 : 0;
-  tally.localWithoutRange += (!directional && !ranged) ? 1 : 0;
-  tally.namedSunDirectional += (directional && namedSun) ? 1 : 0;
+  tally.directional += count(directional);
+  tally.spot += count(type == "spot");
+  tally.point += count(type == "point");
+  tally.withAmbient += count(hasAmbient);
+  tally.ambientNotDirectional += count(!directional && hasAmbient);
+  tally.localWithoutRange += count(!directional && !ranged);
+  tally.namedSunDirectional += count(directional && namedSun);
 }
 
 inline void collect(const nlohmann::json& objects, Tally& tally)
