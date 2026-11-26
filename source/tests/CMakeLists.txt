@@ -230,12 +230,14 @@ add_executable(${PROJECT_NAME}
   AppIconTest.cpp
   TemplateManifestTest.cpp
   TerrainBindingTest.cpp
+  TerrainBrushSessionTest.cpp
   TerrainBrushTest.cpp
   TerrainBrushWireTest.cpp
   TerrainChunkTest.cpp
   TerrainCodecTest.cpp
   TerrainComponentTest.cpp
   TerrainContactTest.cpp
+  TerrainCursorTest.cpp
   TerrainEditApplyTest.cpp
   TerrainEditEchoFixtures.h
   TerrainEditEchoFlushTest.cpp
@@ -272,6 +274,7 @@ add_executable(${PROJECT_NAME}
   TerrainStreamPlanTest.cpp
   TerrainStreamerLifecycleTest.cpp
   TerrainStreamerTest.cpp
+  TerrainStrokeEchoTest.cpp
   TerrainStrokeTest.cpp
   TerrainToolStateTest.cpp
   TerrainUploadTest.cpp

@@ -27,11 +27,13 @@ inline constexpr size_t terrainToolCount = 4;
   }
 }
 
-// Whether terrain mode may be on: an object with a Terrain component is selected and the server accepts edits.
+// Whether terrain mode may be on: an object with a Terrain component is selected, the server accepts edits and the
+// scene is stopped (editing a running scene is not supported).
 struct TerrainModeContext
 {
   std::optional<uuids::uuid> selectedTerrainObject;
   bool editable = false;
+  bool sceneStopped = true;
 };
 
 class TerrainToolState
@@ -110,7 +112,7 @@ public:
 private:
   [[nodiscard]] static bool eligible(const TerrainModeContext& context)
   {
-    return context.editable && context.selectedTerrainObject.has_value();
+    return context.editable && context.sceneStopped && context.selectedTerrainObject.has_value();
   }
 
   std::optional<uuids::uuid> m_terrainObject;

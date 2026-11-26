@@ -148,7 +148,8 @@ namespace terrain
     return packTerrainChunks(received.terrain, entries);
   }
 
-  ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload)
+  ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload,
+                                       const ChunkHold* hold)
   {
     ChunksApplyResult result;
 
@@ -161,6 +162,12 @@ namespace terrain
 
     for (const ReceivedChunk& entry : payload.entries)
     {
+      if (hold && hold->contains(entry.coord))
+      {
+        ++result.held;
+        continue;
+      }
+
       if (entry.revision <= store.revision(payload.terrain, entry.coord))
       {
         ++result.stale;

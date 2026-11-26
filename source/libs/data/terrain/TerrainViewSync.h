@@ -51,7 +51,10 @@ namespace terrain
     // to the server. The log lines are for the caller to write: a refused message, an unknown terrain, that request
     // and a terrain that now holds as many chunks as its description's chunkCount, once until it falls below that
     // count again.
-    ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message);
+    //
+    // hold names chunks the view is predicting: their entries are skipped and never requested (applyTerrainChunks).
+    ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message,
+                           const ChunkHold* hold = nullptr);
 
   private:
     void forgetCompletionIfIncomplete(const TerrainStore& store, const uuids::uuid& terrain);

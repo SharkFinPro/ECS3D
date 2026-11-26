@@ -61,6 +61,8 @@ add_library(${PROJECT_NAME}
   ProfilerPanelState.h
   ProfilerReadout.h
   TerrainReadout.h
+  TerrainBrushSession.h
+  TerrainCursor.h
   TerrainStroke.h
   TerrainToolState.h
   SceneScriptsPanel.cpp

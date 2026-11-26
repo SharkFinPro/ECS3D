@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <unordered_set>
 #include <uuid.h>
 #include <vector>
 
@@ -71,6 +72,8 @@ namespace terrain
     size_t applied = 0;
     // Entries whose revision was not higher than the one held.
     size_t stale = 0;
+    // Entries for a coordinate the caller holds (see applyTerrainChunks); neither applied nor requested.
+    size_t held = 0;
     // Hash-only entries the store could not satisfy (no matching chunk held); the receiver must ask for or wait for
     // the full chunk. Their revision is not recorded.
     std::vector<ChunkCoord> missing;
@@ -79,7 +82,13 @@ namespace terrain
   // The view side: applies each entry whose revision is higher than the store's for that coordinate. A full entry
   // replaces the chunk. A hash-only entry is accepted (revision recorded, chunk kept) only when the held chunk's hash
   // equals it - an absent coordinate holds the air chunk, so it compares against the air chunk's hash.
-  ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload);
+  //
+  // Coordinates in hold are skipped whatever the entry carries, and their revision is not recorded: a view that is
+  // predicting an edit of those chunks keeps its own copy until the server's final state is asked for.
+  using ChunkHold = std::unordered_set<ChunkCoord>;
+
+  ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload,
+                                       const ChunkHold* hold = nullptr);
 
   // True for a message a view sends to ask for chunks: at least one entry, every one hash-only.
   [[nodiscard]] bool isChunkRequest(const TerrainChunksPayload& payload);

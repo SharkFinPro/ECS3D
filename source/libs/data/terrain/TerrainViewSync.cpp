@@ -26,7 +26,8 @@ namespace terrain
     m_completed.clear();
   }
 
-  ViewApplyOutcome TerrainViewSync::apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message)
+  ViewApplyOutcome TerrainViewSync::apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message,
+                                          const ChunkHold* hold)
   {
     ViewApplyOutcome outcome;
 
@@ -41,7 +42,7 @@ namespace terrain
 
     outcome.terrain = payload->terrain;
     forgetCompletionIfIncomplete(store, payload->terrain);
-    outcome.result = applyTerrainChunks(store, *payload);
+    outcome.result = applyTerrainChunks(store, *payload, hold);
     const std::string name = uuids::to_string(payload->terrain);
 
     if (outcome.result.unknownTerrain)

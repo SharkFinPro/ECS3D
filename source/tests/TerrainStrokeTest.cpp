@@ -551,3 +551,31 @@ TEST(TerrainStrokeTest, RedistanceBoxesForATouchedDiagonalStayProportionalToWhat
   const std::vector<terrain::ChunkCoord> outside = { { 500, 0, 500 }, { 0, 5, 0 } };
   EXPECT_TRUE(redistanceBoxes(box, outside).empty());
 }
+
+TEST(TerrainStrokeTest, BreakPathStartsANewSegmentAtTheNextHitWithOneApplication)
+{
+  TerrainStroke bridged;
+  bridged.begin(1, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
+  EXPECT_GT(bridged.moveTo(hitAt({ 40.0f, 0.0f, 0.0f })).size(), 3u);
+
+  TerrainStroke broken;
+  broken.begin(1, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
+  broken.breakPath();
+
+  const std::vector<terrain::BrushOp> first = broken.moveTo(hitAt({ 40.0f, 0.0f, 0.0f }));
+  ASSERT_EQ(first.size(), 1u);
+  EXPECT_EQ(first.front().center, glm::vec3(40.0f, 0.0f, 0.0f));
+
+  // The path continues from there with the carry reset.
+  EXPECT_TRUE(broken.moveTo(hitAt({ 40.0f + radius / 8.0f, 0.0f, 0.0f })).empty());
+  EXPECT_EQ(broken.moveTo(hitAt({ 40.0f + radius / 4.0f, 0.0f, 0.0f })).size(), 1u);
+}
+
+TEST(TerrainStrokeTest, BreakPathWithoutAStrokeDoesNothing)
+{
+  TerrainStroke stroke;
+  stroke.breakPath();
+  stroke.begin(1, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
+
+  EXPECT_TRUE(stroke.moveTo(hitAt({ 0.5f, 0.0f, 0.0f })).empty());
+}

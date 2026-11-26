@@ -175,3 +175,18 @@ TEST(TerrainToolStateTest, BrushKindMapsEveryTool)
   EXPECT_EQ(brushKind(TerrainTool::smooth), terrain::BrushOp::Kind::smooth);
   EXPECT_EQ(brushKind(TerrainTool::flatten), terrain::BrushOp::Kind::flatten);
 }
+
+TEST(TerrainToolStateTest, ARunningSceneRefusesEntryAndLeavesTheModeWhenPlayStarts)
+{
+  TerrainToolState state;
+  TerrainModeContext running = contextFor(terrainA);
+  running.sceneStopped = false;
+
+  EXPECT_FALSE(state.enter(running));
+  EXPECT_FALSE(state.active());
+
+  ASSERT_TRUE(state.enter(contextFor(terrainA)));
+  EXPECT_FALSE(state.refresh(contextFor(terrainA)));
+  EXPECT_TRUE(state.refresh(running));
+  EXPECT_FALSE(state.active());
+}
