@@ -14,6 +14,7 @@
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainUpload.h"
+#include "terrain/TerrainUploadOwners.h"
 #include "terrain/TerrainVolume.h"
 
 #include <Protocol.h>
@@ -61,9 +62,10 @@ namespace {
       registerDataComponents(*componentRegistry);
     }
 
-    bool add(const nlohmann::json& asset)
+    bool add(const nlohmann::json& asset, const bool expectUpload = true)
     {
-      return replication::applyAddAssetWithTerrain(assetRegistry, sceneManager, componentRegistry, store, asset);
+      return replication::applyAddAssetWithTerrain(assetRegistry, sceneManager, componentRegistry, store, asset,
+                                                   expectUpload);
     }
   };
 
@@ -289,4 +291,180 @@ TEST(TerrainRuntimeCreate, RemovingTheAssetDropsTheTerrainAndItsExpectationOnRec
   EXPECT_EQ(side.store.find(terrainUUID), nullptr);
   EXPECT_FALSE(side.store.expectedChunks(terrainUUID).has_value());
   EXPECT_FALSE(terrain::pendingUploadReason(side.store).has_value());
+}
+
+TEST(TerrainRuntimeCreate, AWronglyTypedOrOutOfRangeFieldIsRefusedWithRegistryAndStoreUntouched)
+{
+  const auto valid = terrain::addTerrainAssetJson(sampleDescription(2));
+
+  auto negativeCount = bodyOf(valid);
+  negativeCount["chunkCount"] = -1;
+
+  auto floatCount = bodyOf(valid);
+  floatCount["chunkCount"] = 2.5;
+
+  auto stringVoxel = bodyOf(valid);
+  stringVoxel["voxelSize"] = "4";
+
+  auto hugeVoxel = bodyOf(valid);
+  hugeVoxel["voxelSize"] = 1.0e300;
+
+  auto numberName = bodyOf(valid);
+  numberName["palette"][0]["name"] = 7;
+
+  auto noPalette = bodyOf(valid);
+  noPalette.erase("palette");
+
+  std::vector<nlohmann::json> refused = {
+    withBody(valid, negativeCount.dump()),
+    withBody(valid, floatCount.dump()),
+    withBody(valid, stringVoxel.dump()),
+    withBody(valid, hugeVoxel.dump()),
+    withBody(valid, numberName.dump()),
+    withBody(valid, noPalette.dump()),
+  };
+
+  auto nilUUID = valid;
+  nilUUID["uuid"] = uuids::to_string(uuids::uuid{});
+  nilUUID["path"] = terrainAssetPath(uuids::uuid{});
+  refused.push_back(nilUUID);
+
+  Side control;
+  EXPECT_TRUE(control.add(valid));
+
+  for (const nlohmann::json& asset : refused)
+  {
+    Side side;
+    EXPECT_FALSE(side.add(asset)) << asset.dump();
+    EXPECT_TRUE(side.assetRegistry.getAssets().empty()) << asset.dump();
+    EXPECT_TRUE(side.store.terrains().empty()) << asset.dump();
+  }
+}
+
+TEST(TerrainRuntimeCreate, AUUIDTheRegistryHoldsAsAnotherTypeIsRefusedAndNothingChanges)
+{
+  Side side;
+  side.assetRegistry.registerAsset({ .uuid = terrainUUID, .type = AssetType::Model, .path = "rock.obj" });
+  ASSERT_NE(side.assetRegistry.getByUUIDOfType(terrainUUID, AssetType::Model), nullptr);
+
+  EXPECT_FALSE(side.add(terrain::addTerrainAssetJson(sampleDescription(2))));
+  EXPECT_NE(side.assetRegistry.getByUUIDOfType(terrainUUID, AssetType::Model), nullptr);
+  EXPECT_EQ(side.assetRegistry.getByUUIDOfType(terrainUUID, AssetType::Terrain), nullptr);
+  EXPECT_TRUE(side.store.terrains().empty());
+
+  auto other = sampleDescription(2);
+  other.uuid = albedoUUID;
+  EXPECT_TRUE(side.add(terrain::addTerrainAssetJson(other)));
+  EXPECT_NE(side.store.find(albedoUUID), nullptr);
+}
+
+TEST(TerrainRuntimeCreate, ARecordThatRegistrationDropsLeavesTheStoreUntouched)
+{
+  auto asset = terrain::addTerrainAssetJson(sampleDescription(2));
+  asset["path"] = "terrain/not-the-canonical-path";
+
+  Side side;
+  EXPECT_FALSE(side.add(asset));
+  EXPECT_EQ(side.assetRegistry.getByUUID(terrainUUID), nullptr);
+  EXPECT_TRUE(side.store.terrains().empty());
+}
+
+TEST(TerrainRuntimeCreate, OnlyTheServerSideApplyRecordsTheExpectationAndTheCreatedDescriptionIsReported)
+{
+  Side editor;
+  ASSERT_TRUE(editor.add(terrain::addTerrainAssetJson(sampleDescription(3)), false));
+  EXPECT_NE(editor.store.find(terrainUUID), nullptr);
+  EXPECT_EQ(editor.store.description(terrainUUID)->chunkCount, 3u);
+  EXPECT_FALSE(editor.store.expectedChunks(terrainUUID).has_value());
+
+  Side server;
+  std::optional<terrain::TerrainDescription> created;
+  ASSERT_TRUE(replication::applyAddAssetWithTerrain(server.assetRegistry, server.sceneManager,
+                                                    server.componentRegistry, server.store,
+                                                    terrain::addTerrainAssetJson(sampleDescription(3)), true,
+                                                    &created));
+  EXPECT_EQ(server.store.expectedChunks(terrainUUID), std::optional<uint32_t>(3));
+  ASSERT_TRUE(created.has_value());
+  EXPECT_EQ(created->uuid, terrainUUID);
+  EXPECT_EQ(created->chunkCount, 3u);
+}
+
+namespace {
+  const auto otherTerrain = uuidFrom("44444444-4444-4444-8444-444444444444");
+
+  void expectBoth(terrain::TerrainStore& store)
+  {
+    ASSERT_NE(store.create({ .uuid = terrainUUID }), nullptr);
+    ASSERT_NE(store.create({ .uuid = otherTerrain }), nullptr);
+    ASSERT_TRUE(store.expectChunks(terrainUUID, 4));
+    ASSERT_TRUE(store.expectChunks(otherTerrain, 4));
+  }
+}
+
+TEST(TerrainUploadOwners, ACreatorsDisconnectDropsItsTerrainAndLeavesTheLoadersAlone)
+{
+  terrain::TerrainStore store;
+  expectBoth(store);
+
+  terrain::TerrainUploadOwners owners;
+  owners.claim(terrainUUID, 1);
+  owners.claim(otherTerrain, 2);
+
+  const auto dropped = owners.drop(2, store);
+
+  ASSERT_EQ(dropped.size(), 1u);
+  EXPECT_EQ(dropped[0], otherTerrain);
+  EXPECT_FALSE(store.expectedChunks(otherTerrain).has_value());
+  EXPECT_TRUE(store.expectedChunks(terrainUUID).has_value());
+
+  EXPECT_EQ(owners.drop(1, store), std::vector<uuids::uuid>{ terrainUUID });
+  EXPECT_FALSE(store.expectedChunks(terrainUUID).has_value());
+}
+
+TEST(TerrainUploadOwners, TheLoadersDisconnectLeavesTheCreatorsUploadAccepted)
+{
+  terrain::TerrainStore store;
+  expectBoth(store);
+
+  terrain::TerrainUploadOwners owners;
+  owners.claim(terrainUUID, 1);
+  owners.claim(otherTerrain, 2);
+
+  EXPECT_EQ(owners.drop(1, store), std::vector<uuids::uuid>{ terrainUUID });
+  EXPECT_TRUE(store.expectedChunks(otherTerrain).has_value());
+
+  terrain::TerrainChunksPayload payload;
+  payload.terrain = otherTerrain;
+  const auto chunk = terrain::TerrainChunk::uniform(-terrain::airDistance, 1);
+  payload.entries.push_back({ { 0, 0, 0 }, 1, chunk->hash(), chunk });
+
+  const auto result = terrain::applyTerrainUpload(store, payload);
+  EXPECT_FALSE(result.notExpected);
+  EXPECT_EQ(result.applied.size(), 1u);
+}
+
+TEST(TerrainUploadOwners, ACompletedOrRemovedTerrainIsNotDroppedAgain)
+{
+  terrain::TerrainStore store;
+  expectBoth(store);
+
+  terrain::TerrainUploadOwners owners;
+  owners.claimExpected(store, 7);
+  EXPECT_EQ(owners.owner(terrainUUID), std::optional<int32_t>(7));
+  EXPECT_EQ(owners.owner(otherTerrain), std::optional<int32_t>(7));
+
+  owners.release(terrainUUID);
+  EXPECT_FALSE(owners.owner(terrainUUID).has_value());
+  store.clearExpectation(terrainUUID);
+  ASSERT_TRUE(store.expectChunks(terrainUUID, 9));
+
+  store.remove(otherTerrain);
+
+  EXPECT_TRUE(owners.drop(7, store).empty());
+  EXPECT_EQ(store.expectedChunks(terrainUUID), std::optional<uint32_t>(9));
+  EXPECT_FALSE(owners.owner(otherTerrain).has_value());
+
+  owners.claim(terrainUUID, 8);
+  owners.clear();
+  EXPECT_TRUE(owners.drop(8, store).empty());
 }

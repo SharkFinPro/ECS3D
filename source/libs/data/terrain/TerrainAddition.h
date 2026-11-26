@@ -18,16 +18,15 @@ namespace terrain
   // True when an addAsset blob carries a description body, valid or not.
   [[nodiscard]] bool hasAddedTerrainBody(const nlohmann::json& asset);
 
-  // The description a terrain addAsset carries, with the asset's uuid. Empty for a missing or malformed body, an
-  // invalid description or a chunk count above maxAddedTerrainChunks.
+  // The description a terrain addAsset carries, with the asset's uuid. Empty for a missing or malformed body, a field
+  // of the wrong JSON type, a voxel size outside [minVoxelSize, maxVoxelSize], an invalid description or a chunk count
+  // above maxAddedTerrainChunks.
   [[nodiscard]] std::optional<TerrainDescription> parseAddedTerrain(const nlohmann::json& asset);
 
-  // True when applyAddedTerrain would succeed: the description parses and the store holds no terrain with its uuid.
-  [[nodiscard]] bool canApplyAddedTerrain(const TerrainStore& store, const nlohmann::json& asset);
-
-  // Creates the terrain's empty volume and, for a positive chunk count, records the expectation of an upload. False,
-  // with the store untouched, when canApplyAddedTerrain is false.
-  bool applyAddedTerrain(TerrainStore& store, const nlohmann::json& asset);
+  // Creates the terrain's empty volume. With expectUpload and a positive chunk count it also records the expectation of
+  // an upload, which only the server does: it is the one that receives the chunks. False, with the store untouched,
+  // when the store already holds a terrain under the description's uuid.
+  bool applyAddedTerrain(TerrainStore& store, const TerrainDescription& description, bool expectUpload);
 }
 
 #endif //TERRAINADDITION_H

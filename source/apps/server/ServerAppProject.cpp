@@ -38,7 +38,7 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
   m_terrainStore->clearExpectations();
   m_terrainUploadWarned.clear();
   m_terrainRequestWarned.clear();
-  m_terrainUploader = senderId;
+  m_terrainUploadOwners.clear();
 
   try
   {
@@ -67,6 +67,7 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
 
   // The project is in; a failure here leaves terrain behind it, not the scene, so the load still finishes.
   resetTerrainForLoadedProject();
+  m_terrainUploadOwners.claimExpected(*m_terrainStore, senderId);
 
   finishProjectLoad();
 }
@@ -133,43 +134,28 @@ void ServerApp::restoreTerrainAfterStop()
 
 void ServerApp::dropTerrainUploadFrom(const int32_t connId)
 {
-  if (m_terrainUploader != connId)
+  const auto dropped = m_terrainUploadOwners.drop(connId, *m_terrainStore);
+  if (dropped.empty())
   {
     return;
   }
 
-  m_terrainUploader.reset();
-
-  if (const auto reason = terrain::pendingUploadReason(*m_terrainStore))
-  {
-    m_terrainStore->clearExpectations();
-    Log::warn(LogCategory::server, "The editor uploading the project's terrain disconnected (" + *reason +
-      "); the terrain stays incomplete until a project is opened again.");
-  }
+  Log::warn(LogCategory::server, "The editor uploading " + std::to_string(dropped.size()) + " terrain(s) disconnected"
+    " (first: " + uuids::to_string(dropped.front()) + "); they stay incomplete until the project is opened again.");
 }
 
-void ServerApp::onTerrainCreated(const nlohmann::json& asset, const int32_t senderId)
+void ServerApp::onTerrainCreated(const terrain::TerrainDescription& description, const int32_t senderId)
 {
-  const auto description = terrain::parseAddedTerrain(asset);
-  if (!description)
+  m_terrainUploadWarned.erase(description.uuid);
+  m_terrainEcho.forgetTerrain(description.uuid);
+  m_terrainStreamer.restart(description.uuid, *m_terrainStore, terrainOriginFocus());
+
+  if (description.chunkCount > 0)
   {
-    return;
-  }
+    m_terrainUploadOwners.claim(description.uuid, senderId);
 
-  m_terrainUploadWarned.erase(description->uuid);
-  m_terrainEcho.forgetTerrain(description->uuid);
-  m_terrainStreamer.restart(description->uuid, *m_terrainStore, terrainOriginFocus());
-
-  if (description->chunkCount > 0)
-  {
-    // Without an owner the expectation would outlive an uploader that disconnects and hold Play for good.
-    if (!m_terrainUploader)
-    {
-      m_terrainUploader = senderId;
-    }
-
-    Log::info(LogCategory::server, "Created terrain " + uuids::to_string(description->uuid) + ": expecting "
-      + std::to_string(description->chunkCount) + " chunk(s)");
+    Log::info(LogCategory::server, "Created terrain " + uuids::to_string(description.uuid) + ": expecting "
+      + std::to_string(description.chunkCount) + " chunk(s)");
   }
 }
 
@@ -234,6 +220,7 @@ void ServerApp::handleTerrainUpload(const net::Message& message, const int32_t s
 
   if (result.completed)
   {
+    m_terrainUploadOwners.release(payload->terrain);
     const auto volume = m_terrainStore->find(payload->terrain);
     Log::info(LogCategory::server, "Terrain " + name + " uploaded: " + std::to_string(volume->chunks().size())
       + " chunk(s)");

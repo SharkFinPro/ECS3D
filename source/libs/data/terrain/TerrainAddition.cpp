@@ -113,7 +113,13 @@ namespace terrain
       return std::nullopt;
     }
 
-    description.voxelSize = body["voxelSize"].get<float>();
+    const double voxelSize = body["voxelSize"].get<double>();
+    if (!std::isfinite(voxelSize) || voxelSize < minVoxelSize || voxelSize > maxVoxelSize)
+    {
+      return std::nullopt;
+    }
+
+    description.voxelSize = static_cast<float>(voxelSize);
     description.chunkCount = static_cast<uint32_t>(chunkCount);
 
     if (!isValidDescription(description))
@@ -124,21 +130,13 @@ namespace terrain
     return description;
   }
 
-  bool canApplyAddedTerrain(const TerrainStore& store, const Json& asset)
+  bool applyAddedTerrain(TerrainStore& store, const TerrainDescription& description, const bool expectUpload)
   {
-    const auto description = parseAddedTerrain(asset);
-
-    return description.has_value() && store.find(description->uuid) == nullptr;
-  }
-
-  bool applyAddedTerrain(TerrainStore& store, const Json& asset)
-  {
-    const auto description = parseAddedTerrain(asset);
-    if (!description || store.create(*description) == nullptr)
+    if (store.create(description) == nullptr)
     {
       return false;
     }
 
-    return description->chunkCount == 0 || store.expectChunks(description->uuid, description->chunkCount);
+    return !expectUpload || description.chunkCount == 0 || store.expectChunks(description.uuid, description.chunkCount);
   }
 }

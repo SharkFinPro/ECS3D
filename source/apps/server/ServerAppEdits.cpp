@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <exception>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -208,14 +209,15 @@ void ServerApp::handleAddAsset(const net::Message& message, const int32_t sender
   }
 
   const std::string type = asset.value("assetType", std::string{});
+  std::optional<terrain::TerrainDescription> created;
   if (replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry, *m_terrainStore,
-                                            asset))
+                                            asset, true, &created))
   {
     Log::info(LogCategory::server, "Registered asset (" + type + ").");
 
-    if (terrain::hasAddedTerrainBody(asset))
+    if (created)
     {
-      onTerrainCreated(asset, senderId);
+      onTerrainCreated(*created, senderId);
     }
   }
   else

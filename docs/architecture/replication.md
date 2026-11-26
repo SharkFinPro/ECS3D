@@ -71,24 +71,29 @@ says (`incompleteTerrainReason`) or while the snapshot of its own project load h
 queues a history swap. A load the server refuses never returns that snapshot, so Play waits until the project is
 opened again. While an upload is pending the server does not log stream finishes, since each uploaded batch revives
 the streams. The editor pumps the upload at most once per 20 ms, the server's fixed step, and a dropped connection
-stops it: the project must be opened again. On the server side the uploader's disconnect drops the expectations it
-set, so Play is not held for every editor; the terrain stays incomplete until a project is opened again. The upload
-uses the editor's own connection even for a server it spawned on the same machine; it also serves a remote `--host`
-editor, so it stays where telling a spawned server the project root would not.
+stops it: the project must be opened again. On the server side a disconnect drops the expectations of the terrains
+that connection owed (`TerrainUploadOwners`), so Play is not held for every editor; those terrains stay incomplete
+until a project is opened again. The upload uses the editor's own connection even for a server it spawned on the same
+machine; it also serves a remote `--host` editor, so it stays where telling a spawned server the project root would not.
 A terrain created while a project is open arrives as an `addAsset` with `assetType` `"terrain"`, the canonical record
 path (`terrainAssetPath`) and a `body` holding the description as JSON (`terrain::addTerrainAssetJson`,
 `data/terrain/TerrainAddition.{h,cpp}`): `voxelSize`, `chunkCount` and a `palette` of `name`, `albedoTexture` and
 `specularTexture`, the field names of the terrain index file. The wire has no terrain field, so the existing `body`
 string carries it; the registry record never holds a body. `applyAddAssetWithTerrain` (`Replication.h`), which the
-server and the creating editor both call, checks the description first (`canApplyAddedTerrain`: it parses,
-`isValidDescription` holds, the chunk count is at most `maxAddedTerrainChunks`, and the store holds no terrain under
-that uuid), so a refusal changes neither registry nor store. Then it registers the record and `applyAddedTerrain`
-creates the empty volume and, for a positive chunk count, records the upload expectation. A terrain `addAsset` with no
-body only registers the record, as before, and the snapshot reconcile gives it a default empty terrain. On the server,
+server and the creating editor both call, parses the body once (`parseAddedTerrain`: every field of the right JSON
+type, a voxel size inside `minVoxelSize`..`maxVoxelSize`, a valid description, a chunk count of at most
+`maxAddedTerrainChunks`) and refuses, changing neither registry nor store, when the body is unusable, the store holds
+a terrain under that uuid or the registry holds the uuid as any other asset type. Then it registers the record and, only
+if the registry really holds a Terrain record under the uuid, `applyAddedTerrain` creates the empty volume. Only the
+server asks for the upload expectation (`expectUpload`, for a positive chunk count); the editor's store keeps the
+description, so its own Play gate (`incompleteTerrainReason`) waits for the fill. A terrain `addAsset` with no body only
+registers the record, as before, and the snapshot reconcile gives it a default empty terrain. On the server,
 `ServerApp::onTerrainCreated` restarts the terrain's join streams (the store already holds the terrain when the
-snapshot reconcile runs, so `replacedVolumes` would not see it) and makes the sender the uploader when no one is, so
-its disconnect drops the expectation. The editor then uploads the chunks as for a project load; the snapshot that
-follows the add reports the description, and Play is refused until the upload completes.
+snapshot reconcile runs, so `replacedVolumes` would not see it). Each terrain with a pending expectation has one owning
+connection (`TerrainUploadOwners`): the loadProject sender for every terrain that load expects, the addAsset sender for
+the terrain it created. An owner's disconnect drops only the expectations of its own terrains, and the owner entry ends
+when the upload completes. The editor then uploads the chunks as for a project load; the snapshot that follows the add
+reports the description, and Play is refused until the upload completes.
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`, `addAsset`,
 `renameAsset`, `removeAsset`, `terrainEdit`, and the editor's `terrainChunks` upload) that only a connection
 authorized as `Role::editor` on an `--edit` server may send. A `terrainEdit` message
