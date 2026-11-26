@@ -237,6 +237,8 @@ add_executable(${PROJECT_NAME}
   TerrainComponentTest.cpp
   TerrainContactTest.cpp
   TerrainCreateFlowTest.cpp
+  TerrainCreateHeightmapTest.cpp
+  TerrainCreateTestHelpers.h
   TerrainEditApplyTest.cpp
   TerrainEditEchoFixtures.h
   TerrainEditEchoFlushTest.cpp
