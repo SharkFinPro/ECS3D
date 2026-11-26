@@ -74,7 +74,10 @@ authorized as `Role::editor` on an `--edit` server may send. A `terrainEdit` mes
 (`data/terrain/TerrainEdit.{h,cpp}`) carries the terrain uuid, a stroke id and one operation: a brush, a redistance
 box or a set of whole chunks. `unpackTerrainEdit` bounds only what the wire can say (a valid brush, a non-empty box,
 at most `maxTerrainChunksEntries` distinct valid coordinates whose chunks decode to the stated hash); limits that
-depend on the volume belong to the apply step. A third direction exists for `serverLog` alone: server → editor
+depend on the volume belong to the apply step. `applyTerrainEdit` (`data/terrain/TerrainEditApply`) bounds the
+operation against the volume, applies it through `TerrainStore::setChunk` with one fresh revision for every changed
+chunk, consumes no revision for an edit that changes nothing, and changes nothing when it refuses (unknown terrain,
+invalid operation, too large, revisions exhausted). A third direction exists for `serverLog` alone: server → editor
 connections only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see
 [logging.md](logging.md).
 

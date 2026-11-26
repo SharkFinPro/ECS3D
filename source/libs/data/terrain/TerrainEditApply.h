@@ -22,7 +22,8 @@ namespace terrain
   };
 
   // The server side of a terrainEdit. Bounds the operation against the terrain's volume, applies it through
-  // TerrainStore::setChunk with one fresh revision, and changes nothing when it refuses.
+  // TerrainStore::setChunk with one fresh revision, and changes nothing when it refuses. A setChunks payload must
+  // name each coordinate once, as unpackTerrainEdit guarantees; a null or air chunk means air whatever its material.
   [[nodiscard]] TerrainEditResult applyTerrainEdit(TerrainStore& store, const TerrainEditPayload& edit);
 
   // Lower-case phrase for a log line, e.g. "the operation is too large".

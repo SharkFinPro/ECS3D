@@ -12,12 +12,6 @@ namespace terrain
 {
   namespace
   {
-    std::shared_ptr<const TerrainChunk> airChunk()
-    {
-      static const auto air = TerrainChunk::uniform(airDistance, 0);
-      return air;
-    }
-
     TerrainEditResult refused(const TerrainEditRefusal refusal)
     {
       TerrainEditResult result;
@@ -104,18 +98,18 @@ namespace terrain
           }
         }
 
-        const uint64_t airHash = airChunk()->hash();
-
         for (const SetChunkEntry& entry : edit.chunks)
         {
           const auto held = volume->chunk(entry.coord);
-          const uint64_t heldHash = held ? held->hash() : airHash;
-          const uint64_t incomingHash = entry.chunk ? entry.chunk->hash() : airHash;
+          const bool heldAir = !held || held->isAir();
+          const bool incomingAir = !entry.chunk || entry.chunk->isAir();
 
-          if (heldHash != incomingHash)
+          if (heldAir ? incomingAir : (!incomingAir && held->hash() == entry.chunk->hash()))
           {
-            edits.emplace_back(entry.coord, entry.chunk);
+            continue;
           }
+
+          edits.emplace_back(entry.coord, incomingAir ? nullptr : entry.chunk);
         }
 
         break;
