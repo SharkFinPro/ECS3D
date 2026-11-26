@@ -230,7 +230,9 @@ add_executable(${PROJECT_NAME}
   AppIconTest.cpp
   TemplateManifestTest.cpp
   TerrainBindingTest.cpp
+  TerrainBrushSessionFlowTest.cpp
   TerrainBrushSessionTest.cpp
+  TerrainBrushSessionTestHelpers.h
   TerrainBrushTest.cpp
   TerrainBrushWireTest.cpp
   TerrainChunkTest.cpp

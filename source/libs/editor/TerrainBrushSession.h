@@ -85,8 +85,9 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
 // Performs a stroke's applications against the editor's own volume and sends each one as a terrainEdit, so the view
 // predicts what the server will compute. The store's revisions are never touched. While the stroke is active the
 // view holds touched() out of the server's echo (TerrainViewSync::apply), since the echo describes a server that is
-// behind the prediction; at release the session asks the server for the final state of every touched chunk, which
-// arrives after the redistance and replaces the prediction with the confirmed chunks and their revisions.
+// behind the prediction; the hold ends with the stroke. At release the session asks the server for the final state of
+// every touched chunk, which arrives after the redistance and replaces the prediction with the confirmed chunks and
+// their revisions; an echo already in flight may apply briefly before they arrive.
 class TerrainBrushSession
 {
 public:
@@ -168,6 +169,8 @@ public:
   // applying the same redistance to the volume, piece by piece in the order the server will, so each piece sees the
   // one before it. Then asks for the server's final state of every touched chunk. Returns the finished stroke (its
   // before list is what an undo needs), or nullopt when none was active. A stroke that changed nothing sends nothing.
+  // The stroke is over before the first message is sent, so if send throws the exception propagates, the session is
+  // idle and the messages not yet sent are lost.
   std::optional<TerrainStroke::Finished> end(const Send& send)
   {
     return finish(true, send);
@@ -204,7 +207,8 @@ public:
 
   // One frame of the pointer. makeTemplate is called only when a stroke begins, so the brush settings are read once
   // per press. A frame that cannot paint (no hit, off the scene, the camera flying) breaks the stroke's path so the
-  // next hit does not bridge the gap. A volume that differs from the stroke's ends it as endFor does.
+  // next hit does not bridge the gap. A volume that differs from the stroke's ends it as endFor does. Without editing
+  // no stroke begins: nothing is predicted and nothing is sent.
   Advance advance(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
                   const bool editable, TerrainPointer pointer, const std::optional<terrain::RayHit>& hit,
                   const std::function<terrain::BrushOp()>& makeTemplate, const Send& send)
@@ -212,6 +216,11 @@ public:
     Advance result;
     const bool wasActive = m_stroke.active();
     pointer.hasHit = hit.has_value();
+
+    if (!wasActive && !editable)
+    {
+      return result;
+    }
 
     if (wasActive && volume != m_volume)
     {
@@ -260,6 +269,8 @@ private:
       return finished;
     }
 
+    const std::shared_ptr<terrain::TerrainVolume> volume = std::exchange(m_volume, nullptr);
+
     std::vector<terrain::ChunkCoord> touched;
     touched.reserve(finished->before.size());
 
@@ -272,7 +283,7 @@ private:
     {
       if (commitLocally)
       {
-        terrain::commit(*m_volume, terrain::redistance(*m_volume, piece));
+        terrain::commit(*volume, terrain::redistance(*volume, piece));
       }
 
       send(terrain::packRedistanceEdit(m_terrain, finished->strokeId, piece));
@@ -283,7 +294,6 @@ private:
       requestFinalChunks(touched, send);
     }
 
-    m_volume.reset();
     return finished;
   }
 

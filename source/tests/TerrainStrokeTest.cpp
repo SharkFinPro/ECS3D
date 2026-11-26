@@ -567,8 +567,8 @@ TEST(TerrainStrokeTest, BreakPathStartsANewSegmentAtTheNextHitWithOneApplication
   EXPECT_EQ(first.front().center, glm::vec3(40.0f, 0.0f, 0.0f));
 
   // The path continues from there with the carry reset.
-  EXPECT_TRUE(broken.moveTo(hitAt({ 40.0f + radius / 8.0f, 0.0f, 0.0f })).empty());
-  EXPECT_EQ(broken.moveTo(hitAt({ 40.0f + radius / 4.0f, 0.0f, 0.0f })).size(), 1u);
+  EXPECT_TRUE(broken.moveTo(hitAt({ 40.0f + expectedSpacing / 2.0f, 0.0f, 0.0f })).empty());
+  EXPECT_EQ(broken.moveTo(hitAt({ 40.0f + expectedSpacing, 0.0f, 0.0f })).size(), 1u);
 }
 
 TEST(TerrainStrokeTest, BreakPathWithoutAStrokeDoesNothing)

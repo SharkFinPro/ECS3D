@@ -84,7 +84,8 @@ namespace terrain
   // equals it - an absent coordinate holds the air chunk, so it compares against the air chunk's hash.
   //
   // Coordinates in hold are skipped whatever the entry carries, and their revision is not recorded: a view that is
-  // predicting an edit of those chunks keeps its own copy until the server's final state is asked for.
+  // predicting an edit of those chunks keeps its own copy for as long as the caller passes them, which a stroke does
+  // while it is active.
   using ChunkHold = std::unordered_set<ChunkCoord>;
 
   ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload,
