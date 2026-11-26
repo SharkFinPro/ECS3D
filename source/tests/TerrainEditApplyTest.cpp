@@ -356,6 +356,32 @@ TEST(TerrainEditApply, ANullEntryErasesAHeldChunkAndIsANoOpOverAbsentAir)
   EXPECT_EQ(env.store.revision(terrainId, { 0, 0, 0 }), erased.revision);
 }
 
+TEST(TerrainEditApply, AirOfAnyMaterialOverAbsentAirIsANoOpAndErasesAHeldChunk)
+{
+  Env env(false);
+  ASSERT_EQ(env.volume->chunk({ 50, 50, 50 }), nullptr);
+  ASSERT_NE(env.volume->chunk({ 0, 0, 0 }), nullptr);
+  const auto airWithMaterial = terrain::TerrainChunk::uniform(terrain::airDistance, 5);
+  ASSERT_TRUE(airWithMaterial->isAir());
+
+  const uint32_t before = env.counter();
+  const State state = capture(env);
+  const auto noop = terrain::applyTerrainEdit(env.store, setChunksEdit({ { { 50, 50, 50 }, airWithMaterial } }));
+
+  EXPECT_EQ(noop.refusal, terrain::TerrainEditRefusal::none);
+  EXPECT_EQ(noop.revision, 0u);
+  EXPECT_TRUE(noop.changed.empty());
+  expectSame(state, capture(env));
+  EXPECT_EQ(env.counter(), before + 1);
+
+  const auto erased = terrain::applyTerrainEdit(env.store, setChunksEdit({ { { 0, 0, 0 }, airWithMaterial } }));
+
+  ASSERT_EQ(erased.changed.size(), 1u);
+  EXPECT_EQ(erased.changed[0], (terrain::ChunkCoord{ 0, 0, 0 }));
+  EXPECT_EQ(env.volume->chunk({ 0, 0, 0 }), nullptr);
+  EXPECT_EQ(env.store.revision(terrainId, { 0, 0, 0 }), erased.revision);
+}
+
 TEST(TerrainEditApply, RefusesAnUnknownTerrain)
 {
   Env env(false);
@@ -423,6 +449,25 @@ TEST(TerrainEditApply, AGrownBoxJustOverTheRedistanceLimitIsRefusedAndOneAtTheLi
   const auto accepted = terrain::applyTerrainEdit(env.store, redistanceEdit(atLimit));
   EXPECT_EQ(accepted.refusal, terrain::TerrainEditRefusal::none);
   EXPECT_FALSE(accepted.changed.empty());
+}
+
+TEST(TerrainEditApply, ABoxOverTheChunkLimitButWithinTheSampleLimitIsRefused)
+{
+  static_assert(terrain::maxEditChunks == 16384);
+
+  Env env(true);
+  // Grown samples: 250002 * 4 * 4 = 4000032, within maxRedistanceSamples (4096000). Chunks: 7813 * 2 * 2 = 31252.
+  const terrain::SampleBox tooManyChunks{ { 0, 31, 31 }, { 250000, 33, 33 } };
+  // Chunks: 4096 * 2 * 2 = 16384, exactly maxEditChunks.
+  const terrain::SampleBox atChunkLimit{ { 0, 31, 31 }, { 131072, 33, 33 } };
+
+  const int64_t grownSamples = (250000ll + 2) * (2 + 2) * (2 + 2);
+  ASSERT_LE(grownSamples, terrain::maxRedistanceSamples);
+
+  expectRefused(env, redistanceEdit(tooManyChunks), terrain::TerrainEditRefusal::tooLarge);
+
+  EXPECT_EQ(terrain::applyTerrainEdit(env.store, redistanceEdit(atChunkLimit)).refusal,
+            terrain::TerrainEditRefusal::none);
 }
 
 TEST(TerrainEditApply, RefusesASetChunksCoordinateBeyondTheLimit)
