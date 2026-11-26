@@ -68,13 +68,14 @@ stops it: the project must be opened again. On the server side the uploader's di
 set, so Play is not held for every editor; the terrain stays incomplete until a project is opened again. The upload
 uses the editor's own connection even for a server it spawned on the same machine; it also serves a remote `--host`
 editor, so it stays where telling a spawned server the project root would not.
-Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
-`addAsset`, `renameAsset`, `removeAsset`, `terrainEdit`, and the editor's `terrainChunks` upload) that only a connection authorized as `Role::editor` on an
-`--edit` server may send. A `terrainEdit` message (`data/terrain/TerrainEdit.{h,cpp}`) carries the terrain uuid, a
-stroke id and one operation: a brush, a redistance box or a set of whole chunks. `unpackTerrainEdit` bounds only what
-the wire can say (a valid brush, a non-empty box, at most `maxTerrainChunksEntries` distinct valid coordinates whose
-chunks decode to the stated hash); limits that depend on the volume belong to the apply step. A third direction exists for `serverLog` alone: server → editor connections
-only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see
+Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`, `addAsset`,
+`renameAsset`, `removeAsset`, `terrainEdit`, and the editor's `terrainChunks` upload) that only a connection
+authorized as `Role::editor` on an `--edit` server may send. A `terrainEdit` message
+(`data/terrain/TerrainEdit.{h,cpp}`) carries the terrain uuid, a stroke id and one operation: a brush, a redistance
+box or a set of whole chunks. `unpackTerrainEdit` bounds only what the wire can say (a valid brush, a non-empty box,
+at most `maxTerrainChunksEntries` distinct valid coordinates whose chunks decode to the stated hash); limits that
+depend on the volume belong to the apply step. A third direction exists for `serverLog` alone: server → editor
+connections only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see
 [logging.md](logging.md).
 
 Every snapshot is sent for a `net::SnapshotReason` that `broadcastSnapshot` requires of its caller, and `ServerApp`
