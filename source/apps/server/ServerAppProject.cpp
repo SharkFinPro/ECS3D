@@ -3,6 +3,7 @@
 #include <ProjectPacker.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainAddition.h>
 #include <terrain/TerrainEdit.h>
 #include <terrain/TerrainEditApply.h>
 #include <terrain/TerrainReplication.h>
@@ -12,6 +13,7 @@
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
 #include <Log.h>
+#include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <exception>
 #include <string>
@@ -143,6 +145,31 @@ void ServerApp::dropTerrainUploadFrom(const int32_t connId)
     m_terrainStore->clearExpectations();
     Log::warn(LogCategory::server, "The editor uploading the project's terrain disconnected (" + *reason +
       "); the terrain stays incomplete until a project is opened again.");
+  }
+}
+
+void ServerApp::onTerrainCreated(const nlohmann::json& asset, const int32_t senderId)
+{
+  const auto description = terrain::parseAddedTerrain(asset);
+  if (!description)
+  {
+    return;
+  }
+
+  m_terrainUploadWarned.erase(description->uuid);
+  m_terrainEcho.forgetTerrain(description->uuid);
+  m_terrainStreamer.restart(description->uuid, *m_terrainStore, terrainOriginFocus());
+
+  if (description->chunkCount > 0)
+  {
+    // Without an owner the expectation would outlive an uploader that disconnects and hold Play for good.
+    if (!m_terrainUploader)
+    {
+      m_terrainUploader = senderId;
+    }
+
+    Log::info(LogCategory::server, "Created terrain " + uuids::to_string(description->uuid) + ": expecting "
+      + std::to_string(description->chunkCount) + " chunk(s)");
   }
 }
 

@@ -76,7 +76,7 @@ void ServerApp::handleEditorMessage(const net::Message& message, const int32_t s
       break;
 
     case net::MessageType::addAsset:
-      handleAddAsset(message);
+      handleAddAsset(message, senderId);
       break;
 
     case net::MessageType::renameAsset:

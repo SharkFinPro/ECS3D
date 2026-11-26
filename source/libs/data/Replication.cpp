@@ -11,6 +11,8 @@
 #include "objects/components/Script.h"
 #include "WireTypes.h"
 #include "edits/AssetWireType.h"
+#include "terrain/TerrainAddition.h"
+#include "terrain/TerrainStore.h"
 #include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
@@ -1767,6 +1769,29 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
   }
 
   return false;
+}
+
+bool applyAddAssetWithTerrain(AssetRegistry& assetRegistry,
+                              SceneManager& sceneManager,
+                              const std::shared_ptr<ComponentRegistry>& componentRegistry,
+                              terrain::TerrainStore& terrainStore,
+                              const nlohmann::json& asset)
+{
+  if (!terrain::hasAddedTerrainBody(asset))
+  {
+    return applyAddAsset(assetRegistry, sceneManager, componentRegistry, asset);
+  }
+
+  // Checked first so a refused description leaves no record behind.
+  if (!terrain::canApplyAddedTerrain(terrainStore, asset))
+  {
+    Log::warn(LogCategory::assets, "Ignored an addAsset for a terrain: its description is unusable or the terrain "
+                                   "already exists.");
+    return false;
+  }
+
+  return applyAddAsset(assetRegistry, sceneManager, componentRegistry, asset) &&
+         terrain::applyAddedTerrain(terrainStore, asset);
 }
 
 net::Message packAddAsset(const nlohmann::json& asset)

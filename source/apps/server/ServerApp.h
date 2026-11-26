@@ -230,6 +230,9 @@ private:
   // they are dropped rather than holding Play for every editor until the next load.
   void dropTerrainUploadFrom(int32_t connId);
 
+  // The store now holds a terrain an addAsset created: its streams start over and the sender owes the upload.
+  void onTerrainCreated(const nlohmann::json& asset, int32_t senderId);
+
   // The connection whose loadProject set the current expectations.
   std::optional<int32_t> m_terrainUploader;
 
@@ -287,7 +290,7 @@ private:
 
   void stopScriptsLogged(SceneAsset& scene) const;
 
-  void handleAddAsset(const net::Message& message);
+  void handleAddAsset(const net::Message& message, int32_t senderId);
 
   void handleRenameAsset(const net::Message& message);
 

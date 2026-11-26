@@ -18,6 +18,10 @@ class AssetRegistry;
 class SceneManager;
 class ComponentRegistry;
 
+namespace terrain {
+  class TerrainStore;
+}
+
 enum class LogCategory;
 
 namespace net {
@@ -245,6 +249,15 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,
                    const nlohmann::json& asset);
+
+// applyAddAsset, then, for a terrain addAsset that carries a description body (terrain/TerrainAddition.h), the
+// terrain's empty volume and upload expectation in the store. The description is checked before anything changes, so
+// a refusal leaves registry and store untouched. A terrain addAsset without a body behaves as applyAddAsset does.
+bool applyAddAssetWithTerrain(AssetRegistry& assetRegistry,
+                              SceneManager& sceneManager,
+                              const std::shared_ptr<ComponentRegistry>& componentRegistry,
+                              terrain::TerrainStore& terrainStore,
+                              const nlohmann::json& asset);
 
 // Wire (de)serialization for an addAsset blob. The schema is open-ended per asset type, but only a fixed
 // set of string fields is ever consumed (see applyAddAsset), so each is packed length-prefixed (empty
