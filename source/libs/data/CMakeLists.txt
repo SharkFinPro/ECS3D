@@ -51,6 +51,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainChunk.h
   terrain/TerrainCodec.cpp
   terrain/TerrainCodec.h
+  terrain/TerrainEdit.cpp
+  terrain/TerrainEdit.h
   terrain/TerrainEditEcho.cpp
   terrain/TerrainEditEcho.h
   terrain/TerrainFiles.cpp

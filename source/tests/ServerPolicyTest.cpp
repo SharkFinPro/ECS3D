@@ -31,6 +31,7 @@ namespace {
       case net::MessageType::renameAsset:
       case net::MessageType::removeAsset:
       case net::MessageType::terrainChunks:
+      case net::MessageType::terrainEdit:
         return true;
 
       case net::MessageType::undefined:
@@ -141,7 +142,7 @@ TEST(ServerPolicyTest, MutationSetMatchesIndependentlyStatedExpectation)
     }
   }
 
-  EXPECT_EQ(mutations, 8);
+  EXPECT_EQ(mutations, 9);
 }
 
 TEST(ServerPolicyTest, MutationsPassOnlyOnEditServerFromEditorConnection)
@@ -167,7 +168,8 @@ TEST(ServerPolicyTest, NamedMutationTypes)
   for (const auto type : {net::MessageType::editComponent, net::MessageType::sceneEdit,
                           net::MessageType::sceneControl, net::MessageType::loadProject,
                           net::MessageType::addAsset, net::MessageType::renameAsset,
-                          net::MessageType::removeAsset, net::MessageType::terrainChunks})
+                          net::MessageType::removeAsset, net::MessageType::terrainChunks,
+                          net::MessageType::terrainEdit})
   {
     EXPECT_TRUE(isMutationAuthorized(type, true, true)) << static_cast<int>(type);
     EXPECT_FALSE(isMutationAuthorized(type, true, false)) << static_cast<int>(type);
