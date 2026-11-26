@@ -10,6 +10,7 @@
 #include <terrain/TerrainTypes.h>
 #include <terrain/TerrainVolume.h>
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -18,12 +19,15 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
 namespace {
   constexpr float radius = 4.0f;
   constexpr float voxel = 2.5f;
+  constexpr float expectedSpacing = 1.0f;
 
   terrain::RayHit hitAt(const glm::vec3 point, const glm::vec3 normal = { 0.0f, 1.0f, 0.0f })
   {
@@ -56,6 +60,31 @@ namespace {
     const terrain::ChunkEdits edits = terrain::applyBrush(volume, op);
     stroke.recordApplication(volume, op, edits);
     terrain::commit(volume, edits);
+  }
+
+  terrain::BrushOp digOp(const glm::vec3 center)
+  {
+    terrain::BrushOp op = templateOp(terrain::BrushOp::Kind::subtract);
+    op.radius = 10.0f;
+    op.strength = 1.0f;
+    op.falloff = 0.0f;
+    op.center = center;
+    return op;
+  }
+
+  size_t recordsFor(const TerrainStroke::Finished& finished, const terrain::ChunkCoord coord)
+  {
+    return static_cast<size_t>(std::count_if(finished.before.begin(), finished.before.end(),
+                                             [&](const auto& entry) { return entry.first == coord; }));
+  }
+
+  bool covered(const std::vector<terrain::SampleBox>& pieces, const glm::ivec3 sample)
+  {
+    return std::any_of(pieces.begin(), pieces.end(), [&](const terrain::SampleBox& piece)
+    {
+      return sample.x >= piece.min.x && sample.x < piece.max.x && sample.y >= piece.min.y &&
+             sample.y < piece.max.y && sample.z >= piece.min.z && sample.z < piece.max.z;
+    });
   }
 
   size_t volumeOf(const terrain::SampleBox& box)
@@ -95,7 +124,7 @@ TEST(TerrainStrokeTest, SpacingIsAQuarterOfTheRadiusWithAPositiveFloor)
 {
   TerrainStroke stroke;
   stroke.begin(1, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
-  EXPECT_FLOAT_EQ(stroke.spacing(), radius / 4.0f);
+  EXPECT_FLOAT_EQ(stroke.spacing(), expectedSpacing);
 
   terrain::BrushOp zero = templateOp();
   zero.radius = 0.0f;
@@ -122,7 +151,7 @@ TEST(TerrainStrokeTest, StraightDragYieldsFourApplicationsPerRadiusCarriedAcross
 
   for (size_t i = 0; i < all.size(); ++i)
   {
-    EXPECT_NEAR(all[i].center.x, static_cast<float>(i + 1) * radius / 4.0f, 1.0e-4f);
+    EXPECT_NEAR(all[i].center.x, static_cast<float>(i + 1) * expectedSpacing, 1.0e-4f);
     EXPECT_NEAR(all[i].center.y, 0.0f, 1.0e-6f);
   }
 
@@ -165,18 +194,55 @@ TEST(TerrainStrokeTest, CornerMeasuresAlongThePathNotTheChord)
   }
 }
 
-TEST(TerrainStrokeTest, AnEnormousJumpIsCapped)
+TEST(TerrainStrokeTest, ACappedJumpKeepsTheLastApplicationsSoTheBrushEndsAtThePointer)
 {
   TerrainStroke stroke;
   stroke.begin(1, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
 
-  const std::vector<terrain::BrushOp> due = stroke.moveTo(hitAt({ 100000.0f, 0.0f, 0.0f }));
+  const std::vector<terrain::BrushOp> due = stroke.moveTo(hitAt({ 1000.0f, 0.0f, 0.0f }));
 
-  EXPECT_EQ(due.size(), TerrainStroke::maxApplicationsPerMove);
+  ASSERT_EQ(due.size(), TerrainStroke::maxApplicationsPerMove);
 
-  const std::vector<terrain::BrushOp> next = stroke.moveTo(hitAt({ 100002.0f, 0.0f, 0.0f }));
+  for (size_t i = 0; i < due.size(); ++i)
+  {
+    EXPECT_NEAR(due[i].center.x, 745.0f + static_cast<float>(i), 1.0e-3f);
+  }
+
+  const std::vector<terrain::BrushOp> next = stroke.moveTo(hitAt({ 1002.0f, 0.0f, 0.0f }));
   ASSERT_EQ(next.size(), 2u);
-  EXPECT_NEAR(next[0].center.x, 100001.0f, 1.0f);
+  EXPECT_NEAR(next[0].center.x, 1001.0f, 1.0e-3f);
+  EXPECT_NEAR(next[1].center.x, 1002.0f, 1.0e-3f);
+}
+
+TEST(TerrainStrokeTest, ACappedJumpCarriesTheLeftoverDistance)
+{
+  TerrainStroke stroke;
+  stroke.begin(1, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
+
+  const std::vector<terrain::BrushOp> due = stroke.moveTo(hitAt({ 1000.5f, 0.0f, 0.0f }));
+  ASSERT_EQ(due.size(), TerrainStroke::maxApplicationsPerMove);
+  EXPECT_NEAR(due.back().center.x, 1000.0f, 1.0e-3f);
+
+  const std::vector<terrain::BrushOp> next = stroke.moveTo(hitAt({ 1001.0f, 0.0f, 0.0f }));
+  ASSERT_EQ(next.size(), 1u);
+  EXPECT_NEAR(next[0].center.x, 1001.0f, 1.0e-3f);
+}
+
+TEST(TerrainStrokeTest, BeginningWhileActiveDiscardsTheOldRecord)
+{
+  terrain::TerrainVolume volume = flatGround();
+  const terrain::ChunkCoord groundCoord{ 0, 0, 0 };
+
+  TerrainStroke stroke;
+  applyAndRecord(stroke, volume, stroke.begin(1, digOp({ 30.0f, 11.0f, 30.0f }), hitAt({ 30.0f, 11.0f, 30.0f })));
+
+  stroke.begin(2, templateOp(), hitAt({ 0.0f, 0.0f, 0.0f }));
+  const std::optional<TerrainStroke::Finished> finished = stroke.end();
+
+  ASSERT_TRUE(finished.has_value());
+  EXPECT_EQ(finished->strokeId, 2u);
+  EXPECT_EQ(recordsFor(*finished, groundCoord), 0u);
+  EXPECT_TRUE(finished->box.empty());
 }
 
 TEST(TerrainStrokeTest, ModerateJumpBelowTheCapIsNotTruncated)
@@ -261,82 +327,71 @@ TEST(TerrainStrokeTest, NonFlattenKindsKeepTheTemplatePlane)
   EXPECT_EQ(due.back().planeNormal, op.planeNormal);
 }
 
-TEST(TerrainStrokeTest, RecordsTheOriginalPointerOfEveryTouchedChunk)
+TEST(TerrainStrokeTest, RecordsTheOriginalPointerOfAChunkTouchedRepeatedlyAndTheUnionBox)
 {
   terrain::TerrainVolume volume = flatGround();
   const terrain::ChunkCoord groundCoord{ 0, 0, 0 };
-  const terrain::ChunkCoord airCoord{ 1, 1, 1 };
   const std::shared_ptr<const terrain::TerrainChunk> originalGround = volume.chunk(groundCoord);
-
   ASSERT_NE(originalGround, nullptr);
-  ASSERT_EQ(volume.chunk(airCoord), nullptr);
 
-  terrain::BrushOp base = templateOp(terrain::BrushOp::Kind::subtract);
-  base.radius = 10.0f;
-  base.strength = 1.0f;
-  base.falloff = 0.0f;
+  const terrain::BrushOp first = digOp({ 30.0f, 11.0f, 30.0f });
+  const terrain::BrushOp second = digOp({ 33.0f, 11.0f, 30.0f });
+  const terrain::SampleBox firstBox = terrain::dirtyBox(volume, first);
+  const terrain::SampleBox secondBox = terrain::dirtyBox(volume, second);
 
   TerrainStroke stroke;
-  const terrain::BrushOp first = stroke.begin(9, base, hitAt({ 30.0f, 11.0f, 30.0f }));
+  stroke.begin(9, first, hitAt(first.center));
   applyAndRecord(stroke, volume, first);
 
   EXPECT_NE(volume.chunk(groundCoord), originalGround);
 
-  terrain::BrushOp second = first;
-  second.center = { 33.0f, 11.0f, 30.0f };
   applyAndRecord(stroke, volume, second);
-
-  terrain::BrushOp raise = templateOp(terrain::BrushOp::Kind::add);
-  raise.radius = 10.0f;
-  raise.strength = 1.0f;
-  raise.falloff = 0.0f;
-  raise.center = { 100.0f, 100.0f, 100.0f };
-  const terrain::ChunkEdits raiseEdits = terrain::applyBrush(volume, raise);
-  ASSERT_FALSE(raiseEdits.empty());
-
-  const terrain::SampleBox expectedBox = [&]
-  {
-    terrain::SampleBox box = terrain::dirtyBox(volume, first);
-    for (const terrain::BrushOp& op : { second, raise })
-    {
-      const terrain::SampleBox dirty = terrain::dirtyBox(volume, op);
-      box.min = glm::min(box.min, dirty.min);
-      box.max = glm::max(box.max, dirty.max);
-    }
-    return box;
-  }();
-
-  stroke.recordApplication(volume, raise, raiseEdits);
-  terrain::commit(volume, raiseEdits);
 
   const std::optional<TerrainStroke::Finished> finished = stroke.end();
 
   ASSERT_TRUE(finished.has_value());
   EXPECT_EQ(finished->strokeId, 9u);
-  EXPECT_EQ(finished->box.min, expectedBox.min);
-  EXPECT_EQ(finished->box.max, expectedBox.max);
-
-  size_t groundRecords = 0;
-  size_t airRecords = 0;
+  EXPECT_EQ(finished->box.min, glm::min(firstBox.min, secondBox.min));
+  EXPECT_EQ(finished->box.max, glm::max(firstBox.max, secondBox.max));
+  EXPECT_EQ(recordsFor(*finished, groundCoord), 1u);
 
   for (const auto& entry : finished->before)
   {
     if (entry.first == groundCoord)
     {
-      ++groundRecords;
       EXPECT_EQ(entry.second, originalGround);
     }
+  }
 
+  EXPECT_NE(volume.chunk(groundCoord), originalGround);
+}
+
+TEST(TerrainStrokeTest, RecordsAnOriginallyAbsentChunkAsNull)
+{
+  terrain::TerrainVolume volume = flatGround();
+  const terrain::ChunkCoord airCoord{ 1, 1, 1 };
+  ASSERT_EQ(volume.chunk(airCoord), nullptr);
+
+  terrain::BrushOp raise = digOp({ 100.0f, 100.0f, 100.0f });
+  raise.kind = terrain::BrushOp::Kind::add;
+
+  TerrainStroke stroke;
+  stroke.begin(3, raise, hitAt(raise.center));
+  applyAndRecord(stroke, volume, raise);
+
+  const std::optional<TerrainStroke::Finished> finished = stroke.end();
+
+  ASSERT_TRUE(finished.has_value());
+  EXPECT_EQ(recordsFor(*finished, airCoord), 1u);
+
+  for (const auto& entry : finished->before)
+  {
     if (entry.first == airCoord)
     {
-      ++airRecords;
       EXPECT_EQ(entry.second, nullptr);
     }
   }
 
-  EXPECT_EQ(groundRecords, 1u);
-  EXPECT_EQ(airRecords, 1u);
-  EXPECT_NE(volume.chunk(groundCoord), originalGround);
   EXPECT_NE(volume.chunk(airCoord), nullptr);
 }
 
@@ -460,4 +515,39 @@ TEST(TerrainStrokeTest, RedistanceAcceptsEveryPieceOfABigBoxButNotTheWholeBox)
   }
 
   EXPECT_GT(changedPieces, 0u);
+}
+
+TEST(TerrainStrokeTest, RedistanceBoxesForATouchedDiagonalStayProportionalToWhatWasTouched)
+{
+  const terrain::SampleBox box{ { 0, 0, 0 }, { 4096, 32, 4096 } };
+  std::vector<terrain::ChunkCoord> touched;
+
+  for (int i = 0; i < 128; ++i)
+  {
+    touched.push_back({ i, 0, i });
+  }
+
+  const std::vector<terrain::SampleBox> pieces = redistanceBoxes(box, touched);
+  const std::vector<terrain::SampleBox> everything = redistanceBoxes(box);
+
+  EXPECT_EQ(everything.size(), 26u * 26u);
+  EXPECT_FALSE(pieces.empty());
+  EXPECT_LE(pieces.size(), 3u * 26u);
+
+  for (const terrain::ChunkCoord coord : touched)
+  {
+    const glm::ivec3 origin = terrain::chunkOrigin(coord);
+
+    EXPECT_TRUE(covered(pieces, origin));
+    EXPECT_TRUE(covered(pieces, origin + glm::ivec3(terrain::chunkSize - 1)));
+  }
+
+  EXPECT_FALSE(covered(pieces, { 4095, 0, 0 }));
+  EXPECT_FALSE(covered(pieces, { 0, 0, 4095 }));
+
+  EXPECT_TRUE(redistanceBoxes(box, std::span<const terrain::ChunkCoord>()).empty());
+  EXPECT_TRUE(redistanceBoxes({}, touched).empty());
+
+  const std::vector<terrain::ChunkCoord> outside = { { 500, 0, 500 }, { 0, 5, 0 } };
+  EXPECT_TRUE(redistanceBoxes(box, outside).empty());
 }

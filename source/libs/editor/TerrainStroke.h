@@ -16,6 +16,9 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
+#include <span>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -56,7 +59,8 @@ public:
   // Starts a stroke at the first surface hit and returns the first application. templateOp supplies kind, radius,
   // strength, falloff and material; the returned op's center is hit.point. For flatten, the plane is captured here
   // and kept for the whole stroke. A non-finite hit point is refused: the template comes back unchanged and active()
-  // stays false (a stroke already in progress is left alone).
+  // stays false (a stroke already in progress is left alone). Beginning while a stroke is active discards its
+  // record: the caller ends the old stroke first.
   terrain::BrushOp begin(const uint64_t strokeId, const terrain::BrushOp& templateOp, const terrain::RayHit& hit)
   {
     if (!finite(hit.point))
@@ -85,7 +89,8 @@ public:
   // The pointer is over the surface at hit. Returns the applications due since the last one: points spaced
   // spacing() apart along the piecewise-linear path through successive hit points, carrying the leftover distance
   // from one call to the next. Empty when not active or the pointer did not move far enough. At most
-  // maxApplicationsPerMove are returned; past that the rest of the segment is dropped and the path continues from hit.
+  // maxApplicationsPerMove are returned; past that only the last ones of the segment are kept, so the brush ends at
+  // hit rather than lagging behind it.
   [[nodiscard]] std::vector<terrain::BrushOp> moveTo(const terrain::RayHit& hit)
   {
     std::vector<terrain::BrushOp> due;
@@ -107,23 +112,16 @@ public:
     const glm::dvec3 direction = delta / length;
     const double step = static_cast<double>(spacing());
     const double slack = step * 1.0e-9;
-    double travelled = 0.0;
+    const double total = std::floor((m_sinceLast + length + slack) / step);
+    const double count = std::min(total, static_cast<double>(maxApplicationsPerMove));
 
-    while (m_sinceLast + (length - travelled) + slack >= step)
+    for (double k = total - count + 1.0; k <= total; k += 1.0)
     {
-      if (due.size() >= maxApplicationsPerMove)
-      {
-        m_sinceLast = 0.0;
-        m_last = target;
-        return due;
-      }
-
-      travelled += step - m_sinceLast;
-      m_sinceLast = 0.0;
-      due.push_back(opAt(glm::vec3(m_last + direction * std::min(travelled, length))));
+      const double travelled = std::min(k * step - m_sinceLast, length);
+      due.push_back(opAt(glm::vec3(m_last + direction * travelled)));
     }
 
-    m_sinceLast += length - travelled;
+    m_sinceLast = std::max(0.0, m_sinceLast + length - total * step);
     m_last = target;
     return due;
   }
@@ -136,7 +134,8 @@ public:
   }
 
   // Call for each application BEFORE committing its edits to the volume: captures the pre-stroke pointer of every
-  // coordinate in edits seen for the first time in this stroke, and grows box() by dirtyBox(volume, op).
+  // coordinate in edits seen for the first time in this stroke, and grows box() by dirtyBox(volume, op). Recording
+  // after the commit makes the before list hold post-edit pointers, so an undo restores nothing.
   void recordApplication(const terrain::TerrainVolume& volume, const terrain::BrushOp& op,
                          const terrain::ChunkEdits& edits)
   {
@@ -269,6 +268,73 @@ inline constexpr int maxRedistanceSide = 158;
         pieces.push_back({ { x.first, y.first, z.first }, { x.second, y.second, z.second } });
       }
     }
+  }
+
+  return pieces;
+}
+
+// As above, but only the pieces whose chunks include one of the touched chunks (a stroke's Finished::before
+// coordinates), so a long diagonal stroke costs work in proportion to what it touched rather than to its bounding
+// box. A piece that covers any touched chunk is kept whole. Each piece's redistance reads a one-sample margin from
+// its neighbors, so the caller commits each piece's edits before computing the next.
+[[nodiscard]] inline std::vector<terrain::SampleBox> redistanceBoxes(const terrain::SampleBox& box,
+                                                                     const std::span<const terrain::ChunkCoord> touched)
+{
+  std::vector<terrain::SampleBox> pieces;
+
+  if (box.empty())
+  {
+    return pieces;
+  }
+
+  std::set<std::tuple<int64_t, int64_t, int64_t>> cells;
+
+  for (const terrain::ChunkCoord coord : touched)
+  {
+    const glm::ivec3 origin = terrain::chunkOrigin(coord);
+    int64_t low[3];
+    int64_t high[3];
+    bool overlaps = true;
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      low[axis] = std::max<int64_t>(origin[axis], box.min[axis]);
+      high[axis] = std::min<int64_t>(static_cast<int64_t>(origin[axis]) + terrain::chunkSize, box.max[axis]);
+      overlaps = overlaps && low[axis] < high[axis];
+    }
+
+    if (!overlaps)
+    {
+      continue;
+    }
+
+    for (int64_t z = (low[2] - box.min.z) / maxRedistanceSide; z <= (high[2] - 1 - box.min.z) / maxRedistanceSide; ++z)
+    {
+      for (int64_t y = (low[1] - box.min.y) / maxRedistanceSide; y <= (high[1] - 1 - box.min.y) / maxRedistanceSide;
+           ++y)
+      {
+        for (int64_t x = (low[0] - box.min.x) / maxRedistanceSide;
+             x <= (high[0] - 1 - box.min.x) / maxRedistanceSide; ++x)
+        {
+          cells.emplace(x, y, z);
+        }
+      }
+    }
+  }
+
+  for (const auto& [x, y, z] : cells)
+  {
+    const int64_t cell[3] = { x, y, z };
+    terrain::SampleBox piece;
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      const int64_t low = box.min[axis] + cell[axis] * maxRedistanceSide;
+      piece.min[axis] = static_cast<int>(low);
+      piece.max[axis] = static_cast<int>(std::min<int64_t>(low + maxRedistanceSide, box.max[axis]));
+    }
+
+    pieces.push_back(piece);
   }
 
   return pieces;
