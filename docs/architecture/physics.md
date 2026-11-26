@@ -15,8 +15,8 @@ contacts handed to the solver), `ContactSolver` (the response) and the narrow ph
   `CollisionSystem::fixedUpdate` take `dt` for that.
 - Gravity adds `g * unitsPerMeter * dt * dt` to the velocity each tick, so a fall covers the same distance at any
   tick rate. A body's gravity is in meters per second squared, and the content is authored at
-  `PhysicsSystem::unitsPerMeter` (5) world units per meter, so the server's default gravity falls at 49.05 world
-  units per second squared.
+  `PhysicsSystem::unitsPerMeter` (`worldUnitsPerMeter`, 5) world units per meter, so the server's default gravity
+  falls at 49.05 world units per second squared.
 - The inertia tensor is per unit mass and comes from the body's collider shapes in world geometry (see
   [Inertia](#inertia)), so a velocity change moves and turns a body alike whatever its mass while an impulse is
   divided by the mass for both.

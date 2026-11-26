@@ -33,6 +33,8 @@ add_library(${PROJECT_NAME}
   SaveUI.h
   TerrainSaving.cpp
   TerrainSaving.h
+  TerrainCreateFlow.cpp
+  TerrainCreateFlow.h
   UnsavedChanges.h
   UndoRequestGate.h
   EditorConnectionState.h
