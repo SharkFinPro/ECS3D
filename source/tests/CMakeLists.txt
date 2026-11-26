@@ -235,6 +235,7 @@ add_executable(${PROJECT_NAME}
   TerrainCodecTest.cpp
   TerrainComponentTest.cpp
   TerrainContactTest.cpp
+  TerrainCreateFlowTest.cpp
   TerrainEditApplyTest.cpp
   TerrainEditEchoFixtures.h
   TerrainEditEchoFlushTest.cpp
@@ -454,6 +455,9 @@ add_executable(${PROJECT_NAME}
 
   # The editor's terrain save step depends only on ECS3DData and ECS3DLog.
   ../libs/editor/TerrainSaving.cpp
+
+  # The terrain create flow depends only on ECS3DData and stb_image, which it compiles in itself.
+  ../libs/editor/TerrainCreateFlow.cpp
 
   # The convex hull rebuild step depends only on ECS3DData, glm and ECS3DLog.
   ../libs/editor/components/ConvexHullRebuild.cpp

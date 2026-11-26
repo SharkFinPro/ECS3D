@@ -12,6 +12,8 @@
 
 class AssetCreateFlow;
 class AssetRegistry;
+class TerrainCreateFlow;
+struct GeneratedTerrain;
 class GpuAssetCache;
 class EditorSelection;
 
@@ -23,6 +25,9 @@ public:
   using LoadSceneCallback = std::function<void(const uuids::uuid& sceneUUID)>;
   // The built addAsset blob ({ assetType, uuid, ... }) for the EditorApp to send to the server.
   using AddAssetCallback = std::function<void(const nlohmann::json& addAsset)>;
+  // A generated terrain for the EditorApp to announce, upload and place in the scene. Throws to refuse it, which
+  // leaves the form open with the message.
+  using CreateTerrainCallback = std::function<void(GeneratedTerrain&& terrain)>;
 
   AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache);
 
@@ -31,6 +36,8 @@ public:
   void setLoadSceneCallback(LoadSceneCallback callback);
 
   void setAddAssetCallback(AddAssetCallback callback);
+
+  void setCreateTerrainCallback(CreateTerrainCallback callback);
 
   // Asked before an action writes into the project folder; true means it was handled (the project is an
   // untitled template) and nothing must be written.
@@ -63,6 +70,7 @@ private:
 
   LoadSceneCallback m_onLoadScene;
   AddAssetCallback m_onAddAsset;
+  CreateTerrainCallback m_onCreateTerrain;
   BlockWritesCallback m_blockWrites;
 
   AssetTypeFilter m_filter;
@@ -70,6 +78,9 @@ private:
   char m_search[128] = {};
 
   std::unique_ptr<AssetCreateFlow> m_flow;
+
+  std::unique_ptr<TerrainCreateFlow> m_terrainFlow;
+  char m_terrainName[128] = {};
 
   enum class SortType { NameAscending, NameDescending, Type };
   SortType m_sortType = SortType::NameAscending;
@@ -102,6 +113,12 @@ private:
   void displayCreateAssetPopup();
 
   void commitAsset();
+
+  void displayCreateTerrainPopup();
+
+  // Validates and generates the form's terrain and hands it to the callback. False, with the reason on the form,
+  // when nothing was created.
+  [[nodiscard]] bool commitTerrain();
 };
 
 

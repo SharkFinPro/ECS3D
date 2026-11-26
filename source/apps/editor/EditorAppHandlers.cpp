@@ -7,8 +7,11 @@
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <SaveUI.h>
+#include <Selection.h>
+#include <TerrainCreateFlow.h>
 #include <UnsavedChanges.h>
 #include <objects/components/Component.h>
+#include <terrain/TerrainAddition.h>
 #include <terrain/TerrainFiles.h>
 #include <terrain/TerrainStore.h>
 #include <NetClient.h>
@@ -23,17 +26,26 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace {
-  uuids::uuid makeProjectLoadId()
+  uuids::uuid randomUuid()
   {
     std::mt19937 rng{ std::random_device{}() };
     uuids::uuid_random_generator generator{ rng };
     return generator();
   }
+
+  uuids::uuid makeProjectLoadId()
+  {
+    return randomUuid();
+  }
+
+  // How long a placed terrain object is waited for before the selection is given up.
+  constexpr auto placedTerrainWait = std::chrono::seconds(10);
 
   // Nothing faithful could be derived for an edit (see RecordEdits.h): the edit still goes out, only the
   // history entry is skipped.
@@ -65,6 +77,76 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
   {
     m_saveUI->markEdited();
     logUnrecordedEdit("an addAsset");
+  }
+}
+
+// The terrain asset record goes first, which makes our own store hold an empty volume that takes the generated chunks;
+// the same chunks go up to the server, which waits for them before it lets the scene play. The object that shows
+// the terrain is an ordinary scene edit, so it is recorded for undo like any other added object. The asset record is
+// not undoable, so undoing the object leaves the terrain in the Assets panel.
+void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
+  {
+    throw std::runtime_error("There is no active scene to place the terrain in.");
+  }
+
+  auto asset = terrain::addTerrainAssetJson(generated.description);
+  asset["displayName"] = generated.displayName;
+
+  if (!terrain::parseAddedTerrain(asset) || m_terrainStore->find(generated.description.uuid) != nullptr)
+  {
+    throw std::runtime_error("The terrain could not be created.");
+  }
+
+  onAddAsset(asset);
+
+  const auto volume = m_terrainStore->find(generated.description.uuid);
+  if (!volume)
+  {
+    throw std::runtime_error("The editor did not accept the new terrain.");
+  }
+
+  volume->restoreChunks(generated.volume->snapshotChunks());
+  m_terrainUpload.add(generated.description.uuid, generated.volume);
+  m_terrainUploadSent = 0;
+
+  const auto objectUUID = randomUuid();
+
+  // Past this point the terrain is created and sent, so a failure here must not reopen the form for a second create.
+  try
+  {
+    onSceneEdit(terrainCreate::placementEdit(objectUUID, generated.displayName, generated.description.uuid));
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::editor, std::string("Placing the new terrain failed to record: ") + e.what());
+  }
+
+  m_placedTerrainObject = objectUUID;
+  m_placedTerrainDeadline = std::chrono::steady_clock::now() + placedTerrainWait;
+
+  Log::info(LogCategory::editor, "Created terrain " + generated.displayName + " (" +
+                                   std::to_string(generated.description.chunkCount) + " chunk(s)); uploading it.");
+}
+
+void EditorApp::selectPlacedTerrain()
+{
+  if (!m_placedTerrainObject)
+  {
+    return;
+  }
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (scene && scene->getObjectManager()->getObjectByUUID(*m_placedTerrainObject))
+  {
+    m_selection->selectObject(*m_placedTerrainObject);
+    m_placedTerrainObject.reset();
+  }
+  else if (std::chrono::steady_clock::now() > m_placedTerrainDeadline)
+  {
+    m_placedTerrainObject.reset();
   }
 }
 

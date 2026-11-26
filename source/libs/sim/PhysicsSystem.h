@@ -2,6 +2,7 @@
 #define PHYSICSSYSTEM_H
 
 #include <glm/mat3x3.hpp>
+#include <WorldUnits.h>
 #include <glm/vec3.hpp>
 #include <optional>
 
@@ -32,7 +33,7 @@ public:
 
   // A body's gravity is in meters per second squared, and the engine's content is authored at this many world units
   // per meter.
-  static constexpr float unitsPerMeter = 5.0f;
+  static constexpr float unitsPerMeter = worldUnitsPerMeter;
 
   // Degrees per second. Spin a resting body still carries relative to its support below this is dropped,
   // and any spin below it is too slow to turn a body at all.

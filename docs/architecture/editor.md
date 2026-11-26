@@ -140,6 +140,24 @@ The Terrain component section also shows read-only `Chunks` (held against the co
 `Surface` (none, ready, percent pending, growing, too large to draw or to grow) rows, formatted by the headless
 `TerrainReadout.h` from `GpuAssetCache::terrainSurfaceStatus` and the terrain store.
 
+The Assets panel's Create items include "New Terrain", which opens its own modal (the less invasive choice next to
+`AssetCreateFlow`'s name-only one): a name, a Flat or Heightmap shape, a voxel size and a footprint in meters (a
+heightmap's footprint is its image size times the voxel size, and it adds an image picker and a height scale in
+meters). Sizes are authored in meters and converted at `worldUnitsPerMeter` (`WorldUnits.h`, which
+`PhysicsSystem::unitsPerMeter` reads). The headless `TerrainCreateFlow.h` holds the request, its validation (a free
+terrain display name, finite positive numbers, the voxel size inside `minVoxelSize`/`maxVoxelSize` after conversion,
+and a chunk estimate within the smaller of `maxEditChunks` and `maxAddedTerrainChunks`, refused before anything is
+allocated), the heightmap decode (`stbi_load_16` forced to one channel; 8-bit scaled by 257) and the generated volume
+(`fillFlat` over a few voxels of solid, or `fillFromHeightmap`, with an empty palette like every other terrain
+description). Create sends the terrain through `EditorApp::onCreateTerrain`: the addAsset built by
+`terrain::addTerrainAssetJson` (plus the display name) goes through `onAddAsset`, so the editor's own store gets the
+empty volume; the generated chunks are restored into it and queued on `m_terrainUpload` for the server; a
+`terrainCreate::placementEdit` batch (a root object with a Terrain component) goes through `onSceneEdit` so it is
+recorded for undo, and the object is selected once the server's rebroadcast brings it in. The asset record itself is
+not undoable. On an untitled template the menu item calls `SaveUI::blockAssetWrites` instead (`TerrainCreateFlow::gate`),
+since the terrain would have no folder to be saved into; a generation or decode error shows in the form and leaves
+nothing created.
+
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`
 (`EditorLayoutSettings`). It restores the text in the style-setup hook, before the first frame, and saves it when

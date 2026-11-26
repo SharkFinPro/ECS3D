@@ -281,6 +281,7 @@ void EditorApp::setupAssetBrowser()
   m_assetBrowser->setSelection(m_selection);
   m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) { onLoadScene(sceneUUID); });
   m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& asset) { onAddAsset(asset); });
+  m_assetBrowser->setCreateTerrainCallback([this](GeneratedTerrain&& generated) { onCreateTerrain(std::move(generated)); });
   m_assetBrowser->setBlockWritesCallback([this] { return m_saveUI && m_saveUI->blockAssetWrites(); });
 }
 
@@ -478,6 +479,7 @@ void EditorApp::run()
     }
 
     pumpTerrainUpload();
+    selectPlacedTerrain();
 
     saveLayoutIfRequested();
 

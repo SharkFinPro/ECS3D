@@ -15,6 +15,7 @@
 #include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
 #include <PlayControls.h>
+#include <TerrainCreateFlow.h>
 #include <DefaultDockLayout.h>
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
@@ -148,6 +149,8 @@ private:
   // The server resets its terrain on loadProject; the opened project's chunks reach it through this.
   terrain::TerrainUpload m_terrainUpload;
   size_t m_terrainUploadSent = 0;
+  std::optional<uuids::uuid> m_placedTerrainObject;
+  std::chrono::steady_clock::time_point m_placedTerrainDeadline;
   std::chrono::steady_clock::time_point m_lastTerrainUploadPump;
   std::filesystem::path m_projectRoot;
   std::shared_ptr<SceneManager> m_sceneManager;
@@ -305,6 +308,13 @@ private:
   void setupSceneOverlay();
 
   void onAddAsset(const nlohmann::json& asset);
+
+  // Announces a generated terrain, queues its chunks for upload and places an object for it in the scene. Throws
+  // before sending anything when the terrain cannot be created.
+  void onCreateTerrain(GeneratedTerrain&& generated);
+
+  // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.
+  void selectPlacedTerrain();
 
   void onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
 
