@@ -171,6 +171,7 @@ add_executable(${PROJECT_NAME}
   ClientDisplaySettingsTest.cpp
   FramePacingSettingsTest.cpp
   EditorLayoutSettingsTest.cpp
+  EditorTerrainSettingsTest.cpp
   GizmoTest.cpp
   GizmoEditSendingTest.cpp
   GizmoDragTest.cpp

@@ -194,6 +194,14 @@ const std::array<EditorActionInfo, editorActionCount>& editorActions()
     set(EditorAction::gizmoRotate, "gizmoRotate", "Gizmo: Rotate", parseChord("2"));
     set(EditorAction::gizmoScale, "gizmoScale", "Gizmo: Scale", parseChord("3"));
     set(EditorAction::toggleProfiler, "toggleProfiler", "Toggle Profiler", parseChord("F3"));
+    set(EditorAction::terrainMode, "terrainMode", "Terrain: Toggle Mode", parseChord("T"));
+    // Alt+digit rather than the bare digits, which pick the gizmo mode.
+    set(EditorAction::terrainAdd, "terrainAdd", "Terrain: Add", parseChord("Alt+1"));
+    set(EditorAction::terrainSubtract, "terrainSubtract", "Terrain: Subtract", parseChord("Alt+2"));
+    set(EditorAction::terrainSmooth, "terrainSmooth", "Terrain: Smooth", parseChord("Alt+3"));
+    set(EditorAction::terrainFlatten, "terrainFlatten", "Terrain: Flatten", parseChord("Alt+4"));
+    set(EditorAction::terrainRadiusUp, "terrainRadiusUp", "Terrain: Grow Brush", parseChord("PageUp"));
+    set(EditorAction::terrainRadiusDown, "terrainRadiusDown", "Terrain: Shrink Brush", parseChord("PageDown"));
 
     return result;
   }();
