@@ -153,6 +153,58 @@ void EditorApp::endTerrainStroke()
   terrain::invalidateTerrainBounds(*m_sceneManager, terrainUuid);
 }
 
+namespace {
+  struct TerrainTarget
+  {
+    std::shared_ptr<Terrain> component;
+    std::shared_ptr<Transform> transform;
+    std::shared_ptr<terrain::TerrainVolume> volume;
+  };
+
+  [[nodiscard]] TerrainTarget findTerrainTarget(const SceneManager& scenes, const terrain::TerrainStore& store,
+                                                const uuids::uuid& objectUuid)
+  {
+    const auto scene = scenes.getCurrentScene();
+    const auto object = scene ? scene->getObjectManager()->getObjectByUUID(objectUuid) : nullptr;
+
+    TerrainTarget target;
+    target.component = object ? object->getComponent<Terrain>(ComponentType::collider) : nullptr;
+    target.transform = object ? object->getComponent<Transform>(ComponentType::transform) : nullptr;
+    target.volume = target.component ? store.find(target.component->getTerrainUUID()) : nullptr;
+    return target;
+  }
+
+  [[nodiscard]] TerrainFrame frameOf(const Transform& transform)
+  {
+    TerrainFrame frame;
+    frame.position = transform.getPosition();
+    frame.orientation = transform.getOrientation();
+    return frame;
+  }
+
+  [[nodiscard]] std::optional<terrain::RayHit> raycastCursor(const TerrainFrame& frame,
+                                                             const terrain::TerrainVolume& volume,
+                                                             const gizmo::View& view)
+  {
+    const ImGuiIO& io = ImGui::GetIO();
+    const gizmo::Ray ray = rayToLocal(frame, gizmo::mouseRay(view, glm::vec2(io.MousePos.x, io.MousePos.y)));
+    return terrain::raycast(volume, ray.origin, ray.direction, view.farPlane);
+  }
+
+  template <typename Renderer>
+  void drawBrushRing(Renderer& renderer3D, const TerrainFrame& frame, const terrain::RayHit& hit, const float radius,
+                     const glm::vec4& color)
+  {
+    const terrain::RayHit worldHit = hitToWorld(frame, hit);
+    const std::vector<glm::vec3> ring = brushRing(worldHit.point, worldHit.normal, radius);
+
+    for (size_t index = 0; index < ring.size(); ++index)
+    {
+      renderer3D.renderLine(ring[index], ring[(index + 1) % ring.size()], color, 2.0f, 0.0f, vke::DebugDepth::xray);
+    }
+  }
+}
+
 void EditorApp::drawTerrainSculpt(const std::shared_ptr<Terrain>& component)
 {
   if (!component || component != selectedTerrain())
@@ -160,6 +212,19 @@ void EditorApp::drawTerrainSculpt(const std::shared_ptr<Terrain>& component)
     return;
   }
 
+  drawTerrainSculptToggle();
+
+  if (!m_terrainTool.active())
+  {
+    return;
+  }
+
+  drawTerrainToolStrip();
+  drawTerrainBrushControls(component);
+}
+
+void EditorApp::drawTerrainSculptToggle()
+{
   ImGui::BeginDisabled(!m_serverEditable);
 
   bool active = m_terrainTool.active();
@@ -175,12 +240,10 @@ void EditorApp::drawTerrainSculpt(const std::shared_ptr<Terrain>& component)
   }
 
   ImGui::EndDisabled();
+}
 
-  if (!m_terrainTool.active())
-  {
-    return;
-  }
-
+void EditorApp::drawTerrainToolStrip()
+{
   const size_t current = toolIndex(m_terrainTool.tool());
 
   for (size_t tool = 0; tool < terrainToolCount; ++tool)
@@ -195,7 +258,11 @@ void EditorApp::drawTerrainSculpt(const std::shared_ptr<Terrain>& component)
       setTerrainTool(static_cast<TerrainTool>(tool));
     }
   }
+}
 
+void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& component)
+{
+  const size_t current = toolIndex(m_terrainTool.tool());
   editorTerrainSettings::BrushSettings brush = editorTerrainSettings::readBrush(*m_settings, current);
   bool edited = false;
 
@@ -221,49 +288,9 @@ void EditorApp::drawTerrainSculpt(const std::shared_ptr<Terrain>& component)
   }
 }
 
-void EditorApp::updateTerrainMode(const gizmo::View& view, const bool sceneHovered)
+void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
+                                  const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit)
 {
-  const ImGuiIO& io = ImGui::GetIO();
-  const bool pressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-  const bool wasPressed = std::exchange(m_terrainPointerWasDown, pressed);
-
-  if (!m_terrainTool.active())
-  {
-    return;
-  }
-
-  ECS3D_PROFILE_SCOPE("Terrain mode");
-
-  const auto scene = m_sceneManager->getCurrentScene();
-  const auto object = scene ? scene->getObjectManager()->getObjectByUUID(*m_terrainTool.terrainObject()) : nullptr;
-  const auto component = object ? object->getComponent<Terrain>(ComponentType::collider) : nullptr;
-  const auto transform = object ? object->getComponent<Transform>(ComponentType::transform) : nullptr;
-  const auto volume = component ? m_terrainStore->find(component->getTerrainUUID()) : nullptr;
-
-  if (!volume || !transform)
-  {
-    endTerrainStroke();
-    return;
-  }
-
-  const uuids::uuid terrainUuid = component->getTerrainUUID();
-
-  const auto rendering = m_renderer->getRenderingManager();
-
-  TerrainFrame frame;
-  frame.position = transform->getPosition();
-  frame.orientation = transform->getOrientation();
-
-  const bool usable = sceneHovered && !m_viewCameraObject.has_value();
-  std::optional<terrain::RayHit> hit;
-  if (usable)
-  {
-    const gizmo::Ray ray = rayToLocal(frame, gizmo::mouseRay(view, glm::vec2(io.MousePos.x, io.MousePos.y)));
-    hit = terrain::raycast(*volume, ray.origin, ray.direction, view.farPlane);
-  }
-
-  const TerrainPointer pointer = makeTerrainPointer(pressed, wasPressed, sceneHovered, m_viewCameraObject.has_value(),
-                                                    rendering->isSceneRightDragged(), hit.has_value());
   const size_t tool = toolIndex(m_terrainTool.tool());
 
   const TerrainBrushSession::Advance advanced = m_terrainBrush.advance(
@@ -277,21 +304,48 @@ void EditorApp::updateTerrainMode(const gizmo::View& view, const bool sceneHover
   {
     terrain::invalidateTerrainBounds(*m_sceneManager, terrainUuid);
   }
+}
+
+void EditorApp::updateTerrainMode(const gizmo::View& view, const bool sceneHovered)
+{
+  const bool pressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+  const bool wasPressed = std::exchange(m_terrainPointerWasDown, pressed);
+
+  if (!m_terrainTool.active())
+  {
+    return;
+  }
+
+  ECS3D_PROFILE_SCOPE("Terrain mode");
+
+  const TerrainTarget target = findTerrainTarget(*m_sceneManager, *m_terrainStore, *m_terrainTool.terrainObject());
+
+  if (!target.volume || !target.transform)
+  {
+    endTerrainStroke();
+    return;
+  }
+
+  const auto rendering = m_renderer->getRenderingManager();
+  const TerrainFrame frame = frameOf(*target.transform);
+
+  std::optional<terrain::RayHit> hit;
+  if (sceneHovered && !m_viewCameraObject.has_value())
+  {
+    hit = raycastCursor(frame, *target.volume, view);
+  }
+
+  const TerrainPointer pointer = makeTerrainPointer(pressed, wasPressed, sceneHovered, m_viewCameraObject.has_value(),
+                                                    rendering->isSceneRightDragged(), hit.has_value());
+  driveTerrainBrush(target.component->getTerrainUUID(), target.volume, pointer, hit);
 
   if (!hit || pointer.flying)
   {
     return;
   }
 
+  const size_t tool = toolIndex(m_terrainTool.tool());
   const editorTerrainSettings::BrushSettings brush = editorTerrainSettings::readBrush(*m_settings, tool);
-  const terrain::RayHit worldHit = hitToWorld(frame, *hit);
-  const std::vector<glm::vec3> ring =
-    brushRing(worldHit.point, worldHit.normal, effectiveBrushRadius(brush.radius, *volume));
-  const auto renderer3D = rendering->getRenderer3D();
-  const glm::vec4 color = toolColors[tool];
-
-  for (size_t index = 0; index < ring.size(); ++index)
-  {
-    renderer3D->renderLine(ring[index], ring[(index + 1) % ring.size()], color, 2.0f, 0.0f, vke::DebugDepth::xray);
-  }
+  drawBrushRing(*rendering->getRenderer3D(), frame, *hit, effectiveBrushRadius(brush.radius, *target.volume),
+                toolColors[tool]);
 }

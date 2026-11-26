@@ -445,6 +445,17 @@ private:
   // The Sculpt toggle and the tool strip, drawn inside the Terrain inspector section.
   void drawTerrainSculpt(const std::shared_ptr<Terrain>& component);
 
+  void drawTerrainSculptToggle();
+
+  void drawTerrainToolStrip();
+
+  // The brush sliders and, when the terrain's voxel size caps the radius, the note saying so.
+  void drawTerrainBrushControls(const std::shared_ptr<Terrain>& component);
+
+  // Feeds one frame's pointer to the stroke and makes the terrain's bounds follow what it changed.
+  void driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
+                         const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit);
+
   // The per-frame viewport work of terrain mode, run from the scene overlay: the cursor raycast and ring, and the
   // stroke's begin, move and end.
   void updateTerrainMode(const gizmo::View& view, bool sceneHovered);

@@ -181,18 +181,44 @@ namespace {
     bool stillAwaiting = true;
   };
 
-  // A hill stroke: the add brush rides the raised surface, each center a fresh raycast onto the view volume.
-  Outcome runHill(const Options options)
+  terrain::BrushOp hillBrush()
   {
-    World world(options.ground, options.size);
-    const auto send = world.sender();
-
     terrain::BrushOp op;
     op.kind = terrain::BrushOp::Kind::add;
     op.radius = 20.0f;
     op.strength = 0.12f;
     op.falloff = 0.5f;
     op.material = 1;
+    return op;
+  }
+
+  // Applies everything still queued, then measures how far the view's prediction is from the server and whether
+  // the echo rounds bring them together.
+  Outcome settle(World& world)
+  {
+    world.deliver(world.toServer.size());
+
+    Outcome outcome;
+    outcome.mismatched = mismatches(*world.view.volume, *world.server.volume).size();
+    outcome.unmatchedEchoes = world.missing;
+
+    for (int round = 0; round < 4; ++round)
+    {
+      world.flushToView();
+      world.deliver(world.toServer.size());
+    }
+
+    outcome.converged = world.toServer.empty() && mismatches(*world.view.volume, *world.server.volume).empty();
+    outcome.stillAwaiting = world.session.awaitingFinalChunks();
+    return outcome;
+  }
+
+  // A hill stroke: the add brush rides the raised surface, each center a fresh raycast onto the view volume.
+  Outcome runHill(const Options& options)
+  {
+    World world(options.ground, options.size);
+    const auto send = world.sender();
+    const terrain::BrushOp op = hillBrush();
 
     const std::vector<glm::vec2> path = { { 40.0f, 50.0f }, { 60.0f, 50.0f }, { 80.0f, 50.0f }, { 80.0f, 70.0f },
                                           { 60.0f, 70.0f }, { 40.0f, 70.0f }, { 40.0f, 60.0f }, { 60.0f, 60.0f } };
@@ -229,21 +255,7 @@ namespace {
       world.flushToView();
     }
 
-    world.deliver(world.toServer.size());
-
-    Outcome outcome;
-    outcome.mismatched = mismatches(*world.view.volume, *world.server.volume).size();
-    outcome.unmatchedEchoes = world.missing;
-
-    for (int round = 0; round < 4; ++round)
-    {
-      world.flushToView();
-      world.deliver(world.toServer.size());
-    }
-
-    outcome.converged = world.toServer.empty() && mismatches(*world.view.volume, *world.server.volume).empty();
-    outcome.stillAwaiting = world.session.awaitingFinalChunks();
-    return outcome;
+    return settle(world);
   }
 }
 
