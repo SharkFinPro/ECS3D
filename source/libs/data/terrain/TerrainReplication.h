@@ -81,6 +81,13 @@ namespace terrain
   // equals it - an absent coordinate holds the air chunk, so it compares against the air chunk's hash.
   ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload);
 
+  // True for a message a view sends to ask for chunks: at least one entry, every one hash-only.
+  [[nodiscard]] bool isChunkRequest(const TerrainChunksPayload& payload);
+
+  // A request for the full chunks at the missing coordinates: one hash-only entry each, carrying the revision and
+  // hash the received entry had. Coordinates that are not in received are skipped.
+  [[nodiscard]] net::Message makeChunkRequest(const TerrainChunksPayload& received, std::span<const ChunkCoord> missing);
+
   struct UploadApplyResult
   {
     bool unknownTerrain = false;

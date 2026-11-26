@@ -27,6 +27,9 @@ namespace terrain
     bool malformed = false;
     uuids::uuid terrain;
     ChunksApplyResult result;
+    // Set when hash-only entries did not match what the store holds: the terrainChunks message to send the server
+    // to ask for those chunks in full.
+    std::optional<net::Message> request;
     std::vector<ViewLogLine> log;
   };
 
@@ -44,9 +47,10 @@ namespace terrain
     void reset();
 
     // Applies a terrainChunks message into the store and invalidates the bounds of the Terrain components bound to
-    // that terrain. The log lines are for the caller to write: a refused message, entries the stream never sends
-    // (an unknown terrain, hash-only entries the store could not satisfy) and a terrain that now holds as many chunks
-    // as its description's chunkCount, once until it falls below that count again.
+    // that terrain. Hash-only entries the store could not satisfy come back as outcome.request for the caller to send
+    // to the server. The log lines are for the caller to write: a refused message, an unknown terrain, that request
+    // and a terrain that now holds as many chunks as its description's chunkCount, once until it falls below that
+    // count again.
     ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message);
 
   private:

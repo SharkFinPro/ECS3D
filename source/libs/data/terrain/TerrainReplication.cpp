@@ -1,6 +1,7 @@
 #include "TerrainReplication.h"
 #include "TerrainCodec.h"
 #include "WireTypes.h"
+#include <algorithm>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -123,6 +124,27 @@ namespace terrain
     {
       return std::nullopt;
     }
+  }
+
+  bool isChunkRequest(const TerrainChunksPayload& payload)
+  {
+    return !payload.entries.empty() &&
+           std::ranges::all_of(payload.entries, [](const ReceivedChunk& entry) { return entry.chunk == nullptr; });
+  }
+
+  net::Message makeChunkRequest(const TerrainChunksPayload& received, const std::span<const ChunkCoord> missing)
+  {
+    std::vector<ChunkEntry> entries;
+
+    for (const ReceivedChunk& entry : received.entries)
+    {
+      if (std::ranges::find(missing, entry.coord) != missing.end())
+      {
+        entries.push_back(makeHashOnlyEntry(entry.coord, entry.revision, entry.hash));
+      }
+    }
+
+    return packTerrainChunks(received.terrain, entries);
   }
 
   ChunksApplyResult applyTerrainChunks(TerrainStore& store, const TerrainChunksPayload& payload)
