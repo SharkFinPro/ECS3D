@@ -146,6 +146,26 @@ void ServerApp::dropTerrainUploadFrom(const int32_t connId)
   }
 }
 
+void ServerApp::handleTerrainChunkRequest(const terrain::TerrainChunksPayload& payload, const int32_t senderId)
+{
+  if (m_terrainStore->find(payload.terrain))
+  {
+    std::vector<terrain::ChunkCoord> coords;
+    coords.reserve(payload.entries.size());
+    for (const auto& entry : payload.entries)
+    {
+      coords.push_back(entry.coord);
+    }
+
+    m_terrainEcho.requestFull(payload.terrain, coords, senderId);
+  }
+  else if (m_terrainRequestWarned.insert(payload.terrain).second)
+  {
+    Log::warn(LogCategory::server, "Ignored a terrain chunk request for unknown terrain "
+      + uuids::to_string(payload.terrain));
+  }
+}
+
 void ServerApp::handleTerrainUpload(const net::Message& message, const int32_t senderId)
 {
   const auto payload = terrain::unpackTerrainChunks(message);
@@ -160,22 +180,7 @@ void ServerApp::handleTerrainUpload(const net::Message& message, const int32_t s
 
   if (terrain::isChunkRequest(*payload))
   {
-    if (m_terrainStore->find(payload->terrain))
-    {
-      std::vector<terrain::ChunkCoord> coords;
-      coords.reserve(payload->entries.size());
-      for (const auto& entry : payload->entries)
-      {
-        coords.push_back(entry.coord);
-      }
-
-      m_terrainEcho.requestFull(payload->terrain, coords, senderId);
-    }
-    else if (m_terrainRequestWarned.insert(payload->terrain).second)
-    {
-      Log::warn(LogCategory::server, "Ignored a terrain chunk request for unknown terrain " + name);
-    }
-
+    handleTerrainChunkRequest(*payload, senderId);
     return;
   }
 

@@ -30,6 +30,7 @@ class AssetRegistry;
 class SceneManager;
 namespace terrain {
   class TerrainStore;
+  struct TerrainChunksPayload;
 }
 class ProjectSerializer;
 class ProjectPacker;
@@ -235,6 +236,7 @@ private:
   // The editor's terrain chunks for a terrain a loadProject said to expect: sets them and sends them on to every view.
   // Chunks that are all hash-only are instead the editor's request for those chunks in full.
   void handleTerrainUpload(const net::Message& message, int32_t senderId);
+  void handleTerrainChunkRequest(const terrain::TerrainChunksPayload& payload, int32_t senderId);
 
   // Applies an editor's terrain edit between ticks and records the changed chunks for the next echo flush.
   void handleTerrainEdit(const net::Message& message, int32_t senderId);
