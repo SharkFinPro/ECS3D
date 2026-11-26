@@ -92,9 +92,15 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+  const bool snapshotIsCurrent = m_projectLoads.snapshotIsCurrent(m_projectPacker->getProjectLoadId());
   m_terrainSync.observeSnapshot(*m_terrainStore, m_projectPacker->getProjectLoadId());
 
   checkSnapshotProject();
+
+  if (snapshotIsCurrent)
+  {
+    dropStaleTerrainUploads();
+  }
 
   const auto scene = m_sceneManager->getCurrentScene();
   logSnapshotApplied(message, scene);
@@ -130,6 +136,26 @@ void EditorApp::handleTerrainChunks(const net::Message& message)
   }
 }
 
+namespace {
+  constexpr auto createdTerrainGrace = std::chrono::seconds(5);
+}
+
+// A terrain the server refused to create, or one a later snapshot dropped, is not in the store any more, and the server
+// never expects its chunks. Only called for a snapshot that reflects the server's current project.
+void EditorApp::dropStaleTerrainUploads()
+{
+  const auto now = std::chrono::steady_clock::now();
+  std::erase_if(m_createdTerrains, [now](const auto& entry) { return now - entry.second > createdTerrainGrace; });
+
+  const auto isRecent = [this](const uuids::uuid& uuid) { return m_createdTerrains.contains(uuid); };
+
+  for (const auto& uuid : terrain::forgetUnknownTerrains(m_terrainUpload, *m_terrainStore, isRecent))
+  {
+    Log::warn(LogCategory::editor, "Dropped the pending upload of terrain " + uuids::to_string(uuid) +
+                                     ": the server no longer has that terrain.");
+  }
+}
+
 void EditorApp::checkSnapshotProject()
 {
   const bool foreignLoad = m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId());
@@ -137,6 +163,13 @@ void EditorApp::checkSnapshotProject()
   // After any editor's loadProject the server reports no fingerprint, so a second --host editor on the same
   // project is told to choose a folder; line endings that differ across machines also read as a mismatch.
   // Both only drop the save target.
+  if (foreignLoad && !m_terrainUpload.done())
+  {
+    m_terrainUpload.clear();
+    Log::warn(LogCategory::editor, "Another editor loaded a project on the server, so this editor's pending terrain "
+                                   "upload was dropped.");
+  }
+
   if ((foreignLoad || foreignProject) && m_saveUI)
   {
     m_saveUI->forgetSaveTarget(foreignProject

@@ -1,5 +1,10 @@
 #include "ProjectLoadTracker.h"
 #include <gtest/gtest.h>
+#include "terrain/TerrainChunk.h"
+#include "terrain/TerrainStore.h"
+#include "terrain/TerrainUpload.h"
+#include "terrain/TerrainVolume.h"
+#include <memory>
 #include <uuid.h>
 #include <string>
 
@@ -102,4 +107,53 @@ TEST(ProjectLoadTracker, AnOwnLoadBeforeAnySnapshotIsAdoptedWhenItArrives)
   EXPECT_FALSE(tracker.observeSnapshot(y));
   EXPECT_FALSE(tracker.observeSnapshot(x));
   EXPECT_TRUE(tracker.observeSnapshot(y));
+}
+
+TEST(ProjectLoadTracker, OnlyTheSnapshotAnsweringAnAwaitedOwnLoadReflectsTheServer)
+{
+  ProjectLoadTracker tracker;
+  EXPECT_TRUE(tracker.snapshotIsCurrent(a));
+
+  tracker.expectOwnLoad(b);
+  EXPECT_FALSE(tracker.snapshotIsCurrent(a));
+  EXPECT_FALSE(tracker.snapshotIsCurrent(c));
+  EXPECT_TRUE(tracker.snapshotIsCurrent(b));
+
+  ASSERT_FALSE(tracker.observeSnapshot(b));
+  EXPECT_TRUE(tracker.snapshotIsCurrent(a));
+}
+
+TEST(ProjectLoadTracker, AnOpenProjectRaceKeepsTheNewProjectsUploadsUntilItsOwnSnapshotLacksThem)
+{
+  const auto terrainUuid = idFrom("11111111-1111-4111-8111-111111111111");
+  auto volume = std::make_shared<terrain::TerrainVolume>(2.5f);
+  volume->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-terrain::airDistance, 1));
+
+  terrain::TerrainUpload upload;
+  upload.add(terrainUuid, volume);
+
+  // The store still reflects the old project, which has no such terrain.
+  terrain::TerrainStore store;
+  ProjectLoadTracker tracker;
+  tracker.expectOwnLoad(b);
+
+  // A snapshot already in flight from before the server applied the load: dropping on it would lose the upload.
+  const bool staleMayDrop = tracker.snapshotIsCurrent(a);
+  if (staleMayDrop)
+  {
+    static_cast<void>(terrain::forgetUnknownTerrains(upload, store));
+  }
+  EXPECT_FALSE(staleMayDrop);
+  EXPECT_EQ(upload.terrains().size(), 1u);
+
+  // The control: the same snapshot, once the wait is over, does drop a terrain the store lacks.
+  ASSERT_FALSE(tracker.observeSnapshot(b));
+  ASSERT_TRUE(tracker.snapshotIsCurrent(a));
+  EXPECT_EQ(terrain::forgetUnknownTerrains(upload, store).size(), 1u);
+  EXPECT_TRUE(upload.terrains().empty());
+
+  // And the answering snapshot keeps a terrain that it does hold.
+  upload.add(terrainUuid, volume);
+  ASSERT_NE(store.create({ .uuid = terrainUuid }), nullptr);
+  EXPECT_TRUE(terrain::forgetUnknownTerrains(upload, store).empty());
 }

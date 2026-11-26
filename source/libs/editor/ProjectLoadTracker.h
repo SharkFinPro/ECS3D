@@ -21,6 +21,14 @@ public:
     return m_pendingOwn.has_value();
   }
 
+  // Whether a snapshot carrying id reflects what the server holds now. While this editor's own load is awaited, any
+  // other snapshot was sent before the server applied it and still lists the old project, so what it lacks says
+  // nothing about the project being loaded. Asked before observeSnapshot, which ends the wait.
+  [[nodiscard]] bool snapshotIsCurrent(const uuids::uuid& id) const
+  {
+    return !m_pendingOwn || id == *m_pendingOwn;
+  }
+
   // A new connection starts a new baseline.
   void reset()
   {

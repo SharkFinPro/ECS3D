@@ -6,6 +6,7 @@
 #include "AssetNaming.h"
 #include "GuiComponents.h"
 #include "Selection.h"
+#include "TerrainCreateFlow.h"
 #include <GpuAssetCache.h>
 #include <Log.h>
 #include <ProjectPaths.h>
@@ -19,6 +20,7 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -78,7 +80,8 @@ namespace {
 AssetBrowserPanel::AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache)
   : m_assetRegistry(assetRegistry),
     m_assetCache(std::move(assetCache)),
-    m_flow(std::make_unique<AssetCreateFlow>())
+    m_flow(std::make_unique<AssetCreateFlow>()),
+    m_terrainFlow(std::make_unique<TerrainCreateFlow>())
 {}
 
 AssetBrowserPanel::~AssetBrowserPanel() = default;
@@ -91,6 +94,11 @@ void AssetBrowserPanel::setLoadSceneCallback(LoadSceneCallback callback)
 void AssetBrowserPanel::setAddAssetCallback(AddAssetCallback callback)
 {
   m_onAddAsset = std::move(callback);
+}
+
+void AssetBrowserPanel::setCreateTerrainCallback(CreateTerrainCallback callback)
+{
+  m_onCreateTerrain = std::move(callback);
 }
 
 void AssetBrowserPanel::setBlockWritesCallback(BlockWritesCallback callback)
@@ -257,6 +265,13 @@ void AssetBrowserPanel::displayGui()
   }
 
   displayCreateAssetPopup();
+
+  if (m_terrainFlow->takeOpenRequest())
+  {
+    ImGui::OpenPopup("Create Terrain");
+  }
+
+  displayCreateTerrainPopup();
 }
 
 void AssetBrowserPanel::displaySearchRow()
@@ -481,6 +496,19 @@ void AssetBrowserPanel::displayCreateItems()
                 }));
   }
 
+  ImGui::BeginDisabled(!m_onCreateTerrain);
+  if (ImGui::MenuItem("New Terrain"))
+  {
+    // A template is never written, so its terrain would have nowhere to be saved: ask for Save As first.
+    const bool writesBlocked = m_blockWrites && m_blockWrites();
+    if (TerrainCreateFlow::gate(writesBlocked) == TerrainCreateGate::proceed)
+    {
+      m_terrainFlow->begin(*m_assetRegistry);
+      std::strncpy(m_terrainName, m_terrainFlow->request().name.c_str(), sizeof(m_terrainName) - 1);
+    }
+  }
+  ImGui::EndDisabled();
+
   ImGui::EndDisabled();
 }
 
@@ -664,4 +692,138 @@ void AssetBrowserPanel::activateCreatedScene()
   {
     m_selection->selectAsset(sceneUUID);
   }
+}
+
+void AssetBrowserPanel::displayCreateTerrainPopup()
+{
+  if (!ImGui::BeginPopupModal("Create Terrain", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    return;
+  }
+
+  ImGui::Dummy(ImVec2(360.0f, 0.0f));
+
+  // Enter and Escape also end a text entry in a numeric field, so they only act on the form when no field is being
+  // edited or the name field is the one that is.
+  const bool anyItemActive = ImGui::IsAnyItemActive();
+
+  auto& request = m_terrainFlow->request();
+
+  gc::rowLabel("Name");
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  if (ImGui::IsWindowAppearing())
+  {
+    ImGui::SetKeyboardFocusHere();
+  }
+  ImGui::InputText("##terrainName", m_terrainName, sizeof(m_terrainName), ImGuiInputTextFlags_AutoSelectAll);
+  const bool formKeys = !anyItemActive || ImGui::IsItemActive();
+
+  gc::rowLabel("Shape");
+  if (ImGui::RadioButton("Flat", !request.fromHeightmap))
+  {
+    request.fromHeightmap = false;
+  }
+  ImGui::SameLine();
+  if (ImGui::RadioButton("Heightmap", request.fromHeightmap))
+  {
+    request.fromHeightmap = true;
+  }
+
+  gc::labeledDrag("Voxel size (m)", &request.voxelSizeMeters, 0.05f);
+
+  if (request.fromHeightmap)
+  {
+    gc::rowLabel("Image");
+    if (ImGui::Button("Choose..."))
+    {
+      if (const auto picked = pickFile({ { "Images", "png,jpg,jpeg,tga,bmp" } }))
+      {
+        request.heightmapPath = *picked;
+      }
+    }
+    ImGui::SameLine();
+    const std::string imageName =
+      request.heightmapPath.empty() ? "None" : pathToUtf8(pathFromUtf8(request.heightmapPath.c_str()).filename());
+    ImGui::TextColored(theme::t1, "%s", imageName.c_str());
+
+    gc::labeledDrag("Height scale (m)", &request.heightScaleMeters, 0.5f);
+    ImGui::TextColored(theme::t3, "The footprint follows the image: its size in pixels times the voxel size.");
+  }
+  else
+  {
+    gc::labeledDrag("Footprint (m)", &request.footprintMeters, 1.0f);
+  }
+
+  if (const std::string estimate = terrainCreate::estimateText(request); !estimate.empty())
+  {
+    ImGui::TextColored(theme::t3, "%s", estimate.c_str());
+  }
+
+  if (!m_terrainFlow->error().empty())
+  {
+    ImGui::TextColored(theme::danger, "%s", m_terrainFlow->error().c_str());
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+  ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
+  if (ImGui::Button("Create", ImVec2(120, 0)) || (formKeys && ImGui::IsKeyPressed(ImGuiKey_Enter, false)))
+  {
+    if (commitTerrain())
+    {
+      ImGui::CloseCurrentPopup();
+    }
+  }
+  ImGui::PopStyleColor(4);
+
+  ImGui::SameLine();
+  if (ImGui::Button("Cancel", ImVec2(120, 0)) || (formKeys && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+  {
+    m_terrainFlow->cancel();
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
+}
+
+bool AssetBrowserPanel::commitTerrain()
+{
+  if (!m_onCreateTerrain)
+  {
+    return false;
+  }
+
+  if (!m_editable)
+  {
+    m_terrainFlow->fail("The server is not editable right now, so a terrain cannot be created.");
+    return false;
+  }
+
+  auto& request = m_terrainFlow->request();
+  request.name = m_terrainName;
+
+  auto result = terrainCreate::generateTerrain(request, *m_assetRegistry, newUUID());
+  if (!result.terrain)
+  {
+    m_terrainFlow->fail(result.error);
+    return false;
+  }
+
+  try
+  {
+    m_onCreateTerrain(std::move(*result.terrain));
+  }
+  catch (const std::exception& e)
+  {
+    m_terrainFlow->fail(e.what());
+    return false;
+  }
+
+  m_terrainFlow->cancel();
+  return true;
 }

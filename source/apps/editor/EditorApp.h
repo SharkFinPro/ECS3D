@@ -15,6 +15,8 @@
 #include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
 #include <PlayControls.h>
+#include <Selection.h>
+#include <TerrainCreateFlow.h>
 #include <DefaultDockLayout.h>
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
@@ -29,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -148,6 +151,15 @@ private:
   // The server resets its terrain on loadProject; the opened project's chunks reach it through this.
   terrain::TerrainUpload m_terrainUpload;
   size_t m_terrainUploadSent = 0;
+  // Terrains created here, with when: a snapshot older than the server's reply does not list them yet.
+  std::map<uuids::uuid, std::chrono::steady_clock::time_point> m_createdTerrains;
+  std::optional<uuids::uuid> m_placedTerrainObject;
+  struct SelectionSnapshot
+  {
+    EditorSelection::Kind kind = EditorSelection::Kind::None;
+    std::vector<uuids::uuid> items;
+  } m_selectionWhenPlaced;
+  std::chrono::steady_clock::time_point m_placedTerrainDeadline;
   std::chrono::steady_clock::time_point m_lastTerrainUploadPump;
   std::filesystem::path m_projectRoot;
   std::shared_ptr<SceneManager> m_sceneManager;
@@ -306,6 +318,21 @@ private:
 
   void onAddAsset(const nlohmann::json& asset);
 
+  // Applies the asset locally and sends it. With requireApplied, a local refusal sends and records nothing and the
+  // result is false; without it the asset is always sent, as every other asset path does.
+  bool addAsset(const nlohmann::json& asset, bool requireApplied);
+
+  // Announces a generated terrain, queues its chunks for upload and places an object for it in the scene. Throws
+  // std::runtime_error, with nothing sent, when there is no active scene, the description is unusable, or the
+  // editor refuses the asset. Once the asset is sent, later failures are logged and it does not throw.
+  void onCreateTerrain(GeneratedTerrain&& generated);
+
+  // Restores the generated chunks into the store's new volume and queues them for upload; logs a failure, never throws.
+  void queueCreatedTerrainUpload(const GeneratedTerrain& generated);
+
+  // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.
+  void selectPlacedTerrain();
+
   void onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
 
   void onRemoveAsset(const uuids::uuid& assetUUID);
@@ -336,6 +363,8 @@ private:
 
   // Sends one frame's share of the opened project's terrain to the server.
   void pumpTerrainUpload();
+
+  void dropStaleTerrainUploads();
 
   void handleStateDelta(const net::Message& message) const;
 

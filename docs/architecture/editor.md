@@ -142,6 +142,44 @@ The Terrain component section also shows read-only `Chunks` (held against the co
 `Surface` (none, ready, percent pending, growing, too large to draw or to grow) rows, formatted by the headless
 `TerrainReadout.h` from `GpuAssetCache::terrainSurfaceStatus` and the terrain store.
 
+The Assets panel's Create items include "New Terrain", which opens its own modal (less invasive than extending
+`AssetCreateFlow`'s name-only one). The form takes a name, a Flat or Heightmap shape, a voxel size in meters and, for
+Flat, a footprint in meters. A heightmap adds an image picker and a height scale in meters, and its footprint is the
+image size times the voxel size. Sizes are converted at `worldUnitsPerMeter` (`WorldUnits.h`, which
+`PhysicsSystem::unitsPerMeter` reads). Enter and Escape act on the form only when no numeric field is being edited
+or the name field is.
+
+The headless `TerrainCreateFlow.h` holds the request, its validation, the heightmap decode and the generated volume:
+
+- Validation checks a free terrain display name, finite positive numbers and the voxel size inside
+  `minVoxelSize`/`maxVoxelSize` after conversion. It also checks a chunk estimate within `maxCreateChunks` (4096),
+  before anything is allocated. Generation runs on the frame Create is pressed, so the cap sits well under the
+  server's `maxEditChunks` and `maxAddedTerrainChunks` bounds, which stay. The image sample and file-size limits
+  derive from the same cap, and the form shows the estimated chunks and a memory ceiling.
+- The decode uses `stbi_load_16` forced to one channel, with 8-bit scaled by 257. A picked path is UTF-8
+  (`pathFromUtf8`).
+- The volume is `fillFlat` over a few voxels of solid, or `fillFromHeightmap`, with an empty palette like every
+  other terrain description.
+
+Create sends the terrain through `EditorApp::onCreateTerrain`:
+
+- The addAsset built by `terrain::addTerrainAssetJson` (plus the display name) goes through `addAsset`, so the
+  editor's own store gets the empty volume. A local refusal sends nothing, and the form is not editable while the
+  server is not.
+- The generated chunks are restored into the store and queued on `m_terrainUpload` for the server.
+- A `terrainCreate::placementEdit` batch (a root object with a Terrain component) goes through `onSceneEdit`, so it is
+  recorded for undo. The asset record itself is not undoable.
+- The object is selected once the server's rebroadcast brings it in, waiting up to 10 s, and the pending selection is
+  dropped if the user selects something else first.
+
+A queued upload whose terrain a snapshot no longer holds (the server refused it) is dropped with a warning
+(`terrain::forgetUnknownTerrains`). Two cases keep it: a terrain created within a few seconds, since an older
+snapshot does not list it yet, and any snapshot sent before the server applied this editor's own project load
+(`ProjectLoadTracker::snapshotIsCurrent`), which still lists the old project. Another editor's project load clears
+the queue. On an untitled template the menu item calls `SaveUI::blockAssetWrites` instead
+(`TerrainCreateFlow::gate`), since the terrain would have no folder to be saved into. A generation or decode error
+shows in the form and leaves nothing created.
+
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`
 (`EditorLayoutSettings`). It restores the text in the style-setup hook, before the first frame, and saves it when

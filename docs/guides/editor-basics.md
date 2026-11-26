@@ -107,8 +107,10 @@ The "Assets" panel shows models, textures, scripts, prefabs and scenes. It has a
 and type filter chips.
 
 - The plus button, the right-click menu on empty space, and the Assets menu in the menu bar create assets:
-  New Scene, New Prefab and New Script. The Assets menu also has Import Model and Import Texture, which
-  open a file dialog.
+  New Scene, New Prefab, New Script and New Terrain. The Assets menu also has Import Model and Import
+  Texture, which open a file dialog. New Terrain asks for a name, a voxel size and either a flat footprint or
+  a heightmap image (the footprint is then the image size times the voxel size) with a height scale, all in
+  meters, and adds the terrain and an object that shows it to the active scene.
 - Double-click a scene to make it the active scene. You can also drag a scene onto the viewport.
 - Drag a model or texture onto a matching slot in the Inspector. Drag a prefab onto the Objects panel to
   instantiate it, or onto an object row to instantiate it as a child.
