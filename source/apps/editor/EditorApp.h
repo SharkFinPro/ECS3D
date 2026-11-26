@@ -15,6 +15,7 @@
 #include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
 #include <PlayControls.h>
+#include <Selection.h>
 #include <TerrainCreateFlow.h>
 #include <DefaultDockLayout.h>
 #include <DockLayoutFit.h>
@@ -153,6 +154,11 @@ private:
   // Terrains created here, with when: a snapshot older than the server's reply does not list them yet.
   std::map<uuids::uuid, std::chrono::steady_clock::time_point> m_createdTerrains;
   std::optional<uuids::uuid> m_placedTerrainObject;
+  struct SelectionSnapshot
+  {
+    EditorSelection::Kind kind = EditorSelection::Kind::None;
+    std::vector<uuids::uuid> items;
+  } m_selectionWhenPlaced;
   std::chrono::steady_clock::time_point m_placedTerrainDeadline;
   std::chrono::steady_clock::time_point m_lastTerrainUploadPump;
   std::filesystem::path m_projectRoot;
@@ -318,7 +324,7 @@ private:
 
   // Announces a generated terrain, queues its chunks for upload and places an object for it in the scene. Throws
   // std::runtime_error, with nothing sent, when there is no active scene, the description is unusable, or the
-  // editor refuses the asset. Once the asset is sent it does not throw.
+  // editor refuses the asset. Once the asset is sent, later failures are logged and it does not throw.
   void onCreateTerrain(GeneratedTerrain&& generated);
 
   // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.

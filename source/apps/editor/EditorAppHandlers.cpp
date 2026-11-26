@@ -21,6 +21,7 @@
 #include <imgui_internal.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -116,27 +117,35 @@ void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
     throw std::runtime_error("The editor did not accept the new terrain.");
   }
 
-  const auto volume = m_terrainStore->find(generated.description.uuid);
-  if (volume)
+  // Past this point the terrain is created and sent, so a failure here must not reopen the form for a second create.
+  try
   {
-    volume->restoreChunks(generated.volume->snapshotChunks());
-  }
-  else
-  {
-    Log::error(LogCategory::editor, "The editor's terrain store lost the new terrain right after creating it.");
-  }
+    const auto volume = m_terrainStore->find(generated.description.uuid);
+    if (volume)
+    {
+      volume->restoreChunks(generated.volume->snapshotChunks());
+    }
+    else
+    {
+      Log::error(LogCategory::editor, "The editor's terrain store lost the new terrain right after creating it.");
+    }
 
-  if (m_terrainUpload.done())
-  {
-    m_terrainUploadSent = 0;
-  }
+    if (m_terrainUpload.done())
+    {
+      m_terrainUploadSent = 0;
+    }
 
-  m_terrainUpload.add(generated.description.uuid, generated.volume);
-  m_createdTerrains[generated.description.uuid] = std::chrono::steady_clock::now();
+    m_terrainUpload.add(generated.description.uuid, generated.volume);
+    m_createdTerrains[generated.description.uuid] = std::chrono::steady_clock::now();
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::editor, std::string("The new terrain's chunks could not be queued for upload: ") +
+                                      e.what());
+  }
 
   const auto objectUUID = randomUuid();
 
-  // Past this point the terrain is created and sent, so a failure here must not reopen the form for a second create.
   try
   {
     onSceneEdit(terrainCreate::placementEdit(objectUUID, generated.displayName, generated.description.uuid));
@@ -147,6 +156,8 @@ void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
   }
 
   m_placedTerrainObject = objectUUID;
+  m_selectionWhenPlaced.kind = m_selection->kind();
+  m_selectionWhenPlaced.items.assign(m_selection->items().begin(), m_selection->items().end());
   m_placedTerrainDeadline = std::chrono::steady_clock::now() + placedTerrainWait;
 
   Log::info(LogCategory::editor, "Created terrain " + generated.displayName + " (" +
@@ -157,6 +168,14 @@ void EditorApp::selectPlacedTerrain()
 {
   if (!m_placedTerrainObject)
   {
+    return;
+  }
+
+  // A click on something else in the meantime wins over the late arrival.
+  if (m_selection->kind() != m_selectionWhenPlaced.kind ||
+      !std::ranges::equal(m_selection->items(), m_selectionWhenPlaced.items))
+  {
+    m_placedTerrainObject.reset();
     return;
   }
 

@@ -92,10 +92,15 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+  const bool snapshotIsCurrent = m_projectLoads.snapshotIsCurrent(m_projectPacker->getProjectLoadId());
   m_terrainSync.observeSnapshot(*m_terrainStore, m_projectPacker->getProjectLoadId());
 
   checkSnapshotProject();
-  dropStaleTerrainUploads();
+
+  if (snapshotIsCurrent)
+  {
+    dropStaleTerrainUploads();
+  }
 
   const auto scene = m_sceneManager->getCurrentScene();
   logSnapshotApplied(message, scene);
@@ -136,7 +141,7 @@ namespace {
 }
 
 // A terrain the server refused to create, or one a later snapshot dropped, is not in the store any more, and the server
-// never expects its chunks.
+// never expects its chunks. Only called for a snapshot that reflects the server's current project.
 void EditorApp::dropStaleTerrainUploads()
 {
   const auto now = std::chrono::steady_clock::now();

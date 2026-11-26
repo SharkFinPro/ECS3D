@@ -20,6 +20,7 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -702,6 +703,10 @@ void AssetBrowserPanel::displayCreateTerrainPopup()
 
   ImGui::Dummy(ImVec2(360.0f, 0.0f));
 
+  // Enter and Escape also end a text entry in a numeric field, so they only act on the form when no field is being
+  // edited or the name field is the one that is.
+  const bool anyItemActive = ImGui::IsAnyItemActive();
+
   auto& request = m_terrainFlow->request();
 
   gc::rowLabel("Name");
@@ -711,6 +716,7 @@ void AssetBrowserPanel::displayCreateTerrainPopup()
     ImGui::SetKeyboardFocusHere();
   }
   ImGui::InputText("##terrainName", m_terrainName, sizeof(m_terrainName), ImGuiInputTextFlags_AutoSelectAll);
+  const bool formKeys = !anyItemActive || ImGui::IsItemActive();
 
   gc::rowLabel("Shape");
   if (ImGui::RadioButton("Flat", !request.fromHeightmap))
@@ -766,7 +772,7 @@ void AssetBrowserPanel::displayCreateTerrainPopup()
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false))
+  if (ImGui::Button("Create", ImVec2(120, 0)) || (formKeys && ImGui::IsKeyPressed(ImGuiKey_Enter, false)))
   {
     if (commitTerrain())
     {
@@ -776,7 +782,7 @@ void AssetBrowserPanel::displayCreateTerrainPopup()
   ImGui::PopStyleColor(4);
 
   ImGui::SameLine();
-  if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+  if (ImGui::Button("Cancel", ImVec2(120, 0)) || (formKeys && ImGui::IsKeyPressed(ImGuiKey_Escape)))
   {
     m_terrainFlow->cancel();
     ImGui::CloseCurrentPopup();
@@ -789,6 +795,12 @@ bool AssetBrowserPanel::commitTerrain()
 {
   if (!m_onCreateTerrain)
   {
+    return false;
+  }
+
+  if (!m_editable)
+  {
+    m_terrainFlow->fail("The server is not editable right now, so a terrain cannot be created.");
     return false;
   }
 
