@@ -239,6 +239,7 @@ add_executable(${PROJECT_NAME}
   TerrainEditEchoFixtures.h
   TerrainEditEchoFlushTest.cpp
   TerrainEditEchoTest.cpp
+  TerrainEditFlowTest.cpp
   TerrainEditTest.cpp
   TerrainFileRecoveryTest.cpp
   TerrainFilesTest.cpp

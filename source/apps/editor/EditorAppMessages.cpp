@@ -12,6 +12,7 @@
 #include <RingBufferSink.h>
 #include <ServerLog.h>
 #include <Log.h>
+#include <NetClient.h>
 #include <ProfileScope.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
@@ -121,6 +122,11 @@ void EditorApp::handleTerrainChunks(const net::Message& message)
   for (const auto& line : outcome.log)
   {
     Log::write(line.level, LogCategory::editor, line.text);
+  }
+
+  if (outcome.request)
+  {
+    m_netClient->send(*outcome.request);
   }
 }
 

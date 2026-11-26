@@ -45,6 +45,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 ServerApp::ServerApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -293,6 +294,8 @@ void ServerApp::run()
   m_lastStatsTime = m_previousTime;
   m_lastStatsFeedTime = m_previousTime;
   m_lastTerrainPumpTime = m_previousTime;
+  m_lastTerrainEchoTime = m_previousTime;
+  m_lastTerrainEchoFailureLog = m_previousTime;
 
   m_lane.bindToThisThread();
   struct LaneUnbinder
@@ -391,6 +394,11 @@ void ServerApp::run()
     {
       ECS3D_PROFILE_SCOPE("Terrain stream");
       pumpTerrainStreams(now);
+    }
+
+    {
+      ECS3D_PROFILE_SCOPE("Terrain echo");
+      flushTerrainEcho(now);
     }
 
     // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
@@ -501,6 +509,47 @@ void ServerApp::pumpTerrainStreams(const std::chrono::steady_clock::time_point n
   }
 }
 
+terrain::TerrainStreamer::FocusFor ServerApp::terrainOriginFocus()
+{
+  return [](const uuids::uuid&, const terrain::TerrainDescription&)
+  {
+    return glm::vec3(0.0f);
+  };
+}
+
+void ServerApp::flushTerrainEcho(const std::chrono::steady_clock::time_point now)
+{
+  if (!terrainEchoDue(m_terrainEcho.pending(), now - m_lastTerrainEchoTime))
+  {
+    return;
+  }
+
+  m_lastTerrainEchoTime = now;
+
+  std::vector<int32_t> connections(m_joinedConnections.begin(), m_joinedConnections.end());
+  std::ranges::sort(connections);
+
+  try
+  {
+    m_terrainEcho.flush(*m_terrainStore, connections,
+                        [this](const int32_t connId, const net::Message& message) { m_netServer->sendTo(connId, message); });
+  }
+  catch (const std::exception& e)
+  {
+    constexpr auto summaryPeriod = std::chrono::seconds(10);
+
+    ++m_terrainEchoFailures;
+
+    if (m_terrainEchoFailures == 1 || now - m_lastTerrainEchoFailureLog >= summaryPeriod)
+    {
+      Log::error(LogCategory::server, "Terrain edit echo failed (" + std::to_string(m_terrainEchoFailures)
+        + " time(s) since the last report): " + e.what());
+      m_terrainEchoFailures = 0;
+      m_lastTerrainEchoFailureLog = now;
+    }
+  }
+}
+
 void ServerApp::logStatsIfDue(const std::chrono::steady_clock::time_point now)
 {
   if (m_options.statsIntervalSeconds <= 0 ||
@@ -566,7 +615,7 @@ bool ServerApp::scriptsLive() const
   return m_sceneManager->getCurrentScene() && m_sceneManager->getSceneStatus() != SceneStatus::stopped;
 }
 
-void ServerApp::pollScriptChangesWhileStopped(const float dt) const
+void ServerApp::pollScriptChangesWhileStopped(const float dt)
 {
   const auto scene = m_sceneManager->getCurrentScene();
   if (!shouldPollScriptsWhileStopped(m_options.editMode, scene != nullptr, m_sceneManager->getSceneStatus()))

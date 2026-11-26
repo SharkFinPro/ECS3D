@@ -546,6 +546,19 @@ TEST(ServerPolicy, AnUntickedIterationAtOrPastOneFixedStepClosesTheSample)
   EXPECT_TRUE(shouldCloseServerSample(false, 0.5, 0.02));
 }
 
+TEST(ServerPolicy, ATerrainEchoIsDueOnlyWhenSomethingIsPendingAndTheIntervalHasPassed)
+{
+  const auto interval = terrain::terrainEchoInterval;
+
+  EXPECT_TRUE(terrainEchoDue(true, interval));
+  EXPECT_TRUE(terrainEchoDue(true, interval + std::chrono::milliseconds(1)));
+  EXPECT_FALSE(terrainEchoDue(true, interval - std::chrono::milliseconds(1)));
+  EXPECT_FALSE(terrainEchoDue(true, std::chrono::milliseconds(0)));
+
+  EXPECT_FALSE(terrainEchoDue(false, interval));
+  EXPECT_FALSE(terrainEchoDue(false, std::chrono::seconds(10)));
+}
+
 TEST(ServerPolicy, DroppedStepCountIsWholeFixedStepsOnly)
 {
   EXPECT_EQ(droppedStepCount(0.0f, 0.25f), 0);

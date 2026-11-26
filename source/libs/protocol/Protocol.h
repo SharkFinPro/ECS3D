@@ -69,8 +69,9 @@ enum class MessageType : uint8_t {
                  // records since its previous serverStats to that connection (net::packServerStats /
                  // net::unpackServerStats).
   terrainChunks, // server -> views: terrain chunk data (terrain::packTerrainChunks /
-                 // terrain::unpackTerrainChunks). editor -> server: an opened project's terrain upload, a mutation
-                 // the server honors only from the authorized editor.
+                 // terrain::unpackTerrainChunks). editor -> server: an opened project's terrain upload, or a request
+                 // for chunks in full (every entry hash-only, see terrain::makeChunkRequest), a mutation the server
+                 // honors only from the authorized editor.
   terrainEdit    // editor -> server: one terrain edit operation (terrain::packBrushEdit / packRedistanceEdit /
                  // packSetChunksEdit, terrain::unpackTerrainEdit), a mutation the server honors only from the
                  // authorized editor.

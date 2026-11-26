@@ -92,7 +92,11 @@ void ServerApp::handleEditorMessage(const net::Message& message, const int32_t s
       break;
 
     case net::MessageType::terrainChunks:
-      handleTerrainUpload(message);
+      handleTerrainUpload(message, senderId);
+      break;
+
+    case net::MessageType::terrainEdit:
+      handleTerrainEdit(message, senderId);
       break;
 
     default: break;
@@ -262,6 +266,7 @@ void ServerApp::handleStatsSubscribe(const net::Message& message, const int32_t 
 void ServerApp::handleDisconnect(const int32_t connId)
 {
   m_terrainStreamer.forget(connId);
+  m_terrainEcho.forget(connId);
   dropTerrainUploadFrom(connId);
   m_statsSubscriptions.forget(connId);
   m_joinNonces.erase(connId);

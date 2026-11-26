@@ -78,7 +78,7 @@ namespace {
   }
 }
 
-void ServerApp::handleEditComponent(const net::Message& message) const
+void ServerApp::handleEditComponent(const net::Message& message)
 {
   // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
   // other view (and the editing client, idempotently) converges.
@@ -125,7 +125,7 @@ void ServerApp::handleEditComponent(const net::Message& message) const
   }
 }
 
-void ServerApp::handleSceneEdit(const net::Message& message) const
+void ServerApp::handleSceneEdit(const net::Message& message)
 {
   // An editor changed the scene graph (add/remove object or component, or instantiate a prefab): apply
   // it, then re-snapshot so every view rebuilds (structural changes aren't replicated per-op). The
@@ -192,7 +192,7 @@ void ServerApp::pushSceneScriptFields(const SceneAsset& scene, const nlohmann::j
   }
 }
 
-void ServerApp::handleAddAsset(const net::Message& message) const
+void ServerApp::handleAddAsset(const net::Message& message)
 {
   // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
   nlohmann::json asset;
@@ -218,7 +218,7 @@ void ServerApp::handleAddAsset(const net::Message& message) const
   broadcastSnapshot(net::SnapshotReason::assetChange);
 }
 
-void ServerApp::handleRenameAsset(const net::Message& message) const
+void ServerApp::handleRenameAsset(const net::Message& message)
 {
   // An editor renamed an asset (a display-name override, or a scene's real name): apply it authoritatively and
   // re-snapshot.
@@ -245,7 +245,7 @@ void ServerApp::handleRenameAsset(const net::Message& message) const
   broadcastSnapshot(net::SnapshotReason::assetChange);
 }
 
-void ServerApp::handleRemoveAsset(const net::Message& message) const
+void ServerApp::handleRemoveAsset(const net::Message& message)
 {
   // An editor deleted an asset: drop the record (a scene leaves the SceneManager too) and re-snapshot.
   // References dangle by design (lookups null-tolerate a missing uuid).
