@@ -35,6 +35,7 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
   // Before the unpack, so a failed one cannot leave the previous project's expectations for uuids both share.
   m_terrainStore->clearExpectations();
   m_terrainUploadWarned.clear();
+  m_terrainRequestWarned.clear();
   m_terrainUploader = senderId;
 
   try
@@ -170,7 +171,7 @@ void ServerApp::handleTerrainUpload(const net::Message& message, const int32_t s
 
       m_terrainEcho.requestFull(payload->terrain, coords, senderId);
     }
-    else if (m_terrainUploadWarned.insert(payload->terrain).second)
+    else if (m_terrainRequestWarned.insert(payload->terrain).second)
     {
       Log::warn(LogCategory::server, "Ignored a terrain chunk request for unknown terrain " + name);
     }

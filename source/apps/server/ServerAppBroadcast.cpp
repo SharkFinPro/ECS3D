@@ -84,6 +84,7 @@ net::Message ServerApp::buildSnapshot(uint32_t& buildMicros)
   for (const auto& uuid : terrain::replacedVolumes(volumesBefore, *m_terrainStore))
   {
     m_terrainStreamer.restart(uuid, *m_terrainStore, terrainOriginFocus());
+    m_terrainEcho.forgetTerrain(uuid);
   }
 
   // Binary snapshot: ProjectPacker writes the same project state ProjectSerializer::serialize would,

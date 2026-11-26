@@ -247,6 +247,7 @@ private:
 
   // Terrains a stray upload was already warned about in this project load.
   std::unordered_set<uuids::uuid> m_terrainUploadWarned;
+  std::unordered_set<uuids::uuid> m_terrainRequestWarned;
 
   void finishProjectLoad();
 
