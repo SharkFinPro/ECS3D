@@ -168,11 +168,18 @@ The default keybinds are:
 | Gizmo: Rotate | 2 |
 | Gizmo: Scale | 3 |
 | Toggle Profiler | F3 |
+| Terrain: Toggle Mode | T |
+| Terrain: Add | Alt+1 |
+| Terrain: Subtract | Alt+2 |
+| Terrain: Smooth | Alt+3 |
+| Terrain: Flatten | Alt+4 |
+| Terrain: Grow Brush | PageUp |
+| Terrain: Shrink Brush | PageDown |
 
 Holding Ctrl+Z, Ctrl+Shift+Z or Ctrl+D repeats the action; holding Ctrl+D adds a copy on each repeat, and each
 copy is its own undo step. Ctrl+A in the Objects panel is local to that panel and is not a rebindable action.
-Focus Selection can be bound, but it has no behavior yet. Keybinds are ignored while a text field wants keyboard
-input.
+Focus Selection and the Terrain actions can be bound, but they have no behavior yet. Keybinds are ignored while a
+text field wants keyboard input.
 
 ## Saving and opening
 

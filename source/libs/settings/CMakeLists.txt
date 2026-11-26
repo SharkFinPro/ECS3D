@@ -11,6 +11,8 @@ add_library(${PROJECT_NAME}
   EditorCameraSettings.h
   EditorGizmoSettings.cpp
   EditorGizmoSettings.h
+  EditorTerrainSettings.cpp
+  EditorTerrainSettings.h
   EditorLayoutSettings.cpp
   EditorLayoutSettings.h
   EditorViewportSettings.cpp

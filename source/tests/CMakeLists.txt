@@ -171,6 +171,7 @@ add_executable(${PROJECT_NAME}
   ClientDisplaySettingsTest.cpp
   FramePacingSettingsTest.cpp
   EditorLayoutSettingsTest.cpp
+  EditorTerrainSettingsTest.cpp
   GizmoTest.cpp
   GizmoEditSendingTest.cpp
   GizmoDragTest.cpp
@@ -272,6 +273,8 @@ add_executable(${PROJECT_NAME}
   TerrainStreamPlanTest.cpp
   TerrainStreamerLifecycleTest.cpp
   TerrainStreamerTest.cpp
+  TerrainStrokeTest.cpp
+  TerrainToolStateTest.cpp
   TerrainUploadTest.cpp
   TerrainViewSyncTest.cpp
   TerrainVolumeSourceTest.cpp
