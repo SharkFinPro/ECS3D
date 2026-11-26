@@ -519,3 +519,46 @@ TEST(TerrainPendingUpload, TheReasonNamesTheFirstShortTerrainAndItsCounts)
   store.clearExpectation(terrainB);
   EXPECT_FALSE(terrain::pendingUploadReason(store).has_value());
 }
+
+TEST(TerrainUpload, ForgetDropsOneTerrainAndKeepsTheRest)
+{
+  terrain::TerrainUpload upload;
+  upload.add(terrainA, makeVolume(2));
+  upload.add(terrainB, makeVolume(3));
+  EXPECT_EQ(upload.terrains(), (std::vector<uuids::uuid>{ terrainA, terrainB }));
+
+  EXPECT_FALSE(upload.forget(uuids::uuid{}));
+  EXPECT_EQ(upload.pendingChunks(), 5u);
+
+  EXPECT_TRUE(upload.forget(terrainA));
+  EXPECT_FALSE(upload.forget(terrainA));
+  EXPECT_EQ(upload.terrains(), (std::vector<uuids::uuid>{ terrainB }));
+  EXPECT_EQ(upload.pendingChunks(), 3u);
+}
+
+TEST(TerrainUpload, UnknownTerrainsAreForgottenAndHeldOnesKept)
+{
+  terrain::TerrainStore store;
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+
+  terrain::TerrainUpload upload;
+  upload.add(terrainA, makeVolume(2));
+  upload.add(terrainB, makeVolume(3));
+
+  const auto forgotten = terrain::forgetUnknownTerrains(upload, store);
+  EXPECT_EQ(forgotten, (std::vector<uuids::uuid>{ terrainB }));
+  EXPECT_EQ(upload.terrains(), (std::vector<uuids::uuid>{ terrainA }));
+  EXPECT_EQ(upload.pendingChunks(), 2u);
+
+  // A recently created terrain is kept even though the store lacks it; the control above forgets it when it is not.
+  upload.add(terrainB, makeVolume(3));
+  EXPECT_TRUE(terrain::forgetUnknownTerrains(upload, store, [](const uuids::uuid& id) { return id == terrainB; })
+                .empty());
+  EXPECT_EQ(upload.terrains(), (std::vector<uuids::uuid>{ terrainA, terrainB }));
+  EXPECT_EQ(terrain::forgetUnknownTerrains(upload, store, [](const uuids::uuid&) { return false; }),
+            (std::vector<uuids::uuid>{ terrainB }));
+
+  // The control: with every queued terrain held, nothing is forgotten.
+  EXPECT_TRUE(terrain::forgetUnknownTerrains(upload, store).empty());
+  EXPECT_EQ(upload.pendingChunks(), 2u);
+}

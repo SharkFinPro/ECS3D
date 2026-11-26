@@ -1,5 +1,6 @@
 #include "TerrainUpload.h"
 #include "TerrainReplication.h"
+#include "TerrainStore.h"
 #include <utility>
 #include <vector>
 
@@ -48,6 +49,40 @@ namespace terrain
   void TerrainUpload::clear()
   {
     m_items.clear();
+  }
+
+  bool TerrainUpload::forget(const uuids::uuid& terrain)
+  {
+    return m_items.erase(terrain) > 0;
+  }
+
+  std::vector<uuids::uuid> TerrainUpload::terrains() const
+  {
+    std::vector<uuids::uuid> result;
+    result.reserve(m_items.size());
+
+    for (const auto& entry : m_items)
+    {
+      result.push_back(entry.first);
+    }
+
+    return result;
+  }
+
+  std::vector<uuids::uuid> forgetUnknownTerrains(TerrainUpload& upload, const TerrainStore& store,
+                                                 const std::function<bool(const uuids::uuid&)>& isRecent)
+  {
+    std::vector<uuids::uuid> forgotten;
+
+    for (const uuids::uuid& terrain : upload.terrains())
+    {
+      if (store.find(terrain) == nullptr && !(isRecent && isRecent(terrain)) && upload.forget(terrain))
+      {
+        forgotten.push_back(terrain);
+      }
+    }
+
+    return forgotten;
   }
 
   size_t TerrainUpload::pump(const std::function<void(const net::Message&)>& send, const size_t budgetBytes)
