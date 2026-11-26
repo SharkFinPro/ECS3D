@@ -11,6 +11,8 @@
 #include "objects/components/Script.h"
 #include "WireTypes.h"
 #include "edits/AssetWireType.h"
+#include "terrain/TerrainAddition.h"
+#include "terrain/TerrainStore.h"
 #include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
@@ -1767,6 +1769,46 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
   }
 
   return false;
+}
+
+bool applyAddAssetWithTerrain(AssetRegistry& assetRegistry,
+                              SceneManager& sceneManager,
+                              const std::shared_ptr<ComponentRegistry>& componentRegistry,
+                              terrain::TerrainStore& terrainStore,
+                              const nlohmann::json& asset,
+                              const bool expectUpload,
+                              std::optional<terrain::TerrainDescription>* created)
+{
+  if (!terrain::hasAddedTerrainBody(asset))
+  {
+    return applyAddAsset(assetRegistry, sceneManager, componentRegistry, asset);
+  }
+
+  // Checked first so a refusal leaves neither the registry nor the store changed.
+  const auto description = terrain::parseAddedTerrain(asset);
+  const auto* owner = description ? assetRegistry.getByUUID(description->uuid) : nullptr;
+  if (!description || terrainStore.find(description->uuid) != nullptr ||
+      (owner != nullptr && owner->type != AssetType::Terrain))
+  {
+    Log::warn(LogCategory::assets, "Ignored an addAsset for a terrain: its description is unusable, or the uuid "
+                                   "already belongs to a terrain or another asset.");
+    return false;
+  }
+
+  // registerAsset can drop the record silently, so the store only follows a record that is really there.
+  if (!applyAddAsset(assetRegistry, sceneManager, componentRegistry, asset) ||
+      assetRegistry.getByUUIDOfType(description->uuid, AssetType::Terrain) == nullptr ||
+      !terrain::applyAddedTerrain(terrainStore, *description, expectUpload))
+  {
+    return false;
+  }
+
+  if (created)
+  {
+    *created = *description;
+  }
+
+  return true;
 }
 
 net::Message packAddAsset(const nlohmann::json& asset)

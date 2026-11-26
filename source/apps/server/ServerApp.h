@@ -12,6 +12,7 @@
 #include <terrain/TerrainEditEcho.h>
 #include <terrain/TerrainPlaySnapshot.h>
 #include <terrain/TerrainStreamer.h>
+#include <terrain/TerrainUploadOwners.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
@@ -226,12 +227,15 @@ private:
   // Puts back the chunks play changed and resends them to every connection; logs the count.
   void restoreTerrainAfterStop();
 
-  // The uploader of the last project load left before its terrain arrived: nothing will fill the expectations, so
-  // they are dropped rather than holding Play for every editor until the next load.
+  // A connection that owed terrain uploads left before they arrived: nothing will fill those expectations, so they
+  // are dropped rather than holding Play for every editor. Other connections' expectations stay.
   void dropTerrainUploadFrom(int32_t connId);
 
-  // The connection whose loadProject set the current expectations.
-  std::optional<int32_t> m_terrainUploader;
+  // The store now holds a terrain an addAsset created: its streams start over and the sender owes the upload.
+  void onTerrainCreated(const terrain::TerrainDescription& description, int32_t senderId);
+
+  // Who owes the upload of each terrain with a pending expectation.
+  terrain::TerrainUploadOwners m_terrainUploadOwners;
 
   // The editor's terrain chunks for a terrain a loadProject said to expect: sets them and sends them on to every view.
   // Chunks that are all hash-only are instead the editor's request for those chunks in full.
@@ -287,7 +291,7 @@ private:
 
   void stopScriptsLogged(SceneAsset& scene) const;
 
-  void handleAddAsset(const net::Message& message);
+  void handleAddAsset(const net::Message& message, int32_t senderId);
 
   void handleRenameAsset(const net::Message& message);
 

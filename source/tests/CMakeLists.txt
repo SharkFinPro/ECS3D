@@ -259,6 +259,7 @@ add_executable(${PROJECT_NAME}
   TerrainRestingFixtures.h
   TerrainRestingTest.cpp
   TerrainReplicationTest.cpp
+  TerrainRuntimeCreateTest.cpp
   TerrainSamplingTest.cpp
   TerrainSceneQueryTest.cpp
   TerrainSeamNormalsTest.cpp

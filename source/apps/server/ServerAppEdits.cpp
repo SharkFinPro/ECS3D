@@ -6,6 +6,8 @@
 #include <scenes/SceneAsset.h>
 #include <scenes/SceneScriptEdits.h>
 #include <objects/ObjectManager.h>
+#include <terrain/TerrainAddition.h>
+#include <terrain/TerrainStore.h>
 #include <objects/components/Component.h>
 #include <objects/components/Script.h>
 #include <ScriptSystem.h>
@@ -15,6 +17,7 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <exception>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -192,7 +195,7 @@ void ServerApp::pushSceneScriptFields(const SceneAsset& scene, const nlohmann::j
   }
 }
 
-void ServerApp::handleAddAsset(const net::Message& message)
+void ServerApp::handleAddAsset(const net::Message& message, const int32_t senderId)
 {
   // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
   nlohmann::json asset;
@@ -206,9 +209,16 @@ void ServerApp::handleAddAsset(const net::Message& message)
   }
 
   const std::string type = asset.value("assetType", std::string{});
-  if (replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset))
+  std::optional<terrain::TerrainDescription> created;
+  if (replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry, *m_terrainStore,
+                                            asset, true, &created))
   {
     Log::info(LogCategory::server, "Registered asset (" + type + ").");
+
+    if (created)
+    {
+      onTerrainCreated(*created, senderId);
+    }
   }
   else
   {

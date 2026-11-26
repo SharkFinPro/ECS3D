@@ -51,7 +51,8 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
   // to lose. Same for the two ops below.
   auto command = edits::commandForAddAsset(asset, *m_assetRegistry);
 
-  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
+  replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry, *m_terrainStore,
+                                        asset, false);
 
   m_netClient->send(replication::packAddAsset(asset));
 
