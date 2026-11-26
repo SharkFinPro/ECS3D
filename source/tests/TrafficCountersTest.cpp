@@ -30,6 +30,7 @@ TEST(MessageTypeName, EveryTypeBelowTheCountHasADistinctRealName)
   EXPECT_EQ(net::messageTypeName(net::MessageType::statsSubscribe), "statsSubscribe");
   EXPECT_EQ(net::messageTypeName(net::MessageType::serverStats), "serverStats");
   EXPECT_EQ(net::messageTypeName(net::MessageType::terrainChunks), "terrainChunks");
+  EXPECT_EQ(net::messageTypeName(net::MessageType::terrainEdit), "terrainEdit");
 }
 
 TEST(MessageTypeName, ATypeBeyondTheCountIsUnknown)

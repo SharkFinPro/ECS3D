@@ -68,10 +68,13 @@ enum class MessageType : uint8_t {
   serverStats,   // server -> editor: the server's profiling samples, per-tick durations, traffic and snapshot
                  // records since its previous serverStats to that connection (net::packServerStats /
                  // net::unpackServerStats).
-  terrainChunks  // server -> views: terrain chunk data (terrain::packTerrainChunks /
+  terrainChunks, // server -> views: terrain chunk data (terrain::packTerrainChunks /
                  // terrain::unpackTerrainChunks). editor -> server: an opened project's terrain upload, a mutation
                  // the server honors only from the authorized editor.
-  // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset/terrainChunks are the editor's mutation path; the server
+  terrainEdit    // editor -> server: one terrain edit operation (terrain::packBrushEdit / packRedistanceEdit /
+                 // packSetChunksEdit, terrain::unpackTerrainEdit), a mutation the server honors only from the
+                 // authorized editor.
+  // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset/terrainChunks/terrainEdit are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An
   // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
@@ -80,8 +83,8 @@ enum class MessageType : uint8_t {
 // One past the last enumerator. The assert only pins this to the enumerator it names, so it cannot notice a newly
 // appended type: appending a MessageType means updating messageTypeCount, the assert's last enumerator and
 // messageTypeName together. A type left out is counted in bucket 0 and named "unknown".
-inline constexpr std::size_t messageTypeCount = 23;
-static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::terrainChunks) + 1,
+inline constexpr std::size_t messageTypeCount = 24;
+static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::terrainEdit) + 1,
               "messageTypeCount must be one past the last MessageType");
 
 [[nodiscard]] constexpr std::string_view messageTypeName(const MessageType type) noexcept
@@ -111,6 +114,7 @@ static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::terrainC
     case MessageType::statsSubscribe: return "statsSubscribe";
     case MessageType::serverStats: return "serverStats";
     case MessageType::terrainChunks: return "terrainChunks";
+    case MessageType::terrainEdit: return "terrainEdit";
   }
 
   return "unknown";
@@ -130,6 +134,7 @@ static_assert(messageTypeCount == static_cast<std::size_t>(MessageType::terrainC
     case MessageType::renameAsset:
     case MessageType::removeAsset:
     case MessageType::terrainChunks:
+    case MessageType::terrainEdit:
       return true;
     default:
       return false;
