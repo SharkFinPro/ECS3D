@@ -736,10 +736,9 @@ void AssetBrowserPanel::displayCreateTerrainPopup()
       }
     }
     ImGui::SameLine();
-    ImGui::TextColored(theme::t1, "%s",
-                       request.heightmapPath.empty()
-                         ? "None"
-                         : std::filesystem::path(request.heightmapPath).filename().string().c_str());
+    const std::string imageName =
+      request.heightmapPath.empty() ? "None" : pathToUtf8(pathFromUtf8(request.heightmapPath.c_str()).filename());
+    ImGui::TextColored(theme::t1, "%s", imageName.c_str());
 
     gc::labeledDrag("Height scale (m)", &request.heightScaleMeters, 0.5f);
     ImGui::TextColored(theme::t3, "The footprint follows the image: its size in pixels times the voxel size.");
@@ -747,6 +746,11 @@ void AssetBrowserPanel::displayCreateTerrainPopup()
   else
   {
     gc::labeledDrag("Footprint (m)", &request.footprintMeters, 1.0f);
+  }
+
+  if (const std::string estimate = terrainCreate::estimateText(request); !estimate.empty())
+  {
+    ImGui::TextColored(theme::t3, "%s", estimate.c_str());
   }
 
   if (!m_terrainFlow->error().empty())

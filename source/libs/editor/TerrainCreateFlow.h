@@ -5,7 +5,10 @@
 #include <WorldUnits.h>
 #include <assets/AssetRegistry.h>
 #include <nlohmann/json_fwd.hpp>
+#include <terrain/TerrainAddition.h>
+#include <terrain/TerrainOps.h>
 #include <terrain/TerrainStore.h>
+#include <terrain/TerrainTypes.h>
 #include <terrain/TerrainVolume.h>
 #include <cstdint>
 #include <filesystem>
@@ -58,11 +61,19 @@ namespace terrainCreate {
   inline constexpr float thicknessVoxels = 4.0f;
   inline constexpr uint8_t material = 0;
 
-  // The most chunks a created terrain may hold: what one generator call and one addAsset both accept.
-  [[nodiscard]] int64_t maxChunks();
+  // The most chunks the form creates, since generation runs on the frame that presses Create. Well under what one
+  // generator call (maxEditChunks) and one addAsset (maxAddedTerrainChunks) accept, which the server keeps.
+  inline constexpr int64_t maxCreateChunks = 4096;
+  static_assert(maxCreateChunks <= terrain::maxEditChunks && maxCreateChunks <= terrain::maxAddedTerrainChunks);
 
-  // The largest image, in bytes, read for a heightmap.
-  inline constexpr uintmax_t maxImageFileBytes = 256ull * 1024ull * 1024ull;
+  // A heightmap covers at least one chunk column per 32 x 32 samples, so more samples than this cannot fit.
+  inline constexpr int64_t maxImageSamples = maxCreateChunks * terrain::chunkSize * terrain::chunkSize;
+
+  // The largest image file read: room for a 16-bit RGBA image of the most samples, plus metadata.
+  inline constexpr uintmax_t maxImageFileBytes = static_cast<uintmax_t>(maxImageSamples) * 8u + (1u << 20);
+
+  // The most memory a chunk holds: a distance and a material per sample.
+  inline constexpr int64_t maxChunkBytes = static_cast<int64_t>(terrain::samplesPerChunk) * 3;
 
   [[nodiscard]] inline float worldUnits(const float meters)
   {
@@ -78,12 +89,17 @@ namespace terrainCreate {
   [[nodiscard]] int64_t estimatedChunks(int64_t columns, int64_t rows, float voxelSize, float lowestHeight,
                                         float highestHeight);
 
+  // "About N chunks, up to M MB" for a flat request, the allowed ceiling for a heightmap (whose size is known once its
+  // image is read), and empty when the numbers cannot be sized.
+  [[nodiscard]] std::string estimateText(const TerrainCreateRequest& request);
+
   // The reason a request cannot be created, or nullopt when it can. Checks the name against the registry's terrains
   // and the numbers against the bounds; for a heightmap the image is checked by generateTerrain.
   [[nodiscard]] std::optional<std::string> refusal(const TerrainCreateRequest& request, const AssetRegistry& registry);
 
   // Decodes an 8- or 16-bit image to 16-bit samples (8-bit scaled by 257). A color image is converted to gray.
-  // Refuses an unreadable or unsupported file and one with more than maxSamples samples before decoding it.
+  // Refuses an unreadable or unsupported file, one over maxImageFileBytes and one whose header names more than
+  // maxSamples samples before decoding it, and one whose body is short.
   [[nodiscard]] HeightmapDecode decodeHeightmap(const std::filesystem::path& file, int64_t maxSamples);
 
   // The scene edit that places a created terrain: one batch adding a root object named name with the default

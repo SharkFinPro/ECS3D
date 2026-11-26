@@ -59,12 +59,21 @@ namespace {
 // Shared by the asset browser's import/create and the object tree's "Save as Prefab".
 void EditorApp::onAddAsset(const nlohmann::json& asset)
 {
+  static_cast<void>(addAsset(asset, false));
+}
+
+bool EditorApp::addAsset(const nlohmann::json& asset, const bool requireApplied)
+{
   // Derived before the local apply: the command's before state is the record this registry is about
   // to lose. Same for the two ops below.
   auto command = edits::commandForAddAsset(asset, *m_assetRegistry);
 
-  replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry, *m_terrainStore,
-                                        asset, false);
+  const bool applied = replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
+                                                             *m_terrainStore, asset, false);
+  if (requireApplied && !applied)
+  {
+    return false;
+  }
 
   m_netClient->send(replication::packAddAsset(asset));
 
@@ -78,6 +87,8 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
     m_saveUI->markEdited();
     logUnrecordedEdit("an addAsset");
   }
+
+  return true;
 }
 
 // The terrain asset record goes first, which makes our own store hold an empty volume that takes the generated chunks;
@@ -100,17 +111,28 @@ void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
     throw std::runtime_error("The terrain could not be created.");
   }
 
-  onAddAsset(asset);
-
-  const auto volume = m_terrainStore->find(generated.description.uuid);
-  if (!volume)
+  if (!addAsset(asset, true))
   {
     throw std::runtime_error("The editor did not accept the new terrain.");
   }
 
-  volume->restoreChunks(generated.volume->snapshotChunks());
+  const auto volume = m_terrainStore->find(generated.description.uuid);
+  if (volume)
+  {
+    volume->restoreChunks(generated.volume->snapshotChunks());
+  }
+  else
+  {
+    Log::error(LogCategory::editor, "The editor's terrain store lost the new terrain right after creating it.");
+  }
+
+  if (m_terrainUpload.done())
+  {
+    m_terrainUploadSent = 0;
+  }
+
   m_terrainUpload.add(generated.description.uuid, generated.volume);
-  m_terrainUploadSent = 0;
+  m_createdTerrains[generated.description.uuid] = std::chrono::steady_clock::now();
 
   const auto objectUUID = randomUuid();
 

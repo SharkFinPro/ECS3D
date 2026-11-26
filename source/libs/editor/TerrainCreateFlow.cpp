@@ -1,5 +1,6 @@
 #include "TerrainCreateFlow.h"
 #include "AssetCreateFlow.h"
+#include <ProjectPaths.h>
 #include <Replication.h>
 #include <objects/components/collisions/Terrain.h>
 #include <nlohmann/json.hpp>
@@ -9,6 +10,7 @@
 #include <terrain/TerrainTypes.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <exception>
 #include <fstream>
 #include <limits>
@@ -23,13 +25,27 @@ namespace terrainCreate
 {
   namespace
   {
+    std::string megabytes(const int64_t chunks)
+    {
+      return "about " + std::to_string((chunks * maxChunkBytes + (1 << 20) - 1) / (1 << 20)) + " MB at most";
+    }
+
     // Keeps a footprint far past any bound inside integer arithmetic.
     constexpr int64_t maxColumns = 1ll << 30;
 
     std::string tooLargeMessage(const int64_t chunks)
     {
-      return "That terrain needs about " + std::to_string(chunks) + " chunks; the most one terrain may hold is " +
-             std::to_string(maxChunks()) + ". Use a larger voxel size or a smaller footprint.";
+      return "That terrain needs about " + std::to_string(chunks) + " chunks; the most the editor creates is " +
+             std::to_string(maxCreateChunks) + " (" + megabytes(maxCreateChunks) + "). Use a larger voxel size or a " +
+             "smaller footprint.";
+    }
+
+    std::string meters(const float value)
+    {
+      char text[32];
+      std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(value));
+
+      return text;
     }
 
     bool voxelSizeInBounds(const float voxelSizeMeters)
@@ -37,11 +53,6 @@ namespace terrainCreate
       const float world = worldUnits(voxelSizeMeters);
       return std::isfinite(world) && world >= terrain::minVoxelSize && world <= terrain::maxVoxelSize;
     }
-  }
-
-  int64_t maxChunks()
-  {
-    return std::min<int64_t>(terrain::maxEditChunks, terrain::maxAddedTerrainChunks);
   }
 
   int64_t columnsFor(const float footprintMeters, const float voxelSizeMeters)
@@ -85,6 +96,21 @@ namespace terrainCreate
     return total >= 1.0e18 ? static_cast<int64_t>(1.0e18) : static_cast<int64_t>(total);
   }
 
+  std::string estimateText(const TerrainCreateRequest& request)
+  {
+    if (request.fromHeightmap)
+    {
+      return "Up to " + std::to_string(maxCreateChunks) + " chunks (" + megabytes(maxCreateChunks) + ").";
+    }
+
+    const int64_t columns = columnsFor(request.footprintMeters, request.voxelSizeMeters);
+    const float voxelSize = worldUnits(request.voxelSizeMeters);
+    const float ground = flatGroundVoxels * voxelSize;
+    const int64_t chunks = estimatedChunks(columns, columns, voxelSize, ground, ground);
+
+    return chunks < 1 ? std::string() : "About " + std::to_string(chunks) + " chunks (" + megabytes(chunks) + ").";
+  }
+
   std::optional<std::string> refusal(const TerrainCreateRequest& request, const AssetRegistry& registry)
   {
     if (!AssetCreateFlow::nameIsValid(request.name) || assetNaming::isBlank(request.name))
@@ -100,8 +126,8 @@ namespace terrainCreate
     if (!std::isfinite(request.voxelSizeMeters) || request.voxelSizeMeters <= 0.0f ||
         !voxelSizeInBounds(request.voxelSizeMeters))
     {
-      return "The voxel size must be between " + std::to_string(terrain::minVoxelSize / worldUnitsPerMeter) +
-             " and " + std::to_string(terrain::maxVoxelSize / worldUnitsPerMeter) + " meters.";
+      return "The voxel size must be between " + meters(terrain::minVoxelSize / worldUnitsPerMeter) + " and " +
+             meters(terrain::maxVoxelSize / worldUnitsPerMeter) + " meters.";
     }
 
     if (request.fromHeightmap)
@@ -133,7 +159,7 @@ namespace terrainCreate
     const int64_t columns = columnsFor(request.footprintMeters, request.voxelSizeMeters);
     const float ground = flatGroundVoxels * voxelSize;
 
-    if (const int64_t chunks = estimatedChunks(columns, columns, voxelSize, ground, ground); chunks > maxChunks())
+    if (const int64_t chunks = estimatedChunks(columns, columns, voxelSize, ground, ground); chunks > maxCreateChunks)
     {
       return tooLargeMessage(chunks);
     }
@@ -223,8 +249,8 @@ namespace terrainCreate
 
     if (request.fromHeightmap)
     {
-      auto decoded = decodeHeightmap(std::filesystem::path(request.heightmapPath),
-                                     maxChunks() * terrain::chunkSize * terrain::chunkSize);
+      auto decoded = decodeHeightmap(pathFromUtf8(request.heightmapPath.c_str()),
+                                     maxImageSamples);
       if (!decoded.image)
       {
         return { std::nullopt, decoded.error };
@@ -237,7 +263,7 @@ namespace terrainCreate
       highest = heightScale;
     }
 
-    if (const int64_t chunks = estimatedChunks(columns, rows, voxelSize, lowest, highest); chunks > maxChunks())
+    if (const int64_t chunks = estimatedChunks(columns, rows, voxelSize, lowest, highest); chunks > maxCreateChunks)
     {
       return { std::nullopt, tooLargeMessage(chunks) };
     }

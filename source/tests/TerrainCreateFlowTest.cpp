@@ -3,6 +3,7 @@
 #include "TerrainCreateFlow.h"
 
 #include "TestScene.h"
+#include "ProjectPaths.h"
 #include "PhysicsSystem.h"
 #include "Replication.h"
 #include "WorldUnits.h"
@@ -25,6 +26,7 @@
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +38,12 @@
 #include <string>
 #include <uuid.h>
 #include <vector>
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_STATIC
@@ -74,14 +82,23 @@ namespace {
     return request;
   }
 
+  HeightmapDecode decodeUtf8(const std::string& utf8Path, const int64_t maxSamples)
+  {
+    return terrainCreate::decodeHeightmap(pathFromUtf8(utf8Path.c_str()), maxSamples);
+  }
+
   // Scratch files live in a per-test folder that is removed with the fixture.
   class TerrainCreateHeightmap : public ::testing::Test
   {
   protected:
+    // The folder name carries a non-ASCII character, as a user's folder can: the form hands the path over as UTF-8.
     void SetUp() override
     {
-      m_dir = std::filesystem::temp_directory_path() /
-              ("ecs3d_terrain_create_" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+      const auto* info = testing::UnitTest::GetInstance()->current_test_info();
+      const std::string name = std::string("ecs3d_terrain_create_cafÃ©_") + info->name() + "_" +
+                               std::to_string(processId());
+      m_dir = std::filesystem::temp_directory_path() / pathFromUtf8(name.c_str());
+      std::filesystem::remove_all(m_dir);
       std::filesystem::create_directories(m_dir);
     }
 
@@ -91,14 +108,22 @@ namespace {
       std::filesystem::remove_all(m_dir, ec);
     }
 
+    // UTF-8, the way the file picker reports a path.
     [[nodiscard]] std::string path(const std::string& name) const
     {
-      return (m_dir / name).string();
+      return pathToUtf8(m_dir / name);
+    }
+
+    [[nodiscard]] std::vector<uint8_t> readBytes(const std::string& utf8Path) const
+    {
+      std::ifstream in(pathFromUtf8(utf8Path.c_str()), std::ios::binary);
+
+      return { std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>() };
     }
 
     std::string writeBytes(const std::string& name, const std::vector<uint8_t>& bytes) const
     {
-      std::ofstream out(path(name), std::ios::binary);
+      std::ofstream out(m_dir / name, std::ios::binary);
       out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 
       return path(name);
@@ -177,6 +202,15 @@ namespace {
     }
 
   private:
+    static unsigned long processId()
+    {
+#ifdef _WIN32
+      return static_cast<unsigned long>(_getpid());
+#else
+      return static_cast<unsigned long>(getpid());
+#endif
+    }
+
     static void appendBigEndian(std::vector<uint8_t>& bytes, const uint32_t value)
     {
       for (int shift = 24; shift >= 0; shift -= 8)
@@ -297,7 +331,7 @@ TEST(TerrainCreateValidation, TheVoxelSizeIsBoundedAfterTheUnitConversion)
 
   // The control: a size just inside each bound passes the voxel check (the footprint is raised to hold a voxel).
   request.voxelSizeMeters = terrain::minVoxelSize / worldUnitsPerMeter * 2.0f;
-  request.footprintMeters = 1.0f;
+  request.footprintMeters = 0.5f;
   EXPECT_FALSE(terrainCreate::refusal(request, registry).has_value());
 
   request.voxelSizeMeters = terrain::maxVoxelSize / worldUnitsPerMeter * 0.5f;
@@ -319,16 +353,21 @@ TEST(TerrainCreateValidation, AFootprintPastTheChunkBoundIsRefusedBeforeAnything
 {
   const auto registry = registryWithExistingTerrain();
 
-  // A flat terrain at the default voxel size is one chunk tall: 4096 columns a side is exactly the bound.
+  // A flat terrain at the default voxel size is one chunk tall: 2048 columns a side is exactly 4096 chunks.
+  auto big = validFlat();
+  big.footprintMeters = 512.0f;
+  EXPECT_FALSE(terrainCreate::refusal(big, registry).has_value());
+
   auto atBound = validFlat();
-  atBound.footprintMeters = 4096.0f * atBound.voxelSizeMeters;
+  atBound.footprintMeters = 2048.0f * atBound.voxelSizeMeters;
   EXPECT_FALSE(terrainCreate::refusal(atBound, registry).has_value());
 
   auto past = validFlat();
-  past.footprintMeters = 4160.0f * past.voxelSizeMeters;
+  past.footprintMeters = 2112.0f * past.voxelSizeMeters;
   const auto reason = terrainCreate::refusal(past, registry);
   ASSERT_TRUE(reason.has_value());
   EXPECT_NE(reason->find("chunks"), std::string::npos);
+  EXPECT_NE(reason->find("4096"), std::string::npos);
 
   const auto generated = terrainCreate::generateTerrain(past, registry, newTerrainUUID);
   EXPECT_FALSE(generated.terrain.has_value());
@@ -396,7 +435,7 @@ TEST_F(TerrainCreateHeightmap, AnEightBitImageDecodesScaledToSixteenBits)
 {
   const auto file = writePng8("eight.png", 4, 2, 1, { 0, 1, 128, 255, 10, 20, 30, 40 });
 
-  const auto decoded = terrainCreate::decodeHeightmap(file, 1000);
+  const auto decoded = decodeUtf8(file, 1000);
   ASSERT_TRUE(decoded.image.has_value()) << decoded.error;
   EXPECT_EQ(decoded.image->width, 4);
   EXPECT_EQ(decoded.image->height, 2);
@@ -410,7 +449,7 @@ TEST_F(TerrainCreateHeightmap, ASixteenBitImageKeepsItsValues)
   const std::vector<uint16_t> samples = { 0, 1, 255, 256, 40000, 65534, 65535, 12345, 777 };
   const auto file = writePng16("sixteen.png", 3, 3, samples);
 
-  const auto decoded = terrainCreate::decodeHeightmap(file, 1000);
+  const auto decoded = decodeUtf8(file, 1000);
   ASSERT_TRUE(decoded.image.has_value()) << decoded.error;
   EXPECT_EQ(decoded.image->width, 3);
   EXPECT_EQ(decoded.image->height, 3);
@@ -421,7 +460,7 @@ TEST_F(TerrainCreateHeightmap, AColorImageIsConvertedToGray)
 {
   const auto file = writePng8("color.png", 2, 1, 3, { 255, 255, 255, 0, 0, 0 });
 
-  const auto decoded = terrainCreate::decodeHeightmap(file, 1000);
+  const auto decoded = decodeUtf8(file, 1000);
   ASSERT_TRUE(decoded.image.has_value()) << decoded.error;
   ASSERT_EQ(decoded.image->pixels.size(), 2u);
   EXPECT_EQ(decoded.image->pixels[0], 65535);
@@ -432,27 +471,27 @@ TEST_F(TerrainCreateHeightmap, AnImageOverTheSampleLimitIsRefusedBeforeItIsDecod
 {
   const auto file = writePng8("big.png", 64, 64, 1, std::vector<uint8_t>(64 * 64, 7));
 
-  const auto refused = terrainCreate::decodeHeightmap(file, 64 * 64 - 1);
+  const auto refused = decodeUtf8(file, 64 * 64 - 1);
   EXPECT_FALSE(refused.image.has_value());
   EXPECT_NE(refused.error.find("64 x 64"), std::string::npos);
 
-  const auto accepted = terrainCreate::decodeHeightmap(file, 64 * 64);
+  const auto accepted = decodeUtf8(file, 64 * 64);
   ASSERT_TRUE(accepted.image.has_value()) << accepted.error;
   EXPECT_EQ(accepted.image->pixels.size(), 64u * 64u);
 }
 
 TEST_F(TerrainCreateHeightmap, AMissingEmptyOrNonImageFileIsRefused)
 {
-  EXPECT_FALSE(terrainCreate::decodeHeightmap(path("missing.png"), 1000).image.has_value());
-  EXPECT_FALSE(terrainCreate::decodeHeightmap(writeBytes("empty.png", {}), 1000).image.has_value());
+  EXPECT_FALSE(decodeUtf8(path("missing.png"), 1000).image.has_value());
+  EXPECT_FALSE(decodeUtf8(writeBytes("empty.png", {}), 1000).image.has_value());
 
   const std::string text = "this is not an image";
   const auto notImage = writeBytes("text.png", std::vector<uint8_t>(text.begin(), text.end()));
-  const auto refused = terrainCreate::decodeHeightmap(notImage, 1000);
+  const auto refused = decodeUtf8(notImage, 1000);
   EXPECT_FALSE(refused.image.has_value());
   EXPECT_FALSE(refused.error.empty());
 
-  EXPECT_TRUE(terrainCreate::decodeHeightmap(writePng8("ok.png", 2, 2, 1, { 1, 2, 3, 4 }), 1000).image.has_value());
+  EXPECT_TRUE(decodeUtf8(writePng8("ok.png", 2, 2, 1, { 1, 2, 3, 4 }), 1000).image.has_value());
 }
 
 TEST_F(TerrainCreateHeightmap, AHeightmapTerrainFollowsTheImageAndItsHeights)
@@ -503,6 +542,116 @@ TEST_F(TerrainCreateHeightmap, AHeightScaleThatNeedsTooManyChunksIsRefusedAndASm
   const auto tall = terrainCreate::generateTerrain(request, registry, newTerrainUUID);
   EXPECT_FALSE(tall.terrain.has_value());
   EXPECT_NE(tall.error.find("chunks"), std::string::npos);
+}
+
+TEST_F(TerrainCreateHeightmap, AnImageAtTheChunkBoundIsCreatedAndOneColumnWiderIsRefused)
+{
+  auto request = validFlat();
+  request.fromHeightmap = true;
+  const auto registry = registryWithExistingTerrain();
+
+  // 1024 x 1024 at 32 m over 0.5 m voxels is four chunks tall: exactly 4096 chunks.
+  request.heightmapPath = writePng8("bound.png", 1024, 1024, 1, std::vector<uint8_t>(1024 * 1024, 200));
+  const auto atBound = terrainCreate::generateTerrain(request, registry, newTerrainUUID);
+  ASSERT_TRUE(atBound.terrain.has_value()) << atBound.error;
+  EXPECT_LE(atBound.terrain->description.chunkCount, terrainCreate::maxCreateChunks);
+
+  request.heightmapPath = writePng8("past.png", 1025, 1024, 1, std::vector<uint8_t>(1025 * 1024, 200));
+  const auto past = terrainCreate::generateTerrain(request, registry, newTerrainUUID);
+  EXPECT_FALSE(past.terrain.has_value());
+  EXPECT_NE(past.error.find("4096"), std::string::npos);
+}
+
+TEST_F(TerrainCreateHeightmap, AHeaderNamingTooManySamplesIsRefusedWithoutDecodingTheBody)
+{
+  auto bytes = readBytes(writePng8("small2.png", 4, 4, 1, std::vector<uint8_t>(16, 9)));
+  ASSERT_GT(bytes.size(), 24u);
+
+  // IHDR width and height sit at offsets 16 and 20; stb does not check the chunk's CRC.
+  const auto setDimension = [&bytes](const size_t offset, const uint32_t value) {
+    bytes[offset] = static_cast<uint8_t>(value >> 24);
+    bytes[offset + 1] = static_cast<uint8_t>(value >> 16);
+    bytes[offset + 2] = static_cast<uint8_t>(value >> 8);
+    bytes[offset + 3] = static_cast<uint8_t>(value);
+  };
+
+  setDimension(16, 20000);
+  setDimension(20, 20000);
+  const auto huge = decodeUtf8(writeBytes("huge.png", bytes), terrainCreate::maxImageSamples);
+  EXPECT_FALSE(huge.image.has_value());
+  EXPECT_NE(huge.error.find("too large"), std::string::npos);
+
+  // The control: a header inside the limit gets past that check, and then fails on its short body.
+  setDimension(16, 1024);
+  setDimension(20, 1024);
+  const auto claimsLarge = decodeUtf8(writeBytes("claims.png", bytes),
+                                                         terrainCreate::maxImageSamples);
+  EXPECT_FALSE(claimsLarge.image.has_value());
+  EXPECT_EQ(claimsLarge.error.find("too large"), std::string::npos);
+  EXPECT_FALSE(claimsLarge.error.empty());
+}
+
+TEST_F(TerrainCreateHeightmap, ATruncatedImageWithAValidHeaderIsRefused)
+{
+  std::vector<uint8_t> noisy(128 * 128);
+  uint32_t seed = 12345;
+  for (auto& value : noisy)
+  {
+    seed = seed * 1664525u + 1013904223u;
+    value = static_cast<uint8_t>(seed >> 24);
+  }
+
+  const auto full = readBytes(writePng8("whole.png", 128, 128, 1, noisy));
+  ASSERT_GT(full.size(), 2000u);
+
+  EXPECT_TRUE(decodeUtf8(path("whole.png"), terrainCreate::maxImageSamples).image.has_value());
+
+  const std::vector<uint8_t> cut(full.begin(), full.begin() + static_cast<std::ptrdiff_t>(full.size() / 2));
+  const auto refused = decodeUtf8(writeBytes("cut.png", cut), terrainCreate::maxImageSamples);
+  EXPECT_FALSE(refused.image.has_value());
+  EXPECT_FALSE(refused.error.empty());
+}
+
+TEST_F(TerrainCreateHeightmap, ANonAsciiFolderNameIsReadAsUtf8)
+{
+  const auto file = writePng8("utf8.png", 2, 2, 1, { 1, 2, 3, 4 });
+  ASSERT_NE(file.find("cafÃ©"), std::string::npos);
+
+  auto request = validFlat();
+  request.fromHeightmap = true;
+  request.heightmapPath = file;
+
+  const auto result = terrainCreate::generateTerrain(request, registryWithExistingTerrain(), newTerrainUUID);
+  EXPECT_TRUE(result.terrain.has_value()) << result.error;
+
+  request.heightmapPath = path("missing.png");
+  EXPECT_FALSE(terrainCreate::generateTerrain(request, registryWithExistingTerrain(), newTerrainUUID).terrain
+                 .has_value());
+}
+
+TEST(TerrainCreateEstimate, TheFormShowsTheChunkCountAndAMemoryCeiling)
+{
+  auto request = validFlat();
+  request.footprintMeters = 512.0f;
+  const auto text = terrainCreate::estimateText(request);
+  EXPECT_NE(text.find("1024 chunks"), std::string::npos) << text;
+  EXPECT_NE(text.find("MB"), std::string::npos);
+
+  request.fromHeightmap = true;
+  EXPECT_NE(terrainCreate::estimateText(request).find("4096"), std::string::npos);
+
+  request.fromHeightmap = false;
+  request.footprintMeters = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_TRUE(terrainCreate::estimateText(request).empty());
+}
+
+TEST(TerrainCreateValidation, TheVoxelSizeRefusalNamesTheBoundsWithoutTrailingZeros)
+{
+  auto request = validFlat();
+  request.voxelSizeMeters = 0.0f;
+  const auto reason = terrainCreate::refusal(request, registryWithExistingTerrain());
+  ASSERT_TRUE(reason.has_value());
+  EXPECT_NE(reason->find("0.0002 and 200 meters"), std::string::npos) << *reason;
 }
 
 TEST(TerrainCreateFlowState, TheTemplateGateAsksForSaveAsOnlyWhenWritesAreBlocked)

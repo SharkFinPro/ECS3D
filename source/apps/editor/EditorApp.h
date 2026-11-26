@@ -30,6 +30,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -149,6 +150,8 @@ private:
   // The server resets its terrain on loadProject; the opened project's chunks reach it through this.
   terrain::TerrainUpload m_terrainUpload;
   size_t m_terrainUploadSent = 0;
+  // Terrains created here, with when: a snapshot older than the server's reply does not list them yet.
+  std::map<uuids::uuid, std::chrono::steady_clock::time_point> m_createdTerrains;
   std::optional<uuids::uuid> m_placedTerrainObject;
   std::chrono::steady_clock::time_point m_placedTerrainDeadline;
   std::chrono::steady_clock::time_point m_lastTerrainUploadPump;
@@ -309,8 +312,13 @@ private:
 
   void onAddAsset(const nlohmann::json& asset);
 
+  // Applies the asset locally and sends it. With requireApplied, a local refusal sends and records nothing and the
+  // result is false; without it the asset is always sent, as every other asset path does.
+  bool addAsset(const nlohmann::json& asset, bool requireApplied);
+
   // Announces a generated terrain, queues its chunks for upload and places an object for it in the scene. Throws
-  // before sending anything when the terrain cannot be created.
+  // std::runtime_error, with nothing sent, when there is no active scene, the description is unusable, or the
+  // editor refuses the asset. Once the asset is sent it does not throw.
   void onCreateTerrain(GeneratedTerrain&& generated);
 
   // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.
@@ -346,6 +354,8 @@ private:
 
   // Sends one frame's share of the opened project's terrain to the server.
   void pumpTerrainUpload();
+
+  void dropStaleTerrainUploads();
 
   void handleStateDelta(const net::Message& message) const;
 

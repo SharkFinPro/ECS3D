@@ -146,15 +146,20 @@ heightmap's footprint is its image size times the voxel size, and it adds an ima
 meters). Sizes are authored in meters and converted at `worldUnitsPerMeter` (`WorldUnits.h`, which
 `PhysicsSystem::unitsPerMeter` reads). The headless `TerrainCreateFlow.h` holds the request, its validation (a free
 terrain display name, finite positive numbers, the voxel size inside `minVoxelSize`/`maxVoxelSize` after conversion,
-and a chunk estimate within the smaller of `maxEditChunks` and `maxAddedTerrainChunks`, refused before anything is
-allocated), the heightmap decode (`stbi_load_16` forced to one channel; 8-bit scaled by 257) and the generated volume
+and a chunk estimate within `maxCreateChunks` (4096, well under the server's `maxEditChunks` and
+`maxAddedTerrainChunks` bounds, which stay: generation runs on the frame Create is pressed), refused before anything
+is allocated; the form shows the estimated chunks and a memory ceiling, and the image sample and file-size limits derive
+from the same cap), the heightmap decode (`stbi_load_16` forced to one channel; 8-bit scaled by 257) and the generated volume
 (`fillFlat` over a few voxels of solid, or `fillFromHeightmap`, with an empty palette like every other terrain
 description). Create sends the terrain through `EditorApp::onCreateTerrain`: the addAsset built by
 `terrain::addTerrainAssetJson` (plus the display name) goes through `onAddAsset`, so the editor's own store gets the
 empty volume; the generated chunks are restored into it and queued on `m_terrainUpload` for the server; a
 `terrainCreate::placementEdit` batch (a root object with a Terrain component) goes through `onSceneEdit` so it is
 recorded for undo, and the object is selected once the server's rebroadcast brings it in. The asset record itself is
-not undoable. On an untitled template the menu item calls `SaveUI::blockAssetWrites` instead (`TerrainCreateFlow::gate`),
+not undoable. A local refusal of the asset sends nothing. A picked path is UTF-8 (`pathFromUtf8`). A queued upload
+whose terrain a later snapshot no longer holds (the server refused it) is dropped with a warning
+(`terrain::forgetUnknownTerrains`), except within a few seconds of the create, since an older snapshot does not list
+it yet; another editor's project load clears the queue. On an untitled template the menu item calls `SaveUI::blockAssetWrites` instead (`TerrainCreateFlow::gate`),
 since the terrain would have no folder to be saved into; a generation or decode error shows in the form and leaves
 nothing created.
 
