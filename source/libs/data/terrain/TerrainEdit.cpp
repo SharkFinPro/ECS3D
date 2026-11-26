@@ -70,8 +70,7 @@ namespace terrain
         const auto hash = reader.read<uint64_t>();
         const auto size = reader.read<uint32_t>();
 
-        if (!isValidChunkCoord(entry.coord) || size == 0 || size > maxEncodedChunkBytes ||
-            !seen.insert(entry.coord).second)
+        if (!isValidChunkCoord(entry.coord) || size > maxEncodedChunkBytes || !seen.insert(entry.coord).second)
         {
           return false;
         }

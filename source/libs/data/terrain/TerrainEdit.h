@@ -51,8 +51,8 @@ namespace terrain
 
   // nullopt for any malformed payload: wrong message type, truncated, nil uuid, an unknown kind, a brush a reader
   // cannot trust, an empty redistance box, a setChunks count of 0, above maxTerrainChunksEntries or one the remaining
-  // bytes cannot hold, a coordinate beyond maxChunkCoord or repeated in one message, a size of 0 or over
-  // maxEncodedChunkBytes, bytes decodeChunk refuses, a decoded chunk whose hash() differs from the entry's hash, or
+  // bytes cannot hold, a coordinate beyond maxChunkCoord or repeated in one message, a size over maxEncodedChunkBytes,
+  // bytes decodeChunk refuses (an empty entry included), a decoded chunk whose hash() differs from the entry's hash, or
   // trailing bytes. Limits that depend on the volume (brush radius, box size) are the apply step's to enforce.
   [[nodiscard]] std::optional<TerrainEditPayload> unpackTerrainEdit(const net::Message& message);
 }

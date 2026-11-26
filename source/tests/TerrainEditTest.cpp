@@ -267,12 +267,19 @@ TEST(TerrainEdit, RefusesANilTerrainUuid)
 
 TEST(TerrainEdit, RefusesAnUnknownKind)
 {
-  const net::Message good = terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox());
-  EXPECT_TRUE(accepted(good));
+  EXPECT_TRUE(accepted(terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox())));
+
+  // Header only, so a kind the parser skipped past would leave nothing else to refuse the message.
+  net::Message header(net::MessageType::terrainEdit);
+  header.write(terrainUUID);
+  header.write(strokeId);
+  header.write(static_cast<uint8_t>(terrain::TerrainEditKind::setChunks));
+  const auto headerOnly = bytesOf(header);
+  ASSERT_EQ(headerOnly.size(), headerBytes);
 
   for (const uint8_t kind : { uint8_t{ 3 }, uint8_t{ 4 }, uint8_t{ 255 } })
   {
-    auto bytes = bytesOf(good);
+    auto bytes = headerOnly;
     bytes[headerBytes - 1] = kind;
     EXPECT_FALSE(accepted(net::Message(net::MessageType::terrainEdit, bytes))) << static_cast<int>(kind);
   }
@@ -338,10 +345,12 @@ TEST(TerrainEdit, RefusesASetChunksCountAboveTheLimit)
   EXPECT_FALSE(accepted(rawSetChunks(entries)));
 }
 
-TEST(TerrainEdit, RefusesACountTheRemainingBytesCannotHold)
+// The up-front bound on the count only limits the reserve; the entry loop refuses a short message on its own.
+TEST(TerrainEdit, RefusesACountLargerThanTheEntriesPresent)
 {
   EXPECT_TRUE(accepted(rawSetChunks(1, { validRaw() })));
   EXPECT_FALSE(accepted(rawSetChunks(2, { validRaw() })));
+  EXPECT_FALSE(accepted(rawSetChunks(static_cast<uint32_t>(terrain::maxTerrainChunksEntries), { validRaw() })));
   EXPECT_FALSE(accepted(rawSetChunks(0xFFFFFFFFu, { validRaw() })));
 }
 
@@ -360,7 +369,7 @@ TEST(TerrainEdit, RefusesARepeatedCoordinate)
   EXPECT_FALSE(accepted(rawSetChunks({ validRaw({ 1, 2, 3 }), validRaw({ 1, 2, 3 }) })));
 }
 
-TEST(TerrainEdit, RefusesAnEntrySizeOfZeroOrAboveTheLimit)
+TEST(TerrainEdit, RefusesAnEmptyEntryAnOverlongEntryOrOneSizedPastTheEnd)
 {
   EXPECT_TRUE(accepted(rawSetChunks({ validRaw() })));
 
@@ -369,14 +378,39 @@ TEST(TerrainEdit, RefusesAnEntrySizeOfZeroOrAboveTheLimit)
   empty.bytes.clear();
   EXPECT_FALSE(accepted(rawSetChunks({ empty })));
 
-  RawEntry oversized = validRaw();
-  oversized.size = static_cast<uint32_t>(terrain::maxEncodedChunkBytes + 1);
-  oversized.bytes.resize(oversized.size, 0);
-  EXPECT_FALSE(accepted(rawSetChunks({ oversized })));
-
   RawEntry pastTheEnd = validRaw();
   pastTheEnd.size = static_cast<uint32_t>(pastTheEnd.bytes.size() + 1);
   EXPECT_FALSE(accepted(rawSetChunks({ pastTheEnd })));
+}
+
+TEST(TerrainEdit, RefusesAStreamTheCodecAcceptsButLongerThanTheEncoderCanWrite)
+{
+  // Every sample as its own one-value literal run: a valid stream, but longer than any encodeChunk output.
+  std::vector<uint8_t> stream{ 1 };
+  const auto samples = static_cast<size_t>(terrain::samplesPerChunk);
+
+  for (size_t i = 0; i < samples; ++i)
+  {
+    stream.insert(stream.end(), { 0, 0, 0 });
+  }
+
+  for (size_t i = 0; i < samples; ++i)
+  {
+    stream.insert(stream.end(), { 0, 1 });
+  }
+
+  ASSERT_GT(stream.size(), terrain::maxEncodedChunkBytes);
+
+  const auto decoded = terrain::decodeChunk(stream);
+  ASSERT_NE(decoded, nullptr);
+
+  const auto expected = terrain::TerrainChunk::dense(std::vector<int16_t>(samples, 0), std::vector<uint8_t>(samples, 1));
+  ASSERT_EQ(decoded->hash(), expected->hash());
+
+  RawEntry overlong{ { 1, 2, 3 }, decoded->hash(), static_cast<uint32_t>(stream.size()), stream };
+  EXPECT_FALSE(accepted(rawSetChunks({ overlong })));
+
+  EXPECT_TRUE(accepted(rawSetChunks({ rawFor({ 1, 2, 3 }, decoded) })));
 }
 
 TEST(TerrainEdit, RefusesBytesTheCodecRefuses)
