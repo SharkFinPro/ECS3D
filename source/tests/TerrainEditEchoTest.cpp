@@ -380,3 +380,35 @@ TEST(TerrainEditEchoTest, TheByteBudgetBoundaryIsInclusive)
   EXPECT_EQ(splits.messages[0].payload.entries.size(), 1u);
   EXPECT_EQ(splits.messages[1].payload.entries.size(), 1u);
 }
+
+TEST(TerrainEditEchoTest, ClearDropsEditsAndRequestsSoNothingIsSent)
+{
+  terrain::TerrainStore store;
+  makeTerrain(store);
+  const std::vector<ChunkCoord> edited{ { 0, 0, 0 } };
+  const std::vector<ChunkCoord> requested{ { 1, 0, 0 } };
+  serverSet(store, edited[0], noise(1));
+  serverSet(store, requested[0], noise(2));
+
+  terrain::TerrainEditEcho echo;
+  echo.recordEdit(terrainA, edited, 1);
+  echo.requestFull(terrainA, requested, 2);
+  ASSERT_TRUE(echo.pending());
+
+  // Positive control: what clear drops is otherwise sent.
+  terrain::TerrainEditEcho control = echo;
+  Recorder sent;
+  flush(control, store, sent);
+  EXPECT_EQ(chunkTotal(sent.messages), 3u);
+
+  echo.clear();
+
+  EXPECT_FALSE(echo.pending());
+  Recorder recorder;
+  flush(echo, store, recorder);
+  EXPECT_TRUE(recorder.messages.empty());
+
+  // The echo records again after a clear.
+  echo.recordEdit(terrainA, edited, 1);
+  EXPECT_TRUE(echo.pending());
+}

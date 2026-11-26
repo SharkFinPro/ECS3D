@@ -121,6 +121,12 @@ namespace terrain
     }
   }
 
+  void TerrainEditEcho::clear()
+  {
+    m_edits.clear();
+    m_requests.clear();
+  }
+
   bool TerrainEditEcho::pending() const
   {
     return !m_edits.empty() || !m_requests.empty();

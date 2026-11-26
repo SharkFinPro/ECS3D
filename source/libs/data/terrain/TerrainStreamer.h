@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <span>
 #include <uuid.h>
 #include <vector>
@@ -81,6 +82,15 @@ namespace terrain
     std::map<int32_t, Connection> m_connections;
     std::vector<StreamFinished> m_finished;
   };
+
+  using VolumeSnapshot = std::map<uuids::uuid, std::shared_ptr<const TerrainVolume>>;
+
+  // The volume each terrain in the store holds right now, to compare against after something that may replace them.
+  [[nodiscard]] VolumeSnapshot captureVolumes(const TerrainStore& store);
+
+  // The terrains added, removed or whose volume object changed between before and the store now, in uuid order: the
+  // ones whose streams need restarting.
+  [[nodiscard]] std::vector<uuids::uuid> replacedVolumes(const VolumeSnapshot& before, const TerrainStore& store);
 }
 
 #endif //TERRAINSTREAMER_H

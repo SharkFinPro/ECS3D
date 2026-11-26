@@ -460,3 +460,81 @@ TEST(TerrainStreamerTest, ForgettingAConnectionDropsItsPendingFinishReport)
   ASSERT_EQ(finished.size(), 1u);
   EXPECT_EQ(finished.front().connId, 2);
 }
+
+TEST(TerrainVolumeSnapshotTest, AnUnchangedStoreReplacesNothing)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 2);
+  addTerrain(store, terrainB, 2);
+
+  const auto before = terrain::captureVolumes(store);
+
+  EXPECT_EQ(before.size(), 2u);
+  EXPECT_TRUE(terrain::replacedVolumes(before, store).empty());
+
+  // Changing a chunk inside the same volume is not a replacement.
+  store.find(terrainA)->setChunk({ 0, 0, 0 }, solid());
+  EXPECT_TRUE(terrain::replacedVolumes(before, store).empty());
+}
+
+TEST(TerrainVolumeSnapshotTest, AnAddedTerrainIsReplaced)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 2);
+
+  const auto before = terrain::captureVolumes(store);
+  addTerrain(store, terrainB, 2);
+
+  EXPECT_EQ(terrain::replacedVolumes(before, store), std::vector<uuids::uuid>{ terrainB });
+}
+
+TEST(TerrainVolumeSnapshotTest, ARemovedTerrainIsReplaced)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 2);
+  addTerrain(store, terrainB, 2);
+
+  const auto before = terrain::captureVolumes(store);
+  ASSERT_TRUE(store.remove(terrainA));
+
+  EXPECT_EQ(terrain::replacedVolumes(before, store), std::vector<uuids::uuid>{ terrainA });
+}
+
+TEST(TerrainVolumeSnapshotTest, ARemoveAndReAddUnderOneUuidIsReplaced)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 2);
+  addTerrain(store, terrainB, 2);
+
+  const auto before = terrain::captureVolumes(store);
+  ASSERT_TRUE(store.remove(terrainA));
+  ASSERT_NE(store.create({ .uuid = terrainA }), nullptr);
+
+  EXPECT_EQ(terrain::replacedVolumes(before, store), std::vector<uuids::uuid>{ terrainA });
+}
+
+TEST(TerrainVolumeSnapshotTest, ResetVolumesReplacesEveryTerrainInUuidOrder)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainB, 2);
+  addTerrain(store, terrainA, 2);
+
+  const auto before = terrain::captureVolumes(store);
+  store.resetVolumes();
+
+  const std::vector<uuids::uuid> expected{ terrainA, terrainB };
+  EXPECT_EQ(terrain::replacedVolumes(before, store), expected);
+}
+
+TEST(TerrainVolumeSnapshotTest, AnAddAndARemoveTogetherListBoth)
+{
+  terrain::TerrainStore store;
+  addTerrain(store, terrainA, 2);
+
+  const auto before = terrain::captureVolumes(store);
+  ASSERT_TRUE(store.remove(terrainA));
+  addTerrain(store, terrainB, 2);
+
+  const std::vector<uuids::uuid> expected{ terrainA, terrainB };
+  EXPECT_EQ(terrain::replacedVolumes(before, store), expected);
+}

@@ -1,6 +1,7 @@
 #include "TerrainStreamer.h"
 #include "TerrainReplication.h"
 #include <exception>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -247,5 +248,41 @@ namespace terrain
 
       ++it;
     }
+  }
+
+  VolumeSnapshot captureVolumes(const TerrainStore& store)
+  {
+    VolumeSnapshot snapshot;
+
+    for (const uuids::uuid& uuid : store.terrains())
+    {
+      snapshot.emplace(uuid, store.find(uuid));
+    }
+
+    return snapshot;
+  }
+
+  std::vector<uuids::uuid> replacedVolumes(const VolumeSnapshot& before, const TerrainStore& store)
+  {
+    std::set<uuids::uuid> replaced;
+
+    for (const uuids::uuid& uuid : store.terrains())
+    {
+      const auto held = before.find(uuid);
+      if (held == before.end() || held->second != store.find(uuid))
+      {
+        replaced.insert(uuid);
+      }
+    }
+
+    for (const auto& entry : before)
+    {
+      if (!store.find(entry.first))
+      {
+        replaced.insert(entry.first);
+      }
+    }
+
+    return { replaced.begin(), replaced.end() };
   }
 }

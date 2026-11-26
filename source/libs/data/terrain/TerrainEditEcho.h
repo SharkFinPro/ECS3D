@@ -38,6 +38,9 @@ namespace terrain
     // else in full at the next flush, since no remaining connection predicted the edit.
     void forget(int32_t connId);
 
+    // Drops every recorded edit and request, for a project load that replaces the volumes they describe.
+    void clear();
+
     [[nodiscard]] bool pending() const;
 
     // Sends every recorded chunk's current store state once to each listed connection - hash-only to a connection
