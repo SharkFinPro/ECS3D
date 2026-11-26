@@ -83,11 +83,12 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
 }
 
 // Performs a stroke's applications against the editor's own volume and sends each one as a terrainEdit, so the view
-// predicts what the server will compute. The store's revisions are never touched. While the stroke is active the
-// view holds touched() out of the server's echo (TerrainViewSync::apply), since the echo describes a server that is
-// behind the prediction; the hold ends with the stroke. At release the session asks the server for the final state of
-// every touched chunk, which arrives after the redistance and replaces the prediction with the confirmed chunks and
-// their revisions; an echo already in flight may apply briefly before they arrive.
+// predicts what the server will compute. The store's revisions are never touched. The view holds the stroke's touched
+// chunks out of the server's echo (TerrainViewSync::apply), since the echo describes a server that is behind the
+// prediction. At release the session asks the server for the final state of every touched chunk, and the hold lasts
+// until that answer arrives: an echo flushed between the server's last brush and its redistance still describes the
+// unfinished stroke. The answer arrives after the redistance and replaces the prediction with the confirmed chunks and
+// their revisions.
 class TerrainBrushSession
 {
 public:
@@ -115,10 +116,41 @@ public:
   }
 
   // The hold for an echo message about the given terrain: the touched chunks while a stroke of that terrain is
-  // active, otherwise none.
-  [[nodiscard]] const terrain::ChunkHold* holdFor(const uuids::uuid& terrainUuid) const
+  // active, plus the chunks of a released stroke whose final state has not arrived; none when there are neither.
+  [[nodiscard]] const terrain::ChunkHold* holdFor(const uuids::uuid& terrainUuid)
   {
-    return m_stroke.active() && terrainUuid == m_terrain ? &m_stroke.touched() : nullptr;
+    if (terrainUuid != m_terrain || (!m_stroke.active() && m_awaiting.empty()))
+    {
+      return nullptr;
+    }
+
+    m_hold = m_awaiting;
+    m_hold.insert(m_stroke.touched().begin(), m_stroke.touched().end());
+    return &m_hold;
+  }
+
+  // Call with each terrainChunks message before applying it: a chunk the server sent in full ends the wait for that
+  // chunk, so the message about to be applied replaces the prediction. Hash-only entries (an echo of an edit the view
+  // predicted) leave the wait alone.
+  void confirmChunks(const terrain::TerrainChunksPayload& payload)
+  {
+    if (payload.terrain != m_terrain)
+    {
+      return;
+    }
+
+    for (const terrain::ReceivedChunk& entry : payload.entries)
+    {
+      if (entry.chunk)
+      {
+        m_awaiting.erase(entry.coord);
+      }
+    }
+  }
+
+  [[nodiscard]] bool awaitingFinalChunks() const
+  {
+    return !m_awaiting.empty();
   }
 
   // Starts a stroke and performs its first application. False, with nothing sent, when a stroke is already active,
@@ -132,6 +164,11 @@ public:
     }
 
     templateOp.radius = effectiveBrushRadius(templateOp.radius, *volume);
+
+    if (terrainUuid != m_terrain)
+    {
+      m_awaiting.clear();
+    }
 
     m_terrain = terrainUuid;
     m_volume = volume;
@@ -257,6 +294,7 @@ public:
   {
     static_cast<void>(m_stroke.end());
     m_volume.reset();
+    m_awaiting.clear();
   }
 
 private:
@@ -292,6 +330,7 @@ private:
     if (commitLocally)
     {
       requestFinalChunks(touched, send);
+      m_awaiting.insert(touched.begin(), touched.end());
     }
 
     return finished;
@@ -332,6 +371,9 @@ private:
   TerrainStroke m_stroke;
   uuids::uuid m_terrain;
   std::shared_ptr<terrain::TerrainVolume> m_volume;
+  // Chunks of a released stroke of m_terrain that were requested and have not arrived in full.
+  terrain::ChunkHold m_awaiting;
+  terrain::ChunkHold m_hold;
   uint64_t m_nextStrokeId = 1;
 };
 
