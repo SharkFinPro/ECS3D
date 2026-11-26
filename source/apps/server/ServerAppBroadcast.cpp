@@ -11,6 +11,7 @@
 #include <objects/components/Component.h>
 #include <objects/Object.h>
 #include <terrain/TerrainStore.h>
+#include <terrain/TerrainStreamer.h>
 #include <ProfileScope.h>
 #include <ScriptSystem.h>
 #include "StructuralChanges.h"
@@ -43,7 +44,7 @@ namespace {
   }
 }
 
-net::Message ServerApp::buildSnapshot(uint32_t& buildMicros) const
+net::Message ServerApp::buildSnapshot(uint32_t& buildMicros)
 {
   ECS3D_PROFILE_SCOPE("Snapshot");
 
@@ -76,7 +77,15 @@ net::Message ServerApp::buildSnapshot(uint32_t& buildMicros) const
     Log::error(LogCategory::server, std::string("Script class assets were not registered: ") + e.what());
   }
 
+  // A terrain added, dropped or re-added here changes its volume without a restart of the join streams.
+  const auto volumesBefore = terrain::captureVolumes(*m_terrainStore);
   m_terrainStore->reconcile(*m_assetRegistry);
+
+  for (const auto& uuid : terrain::replacedVolumes(volumesBefore, *m_terrainStore))
+  {
+    m_terrainStreamer.restart(uuid, *m_terrainStore, terrainOriginFocus());
+    m_terrainEcho.forgetTerrain(uuid);
+  }
 
   // Binary snapshot: ProjectPacker writes the same project state ProjectSerializer::serialize would,
   // but tightly packed instead of JSON. ProjectSerializer stays the JSON path for file save/load.
@@ -88,7 +97,7 @@ net::Message ServerApp::buildSnapshot(uint32_t& buildMicros) const
   return message;
 }
 
-void ServerApp::broadcastSnapshot(const net::SnapshotReason reason) const
+void ServerApp::broadcastSnapshot(const net::SnapshotReason reason)
 {
   uint32_t buildMicros = 0;
   const auto message = buildSnapshot(buildMicros);
@@ -105,7 +114,7 @@ void ServerApp::broadcastSnapshot(const net::SnapshotReason reason) const
   broadcastSceneStatus();
 }
 
-void ServerApp::sendJoinReply(const int32_t connId) const
+void ServerApp::sendJoinReply(const int32_t connId)
 {
   m_netServer->sendTo(connId, replication::buildEditStatus(m_options.editMode));
 

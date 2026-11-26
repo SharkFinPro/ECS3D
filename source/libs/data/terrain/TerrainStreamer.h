@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <span>
 #include <uuid.h>
 #include <vector>
@@ -37,8 +38,8 @@ namespace terrain
     void forget(int32_t connId);
 
     // A terrain's volume was replaced (resetVolumes, adopt, a new voxel size, a project load): restarts that
-    // terrain's stream on every connection that has one, from the current volume, and starts each connection's sent
-    // count over. A terrain the store no longer holds is dropped. A restart that leaves nothing to send ends the
+    // terrain's stream on every connection that has one, from the current volume, and starts every connection's sent
+    // count over (not just this terrain's), so a finish report after a restart counts only chunks sent since it. A terrain the store no longer holds is dropped. A restart that leaves nothing to send ends the
     // stream without a finish report: only pump reports, and only streams that sent chunks since they last became
     // active.
     void restart(const uuids::uuid& terrain, const TerrainStore& store, const FocusFor& focusFor);
@@ -81,6 +82,15 @@ namespace terrain
     std::map<int32_t, Connection> m_connections;
     std::vector<StreamFinished> m_finished;
   };
+
+  using VolumeSnapshot = std::map<uuids::uuid, std::shared_ptr<const TerrainVolume>>;
+
+  // The volume each terrain in the store holds right now, to compare against after something that may replace them.
+  [[nodiscard]] VolumeSnapshot captureVolumes(const TerrainStore& store);
+
+  // The terrains added, removed or whose volume object changed between before and the store now, in uuid order: the
+  // ones whose streams need restarting.
+  [[nodiscard]] std::vector<uuids::uuid> replacedVolumes(const VolumeSnapshot& before, const TerrainStore& store);
 }
 
 #endif //TERRAINSTREAMER_H

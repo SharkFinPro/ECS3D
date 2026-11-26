@@ -6,6 +6,7 @@
 #include <RemoteLogSink.h>
 #include <ServerLog.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainEditEcho.h>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -38,6 +39,13 @@
 
 // The least time between two serverStats sends.
 inline constexpr auto serverStatsPeriod = std::chrono::milliseconds(250);
+
+// Terrain edit echoes go out at most once per terrain::terrainEchoInterval, and only when something is recorded.
+[[nodiscard]] constexpr bool terrainEchoDue(const bool pending,
+                                            const std::chrono::steady_clock::duration sinceLastFlush) noexcept
+{
+  return pending && sinceLastFlush >= terrain::terrainEchoInterval;
+}
 
 // Hot reload is polled only where fixedUpdate never runs: an edit-mode server whose scene is stopped. A play
 // server auto-starts, and a paused scene keeps its started instances.

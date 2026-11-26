@@ -84,7 +84,29 @@ at most `maxTerrainChunksEntries` distinct valid coordinates whose chunks decode
 depend on the volume belong to the apply step. `applyTerrainEdit` (`data/terrain/TerrainEditApply`) bounds the
 operation against the volume, applies it through `TerrainStore::setChunk` with one fresh revision for every changed
 chunk, consumes no revision for an edit that changes nothing, and changes nothing when it refuses (unknown terrain,
-invalid operation, too large, revisions exhausted). A third direction exists for `serverLog` alone: server → editor
+invalid operation, too large, revisions exhausted).
+`ServerApp::handleTerrainEdit` runs it between ticks, as the message arrives. A malformed edit logs
+`Refused a malformed terrain edit (N bytes) from connection C` and a refused one logs
+`Refused a terrain edit for terrain <uuid> from connection C: <reason>`; neither changes the store, and a good edit
+logs nothing, since a stroke sends many. The changed chunks go to `TerrainEditEcho::recordEdit` with the sender's
+connection id. An edit sends no snapshot and requeues nothing on the join streams: the echo reaches every joined
+connection, and a chunk a stream has not sent yet is read from the live volume, and a duplicate of an
+edited chunk that reaches a view twice is refused as stale. The run loop flushes the echo once `terrainEchoInterval`
+(50 ms) has passed and something is recorded (`terrainEchoDue` in `ServerPolicy.h`), to the joined connections in
+connection-id order: hash-only to the one connection that was the only sender of a chunk since the last flush, full to
+the rest. A view whose hash-only entry does not match what it holds answers with a request; the editor sends the
+`outcome.request` of `TerrainViewSync::apply` (a player never receives hash-only entries, so the client sends none),
+and the server routes a `terrainChunks` message whose entries are all hash-only (`isChunkRequest`) to
+`TerrainEditEcho::requestFull`, which sends those chunks in full to the requester alone at the next flush. A
+disconnect forgets the connection's requests and its standing as a sender (`TerrainEditEcho::forget`), and a project
+load drops every recorded edit and request (`TerrainEditEcho::clear`), since they describe volumes that were replaced;
+a terrain the snapshot reconcile adds, drops or replaces likewise drops its own pending records
+(`TerrainEditEcho::forgetTerrain`), so a terrain re-added under one uuid never flushes the old edits' air.
+The snapshot build reconciles the store with the asset registry before packing, which can add a terrain, drop one or
+replace a volume (a Terrain asset removed and added again under one uuid); `captureVolumes` and `replacedVolumes`
+find those terrains and the server restarts their join streams, from the terrain's origin since no one connection
+owns the restart, so a connection streams a terrain added after it joined and does not keep a stale plan for a
+replaced one. A third direction exists for `serverLog` alone: server → editor
 connections only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see
 [logging.md](logging.md).
 
