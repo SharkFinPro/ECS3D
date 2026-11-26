@@ -135,10 +135,11 @@ namespace terrain
   net::Message makeChunkRequest(const TerrainChunksPayload& received, const std::span<const ChunkCoord> missing)
   {
     std::vector<ChunkEntry> entries;
+    const std::unordered_set<ChunkCoord> wanted(missing.begin(), missing.end());
 
     for (const ReceivedChunk& entry : received.entries)
     {
-      if (std::ranges::find(missing, entry.coord) != missing.end())
+      if (wanted.contains(entry.coord))
       {
         entries.push_back(makeHashOnlyEntry(entry.coord, entry.revision, entry.hash));
       }

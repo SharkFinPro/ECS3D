@@ -15,6 +15,7 @@ namespace terrain
     struct ChunkState
     {
       const std::set<int32_t>* senders = nullptr;
+      bool shared = false;
       const std::set<int32_t>* requesters = nullptr;
       ChunkEntry full;
     };
@@ -76,7 +77,9 @@ namespace terrain
     {
       if (isValidChunkCoord(coord))
       {
-        m_edits[terrain][coord].insert(sender);
+        EditRecord& record = m_edits[terrain][coord];
+        record.shared = record.shared || (!record.senders.empty() && !record.senders.contains(sender));
+        record.senders.insert(sender);
       }
     }
   }
@@ -110,7 +113,10 @@ namespace terrain
     {
       for (auto& coord : terrain.second)
       {
-        coord.second.erase(connId);
+        if (coord.second.senders.erase(connId) > 0)
+        {
+          coord.second.shared = true;
+        }
       }
     }
   }
@@ -153,7 +159,9 @@ namespace terrain
       {
         for (const auto& entry : edited->second)
         {
-          states[entry.first].senders = &entry.second;
+          ChunkState& state = states[entry.first];
+          state.senders = &entry.second.senders;
+          state.shared = entry.second.shared;
         }
       }
 
@@ -192,7 +200,8 @@ namespace terrain
         {
           const ChunkState& state = entry.second;
           const bool asked = state.requesters && state.requesters->contains(connId);
-          const bool onlySender = state.senders && state.senders->size() == 1 && state.senders->contains(connId);
+          const bool onlySender = state.senders && !state.shared && state.senders->size() == 1 &&
+                                  state.senders->contains(connId);
 
           if (asked || (state.senders && !onlySender))
           {
