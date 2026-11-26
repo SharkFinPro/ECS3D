@@ -20,6 +20,7 @@ add_library(${PROJECT_NAME}
   Replication.cpp
   Replication.h
   WireTypes.h
+  WorldUnits.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
   assets/ScriptClassAssets.cpp

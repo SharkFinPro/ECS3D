@@ -9,9 +9,12 @@
 #include <map>
 #include <memory>
 #include <uuid.h>
+#include <vector>
 
 namespace terrain
 {
+  class TerrainStore;
+
   // Sends the chunks of held volumes to the server as terrainChunks messages. Holds the volumes, not a store, because
   // the editor's store is reset when its own project load snapshot comes back. Not thread safe.
   class TerrainUpload
@@ -22,6 +25,12 @@ namespace terrain
     void add(const uuids::uuid& terrain, std::shared_ptr<const TerrainVolume> volume);
 
     void clear();
+
+    // Drops what is queued for the terrain. False when nothing was queued for it.
+    bool forget(const uuids::uuid& terrain);
+
+    // The terrains with something queued, in uuid order.
+    [[nodiscard]] std::vector<uuids::uuid> terrains() const;
 
     // Sends at most budgetBytes this call (the first chunk always goes), at most maxTerrainChunksEntries per message,
     // terrains in uuid order. Every entry carries revision 1: the server assigns its own revisions to an upload. A
@@ -42,6 +51,13 @@ namespace terrain
 
     std::map<uuids::uuid, Item> m_items;
   };
+
+  // The terrains an upload still queues that the store no longer holds, which the server will never expect chunks
+  // for: it refused the addAsset, or a snapshot dropped the terrain. Drops them from the upload and returns them. A
+  // terrain for which isRecent answers true is kept: a snapshot sent before the server saw its addAsset does not
+  // list it yet.
+  std::vector<uuids::uuid> forgetUnknownTerrains(TerrainUpload& upload, const TerrainStore& store,
+                                                 const std::function<bool(const uuids::uuid&)>& isRecent = {});
 }
 
 #endif //TERRAINUPLOAD_H
