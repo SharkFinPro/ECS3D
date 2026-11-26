@@ -55,6 +55,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainEdit.h
   terrain/TerrainEditApply.cpp
   terrain/TerrainEditApply.h
+  terrain/TerrainEditEcho.cpp
+  terrain/TerrainEditEcho.h
   terrain/TerrainFiles.cpp
   terrain/TerrainFiles.h
   terrain/TerrainFormat.cpp

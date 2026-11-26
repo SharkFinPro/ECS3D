@@ -52,8 +52,10 @@ namespace terrain
 
     if (!outcome.result.missing.empty())
     {
-      outcome.log.push_back({ LogLevel::warn, "Terrain " + name + ": " + std::to_string(outcome.result.missing.size())
-                                                + " hash-only chunk(s) did not match what is held" });
+      outcome.request = makeChunkRequest(*payload, outcome.result.missing);
+      outcome.log.push_back({ LogLevel::info, "Terrain " + name + ": requested "
+                                                + std::to_string(outcome.result.missing.size())
+                                                + " chunk(s) whose hash did not match" });
     }
 
     if (outcome.result.applied > 0)
