@@ -235,9 +235,11 @@ add_executable(${PROJECT_NAME}
   TerrainCodecTest.cpp
   TerrainComponentTest.cpp
   TerrainContactTest.cpp
+  TerrainEditApplyTest.cpp
   TerrainEditEchoFixtures.h
   TerrainEditEchoFlushTest.cpp
   TerrainEditEchoTest.cpp
+  TerrainEditTest.cpp
   TerrainFileRecoveryTest.cpp
   TerrainFilesTest.cpp
   TerrainFormatTest.cpp
