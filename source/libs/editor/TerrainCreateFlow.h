@@ -20,7 +20,7 @@
 #include <uuid.h>
 
 // The decisions behind the asset browser's "New Terrain" form: the request, its validation, the unit conversion, the
-// heightmap decode and the generated volume. The panel draws the form and EditorApp sends the result.
+// heightmap decode and the generated volume. These are pure functions: a UI calls them and owns drawing and sending.
 struct TerrainCreateRequest {
   std::string name;
   float footprintMeters = 128.0f;
