@@ -317,20 +317,33 @@ private:
       touched.push_back(entry.first);
     }
 
+    std::vector<terrain::ChunkCoord> requested = touched;
+    std::unordered_set<terrain::ChunkCoord> known(touched.begin(), touched.end());
+
     for (const terrain::SampleBox& piece : redistanceBoxes(finished->box, touched))
     {
       if (commitLocally)
       {
-        terrain::commit(*volume, terrain::redistance(*volume, piece));
+        const terrain::ChunkEdits edits = terrain::redistance(*volume, piece);
+        terrain::commit(*volume, edits);
+
+        for (const auto& edit : edits)
+        {
+          if (known.insert(edit.first).second)
+          {
+            requested.push_back(edit.first);
+          }
+        }
       }
 
       send(terrain::packRedistanceEdit(m_terrain, finished->strokeId, piece));
     }
 
+    // A send that throws leaves nothing awaited: no answer is coming for a request that was not sent in full.
     if (commitLocally)
     {
-      requestFinalChunks(touched, send);
-      m_awaiting.insert(touched.begin(), touched.end());
+      requestFinalChunks(requested, send);
+      m_awaiting.insert(requested.begin(), requested.end());
     }
 
     return finished;

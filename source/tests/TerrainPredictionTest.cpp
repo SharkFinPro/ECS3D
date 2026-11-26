@@ -38,7 +38,7 @@ namespace {
     terrain::TerrainStore store;
     std::shared_ptr<terrain::TerrainVolume> volume;
 
-    explicit Env(const float ground = 10.0f)
+    explicit Env(const float ground = 10.0f, const int size = 52)
     {
       terrain::TerrainDescription description;
       description.uuid = terrainId;
@@ -46,7 +46,7 @@ namespace {
       volume = store.create(description);
 
       const uint32_t revision = store.nextRevision(terrainId);
-      for (const auto& [coord, chunk] : terrain::fillFlat(*volume, { 52, 52 }, ground, 20.0f, 1))
+      for (const auto& [coord, chunk] : terrain::fillFlat(*volume, { size, size }, ground, 20.0f, 1))
       {
         store.setChunk(terrainId, coord, chunk, revision);
       }
@@ -83,7 +83,7 @@ namespace {
     Env server;
     Env view;
 
-    explicit World(const float ground) : server(ground), view(ground) {}
+    World(const float ground, const int size) : server(ground, size), view(ground, size) {}
 
     terrain::TerrainEditEcho echo;
     terrain::TerrainViewSync sync;
@@ -165,6 +165,8 @@ namespace {
     size_t deliverEvery = 0;
     size_t flushEvery = 0;
     float ground = 10.0f;
+    int size = 52;
+    float span = 1.0f;
     // After release, before the rest reaches the server: how many messages reach it, or npos for none of this step.
     size_t afterRelease = std::string::npos;
   };
@@ -182,7 +184,7 @@ namespace {
   // A hill stroke: the add brush rides the raised surface, each center a fresh raycast onto the view volume.
   Outcome runHill(const Options options)
   {
-    World world(options.ground);
+    World world(options.ground, options.size);
     const auto send = world.sender();
 
     terrain::BrushOp op;
@@ -204,7 +206,7 @@ namespace {
       for (int step = 1; step <= 4; ++step)
       {
         const glm::vec2 at = path[i - 1] + (path[i] - path[i - 1]) * (static_cast<float>(step) / 4.0f);
-        world.session.moveTo(surfaceAt(*world.view.volume, at.x, at.y), send);
+        world.session.moveTo(surfaceAt(*world.view.volume, 20.0f + (at.x - 20.0f) * options.span, at.y), send);
         ++moves;
 
         if (options.deliverEvery > 0 && moves % options.deliverEvery == 0)
@@ -274,11 +276,33 @@ TEST(TerrainPredictionTest, AnEchoFlushedAfterTheReleaseBeforeTheRedistanceDoesN
   // Every brush reached the server, then the echo went out before its redistance did.
   for (const size_t delivered : { size_t{ 0 }, size_t{ 1 }, size_t{ 2 } })
   {
-    const Outcome outcome = runHill({ 1, 0, 10.0f, delivered });
+    Options options;
+    options.deliverEvery = 1;
+    options.afterRelease = delivered;
+    const Outcome outcome = runHill(options);
 
     EXPECT_EQ(outcome.mismatched, 0u) << delivered;
     EXPECT_EQ(outcome.unmatchedEchoes, 0u) << delivered;
     EXPECT_TRUE(outcome.converged) << delivered;
     EXPECT_FALSE(outcome.stillAwaiting) << delivered;
   }
+}
+
+TEST(TerrainPredictionTest, AnEchoBetweenTwoRedistancePiecesDoesNotFlagAChunkOnlyTheRedistanceChanged)
+{
+  // A long stroke redistances in two pieces; the surface at 85 m puts chunks the brush never changed in reach of the
+  // redistance. The server has applied the first piece when the echo goes out.
+  Options options;
+  options.deliverEvery = 1;
+  options.ground = 85.0f;
+  options.size = 220;
+  options.span = 8.0f;
+  options.afterRelease = 1;
+
+  const Outcome outcome = runHill(options);
+
+  EXPECT_EQ(outcome.mismatched, 0u);
+  EXPECT_EQ(outcome.unmatchedEchoes, 0u);
+  EXPECT_TRUE(outcome.converged);
+  EXPECT_FALSE(outcome.stillAwaiting);
 }
