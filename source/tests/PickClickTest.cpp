@@ -87,6 +87,15 @@ TEST(PickClickRequestTest, AGizmoHandleCapturesTheClick)
   EXPECT_TRUE(shouldRequestPick(freshCtrlClick()));
 }
 
+TEST(PickClickRequestTest, AViewportToolThatOwnsTheMouseWithholdsThePick)
+{
+  auto click = freshCtrlClick();
+  click.toolOwnsMouse = true;
+
+  EXPECT_FALSE(shouldRequestPick(click));
+  EXPECT_TRUE(shouldRequestPick(freshCtrlClick()));
+}
+
 TEST(PickClickRequestTest, ADefaultClickRequestsNothing)
 {
   EXPECT_FALSE(shouldRequestPick(PickClick{}));

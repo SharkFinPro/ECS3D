@@ -15,6 +15,13 @@ TEST(GizmoVisibilityTest, HiddenThroughASceneCamera)
   EXPECT_FALSE(shouldDrawTransformGizmo(true));
 }
 
+TEST(GizmoVisibilityTest, HiddenInTerrainMode)
+{
+  EXPECT_TRUE(shouldDrawTransformGizmo(false, false));
+  EXPECT_FALSE(shouldDrawTransformGizmo(false, true));
+  EXPECT_FALSE(shouldDrawTransformGizmo(true, true));
+}
+
 TEST(GizmoDefaultsTest, StateStartsInLocalSpace)
 {
   const gizmo::State state;

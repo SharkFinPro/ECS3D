@@ -56,6 +56,12 @@ public:
     return m_box;
   }
 
+  // The coordinates recordApplication has seen so far in this stroke; empty when not active.
+  [[nodiscard]] const std::unordered_set<terrain::ChunkCoord>& touched() const
+  {
+    return m_seen;
+  }
+
   // Starts a stroke at the first surface hit and returns the first application. templateOp supplies kind, radius,
   // strength, falloff and material; the returned op's center is hit.point. For flatten, the plane is captured here
   // and kept for the whole stroke. A non-finite hit point is refused: the template comes back unchanged and active()
@@ -73,6 +79,7 @@ public:
     m_template = templateOp;
     m_last = glm::dvec3(hit.point);
     m_sinceLast = 0.0;
+    m_pathBroken = false;
     m_before.clear();
     m_seen.clear();
     m_box = {};
@@ -84,6 +91,14 @@ public:
     }
 
     return opAt(hit.point);
+  }
+
+  // The pointer lost the surface (it left the terrain or the scene, or the camera is flying): the next moveTo starts
+  // a new segment at its hit with one application instead of bridging the gap with a straight line. No-op when
+  // not active.
+  void breakPath()
+  {
+    m_pathBroken = m_active;
   }
 
   // The pointer is over the surface at hit. Returns the applications due since the last one: points spaced
@@ -101,6 +116,16 @@ public:
     }
 
     const glm::dvec3 target(hit.point);
+
+    if (m_pathBroken)
+    {
+      m_pathBroken = false;
+      m_last = target;
+      m_sinceLast = 0.0;
+      due.push_back(opAt(hit.point));
+      return due;
+    }
+
     const glm::dvec3 delta = target - m_last;
     const double length = glm::length(delta);
 
@@ -220,6 +245,7 @@ private:
   }
 
   bool m_active = false;
+  bool m_pathBroken = false;
   uint64_t m_strokeId = 0;
   terrain::BrushOp m_template;
   glm::dvec3 m_last{ 0.0 };

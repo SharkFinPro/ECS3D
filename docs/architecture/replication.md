@@ -116,7 +116,13 @@ connection-id order: hash-only to the one connection that was the only sender of
 the rest. A view whose hash-only entry does not match what it holds answers with a request; the editor sends the
 `outcome.request` of `TerrainViewSync::apply` (a player never receives hash-only entries, so the client sends none),
 and the server routes a `terrainChunks` message whose entries are all hash-only (`isChunkRequest`) to
-`TerrainEditEcho::requestFull`, which sends those chunks in full to the requester alone at the next flush. A
+`TerrainEditEcho::requestFull`, which sends those chunks in full to the requester alone at the next flush. A view
+that is predicting a stroke passes the stroke's touched chunks as a hold to `TerrainViewSync::apply`
+(`applyTerrainChunks`): held entries, full or hash-only, are skipped and counted in `held`, and nothing is requested
+for them, since the echo describes a server behind the prediction. The hold lasts while the stroke is active. The
+contract of `TerrainBrushSession` is that it ends a stroke by sending the redistance, then one such request for every
+touched chunk, so the server's final state replaces the prediction; an in-flight full echo that arrives after release
+may briefly apply until those final chunks arrive. A
 disconnect forgets the connection's requests and its standing as a sender (`TerrainEditEcho::forget`), and a project
 load drops every recorded edit and request (`TerrainEditEcho::clear`), since they describe volumes that were replaced;
 a terrain the snapshot reconcile adds, drops or replaces likewise drops its own pending records

@@ -13,13 +13,16 @@ struct PickClick {
   bool ctrl = false;
   bool sceneHovered = false;
   bool gizmoCaptured = false;
+  // A viewport tool that owns the left button, such as terrain mode, takes the click for itself.
+  bool toolOwnsMouse = false;
 };
 
 // A plain click focuses the viewport or grabs a gizmo handle, so only a fresh Ctrl+click over the scene that no
-// gizmo handle captured picks.
+// gizmo handle captured and no viewport tool owns picks.
 [[nodiscard]] constexpr bool shouldRequestPick(const PickClick& click)
 {
-  return click.pressed && !click.wasPressed && click.ctrl && click.sceneHovered && !click.gizmoCaptured;
+  return click.pressed && !click.wasPressed && click.ctrl && click.sceneHovered && !click.gizmoCaptured &&
+         !click.toolOwnsMouse;
 }
 
 // Applies a finished pick to the selection. Plain select replaces, toggle adds or removes, and empty space clears
