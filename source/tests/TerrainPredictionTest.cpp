@@ -91,10 +91,15 @@ namespace {
     TerrainBrushSession session;
     std::vector<net::Message> toServer;
     size_t missing = 0;
+    size_t redistancesSent = 0;
 
     TerrainBrushSession::Send sender()
     {
-      return [this](const net::Message& message) { toServer.push_back(message); };
+      return [this](const net::Message& message) {
+        const auto edit = terrain::unpackTerrainEdit(message);
+        redistancesSent += edit && edit->kind == terrain::TerrainEditKind::redistance ? 1 : 0;
+        toServer.push_back(message);
+      };
     }
 
     // Applies up to count queued messages on the server; a chunk request is registered with the echo.
@@ -179,6 +184,7 @@ namespace {
     size_t unmatchedEchoes = 0;
     bool converged = false;
     bool stillAwaiting = true;
+    size_t redistancePieces = 0;
   };
 
   terrain::BrushOp hillBrush()
@@ -210,6 +216,7 @@ namespace {
 
     outcome.converged = world.toServer.empty() && mismatches(*world.view.volume, *world.server.volume).empty();
     outcome.stillAwaiting = world.session.awaitingFinalChunks();
+    outcome.redistancePieces = world.redistancesSent;
     return outcome;
   }
 
@@ -313,6 +320,7 @@ TEST(TerrainPredictionTest, AnEchoBetweenTwoRedistancePiecesDoesNotFlagAChunkOnl
 
   const Outcome outcome = runHill(options);
 
+  EXPECT_GT(outcome.redistancePieces, 1u);
   EXPECT_EQ(outcome.mismatched, 0u);
   EXPECT_EQ(outcome.unmatchedEchoes, 0u);
   EXPECT_TRUE(outcome.converged);

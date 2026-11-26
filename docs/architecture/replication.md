@@ -122,8 +122,12 @@ that is predicting a stroke passes the stroke's touched chunks as a hold to `Ter
 for them, since the echo describes a server behind the prediction. `TerrainBrushSession` ends a stroke by sending the
 redistance, then one such request for every touched chunk and every chunk its local redistance changed, and the hold
 covers those chunks until a full entry for each arrives (`confirmChunks`): the server may still be applying the
-stroke when it flushes, so a hash-only echo after release can describe a state before the redistance. The editor
-drops the wait when its connection is lost, since no answer will come. A
+stroke when it flushes, so a hash-only echo after release can describe a state before the redistance. Any full entry
+for a chunk ends the wait for that chunk, so another editor's echo or a stream restart can end it early; that is
+transient, since the view then applies what the server sent. The wait also ends when no answer can come: the
+connection is lost, a snapshot reports a new project load, the store's volume for the terrain is no longer the one the
+stroke finished on (`dropAwaitingIfReplaced`), or `TerrainBrushSession::awaitTimeout` has passed since the release
+(`expireAwaiting`, checked each frame). A
 disconnect forgets the connection's requests and its standing as a sender (`TerrainEditEcho::forget`), and a project
 load drops every recorded edit and request (`TerrainEditEcho::clear`), since they describe volumes that were replaced;
 a terrain the snapshot reconcile adds, drops or replaces likewise drops its own pending records

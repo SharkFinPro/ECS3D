@@ -29,6 +29,7 @@
 #include <imgui.h>
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -95,6 +96,8 @@ void EditorApp::loadTerrainTool()
 
 void EditorApp::refreshTerrainMode()
 {
+  m_terrainBrush.expireAwaiting(std::chrono::steady_clock::now());
+
   const bool left = m_terrainTool.refresh(terrainModeContext());
 
   if (left || !m_terrainTool.active())
@@ -191,8 +194,7 @@ namespace {
     return terrain::raycast(volume, ray.origin, ray.direction, view.farPlane);
   }
 
-  template <typename Renderer>
-  void drawBrushRing(Renderer& renderer3D, const TerrainFrame& frame, const terrain::RayHit& hit, const float radius,
+  void drawBrushRing(vke::Renderer3D& renderer3D, const TerrainFrame& frame, const terrain::RayHit& hit, const float radius,
                      const glm::vec4& color)
   {
     const terrain::RayHit worldHit = hitToWorld(frame, hit);

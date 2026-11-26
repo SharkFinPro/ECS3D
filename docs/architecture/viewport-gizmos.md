@@ -73,7 +73,12 @@ next is computed, and sent, so the prediction matches what the server computes f
 `maxTerrainChunksEntries`), and the server answers after the redistance, on the same ordered connection, with its
 final chunks and their revisions. Those chunks stay held until their full answer arrives: `handleTerrainChunks` calls
 `TerrainBrushSession::confirmChunks` with each message before applying it, because an echo the server flushed between
-the stroke's last brush and its redistance would otherwise read as a mismatch. Without editing the stroke
+the stroke's last brush and its redistance would otherwise read as a mismatch. The wait for a chunk ends with a full
+entry for it (so a second editor's echo or a stream restart can end it early, which is transient). It also ends on a
+lost connection, a new project load (`handleSnapshot`), a store volume that is not the one the stroke finished on, a
+`cancel`, a stroke ended without editing, and after `TerrainBrushSession::awaitTimeout` (`refreshTerrainMode` calls
+`expireAwaiting` every frame). A begin that is refused keeps the previous hold and terrain; one that starts on another
+terrain drops the hold. Without editing the stroke
 is dropped and nothing is sent. When the volume was replaced under the stroke the server still applied its brushes,
 so the redistance pieces are sent, but the replaced volume is left alone and no final state is requested.
 Each light also gets a sprite at its position, drawn through `RenderSystem::drawLightGizmos`, which only the

@@ -95,7 +95,12 @@ void EditorApp::handleSnapshot(const net::Message& message)
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
   const bool snapshotIsCurrent = m_projectLoads.snapshotIsCurrent(m_projectPacker->getProjectLoadId());
-  m_terrainSync.observeSnapshot(*m_terrainStore, m_projectPacker->getProjectLoadId());
+  if (m_terrainSync.observeSnapshot(*m_terrainStore, m_projectPacker->getProjectLoadId()))
+  {
+    m_terrainBrush.clearAwaiting();
+  }
+
+  m_terrainBrush.dropAwaitingIfReplaced(m_terrainStore->find(m_terrainBrush.terrain()));
 
   checkSnapshotProject();
 
@@ -125,20 +130,18 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
 void EditorApp::handleTerrainChunks(const net::Message& message)
 {
+  const auto payload = terrain::unpackTerrainChunks(message);
   const terrain::ChunkHold* hold = nullptr;
 
-  // Only while a stroke is active or a released stroke still waits for its final chunks, so a join stream is not
-  // decoded twice.
-  if (m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks())
+  if (payload)
   {
-    if (const auto payload = terrain::unpackTerrainChunks(message))
-    {
-      m_terrainBrush.confirmChunks(*payload);
-      hold = m_terrainBrush.holdFor(payload->terrain);
-    }
+    m_terrainBrush.dropAwaitingIfReplaced(m_terrainStore->find(m_terrainBrush.terrain()));
+    m_terrainBrush.confirmChunks(*payload);
+    hold = m_terrainBrush.holdFor(payload->terrain);
   }
 
-  const auto outcome = m_terrainSync.apply(*m_terrainStore, *m_sceneManager, message, hold);
+  const auto outcome = payload ? m_terrainSync.apply(*m_terrainStore, *m_sceneManager, *payload, hold)
+                               : m_terrainSync.apply(*m_terrainStore, *m_sceneManager, message, hold);
 
   for (const auto& line : outcome.log)
   {
