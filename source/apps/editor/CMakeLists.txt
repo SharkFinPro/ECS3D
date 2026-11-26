@@ -10,6 +10,7 @@ add_executable(${PROJECT_NAME}
   EditorAppMessages.cpp
   EditorAppPanels.cpp
   EditorAppProfiler.cpp
+  EditorAppTerrain.cpp
   EditorAppUndoMenu.cpp
   EditorApp.h
   DarkTitleBar.cpp

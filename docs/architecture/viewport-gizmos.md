@@ -39,6 +39,43 @@ before the callback ran changes nothing. `RenderSystem` maps the picked render o
 its object uuid from a table it fills at the submissions only while a request is in flight, and clears when the
 last one resolves. The editor sets `ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`)
 so a drag inside a detached scene window's body drives the gizmo instead of moving the OS window.
+While terrain mode is on (see [editor.md](editor.md)), the editor owns the left button over the scene: `EditorApp`
+passes `shouldDrawTransformGizmo` the mode's state so the gizmo draws nothing, and sets `PickClick::toolOwnsMouse`
+so `shouldRequestPick` refuses every click. The right-drag camera fly is untouched. `EditorApp::updateTerrainMode`
+runs from the scene overlay callback (inside a `Terrain mode` profiler scope), because the overlay already has the
+view and the scene rect and runs before the 3D pass records its lines. It builds the pointer ray with
+`gizmo::mouseRay`, moves it into the terrain's local space (`TerrainFrame` in `TerrainCursor.h`: position plus
+orientation, no scale, as in `TerrainStreamFocus`), and calls `terrain::raycast` with the far plane as the longest
+distance. A hit draws the brush ring (`brushRing`: 48 points of a circle of `effectiveBrushRadius` in the plane
+perpendicular to the hit normal, +Y for a degenerate normal) with `Renderer3D::renderLine`, in the tool's color; no
+hit draws nothing and begins nothing. Looking through a scene camera hides the cursor and blocks strokes while the
+mode stays on (`makeTerrainPointer`), and a running scene leaves the mode altogether (`TerrainModeContext`).
+
+The frame's decisions are `TerrainBrushSession::advance`, which `nextStrokeStep` drives. A stroke begins on a fresh
+left press over the scene that has a hit, so a drag that starts on a panel never begins one, and reads the brush
+template (`terrainBrushTemplate`, from the tool and its preferences) once, at that press. While the button is held
+each frame's `moveTo` performs the applications `TerrainStroke` spaces a quarter radius apart: `applyBrush`,
+`recordApplication`, `terrain::commit` on the store's own volume and a `terrainEdit` brush message, which is the
+prediction. A frame with no usable hit (off the terrain, over a panel, or the camera flying) paints nothing and calls
+`TerrainStroke::breakPath`, so the next hit starts a new segment instead of bridging the gap; the stroke stays alive
+and a release still ends it. After each application the Terrain components' bounds are invalidated and the
+renderer's surface follows the volume revision.
+
+The store's revisions are never touched by a prediction, and the echo does not simply replace it. The server flushes
+its echo every 50 ms while the view is ahead of it, so while a stroke is active `EditorApp::handleTerrainChunks`
+passes `TerrainBrushSession::holdFor(terrain)` (the stroke's touched chunks, for that terrain only) to
+`TerrainViewSync::apply`, which skips those entries, full or hash-only, and requests nothing for them. Releasing the
+button, leaving the mode, losing the connection or the volume ends the stroke through `endFor`: one redistance per
+`redistanceBoxes` piece of the stroke's box that holds a touched chunk (so a long diagonal stroke costs what it
+touched, not its bounding box) is applied to the volume locally, in order, each piece's edits committed before the
+next is computed, and sent, so the prediction matches what the server computes from the same messages. Then one
+`terrainChunks` request names every touched chunk and every chunk the local redistance changed (split at
+`maxTerrainChunksEntries`), and the server answers after the redistance, on the same ordered connection, with its
+final chunks and their revisions. Those chunks stay held until their full answer arrives: `handleTerrainChunks` calls
+`TerrainBrushSession::confirmChunks` with each message before applying it, because an echo the server flushed between
+the stroke's last brush and its redistance would otherwise read as a mismatch. Without editing the stroke
+is dropped and nothing is sent. When the volume was replaced under the stroke the server still applied its brushes,
+so the redistance pieces are sent, but the replaced volume is left alone and no final state is requested.
 Each light also gets a sprite at its position, drawn through `RenderSystem::drawLightGizmos`, which only the
 editor calls, and only while the scene is stopped and ray tracing is off (`LightGizmoVisibility.h`): the ray
 traced path traces every submitted object as lit geometry and has no raster pass to draw an icon in. A pick of the

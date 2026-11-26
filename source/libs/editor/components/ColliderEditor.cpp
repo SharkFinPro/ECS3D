@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -364,11 +365,12 @@ namespace {
 namespace {
   // The terrain asset is shown as its uuid until the asset registry names terrains.
   void registerTerrainEditor(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
-                             const terrain::TerrainStore* terrainStore)
+                             const terrain::TerrainStore* terrainStore,
+                             std::function<void(const std::shared_ptr<Terrain>&)> drawSculpt)
   {
     componentEditor.registerHandler("Terrain",
-      [assetCache = std::move(assetCache), terrainStore](const std::shared_ptr<Component>& component,
-                                                          const MixedFields& mixed) -> bool {
+      [assetCache = std::move(assetCache), terrainStore, drawSculpt = std::move(drawSculpt)](
+        const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
       const auto terrain = std::dynamic_pointer_cast<Terrain>(component);
       if (!terrain)
       {
@@ -404,6 +406,11 @@ namespace {
         const std::string surfaceText = terrain::terrainSurfaceText(surface);
         gc::rowLabel("Surface");
         ImGui::TextUnformatted(surfaceText.c_str());
+
+        if (drawSculpt)
+        {
+          drawSculpt(terrain);
+        }
 
         bool collisionEnabled = terrain->getCollisionEnabled();
         if (gc::accentCheckbox("Collision", &collisionEnabled, mixed.contains("collisionEnabled")))
@@ -452,10 +459,11 @@ namespace {
 }
 
 void registerColliderEditors(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
-                             const AssetRegistry* assetRegistry, const terrain::TerrainStore* terrainStore)
+                             const AssetRegistry* assetRegistry, const terrain::TerrainStore* terrainStore,
+                             std::function<void(const std::shared_ptr<Terrain>&)> drawSculpt)
 {
   registerConvexMeshEditor(componentEditor, assetCache, assetRegistry);
-  registerTerrainEditor(componentEditor, std::move(assetCache), terrainStore);
+  registerTerrainEditor(componentEditor, std::move(assetCache), terrainStore, std::move(drawSculpt));
 
   // Keyed by display name (componentTypeToString), since both colliders share a component type and
   // differ only by subType.

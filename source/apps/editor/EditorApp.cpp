@@ -48,6 +48,8 @@
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
+#include <objects/components/collisions/Terrain.h>
+#include <EditorTerrainSettings.h>
 #include <components/TransformEditor.h>
 #include <components/RigidBodyEditor.h>
 #include <components/ModelRendererEditor.h>
@@ -113,6 +115,8 @@ EditorApp::EditorApp(LaunchOptions options)
   setupKeybinds();
 
   m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_renderer, m_keybindTable, m_keybindDispatcher);
+
+  loadTerrainTool();
 
   // Only the editor has a panel to show it, so only the editor registers the ring buffer - the console
   // and file sinks main() already registers keep receiving everything regardless.
@@ -202,11 +206,13 @@ void EditorApp::setupSceneOverlay()
 
       const bool sceneHovered = m_renderer->getRenderingManager()->isSceneHovered();
 
-      const auto gizmoTarget = shouldDrawTransformGizmo(m_viewCameraObject.has_value())
+      const auto gizmoTarget = shouldDrawTransformGizmo(m_viewCameraObject.has_value(), m_terrainTool.active())
         ? m_selection->objectUUID()
         : std::nullopt;
 
       m_viewportGizmo->update(objectManager, gizmoTarget, view, drawList, m_serverEditable, snap, sceneHovered);
+
+      updateTerrainMode(view, sceneHovered);
 
       acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
 
@@ -458,6 +464,8 @@ void EditorApp::run()
         logMessage("Error", editorConnectionLogMessage(m_connectionTracker.state()));
         m_serverEditable = false;
         m_remoteStats.disconnected();
+        // The server will never answer a released stroke's final-state request now.
+        m_terrainBrush.cancel();
 
         if (!m_terrainUpload.done())
         {
@@ -467,6 +475,8 @@ void EditorApp::run()
         }
       }
     }
+
+    refreshTerrainMode();
 
     {
       ECS3D_PROFILE_SCOPE("Input");
@@ -548,13 +558,14 @@ void EditorApp::createRenderer()
   applyDarkTitleBar(m_renderer->getWindow()->getWindow(), panelLuminance < 0.5f);
 }
 
-void EditorApp::registerEditors() const
+void EditorApp::registerEditors()
 {
   registerTransformEditor(*m_componentEditor);
   registerRigidBodyEditor(*m_componentEditor);
   registerModelRendererEditor(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerLightRendererEditor(*m_componentEditor);
-  registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get(), m_terrainStore.get());
+  registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get(), m_terrainStore.get(),
+                          [this](const std::shared_ptr<Terrain>& component) { drawTerrainSculpt(component); });
   registerScriptEditor(*m_componentEditor, m_assetRegistry.get(), m_assetCache);
   registerPlayerControllerEditor(*m_componentEditor);
   registerCameraEditor(*m_componentEditor);
@@ -599,6 +610,15 @@ void EditorApp::setupKeybinds()
   m_keybindDispatcher->on(EditorAction::gizmoTranslate, [this] { m_viewportGizmo->setMode(gizmo::Mode::translate); });
   m_keybindDispatcher->on(EditorAction::gizmoRotate, [this] { m_viewportGizmo->setMode(gizmo::Mode::rotate); });
   m_keybindDispatcher->on(EditorAction::gizmoScale, [this] { m_viewportGizmo->setMode(gizmo::Mode::scale); });
+
+  // Tool and radius keys only change the brush; terrainMode is the one that turns the mode on or off.
+  m_keybindDispatcher->on(EditorAction::terrainMode, [this] { toggleTerrainMode(); });
+  m_keybindDispatcher->on(EditorAction::terrainAdd, [this] { setTerrainTool(TerrainTool::add); });
+  m_keybindDispatcher->on(EditorAction::terrainSubtract, [this] { setTerrainTool(TerrainTool::subtract); });
+  m_keybindDispatcher->on(EditorAction::terrainSmooth, [this] { setTerrainTool(TerrainTool::smooth); });
+  m_keybindDispatcher->on(EditorAction::terrainFlatten, [this] { setTerrainTool(TerrainTool::flatten); });
+  m_keybindDispatcher->on(EditorAction::terrainRadiusUp, [this] { growTerrainBrush(); });
+  m_keybindDispatcher->on(EditorAction::terrainRadiusDown, [this] { shrinkTerrainBrush(); });
 
   // Save/Save As are registered later, once m_saveUI exists. focus stays in the table with no handler -
   // bindable and shown in Settings, but a no-op until a later feature gives it behavior.

@@ -60,6 +60,7 @@ void EditorApp::handlePicking()
   click.ctrl = io.KeyCtrl;
   click.sceneHovered = mousePicker->canMousePick();
   click.gizmoCaptured = m_viewportGizmo->capturesMouseAt({ io.MousePos.x, io.MousePos.y });
+  click.toolOwnsMouse = m_terrainTool.active();
 
   m_mouseWasPressed = pressed;
 

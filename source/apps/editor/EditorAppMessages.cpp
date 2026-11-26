@@ -2,9 +2,11 @@
 #include <ProjectPacker.h>
 #include <SaveUI.h>
 #include <Replication.h>
+#include <WireTypes.h>
 #include <PlayerSlots.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainReplication.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
@@ -123,7 +125,20 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
 void EditorApp::handleTerrainChunks(const net::Message& message)
 {
-  const auto outcome = m_terrainSync.apply(*m_terrainStore, *m_sceneManager, message);
+  const terrain::ChunkHold* hold = nullptr;
+
+  // Only while a stroke is active or a released stroke still waits for its final chunks, so a join stream is not
+  // decoded twice.
+  if (m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks())
+  {
+    if (const auto payload = terrain::unpackTerrainChunks(message))
+    {
+      m_terrainBrush.confirmChunks(*payload);
+      hold = m_terrainBrush.holdFor(payload->terrain);
+    }
+  }
+
+  const auto outcome = m_terrainSync.apply(*m_terrainStore, *m_sceneManager, message, hold);
 
   for (const auto& line : outcome.log)
   {
