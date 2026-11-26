@@ -9,6 +9,7 @@
 #include "StatsSummary.h"
 #include <StatsSubscriptions.h>
 #include <terrain/TerrainBinding.h>
+#include <terrain/TerrainEditEcho.h>
 #include <terrain/TerrainPlaySnapshot.h>
 #include <terrain/TerrainStreamer.h>
 #include <nlohmann/json_fwd.hpp>
@@ -88,6 +89,8 @@ private:
 
   // The terrain chunks each joined connection is still being sent, pumped once per run() iteration.
   terrain::TerrainStreamer m_terrainStreamer;
+  // The chunks terrain edits changed since the last flush, and the full chunks views asked for.
+  terrain::TerrainEditEcho m_terrainEcho;
   // The chunk maps from when the scene last started, so Stop can put back what play changed.
   terrain::TerrainPlaySnapshot m_terrainPlaySnapshot;
   std::shared_ptr<SceneManager> m_sceneManager;
@@ -120,6 +123,11 @@ private:
   size_t m_terrainPumpFailures = 0;
   std::string m_lastTerrainPumpError;
   std::chrono::steady_clock::time_point m_lastTerrainFailureLog;
+
+  std::chrono::steady_clock::time_point m_lastTerrainEchoTime;
+  // A failing echo flush logs at most once per period; the count is of the failures since that line.
+  std::chrono::steady_clock::time_point m_lastTerrainEchoFailureLog;
+  size_t m_terrainEchoFailures = 0;
 
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
@@ -203,9 +211,9 @@ private:
 
   void handleJoin(const net::Message& message, int32_t senderId);
 
-  void handleEditComponent(const net::Message& message) const;
+  void handleEditComponent(const net::Message& message);
 
-  void handleSceneEdit(const net::Message& message) const;
+  void handleSceneEdit(const net::Message& message);
 
   // Hands a just-applied setSceneScriptFields edit to the running instance; any other edit does nothing.
   void pushSceneScriptFields(const SceneAsset& scene, const nlohmann::json& edit) const;
@@ -225,12 +233,22 @@ private:
   std::optional<int32_t> m_terrainUploader;
 
   // The editor's terrain chunks for a terrain a loadProject said to expect: sets them and sends them on to every view.
-  void handleTerrainUpload(const net::Message& message);
+  // Chunks that are all hash-only are instead the editor's request for those chunks in full.
+  void handleTerrainUpload(const net::Message& message, int32_t senderId);
+
+  // Applies an editor's terrain edit between ticks and records the changed chunks for the next echo flush.
+  void handleTerrainEdit(const net::Message& message, int32_t senderId);
+
+  // Sends the recorded chunks to the joined connections once terrainEchoInterval has passed since the last flush.
+  void flushTerrainEcho(std::chrono::steady_clock::time_point now);
+
+  // The streams' focus for a restart that has no one connection to look through: the terrain's origin.
+  [[nodiscard]] static terrain::TerrainStreamer::FocusFor terrainOriginFocus();
 
   // Terrains a stray upload was already warned about in this project load.
   std::unordered_set<uuids::uuid> m_terrainUploadWarned;
 
-  void finishProjectLoad() const;
+  void finishProjectLoad();
 
   // Whether the current scene is running, the only state in which a fixed step does any work.
   [[nodiscard]] bool sceneRunning() const;
@@ -266,11 +284,11 @@ private:
 
   void stopScriptsLogged(SceneAsset& scene) const;
 
-  void handleAddAsset(const net::Message& message) const;
+  void handleAddAsset(const net::Message& message);
 
-  void handleRenameAsset(const net::Message& message) const;
+  void handleRenameAsset(const net::Message& message);
 
-  void handleRemoveAsset(const net::Message& message) const;
+  void handleRemoveAsset(const net::Message& message);
 
   void handleInputState(const net::Message& message, int32_t senderId);
 
@@ -289,17 +307,18 @@ private:
   // Hot reload for an edit-mode scene that is stopped, where fixedUpdate never runs: compiles a new or
   // changed script so its fields reach the editor before Play, and re-snapshots when the reload replaced
   // the scripts. Paused scenes are left alone.
-  void pollScriptChangesWhileStopped(float dt) const;
+  void pollScriptChangesWhileStopped(float dt);
 
-  void broadcastSnapshot(net::SnapshotReason reason) const;
+  void broadcastSnapshot(net::SnapshotReason reason);
 
   // The full project state as a snapshot message, after refreshing the script fields and script class assets
-  // it carries.
-  [[nodiscard]] net::Message buildSnapshot(uint32_t& buildMicros) const;
+  // it carries. Reconciles the terrain store with the asset registry first and restarts the join streams of every
+  // terrain whose volume that replaced.
+  [[nodiscard]] net::Message buildSnapshot(uint32_t& buildMicros);
 
   // Answers a join: the edit status (so an editor can show a read-only cue and disable its editing UI), the
   // snapshot and the scene status, to connId alone.
-  void sendJoinReply(int32_t connId) const;
+  void sendJoinReply(int32_t connId);
 
   void broadcastSceneStatus() const;
 

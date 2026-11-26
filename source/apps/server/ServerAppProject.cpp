@@ -3,6 +3,8 @@
 #include <ProjectPacker.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <terrain/TerrainEdit.h>
+#include <terrain/TerrainEditApply.h>
 #include <terrain/TerrainReplication.h>
 #include <terrain/TerrainStore.h>
 #include <objects/ObjectManager.h>
@@ -13,6 +15,7 @@
 #include <uuid.h>
 #include <exception>
 #include <string>
+#include <vector>
 
 void ServerApp::handleLoadProject(const net::Message& message, const int32_t senderId)
 {
@@ -67,6 +70,9 @@ void ServerApp::handleLoadProject(const net::Message& message, const int32_t sen
 
 void ServerApp::resetTerrainForLoadedProject()
 {
+  // The echo's records describe the volumes about to be replaced.
+  m_terrainEcho.clear();
+
   try
   {
     m_terrainStore->resetVolumes();
@@ -81,14 +87,9 @@ void ServerApp::resetTerrainForLoadedProject()
     }
 
     // The volumes are empty now, so every stream ends here; where it started from no longer matters.
-    const terrain::TerrainStreamer::FocusFor origin = [](const uuids::uuid&, const terrain::TerrainDescription&)
-    {
-      return glm::vec3(0.0f);
-    };
-
     for (const auto& uuid : m_terrainStore->terrains())
     {
-      m_terrainStreamer.restart(uuid, *m_terrainStore, origin);
+      m_terrainStreamer.restart(uuid, *m_terrainStore, terrainOriginFocus());
     }
   }
   catch (const std::exception& e)
@@ -144,7 +145,7 @@ void ServerApp::dropTerrainUploadFrom(const int32_t connId)
   }
 }
 
-void ServerApp::handleTerrainUpload(const net::Message& message)
+void ServerApp::handleTerrainUpload(const net::Message& message, const int32_t senderId)
 {
   const auto payload = terrain::unpackTerrainChunks(message);
   if (!payload)
@@ -155,6 +156,28 @@ void ServerApp::handleTerrainUpload(const net::Message& message)
   }
 
   const std::string name = uuids::to_string(payload->terrain);
+
+  if (terrain::isChunkRequest(*payload))
+  {
+    if (m_terrainStore->find(payload->terrain))
+    {
+      std::vector<terrain::ChunkCoord> coords;
+      coords.reserve(payload->entries.size());
+      for (const auto& entry : payload->entries)
+      {
+        coords.push_back(entry.coord);
+      }
+
+      m_terrainEcho.requestFull(payload->terrain, coords, senderId);
+    }
+    else if (m_terrainUploadWarned.insert(payload->terrain).second)
+    {
+      Log::warn(LogCategory::server, "Ignored a terrain chunk request for unknown terrain " + name);
+    }
+
+    return;
+  }
+
   const auto result = terrain::applyTerrainUpload(*m_terrainStore, *payload);
 
   if (result.unknownTerrain || result.notExpected)
@@ -184,7 +207,33 @@ void ServerApp::handleTerrainUpload(const net::Message& message)
   }
 }
 
-void ServerApp::finishProjectLoad() const
+void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t senderId)
+{
+  const std::string connection = std::to_string(senderId);
+
+  const auto edit = terrain::unpackTerrainEdit(message);
+  if (!edit)
+  {
+    Log::warn(LogCategory::server, "Refused a malformed terrain edit (" + std::to_string(message.bytes().size())
+      + " bytes) from connection " + connection);
+    return;
+  }
+
+  const auto result = terrain::applyTerrainEdit(*m_terrainStore, *edit);
+  if (result.refusal != terrain::TerrainEditRefusal::none)
+  {
+    Log::warn(LogCategory::server, "Refused a terrain edit for terrain " + uuids::to_string(edit->terrain)
+      + " from connection " + connection + ": " + std::string(terrain::refusalText(result.refusal)));
+    return;
+  }
+
+  if (!result.changed.empty())
+  {
+    m_terrainEcho.recordEdit(edit->terrain, result.changed, senderId);
+  }
+}
+
+void ServerApp::finishProjectLoad()
 {
   // New project/scene: any contact history belongs to the project we just swapped out.
   m_collisionSystem->reset();
