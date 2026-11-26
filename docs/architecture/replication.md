@@ -43,6 +43,13 @@ store is untouched, an applied one invalidates the bounds of the Terrain compone
 view logs `Terrain <uuid> complete: N chunk(s)` when its held count reaches the snapshot's chunk count. After each
 snapshot unpack the view calls `observeSnapshot`, which resets every volume (and so the revisions) when the project
 load id differs from the previous snapshot's; the first snapshot is not a change.
+A hash-only entry that does not match what a view holds makes `TerrainViewSync::apply` return `outcome.request`: a
+`terrainChunks` message of hash-only entries (`makeChunkRequest`, recognized by `isChunkRequest`) carrying the revision
+and hash the view was told. `TerrainEditEcho` is the server side of terrain edit echo. It records the chunks an edit
+changed (`recordEdit`) and requests (`requestFull`), and `flush`, at most every `terrainEchoInterval`, sends each
+recorded chunk once with its latest state: hash-only to a connection that was the only sender of it since the last
+flush (its prediction already holds the content), full to every other, and a requested chunk in full to its requester
+only.
 On Start of a stopped scene the server keeps each terrain's chunk map (`TerrainPlaySnapshot`; the capture copies the map of
 chunk pointers, not chunk data). Stop restores it, and so does a scene switch away from a running or paused scene:
 each coordinate whose chunk pointer differs (changed, added or erased) is set back through `TerrainStore::setChunk`

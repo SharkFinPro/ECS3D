@@ -153,7 +153,7 @@ TEST(TerrainViewSyncTest, AnUnknownTerrainIsWarnedAboutAndNothingIsApplied)
   EXPECT_EQ(view.held(), 0u);
 }
 
-TEST(TerrainViewSyncTest, AHashOnlyEntryTheStoreCannotSatisfyIsWarnedAbout)
+TEST(TerrainViewSyncTest, AHashOnlyEntryTheStoreCannotSatisfyIsRequested)
 {
   View view;
 
@@ -161,11 +161,35 @@ TEST(TerrainViewSyncTest, AHashOnlyEntryTheStoreCannotSatisfyIsWarnedAbout)
   const auto outcome = view.sync.apply(view.store, view.scenes, terrain::packTerrainChunks(terrainUUID, entries));
 
   EXPECT_EQ(outcome.result.missing.size(), 1u);
-  EXPECT_TRUE(hasLine(outcome, LogLevel::warn, "hash-only"));
+  EXPECT_TRUE(hasLine(outcome, LogLevel::info, "requested 1 chunk(s) whose hash did not match"));
+  ASSERT_TRUE(outcome.request.has_value());
+  const auto request = terrain::unpackTerrainChunks(*outcome.request);
+  ASSERT_TRUE(request.has_value());
+  EXPECT_TRUE(terrain::isChunkRequest(*request));
 
-  // Positive control: a full entry produces no such warning.
+  // Positive control: a full entry produces no request.
   const auto full = view.sync.apply(view.store, view.scenes, chunksMessage(terrainUUID, { { 0, 0, 0 } }));
-  EXPECT_FALSE(hasLine(full, LogLevel::warn, "hash-only"));
+  EXPECT_FALSE(full.request.has_value());
+  EXPECT_FALSE(hasLine(full, LogLevel::info, "requested"));
+}
+
+TEST(TerrainViewSyncTest, AHashOnlyEntryThatMatchesWhatIsHeldIsNotRequested)
+{
+  View view;
+  ASSERT_EQ(view.sync.apply(view.store, view.scenes, chunksMessage(terrainUUID, { { 0, 0, 0 } })).result.applied, 1u);
+
+  const std::vector<terrain::ChunkEntry> matching{ terrain::makeHashOnlyEntry({ 0, 0, 0 }, 2, solid()->hash()) };
+  const auto outcome = view.sync.apply(view.store, view.scenes, terrain::packTerrainChunks(terrainUUID, matching));
+
+  EXPECT_TRUE(outcome.result.missing.empty());
+  EXPECT_EQ(outcome.result.applied, 1u);
+  EXPECT_FALSE(outcome.request.has_value());
+  EXPECT_FALSE(hasLine(outcome, LogLevel::info, "requested"));
+
+  // Positive control: a hash the store does not hold is requested.
+  const std::vector<terrain::ChunkEntry> differing{ terrain::makeHashOnlyEntry({ 0, 0, 0 }, 3, solid(2)->hash()) };
+  const auto wrong = view.sync.apply(view.store, view.scenes, terrain::packTerrainChunks(terrainUUID, differing));
+  EXPECT_TRUE(wrong.request.has_value());
 }
 
 TEST(TerrainViewSyncTest, CompletionIsLoggedOnceWhenTheHeldCountReachesTheDescriptionsCount)
