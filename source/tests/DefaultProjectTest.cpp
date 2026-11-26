@@ -12,10 +12,12 @@
 #include "InertiaTensor.h"
 #include "PhysicsSystem.h"
 #include "ProjectSerializer.h"
+#include "SceneLightingCheck.h"
 #include "TestScene.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/LightRenderer.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/collisions/ConvexHullValidation.h"
 #include "scenes/SceneAsset.h"
@@ -298,6 +300,81 @@ TEST(DefaultProject, AScaledInstanceKeepsItsPrefabsDensity)
 
   // Tower Collapse is generated at random, but always as a grid of several hundred bodies.
   EXPECT_GT(checked, 100);
+}
+
+TEST(DefaultProject, EverySceneHasOneSunAndOnlyRangedLocalLights)
+{
+  const auto project = buildDefaultProject();
+  const auto& scenes = project.at("assets").at("scenes");
+  ASSERT_GE(scenes.size(), 7u);
+
+  int spotLights = 0;
+  for (const auto& scene : scenes)
+  {
+    SCOPED_TRACE(scene.at("name").get<std::string>());
+    spotLights += lightingcheck::expectSunRig(scene.at("objects")).spot;
+  }
+
+  EXPECT_EQ(spotLights, 1);
+}
+
+TEST(DefaultProject, LightsAndPlayersShowsAllThreeLightTypes)
+{
+  const auto project = buildDefaultProject();
+  lightingcheck::Tally tally;
+  for (const auto& scene : project.at("assets").at("scenes"))
+  {
+    if (scene.at("name") == "Lights and Players")
+    {
+      lightingcheck::collect(scene.at("objects"), tally);
+    }
+  }
+
+  EXPECT_EQ(tally.directional, 1);
+  EXPECT_EQ(tally.spot, 1);
+  EXPECT_EQ(tally.point, 2);
+}
+
+// A zoomed-out view of these scenes spans hundreds of units, so a shorter shadow distance drops their shadows.
+TEST(DefaultProject, LargeScenesCastSunShadowsAsFarAsTheComponentAllows)
+{
+  const auto project = buildDefaultProject();
+  int largeScenes = 0;
+  for (const auto& scene : project.at("assets").at("scenes"))
+  {
+    const auto name = scene.at("name").get<std::string>();
+    if (name != "Tower Collapse" && name.rfind("Terrain", 0) != 0)
+    {
+      continue;
+    }
+
+    SCOPED_TRACE(name);
+    ++largeScenes;
+    for (const auto& object : scene.at("objects"))
+    {
+      if (object.at("name") != "Sun")
+      {
+        continue;
+      }
+
+      for (const auto& component : object.at("components"))
+      {
+        if (component.at("type") == "LightRenderer")
+        {
+          EXPECT_FLOAT_EQ(component.at("shadowDistance").get<float>(), LightRenderer::maxShadowDistance);
+        }
+      }
+    }
+  }
+
+  EXPECT_EQ(largeScenes, 3);
+}
+
+TEST(DefaultProject, NoSceneWritesTheLegacySpotlightFlag)
+{
+  const auto project = buildDefaultProject();
+  EXPECT_EQ(project.dump().find("isSpotlight"), std::string::npos);
+  EXPECT_NE(project.dump().find("lightType"), std::string::npos);
 }
 
 TEST(DefaultProject, LoadsAndItsFirstSceneSettles)

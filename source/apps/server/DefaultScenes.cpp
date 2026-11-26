@@ -1,6 +1,7 @@
 #include "DefaultProjectParts.h"
 #include "DefaultTerrainCaves.h"
 #include "DefaultTerrainTiles.h"
+#include "objects/components/LightRenderer.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <glm/geometric.hpp>
@@ -20,9 +21,10 @@ namespace defaultproject {
 json buildScene1()
 {
   return json::array({
-    light({ 0, 1.0f, 0 }, { 1.0f, 1.0f, 1.0f }, 0.25f, 0.0f, 0.0f),
-    light({ -10, -0.375f, 3 }, { 0.0f, 1.0f, 1.0f }, 0.0f, 0.75f, 0.75f),
-    light({ 10, -0.375f, 3 }, { 1.0f, 0.0f, 0.0f }, 0.0f, 0.75f, 0.75f),
+    daySun(60.0f),
+    pointLight({ -4, -6.5f, 3 }, { 0.0f, 1.0f, 1.0f }, 8.0f, 4.0f, 20.0f),
+    pointLight({ 4, -6.5f, 3 }, { 1.0f, 0.0f, 0.0f }, 8.0f, 4.0f, 20.0f),
+    spotLight({ 0, 8, 0 }, { 0, -1, 0 }, 28.0f, { 1.0f, 0.8f, 0.5f }, 30.0f, 15.0f, 25.0f),
     rigidBlock({ 0, -10, 0 }, { 10, 1, 10 }),
     block({ 5, 5, 0 }),
     rigidBlock({ 15, -15, 0 }, { 10, 0.25f, 10 }, { 0, 0, 30 }),
@@ -39,9 +41,9 @@ json buildScene1()
 json buildScene2()
 {
   return json::array({
-    light({ 0, 1.0f, 0 }, { 1.0f, 1.0f, 1.0f }, 0.25f, 0.0f, 0.0f),
-    light({ -10, -0.375f, 3 }, { 0.0f, 1.0f, 1.0f }, 0.0f, 0.75f, 0.75f),
-    light({ 10, -0.375f, 3 }, { 1.0f, 0.0f, 0.0f }, 0.0f, 0.75f, 0.75f),
+    daySun(60.0f),
+    pointLight({ -4, -6.5f, 3 }, { 0.0f, 1.0f, 1.0f }, 8.0f, 4.0f, 20.0f),
+    pointLight({ 4, -6.5f, 3 }, { 1.0f, 0.0f, 0.0f }, 8.0f, 4.0f, 20.0f),
     rigidBlock({ 0, -10, 0 }, { 10, 1, 10 }),
     rigidBlock({ 18, -5, 0 }, { 10, 1, 10 }, { 0, 0, 30 }),
     rigidBlock({ -18, -5, 0 }, { 10, 1, 10 }, { 0, 0, -30 }),
@@ -59,9 +61,9 @@ json buildScene3()
   constexpr int ballSpacing = 5;
 
   json objects = json::array({
-    light({ 0, 1.0f, 0 }, { 1.0f, 1.0f, 1.0f }, 0.25f, 0.0f, 0.0f),
-    light({ -25, 25.0f, 3 }, { 0.0f, 1.0f, 1.0f }, 0.0f, 0.75f, 0.75f),
-    light({ 25, 25.0f, 3 }, { 1.0f, 0.0f, 0.0f }, 0.0f, 0.75f, 0.75f),
+    daySun(LightRenderer::maxShadowDistance),
+    pointLight({ -25, 3.0f, 3 }, { 0.0f, 1.0f, 1.0f }, 40.0f, 20.0f, 40.0f),
+    pointLight({ 25, 3.0f, 3 }, { 1.0f, 0.0f, 0.0f }, 40.0f, 20.0f, 40.0f),
     rigidBlock({ 0, -9, 0 }, { 100, 10, 100 })
   });
 
@@ -110,9 +112,9 @@ json buildFallingBalls()
   constexpr int ballSpacing = 3;
 
   json objects = json::array({
-    light({ 0, 1.0f, 0 }, { 1.0f, 1.0f, 1.0f }, 0.25f, 0.0f, 0.0f),
-    light({ -10, -0.375f, 3 }, { 0.0f, 1.0f, 1.0f }, 0.0f, 0.75f, 0.75f),
-    light({ 10, -0.375f, 3 }, { 1.0f, 0.0f, 0.0f }, 0.0f, 0.75f, 0.75f),
+    daySun(100.0f),
+    pointLight({ -10, -9.5f, 3 }, { 0.0f, 1.0f, 1.0f }, 12.0f, 6.0f, 30.0f),
+    pointLight({ 10, -9.5f, 3 }, { 1.0f, 0.0f, 0.0f }, 12.0f, 6.0f, 30.0f),
     rigidBlock({ 0, -15, 0 }, { 100, 3, 100 })
   });
 
@@ -292,7 +294,7 @@ json buildTerrainBasin()
     }
   }
 
-  objects.push_back(light({ 0.0f, 300.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 0.35f, 0.8f, 0.4f));
+  objects.push_back(daySun(LightRenderer::maxShadowDistance));
   objects.push_back(player({ 0.0f, 3.0f, -60.0f }, 0, glm::vec3(0.0f, 0.0f, -1.0f), 180.0f));
 
   std::random_device rd;

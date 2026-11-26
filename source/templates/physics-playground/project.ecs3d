@@ -1564,19 +1564,25 @@
             "components": [
               {
                 "type": "Transform",
-                "position": [0.0, 30, 0.0],
+                "position": [12.0, 30, 9.0],
                 "rotation": [0.0, 0.0, 0.0],
                 "scale": [1, 1, 1]
               },
               {
                 "type": "LightRenderer",
                 "color": [1.0, 0.97, 0.9],
-                "direction": [0, -1, 0],
-                "isSpotlight": false,
+                "direction": [
+                  -0.3578,
+                  -0.8944,
+                  -0.2683
+                ],
+                "lightType": "directional",
                 "ambient": 0.25,
                 "diffuse": 0.8,
                 "specular": 0.5,
-                "coneAngle": 0.0
+                "coneAngle": 0.0,
+                "range": 0.0,
+                "shadowDistance": 100.0
               }
             ],
             "scripts": [],

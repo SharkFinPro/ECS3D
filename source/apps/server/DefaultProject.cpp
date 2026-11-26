@@ -5,6 +5,7 @@
 #include <assets/AssetRegistry.h>
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
+#include <glm/geometric.hpp>
 #include <algorithm>
 #include <map>
 #include <numbers>
@@ -416,26 +417,84 @@ json player(const glm::vec3& position, const int slot,
 }
 
 // Lights are parameterized well past what a prefab would capture (color/ambient/diffuse/specular all vary
-// per instance), so they stay a plain builder rather than a prefab.
-json light(const glm::vec3& position,
-           const glm::vec3& color,
-           const float ambient,
-           const float diffuse,
-           const float specular)
+// per instance), so they stay plain builders rather than prefabs. Only the sun carries ambient; a ranged light
+// is attenuated to nothing at its range, so it never doubles as a fill light.
+namespace {
+
+struct LightSpec
 {
-  return makeObject("Light", json::array({
-    transform(position),
+  const char* name = "Light";
+  const char* lightType = "point";
+  glm::vec3 position{ 0.0f };
+  glm::vec3 direction{ 0.0f, -1.0f, 0.0f };
+  glm::vec3 color{ 1.0f };
+  float ambient = 0.0f;
+  float diffuse = 0.0f;
+  float specular = 0.0f;
+  float coneAngle = 0.0f;
+  float range = 0.0f;
+  float shadowDistance = 100.0f;
+};
+
+json lightObject(const LightSpec& light)
+{
+  return makeObject(light.name, json::array({
+    transform(light.position),
     {
       { "type", "LightRenderer" },
-      { "color", vec(color) },
-      { "direction", vec(glm::vec3(0, -1, 0)) },
-      { "isSpotlight", false },
-      { "ambient", ambient },
-      { "diffuse", diffuse },
-      { "specular", specular },
-      { "coneAngle", 0.0 }
+      { "color", vec(light.color) },
+      { "direction", vec(light.direction) },
+      { "lightType", light.lightType },
+      { "ambient", light.ambient },
+      { "diffuse", light.diffuse },
+      { "specular", light.specular },
+      { "coneAngle", light.coneAngle },
+      { "range", light.range },
+      { "shadowDistance", light.shadowDistance }
     }
   }));
+}
+
+}
+
+// The transform only places the editor icon; a directional light shines along its direction from infinitely far.
+json sun(const glm::vec3& direction,
+         const glm::vec3& color,
+         const float ambient,
+         const float diffuse,
+         const float specular,
+         const float shadowDistance)
+{
+  return lightObject({ .name = "Sun", .lightType = "directional", .position = -glm::normalize(direction) * 40.0f,
+                       .direction = direction, .color = color, .ambient = ambient, .diffuse = diffuse,
+                       .specular = specular, .shadowDistance = shadowDistance });
+}
+
+json daySun(const float shadowDistance)
+{
+  return sun(glm::vec3(-0.4f, -1.0f, -0.3f), glm::vec3(1.0f, 0.97f, 0.9f), 0.25f, 0.8f, 0.5f, shadowDistance);
+}
+
+json pointLight(const glm::vec3& position,
+                const glm::vec3& color,
+                const float diffuse,
+                const float specular,
+                const float range)
+{
+  return lightObject({ .position = position, .color = color, .diffuse = diffuse, .specular = specular,
+                       .range = range });
+}
+
+json spotLight(const glm::vec3& position,
+               const glm::vec3& direction,
+               const float coneAngle,
+               const glm::vec3& color,
+               const float diffuse,
+               const float specular,
+               const float range)
+{
+  return lightObject({ .lightType = "spot", .position = position, .direction = direction, .color = color,
+                       .diffuse = diffuse, .specular = specular, .coneAngle = coneAngle, .range = range });
 }
 
 }

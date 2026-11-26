@@ -273,6 +273,7 @@ add_executable(${PROJECT_NAME}
   ProjectLoadTrackerTest.cpp
   ProjectOriginTest.cpp
   ProjectPathsTest.cpp
+  SceneLightingCheck.h
   TemplateValidation.h
   TemplateValidationTest.cpp
   PhysicsStackingTest.cpp

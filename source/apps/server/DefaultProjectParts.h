@@ -127,8 +127,18 @@ struct LibraryShape
                                     const glm::vec3& cameraDirection = glm::vec3(0, 0, -1),
                                     float facingYawDegrees = 0.0f);
 
-[[nodiscard]] nlohmann::json light(const glm::vec3& position, const glm::vec3& color, float ambient,
-                                   float diffuse, float specular);
+// A directional light (placed up the sky for its editor icon), then ranged point and spot lights.
+[[nodiscard]] nlohmann::json sun(const glm::vec3& direction, const glm::vec3& color, float ambient, float diffuse,
+                                 float specular, float shadowDistance);
+
+// The shipped scenes' warm main light, slanted so shadows read.
+[[nodiscard]] nlohmann::json daySun(float shadowDistance);
+
+[[nodiscard]] nlohmann::json pointLight(const glm::vec3& position, const glm::vec3& color, float diffuse,
+                                        float specular, float range);
+
+[[nodiscard]] nlohmann::json spotLight(const glm::vec3& position, const glm::vec3& direction, float coneAngle,
+                                       const glm::vec3& color, float diffuse, float specular, float range);
 
 // A scene asset: its name, uuid and objects. The builders below return the objects of the built-in scenes.
 [[nodiscard]] nlohmann::json scene(const std::string& name, const std::string& uuid, nlohmann::json objects);
