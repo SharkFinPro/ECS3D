@@ -333,7 +333,8 @@ TEST(TerrainEditFlow, TwoStrokesOnOverlappingChunksInOneIntervalGoToBothInFull)
 
   flow.deliver();
 
-  // Every chunk was predicted by at most one view and shared ones went out in full, so nobody needed a request.
+  // Chunks both strokes changed went out in full to both views and the rest hash-only to their one sender, so nobody
+  // needed a request.
   EXPECT_TRUE(flow.requests.empty());
   EXPECT_GT(flow.fullEntries[connA], 0u);
   EXPECT_GT(flow.fullEntries[connB], 0u);

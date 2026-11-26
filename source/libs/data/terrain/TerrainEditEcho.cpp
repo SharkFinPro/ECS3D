@@ -127,6 +127,12 @@ namespace terrain
     m_requests.clear();
   }
 
+  void TerrainEditEcho::forgetTerrain(const uuids::uuid& terrain)
+  {
+    m_edits.erase(terrain);
+    m_requests.erase(terrain);
+  }
+
   bool TerrainEditEcho::pending() const
   {
     return !m_edits.empty() || !m_requests.empty();

@@ -38,8 +38,8 @@ namespace terrain
     void forget(int32_t connId);
 
     // A terrain's volume was replaced (resetVolumes, adopt, a new voxel size, a project load): restarts that
-    // terrain's stream on every connection that has one, from the current volume, and starts each connection's sent
-    // count over. A terrain the store no longer holds is dropped. A restart that leaves nothing to send ends the
+    // terrain's stream on every connection that has one, from the current volume, and starts every connection's sent
+    // count over (not just this terrain's), so a finish report after a restart counts only chunks sent since it. A terrain the store no longer holds is dropped. A restart that leaves nothing to send ends the
     // stream without a finish report: only pump reports, and only streams that sent chunks since they last became
     // active.
     void restart(const uuids::uuid& terrain, const TerrainStore& store, const FocusFor& focusFor);

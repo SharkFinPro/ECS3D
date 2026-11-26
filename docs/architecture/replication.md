@@ -99,7 +99,9 @@ the rest. A view whose hash-only entry does not match what it holds answers with
 and the server routes a `terrainChunks` message whose entries are all hash-only (`isChunkRequest`) to
 `TerrainEditEcho::requestFull`, which sends those chunks in full to the requester alone at the next flush. A
 disconnect forgets the connection's requests and its standing as a sender (`TerrainEditEcho::forget`), and a project
-load drops every recorded edit and request (`TerrainEditEcho::clear`), since they describe volumes that were replaced.
+load drops every recorded edit and request (`TerrainEditEcho::clear`), since they describe volumes that were replaced;
+a terrain the snapshot reconcile adds, drops or replaces likewise drops its own pending records
+(`TerrainEditEcho::forgetTerrain`), so a terrain re-added under one uuid never flushes the old edits' air.
 The snapshot build reconciles the store with the asset registry before packing, which can add a terrain, drop one or
 replace a volume (a Terrain asset removed and added again under one uuid); `captureVolumes` and `replacedVolumes`
 find those terrains and the server restarts their join streams, from the terrain's origin since no one connection

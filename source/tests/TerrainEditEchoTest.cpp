@@ -412,3 +412,48 @@ TEST(TerrainEditEchoTest, ClearDropsEditsAndRequestsSoNothingIsSent)
   echo.recordEdit(terrainA, edited, 1);
   EXPECT_TRUE(echo.pending());
 }
+
+TEST(TerrainEditEchoTest, ForgetTerrainDropsOnlyThatTerrainsEditsAndRequests)
+{
+  terrain::TerrainStore store;
+  makeTerrain(store);
+  ASSERT_NE(store.create({ .uuid = terrainB }), nullptr);
+  ASSERT_EQ(store.nextRevision(terrainB), 1u);
+  const std::vector<ChunkCoord> edited{ { 0, 0, 0 } };
+  const std::vector<ChunkCoord> requested{ { 1, 0, 0 } };
+  serverSet(store, edited[0], noise(1));
+  serverSet(store, requested[0], noise(2));
+  ASSERT_TRUE(store.setChunk(terrainB, edited[0], noise(3), store.nextRevision(terrainB)));
+
+  terrain::TerrainEditEcho echo;
+  echo.recordEdit(terrainA, edited, 1);
+  echo.requestFull(terrainA, requested, 2);
+  echo.recordEdit(terrainB, edited, 1);
+
+  // Positive control: both terrains are otherwise sent.
+  terrain::TerrainEditEcho control = echo;
+  Recorder sent;
+  flush(control, store, sent);
+  size_t controlA = 0;
+  size_t controlB = 0;
+  for (const auto& message : sent.messages)
+  {
+    (message.payload.terrain == terrainA ? controlA : controlB) += message.payload.entries.size();
+  }
+  EXPECT_GT(controlA, 0u);
+  EXPECT_GT(controlB, 0u);
+
+  echo.forgetTerrain(terrainA);
+  ASSERT_TRUE(echo.pending());
+
+  Recorder recorder;
+  flush(echo, store, recorder);
+  ASSERT_FALSE(recorder.messages.empty());
+  size_t entriesB = 0;
+  for (const auto& message : recorder.messages)
+  {
+    EXPECT_EQ(message.payload.terrain, terrainB);
+    entriesB += message.payload.entries.size();
+  }
+  EXPECT_EQ(entriesB, controlB);
+}
