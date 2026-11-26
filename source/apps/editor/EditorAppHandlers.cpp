@@ -118,6 +118,30 @@ void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
   }
 
   // Past this point the terrain is created and sent, so a failure here must not reopen the form for a second create.
+  queueCreatedTerrainUpload(generated);
+
+  const auto objectUUID = randomUuid();
+
+  try
+  {
+    onSceneEdit(terrainCreate::placementEdit(objectUUID, generated.displayName, generated.description.uuid));
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::editor, std::string("Placing the new terrain failed to record: ") + e.what());
+  }
+
+  m_placedTerrainObject = objectUUID;
+  m_selectionWhenPlaced.kind = m_selection->kind();
+  m_selectionWhenPlaced.items.assign(m_selection->items().begin(), m_selection->items().end());
+  m_placedTerrainDeadline = std::chrono::steady_clock::now() + placedTerrainWait;
+
+  Log::info(LogCategory::editor, "Created terrain " + generated.displayName + " (" +
+                                   std::to_string(generated.description.chunkCount) + " chunk(s)); uploading it.");
+}
+
+void EditorApp::queueCreatedTerrainUpload(const GeneratedTerrain& generated)
+{
   try
   {
     const auto volume = m_terrainStore->find(generated.description.uuid);
@@ -143,25 +167,6 @@ void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
     Log::error(LogCategory::editor, std::string("The new terrain's chunks could not be queued for upload: ") +
                                       e.what());
   }
-
-  const auto objectUUID = randomUuid();
-
-  try
-  {
-    onSceneEdit(terrainCreate::placementEdit(objectUUID, generated.displayName, generated.description.uuid));
-  }
-  catch (const std::exception& e)
-  {
-    Log::error(LogCategory::editor, std::string("Placing the new terrain failed to record: ") + e.what());
-  }
-
-  m_placedTerrainObject = objectUUID;
-  m_selectionWhenPlaced.kind = m_selection->kind();
-  m_selectionWhenPlaced.items.assign(m_selection->items().begin(), m_selection->items().end());
-  m_placedTerrainDeadline = std::chrono::steady_clock::now() + placedTerrainWait;
-
-  Log::info(LogCategory::editor, "Created terrain " + generated.displayName + " (" +
-                                   std::to_string(generated.description.chunkCount) + " chunk(s)); uploading it.");
 }
 
 void EditorApp::selectPlacedTerrain()

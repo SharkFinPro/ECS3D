@@ -327,6 +327,9 @@ private:
   // editor refuses the asset. Once the asset is sent, later failures are logged and it does not throw.
   void onCreateTerrain(GeneratedTerrain&& generated);
 
+  // Restores the generated chunks into the store's new volume and queues them for upload; logs a failure, never throws.
+  void queueCreatedTerrainUpload(const GeneratedTerrain& generated);
+
   // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.
   void selectPlacedTerrain();
 
