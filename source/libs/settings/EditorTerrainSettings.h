@@ -13,6 +13,8 @@ namespace editorTerrainSettings {
 
   inline constexpr float defaultRadius = 10.0f;
   inline constexpr float minRadius = 0.1f;
+  // The brush itself refuses a radius above maxBrushRadiusVoxels * voxelSize, so the user of these settings clamps
+  // to the volume at use time.
   inline constexpr float maxRadius = 1000.0f;
 
   inline constexpr float defaultStrength = 0.5f;

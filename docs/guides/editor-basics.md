@@ -176,8 +176,8 @@ The default keybinds are:
 
 Holding Ctrl+Z, Ctrl+Shift+Z or Ctrl+D repeats the action; holding Ctrl+D adds a copy on each repeat, and each
 copy is its own undo step. Ctrl+A in the Objects panel is local to that panel and is not a rebindable action.
-Focus Selection and the Terrain actions can be bound, but they have no behavior yet. Keybinds are ignored while a text field wants keyboard
-input.
+Focus Selection and the Terrain actions can be bound, but they have no behavior yet. Keybinds are ignored while a
+text field wants keyboard input.
 
 ## Saving and opening
 

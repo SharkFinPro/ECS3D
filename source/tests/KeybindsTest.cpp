@@ -606,3 +606,27 @@ TEST_F(Keybinds, EveryDefaultChordIsBoundAndUniqueSoTheTableIsBijective)
     }
   }
 }
+
+TEST_F(Keybinds, AnExistingUserChordThatEqualsANewTerrainDefaultWinsAndLeavesTheTerrainActionUnbound)
+{
+  writeFile(R"({
+    "keybinds.focusSelection": "T",
+    "keybinds.duplicateSelection": "Alt+1",
+    "keybinds.deleteSelection": "PageUp"
+  })");
+
+  const SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  EXPECT_EQ(table.binding(EditorAction::focusSelection), parseChord("T"));
+  EXPECT_EQ(table.binding(EditorAction::duplicateSelection), parseChord("Alt+1"));
+  EXPECT_EQ(table.binding(EditorAction::deleteSelection), parseChord("PageUp"));
+  EXPECT_FALSE(table.binding(EditorAction::terrainMode).has_value());
+  EXPECT_FALSE(table.binding(EditorAction::terrainAdd).has_value());
+  EXPECT_FALSE(table.binding(EditorAction::terrainRadiusUp).has_value());
+
+  // Positive control: terrain actions whose defaults nobody claimed stay bound.
+  EXPECT_EQ(table.binding(EditorAction::terrainSubtract), parseChord("Alt+2"));
+  EXPECT_EQ(table.binding(EditorAction::terrainRadiusDown), parseChord("PageDown"));
+}

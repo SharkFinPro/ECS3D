@@ -259,3 +259,21 @@ TEST_F(EditorTerrainSettings, AnOutOfRangeLastToolWritesNothing)
 
   EXPECT_EQ(editorTerrainSettings::readLastTool(store), 1u);
 }
+
+TEST_F(EditorTerrainSettings, WritingStoresTheClampedValueNotTheRawOne)
+{
+  SettingsStore store(m_file);
+  editorTerrainSettings::writeBrush(store, 2, { 5000.0f, -2.0f, 3.0f });
+
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.smooth.radius", -1.0f), editorTerrainSettings::maxRadius);
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.smooth.strength", -1.0f), editorTerrainSettings::minStrength);
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.smooth.falloff", -1.0f), editorTerrainSettings::maxFalloff);
+
+  editorTerrainSettings::writeBrush(store, 0, { 0.0f, 0.5f, 0.5f });
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.add.radius", -1.0f), editorTerrainSettings::minRadius);
+
+  editorTerrainSettings::writeBrush(store, 1, { notANumber, infinity, -infinity });
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.radius", -1.0f), editorTerrainSettings::defaultRadius);
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.strength", -1.0f), editorTerrainSettings::defaultStrength);
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.falloff", -1.0f), editorTerrainSettings::defaultFalloff);
+}
