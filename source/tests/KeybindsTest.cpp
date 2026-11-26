@@ -3,6 +3,7 @@
 #include "Keybinds.h"
 #include "SettingsStore.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -531,4 +532,101 @@ TEST_F(Keybinds, LoadFallsBackToTheDefaultWhenAStoredKeyCodeOverflows)
   table.load(settings);
 
   EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
+}
+
+TEST_F(Keybinds, TerrainActionsAppendAfterTheProfilerWithTheirIdsLabelsAndChords)
+{
+  struct Expected {
+    EditorAction action;
+    const char* id;
+    const char* label;
+    const char* chord;
+  };
+
+  const Expected expected[] = {
+    { EditorAction::terrainMode, "terrainMode", "Terrain: Toggle Mode", "T" },
+    { EditorAction::terrainAdd, "terrainAdd", "Terrain: Add", "Alt+1" },
+    { EditorAction::terrainSubtract, "terrainSubtract", "Terrain: Subtract", "Alt+2" },
+    { EditorAction::terrainSmooth, "terrainSmooth", "Terrain: Smooth", "Alt+3" },
+    { EditorAction::terrainFlatten, "terrainFlatten", "Terrain: Flatten", "Alt+4" },
+    { EditorAction::terrainRadiusUp, "terrainRadiusUp", "Terrain: Grow Brush", "PageUp" },
+    { EditorAction::terrainRadiusDown, "terrainRadiusDown", "Terrain: Shrink Brush", "PageDown" }
+  };
+
+  std::size_t index = static_cast<std::size_t>(EditorAction::toggleProfiler) + 1;
+
+  for (const Expected& entry : expected)
+  {
+    EXPECT_EQ(static_cast<std::size_t>(entry.action), index) << entry.id;
+
+    const EditorActionInfo& info = actionInfo(entry.action);
+    EXPECT_STREQ(info.id, entry.id);
+    EXPECT_STREQ(info.label, entry.label);
+    ASSERT_TRUE(info.defaultChord.has_value()) << entry.id;
+    EXPECT_EQ(info.defaultChord, parseChord(entry.chord)) << entry.id;
+    ++index;
+  }
+
+  EXPECT_EQ(index, editorActionCount);
+}
+
+TEST_F(Keybinds, LoadingAnEmptyStoreBindsEveryTerrainActionToItsDefault)
+{
+  const SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  EXPECT_EQ(table.binding(EditorAction::terrainMode), parseChord("T"));
+  EXPECT_EQ(table.binding(EditorAction::terrainAdd), parseChord("Alt+1"));
+  EXPECT_EQ(table.binding(EditorAction::terrainSubtract), parseChord("Alt+2"));
+  EXPECT_EQ(table.binding(EditorAction::terrainSmooth), parseChord("Alt+3"));
+  EXPECT_EQ(table.binding(EditorAction::terrainFlatten), parseChord("Alt+4"));
+  EXPECT_EQ(table.binding(EditorAction::terrainRadiusUp), parseChord("PageUp"));
+  EXPECT_EQ(table.binding(EditorAction::terrainRadiusDown), parseChord("PageDown"));
+
+  EXPECT_EQ(table.actionFor(*parseChord("Alt+1")), EditorAction::terrainAdd);
+  EXPECT_EQ(table.actionFor(*parseChord("1")), EditorAction::gizmoTranslate);
+}
+
+TEST_F(Keybinds, EveryDefaultChordIsBoundAndUniqueSoTheTableIsBijective)
+{
+  const KeybindTable table;
+
+  for (const auto& a : editorActions())
+  {
+    ASSERT_TRUE(a.defaultChord.has_value()) << a.id;
+    EXPECT_EQ(table.actionFor(*a.defaultChord), a.action) << a.id;
+
+    for (const auto& b : editorActions())
+    {
+      if (a.action != b.action)
+      {
+        EXPECT_NE(a.defaultChord, b.defaultChord) << a.id << " vs " << b.id;
+      }
+    }
+  }
+}
+
+TEST_F(Keybinds, AnExistingUserChordThatEqualsANewTerrainDefaultWinsAndLeavesTheTerrainActionUnbound)
+{
+  writeFile(R"({
+    "keybinds.focusSelection": "T",
+    "keybinds.duplicateSelection": "Alt+1",
+    "keybinds.deleteSelection": "PageUp"
+  })");
+
+  const SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  EXPECT_EQ(table.binding(EditorAction::focusSelection), parseChord("T"));
+  EXPECT_EQ(table.binding(EditorAction::duplicateSelection), parseChord("Alt+1"));
+  EXPECT_EQ(table.binding(EditorAction::deleteSelection), parseChord("PageUp"));
+  EXPECT_FALSE(table.binding(EditorAction::terrainMode).has_value());
+  EXPECT_FALSE(table.binding(EditorAction::terrainAdd).has_value());
+  EXPECT_FALSE(table.binding(EditorAction::terrainRadiusUp).has_value());
+
+  // Positive control: terrain actions whose defaults nobody claimed stay bound.
+  EXPECT_EQ(table.binding(EditorAction::terrainSubtract), parseChord("Alt+2"));
+  EXPECT_EQ(table.binding(EditorAction::terrainRadiusDown), parseChord("PageDown"));
 }

@@ -35,7 +35,10 @@ persisting; the client keys live in `client-settings.json`, the editor keys in `
 a saved string holds a dock tree),
 `EditorGizmoSettings` (clamped get/set for the viewport gizmo's snap toggle and translate/rotate/scale step
 sizes; returns plain values rather than a `gizmo::Snap`, which keeps settings below the editor lib in the
-dependency direction under Build System), and `RecentProjects` (the recent-projects list the editor and the
+dependency direction under Build System), `EditorTerrainSettings` (per-tool brush radius, strength and falloff
+under `editor.terrain.<tool>.radius|strength|falloff`, plus the last tool under `editor.terrain.tool`; tools are
+plain indices 0..3 for add, subtract, smooth and flatten, in the editor's `TerrainTool` order, and every value is
+clamped on read and write), and `RecentProjects` (the recent-projects list the editor and the
 launcher share; headless, schema in `source/libs/settings/RecentProjects.md`). **Not** project data: see
 Development Principles.
 

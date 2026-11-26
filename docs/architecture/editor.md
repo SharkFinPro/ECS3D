@@ -48,7 +48,9 @@ section nav beside the selected section's content, opening centered at a font-re
 their content, reading and writing `ECS3DSettings` directly since
 preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Viewport drags
 the free-fly camera speed (`EditorCameraSettings`, applied to `vke::Camera::setSpeed` immediately) and the
-viewport gizmo's Snap toggle + translate/rotate/scale step sizes (`EditorGizmoSettings`); Display holds vsync and the
+viewport gizmo's Snap toggle + translate/rotate/scale step sizes (`EditorGizmoSettings`); the terrain brush
+preferences (`EditorTerrainSettings`, no panel yet) are described in
+[library-reference.md](library-reference.md); Display holds vsync and the
 frame rate limit (`editor.display.vsync`/`editor.display.maxFps`, applied at renderer creation and live through
 `RenderingManager`; the numeric field commits on deactivation only, and `FramePacingNotes.h` decides the
 explanatory notes; its Reset to defaults covers frame pacing only), then a Rendering block with the Ray tracing checkbox (`editor.display.rayTracing`, default on like
