@@ -107,6 +107,10 @@ public:
   [[nodiscard]] std::optional<CommandKind> nextUndoKind() const;
   [[nodiscard]] std::optional<CommandKind> nextRedoKind() const;
 
+  // The primaryUUID() of the command nextUndoKind()/nextRedoKind() names; nullopt when that stack is empty.
+  [[nodiscard]] std::optional<uuids::uuid> nextUndoPrimaryUUID() const;
+  [[nodiscard]] std::optional<uuids::uuid> nextRedoPrimaryUUID() const;
+
   // Whether undo()/redo() would actually produce a payload for the top of that stack, without popping
   // either stack - false for an empty stack as well as for a non-reversible entry (every command in a
   // grouped entry, for a group), so a caller can gate an attempt on this alone rather than also checking

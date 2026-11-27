@@ -25,6 +25,7 @@ bool EditorApp::requestUndo()
   }
 
   const auto redoDepthBefore = m_playHistory.current().redoDepth();
+  m_terrainUndo.startRequest();
   undo();
 
   if (gainedOneEntry(redoDepthBefore, m_playHistory.current().redoDepth()))
@@ -44,6 +45,7 @@ bool EditorApp::requestRedo()
   }
 
   const auto undoDepthBefore = m_playHistory.current().undoDepth();
+  m_terrainUndo.startRequest();
   redo();
 
   if (gainedOneEntry(undoDepthBefore, m_playHistory.current().undoDepth()))
@@ -63,11 +65,13 @@ bool EditorApp::undoRedoRequestBlocked()
 void EditorApp::beginUndoRedoPending()
 {
   m_undoRedoGate.begin();
+  m_terrainUndo.begin();
 }
 
 void EditorApp::clearUndoRedoPending()
 {
   m_undoRedoGate.clear();
+  m_terrainUndo.reset();
 }
 
 void EditorApp::clearEditHistory()

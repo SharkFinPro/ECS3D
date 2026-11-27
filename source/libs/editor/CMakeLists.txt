@@ -67,6 +67,7 @@ add_library(${PROJECT_NAME}
   TerrainCursor.h
   TerrainStroke.h
   TerrainToolState.h
+  TerrainUndoState.h
   SceneScriptsPanel.cpp
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h

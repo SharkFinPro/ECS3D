@@ -39,6 +39,10 @@ public:
     std::vector<std::pair<terrain::ChunkCoord, std::shared_ptr<const terrain::TerrainChunk>>> before;
     // The union of the dirty boxes of every recorded application.
     terrain::SampleBox box;
+    // Set by TerrainBrushSession when the release redistance was also committed to the volume the stroke edited, so
+    // before is complete and the volume holds the finished state; false when the stroke was dropped or its volume was
+    // replaced.
+    bool predicted = false;
   };
 
   [[nodiscard]] bool active() const

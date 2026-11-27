@@ -22,6 +22,7 @@
 #include <EditorConnectionState.h>
 #include <TerrainBrushSession.h>
 #include <TerrainToolState.h>
+#include <TerrainUndoState.h>
 #include <scenes/SceneManager.h>
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainUpload.h>
@@ -236,6 +237,10 @@ private:
   // the one already sent lands (cleared in handleSnapshot/handleEditComponent) or its timeout passes.
   UndoRequestGate m_undoRedoGate{defaultUndoRedoPendingTimeout};
 
+  // The terrain a pending terrain undo/redo changed: a terrain edit is answered with a terrainChunks message about it
+  // rather than a snapshot, so that message is what releases the gate.
+  TerrainUndoState m_terrainUndo;
+
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
   bool m_shouldDisplayGui = true;
@@ -438,9 +443,22 @@ private:
 
   void sendTerrainEdit(const net::Message& message) const;
 
+  // Logs why an undo or redo must wait for the terrain brush and returns true when it must.
+  [[nodiscard]] bool refuseForTerrainStroke(bool isUndo);
+
   // Sends the release redistance and makes the Terrain component's bounds follow; a stroke whose volume was
   // replaced is dropped instead.
   void endTerrainStroke();
+
+  // Every end of an active stroke goes through here: it releases the dirty hold a stroke took when it began and, for a
+  // stroke that finished with its prediction, records it as one undo step against the volume it edited. A stroke that
+  // sent brushes (sentBrushes) but recorded no step marks the project edited instead, since the server changed and the
+  // history cannot reverse it.
+  void finishTerrainStroke(const uuids::uuid& terrainUuid, const std::optional<TerrainStroke::Finished>& finished,
+                           const std::shared_ptr<terrain::TerrainVolume>& volume, bool sentBrushes);
+
+  // Drops an active stroke and the wait for a released one without sending anything, for a lost connection.
+  void cancelTerrainStroke();
 
   // The Sculpt toggle and the tool strip, drawn inside the Terrain inspector section.
   void drawTerrainSculpt(const std::shared_ptr<Terrain>& component);

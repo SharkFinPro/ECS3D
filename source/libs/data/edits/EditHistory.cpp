@@ -210,6 +210,26 @@ std::optional<CommandKind> EditHistory::nextRedoKind() const
   return m_redoStack.back().back().kind();
 }
 
+std::optional<uuids::uuid> EditHistory::nextUndoPrimaryUUID() const
+{
+  if (m_undoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_undoStack.back().back().primaryUUID();
+}
+
+std::optional<uuids::uuid> EditHistory::nextRedoPrimaryUUID() const
+{
+  if (m_redoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_redoStack.back().back().primaryUUID();
+}
+
 namespace {
   bool allReversible(const std::vector<EditCommand>& entry)
   {
