@@ -242,10 +242,17 @@ namespace {
 
   [[nodiscard]] std::optional<terrain::RayHit> raycastCursor(const TerrainFrame& frame,
                                                              const terrain::TerrainVolume& volume,
+                                                             const TerrainBrushSession& brush,
                                                              const gizmo::View& view)
   {
     const ImGuiIO& io = ImGui::GetIO();
     const gizmo::Ray ray = rayToLocal(frame, gizmo::mouseRay(view, glm::vec2(io.MousePos.x, io.MousePos.y)));
+
+    if (const auto& surface = brush.strokeSurface())
+    {
+      return strokeCursorHit(*surface, brush.strokePoint(), ray, view.farPlane);
+    }
+
     return terrain::raycast(volume, ray.origin, ray.direction, view.farPlane);
   }
 
@@ -419,7 +426,7 @@ void EditorApp::updateTerrainMode(const gizmo::View& view, const bool sceneHover
   std::optional<terrain::RayHit> hit;
   if (sceneHovered && !m_viewCameraObject.has_value())
   {
-    hit = raycastCursor(frame, *target.volume, view);
+    hit = raycastCursor(frame, *target.volume, m_terrainBrush, view);
   }
 
   const TerrainPointer pointer = makeTerrainPointer(pressed, wasPressed, sceneHovered, m_viewCameraObject.has_value(),

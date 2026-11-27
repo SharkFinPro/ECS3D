@@ -79,7 +79,9 @@ terrain with a brush. It works only while the editor can edit the server.
 
 - Pick Add, Subtract, Smooth or Flatten in the Terrain section, or press Alt+1 to Alt+4. Radius, Strength and
   Falloff are remembered for each tool. PageUp and PageDown grow and shrink the current tool's radius.
-- A ring follows the cursor on the terrain. Left-drag to sculpt; Flatten levels to the height where you press.
+- A ring follows the cursor on the terrain. Left-drag to sculpt; Flatten levels to the height where you press. A
+  stroke follows the ground as it was when you pressed, so a drag draws along the terrain instead of piling toward
+  the camera; drag up past the horizon to raise a column on an upright plane through the stroke's last point.
   Right-drag still flies the camera.
 - Ctrl+click picking and the transform gizmo are off while Sculpt is on. Changing the selection, starting Play or
   losing the connection to the server turns Sculpt off.

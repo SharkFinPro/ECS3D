@@ -453,6 +453,23 @@ namespace terrain
     std::vector<float> nextField = field;
     std::vector<uint8_t> sliceChanged(static_cast<size_t>(size.z));
 
+    // A row whose own values and whose neighbor rows' values did not change in the last pass reads the same inputs
+    // again, so it cannot change; such rows are skipped, which keeps both buffers equal there.
+    const auto rowIndex = [&size](const int y, const int z)
+    {
+      return static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y);
+    };
+    std::vector<uint8_t> rowChanged(activeRow.size(), 0);
+    std::vector<uint8_t> nextRowChanged(activeRow.size(), 0);
+
+    for (int z = 1; z < size.z - 1; ++z)
+    {
+      for (int y = 1; y < size.y - 1; ++y)
+      {
+        rowChanged[rowIndex(y, z)] = activeRow[rowIndex(y, z)];
+      }
+    }
+
     for (int pass = 0; pass < maxPasses && sourceMaxX >= 0; ++pass)
     {
       std::ranges::fill(sliceChanged, 0);
@@ -468,10 +485,29 @@ namespace terrain
 
         for (int y = 1; y < size.y - 1; ++y)
         {
-          if (activeRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] == 0)
+          nextRowChanged[rowIndex(y, z)] = 0;
+
+          if (activeRow[rowIndex(y, z)] == 0)
           {
             continue;
           }
+
+          bool neighborChanged = false;
+
+          for (int dz = -1; dz <= 1 && !neighborChanged; ++dz)
+          {
+            for (int dy = -1; dy <= 1 && !neighborChanged; ++dy)
+            {
+              neighborChanged = rowChanged[rowIndex(y + dy, z + dz)] != 0;
+            }
+          }
+
+          if (!neighborChanged)
+          {
+            continue;
+          }
+
+          bool rowAny = false;
 
           for (int x = sweepLow; x <= sweepHigh; ++x)
           {
@@ -499,14 +535,18 @@ namespace terrain
             const float value = std::signbit(current) ? -magnitude : magnitude;
 
             nextField[index] = value;
-            any = any || value != current;
+            rowAny = rowAny || value != current;
           }
+
+          nextRowChanged[rowIndex(y, z)] = rowAny ? 1 : 0;
+          any = any || rowAny;
         }
 
         sliceChanged[static_cast<size_t>(z)] = any ? 1 : 0;
       });
 
       field.swap(nextField);
+      rowChanged.swap(nextRowChanged);
 
       if (std::ranges::none_of(sliceChanged, [](const uint8_t changed) { return changed != 0; }))
       {

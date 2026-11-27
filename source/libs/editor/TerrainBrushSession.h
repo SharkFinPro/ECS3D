@@ -110,6 +110,19 @@ public:
     return m_volume;
   }
 
+  // The terrain as it was when the active stroke began, for the cursor to aim at (strokeCursorHit), so a stroke
+  // follows the ground it started on instead of climbing the material it adds; null when no stroke is active.
+  [[nodiscard]] const std::shared_ptr<const terrain::TerrainVolume>& strokeSurface() const
+  {
+    return m_surface;
+  }
+
+  // Where the active stroke's last application landed.
+  [[nodiscard]] glm::vec3 strokePoint() const
+  {
+    return m_stroke.lastPoint();
+  }
+
   [[nodiscard]] const uuids::uuid& terrain() const
   {
     return m_terrain;
@@ -220,6 +233,7 @@ public:
 
     m_terrain = terrainUuid;
     m_volume = volume;
+    m_surface = snapshotSurface(*volume);
     ++m_nextStrokeId;
     perform(first, send);
     return true;
@@ -344,6 +358,7 @@ public:
   {
     static_cast<void>(m_stroke.end());
     m_volume.reset();
+    m_surface.reset();
     clearAwaiting();
   }
 
@@ -351,6 +366,7 @@ private:
   std::optional<TerrainStroke::Finished> finish(const bool commitLocally, const Send& send)
   {
     std::optional<TerrainStroke::Finished> finished = m_stroke.end();
+    m_surface.reset();
 
     if (!finished)
     {
@@ -438,7 +454,16 @@ private:
     return true;
   }
 
+  // Copies the chunk pointers only: chunks are immutable, so later edits never reach the copy.
+  [[nodiscard]] static std::shared_ptr<const terrain::TerrainVolume> snapshotSurface(const terrain::TerrainVolume& volume)
+  {
+    auto surface = std::make_shared<terrain::TerrainVolume>(volume.voxelSize());
+    surface->restoreChunks(volume.snapshotChunks());
+    return surface;
+  }
+
   TerrainStroke m_stroke;
+  std::shared_ptr<const terrain::TerrainVolume> m_surface;
   uuids::uuid m_terrain;
   std::shared_ptr<terrain::TerrainVolume> m_volume;
   // Chunks of a released stroke of m_terrain that were requested and have not arrived in full.

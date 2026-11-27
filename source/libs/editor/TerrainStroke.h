@@ -55,6 +55,12 @@ public:
     return m_strokeId;
   }
 
+  // Where the last application landed, or the first hit; meaningful only while active.
+  [[nodiscard]] glm::vec3 lastPoint() const
+  {
+    return glm::vec3(m_last);
+  }
+
   [[nodiscard]] const terrain::SampleBox& box() const
   {
     return m_box;
