@@ -27,7 +27,11 @@ namespace terrain
 
       void run(const int count, const std::function<void(int)>& body)
       {
-        if (count < 2 || m_threads.empty() || !m_runMutex.try_lock())
+        // A body that calls parallelFor again on the thread that holds the pool runs that call serially: try_lock on
+        // a mutex the thread already owns is undefined.
+        thread_local bool running = false;
+
+        if (count < 2 || m_threads.empty() || running || !m_runMutex.try_lock())
         {
           for (int index = 0; index < count; ++index)
           {
@@ -38,6 +42,17 @@ namespace terrain
         }
 
         const std::lock_guard runLock(m_runMutex, std::adopt_lock);
+        running = true;
+
+        struct Reset
+        {
+          bool& flag;
+
+          ~Reset()
+          {
+            flag = false;
+          }
+        } const reset{ running };
 
         {
           const std::lock_guard lock(m_mutex);

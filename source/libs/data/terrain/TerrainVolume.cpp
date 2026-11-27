@@ -2,7 +2,6 @@
 #include <glm/common.hpp>
 #include <algorithm>
 #include <atomic>
-#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -119,7 +118,11 @@ namespace terrain
     }
 
     const glm::ivec3 size = box.max - box.min;
-    assert(out.size() >= static_cast<size_t>(size.x) * static_cast<size_t>(size.y) * static_cast<size_t>(size.z));
+
+    if (out.size() < static_cast<size_t>(size.x) * static_cast<size_t>(size.y) * static_cast<size_t>(size.z))
+    {
+      throw std::invalid_argument("readDistances: the output holds fewer samples than the box");
+    }
 
     const ChunkCoord first = chunkOfSample(box.min);
     const ChunkCoord last = chunkOfSample(box.max - glm::ivec3(1));

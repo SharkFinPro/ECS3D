@@ -13,6 +13,7 @@
 #include <Protocol.h>
 #include <glm/geometric.hpp>
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -360,9 +361,10 @@ public:
         break;
       case TerrainStrokeStep::move:
         // A Subtract stroke aims at the live terrain, so the cursor leaving the hole it dug lands on the surface well
-        // above the hole's bottom. Bridging that jump would cut a straight trench through the ground at the hole's
-        // depth, so a jump of more than a brush radius starts a new segment at the hit instead.
-        if (!m_surface && glm::length(hit->point - m_stroke.lastPoint()) > m_stroke.radius())
+        // above the hole's bottom. Bridging that rise would cut a straight trench through the ground at the hole's
+        // depth, so a height change of more than a brush radius starts a new segment at the hit instead. A fast drag
+        // across level ground still bridges.
+        if (!m_surface && std::abs(hit->point.y - m_stroke.lastPoint().y) > m_stroke.radius())
         {
           m_stroke.breakPath();
         }

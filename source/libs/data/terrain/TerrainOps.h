@@ -37,13 +37,11 @@ namespace terrain
   // one of them unchanged, so the chunk is not rebuilt at all. It must never answer true for a sample the edit changes.
   using ChunkSkip = std::function<bool(const SampleBox& covered)>;
 
-  // With parallel set, chunks are edited on several OpenMP threads, so edit, uniformHint and skipChunk must be safe to call
-  // concurrently; the result is the same either way.
-  //
   // Rebuilds every chunk the box touches and returns only the chunks whose content changed; a result that is air is
   // emitted as nullptr. A distance written outside the band is clamped, and the reserved material keeps the input's.
   // Returns empty edits for an empty box, a box over maxEditChunks chunks or a box with a chunk outside
-  // isValidChunkCoord. Never mutates the volume.
+  // isValidChunkCoord. Never mutates the volume. With parallel set, chunks are edited on parallelFor's pool, so edit,
+  // uniformHint and skipChunk must be safe to call concurrently; the result is the same either way.
   [[nodiscard]] ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
                                        const UniformChunkHint& uniformHint = {},
                                        const ChunkSkip& skipChunk = {}, bool parallel = false);

@@ -290,4 +290,10 @@ TEST(TerrainBrushSessionFlowTest, ASubtractJumpStartsANewSegmentInsteadOfCutting
                   recorder.sender());
   ASSERT_EQ(recorder.payloads().size(), afterPress + 1);
   EXPECT_FLOAT_EQ(recorder.payloads().back().brush.center.x, 60.0f);
+
+  // A fast drag across level ground is no rise out of a hole: it still bridges with spaced applications.
+  const size_t beforeDrag = recorder.payloads().size();
+  session.advance(terrainId, env.volume, true, pressedAt(true), hitAt({ 80.0f, 10.0f, 40.0f }), makeTemplate,
+                  recorder.sender());
+  EXPECT_GT(recorder.payloads().size(), beforeDrag + 1);
 }

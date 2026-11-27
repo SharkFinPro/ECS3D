@@ -40,7 +40,7 @@ namespace terrain
     [[nodiscard]] uint8_t materialAtSample(glm::ivec3 sample) const;
 
     // Copies the box's distances into out, x fastest then y then z, reading absent chunks as air. out must hold the
-    // box's sample count.
+    // box's sample count; a smaller one throws std::invalid_argument.
     void readDistances(const SampleBox& box, std::span<int16_t> out) const;
 
     [[nodiscard]] SampleBox occupiedBounds() const;

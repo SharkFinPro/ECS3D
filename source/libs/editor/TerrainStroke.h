@@ -117,11 +117,6 @@ public:
     m_pathBroken = m_active;
   }
 
-  // The pointer is over the surface at hit. Returns the applications due since the last one: points spaced
-  // spacing() apart along the piecewise-linear path through successive hit points, carrying the leftover distance
-  // from one call to the next. Empty when not active or the pointer did not move far enough. At most
-  // maxApplicationsPerMove are returned; past that only the last ones of the segment are kept, so the brush ends at
-  // hit rather than lagging behind it.
   // The pointer is held still over hit: one more application there, which restarts the spacing from it. Nothing when
   // not active or the hit point is not finite.
   [[nodiscard]] std::optional<terrain::BrushOp> holdAt(const terrain::RayHit& hit)
@@ -136,6 +131,11 @@ public:
     return opAt(hit.point);
   }
 
+  // The pointer is over the surface at hit. Returns the applications due since the last one: points spaced
+  // spacing() apart along the piecewise-linear path through successive hit points, carrying the leftover distance
+  // from one call to the next. Empty when not active or the pointer did not move far enough. At most
+  // maxApplicationsPerMove are returned; past that only the last ones of the segment are kept, so the brush ends at
+  // hit rather than lagging behind it.
   [[nodiscard]] std::vector<terrain::BrushOp> moveTo(const terrain::RayHit& hit)
   {
     std::vector<terrain::BrushOp> due;

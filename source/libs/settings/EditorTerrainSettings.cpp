@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <string_view>
 
 namespace editorTerrainSettings {
   namespace {
@@ -37,7 +38,7 @@ namespace editorTerrainSettings {
 
   float defaultStrengthFor(const std::size_t tool)
   {
-    return tool == 1 ? defaultSubtractStrength : defaultStrength;
+    return tool < toolCount && std::string_view(toolIds[tool]) == "subtract" ? defaultSubtractStrength : defaultStrength;
   }
 
   float clampFalloff(const float falloff)
