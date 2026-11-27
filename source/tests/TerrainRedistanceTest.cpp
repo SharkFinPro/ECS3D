@@ -414,121 +414,200 @@ namespace {
 
     return u;
   }
-}
 
-// A plain reference (27-neighbor freeze, full-grid Jacobi to convergence, no skipping) on a grid large enough for the
-// parallel passes: redistance must agree with it everywhere in the box.
-TEST(TerrainRedistanceTest, MatchesAFullJacobiReferenceOnALargeBox)
-{
-  terrain::TerrainVolume volume(1.0f);
-  terrain::commit(volume, terrain::fillFlat(volume, { 96, 96 }, 20.0f, 20.0f, 1));
-
-  // A steep dig and a blob leave distances that are no longer distance-like.
-  const std::tuple<terrain::BrushOp::Kind, glm::vec3, float> shapes[] = {
-    { terrain::BrushOp::Kind::subtract, glm::vec3(40.0f, 20.0f, 40.0f), 12.0f },
-    { terrain::BrushOp::Kind::add, glm::vec3(60.0f, 24.0f, 50.0f), 8.0f }
-  };
-
-  for (const auto& [kind, center, radius] : shapes)
+  // Flat ground with a steep dig and a blob, whose distances are no longer distance-like.
+  terrain::TerrainVolume dugGround()
   {
-    terrain::BrushOp op;
-    op.kind = kind;
-    op.center = center;
-    op.radius = radius;
-    op.strength = 1.0f;
-    op.falloff = 0.0f;
-    op.material = 1;
-    terrain::commit(volume, terrain::applyBrush(volume, op));
+    terrain::TerrainVolume volume(1.0f);
+    terrain::commit(volume, terrain::fillFlat(volume, { 96, 96 }, 20.0f, 20.0f, 1));
+
+    const std::tuple<terrain::BrushOp::Kind, glm::vec3, float> shapes[] = {
+      { terrain::BrushOp::Kind::subtract, glm::vec3(40.0f, 20.0f, 40.0f), 12.0f },
+      { terrain::BrushOp::Kind::add, glm::vec3(60.0f, 24.0f, 50.0f), 8.0f }
+    };
+
+    for (const auto& [kind, center, radius] : shapes)
+    {
+      terrain::BrushOp op;
+      op.kind = kind;
+      op.center = center;
+      op.radius = radius;
+      op.strength = 1.0f;
+      op.falloff = 0.0f;
+      op.material = 1;
+      terrain::commit(volume, terrain::applyBrush(volume, op));
+    }
+
+    return volume;
   }
 
-  const terrain::SampleBox box{ { 4, 0, 4 }, { 84, 44, 84 } };
-  const glm::ivec3 gridMin = box.min - glm::ivec3(1);
-  const glm::ivec3 size = box.max - box.min + glm::ivec3(2);
-  ASSERT_GT(static_cast<int64_t>(size.x) * size.y * size.z, 65536);
-
-  const auto at = [&size](const int x, const int y, const int z)
+  // A plain redistance of box: 27-neighbor freeze, then full-grid Jacobi passes to convergence with no skipping.
+  class ReferenceRedistance
   {
-    return static_cast<size_t>(x + size.x * (y + size.y * z));
-  };
-
-  std::vector<int16_t> encoded(static_cast<size_t>(size.x) * size.y * size.z);
-  std::vector<float> field(encoded.size());
-  std::vector<uint8_t> fixed(encoded.size(), 0);
-
-  for (int z = 0; z < size.z; ++z)
-  {
-    for (int y = 0; y < size.y; ++y)
+  public:
+    ReferenceRedistance(const terrain::TerrainVolume& volume, const terrain::SampleBox& box)
+      : m_min(box.min - glm::ivec3(1)), m_size(box.max - box.min + glm::ivec3(2)),
+        m_encoded(count()), m_field(count()), m_fixed(count(), 0)
     {
-      for (int x = 0; x < size.x; ++x)
+      forEach([&](const glm::ivec3 local)
       {
-        encoded[at(x, y, z)] = volume.distanceAtSample(gridMin + glm::ivec3(x, y, z));
-        field[at(x, y, z)] = terrain::decodeDistance(encoded[at(x, y, z)]);
+        m_encoded[at(local)] = volume.distanceAtSample(m_min + local);
+        m_field[at(local)] = terrain::decodeDistance(m_encoded[at(local)]);
+      });
+
+      forEach([&](const glm::ivec3 local) { freeze(local); });
+
+      while (pass())
+      {
       }
     }
-  }
 
-  for (int z = 0; z < size.z; ++z)
-  {
-    for (int y = 0; y < size.y; ++y)
+    [[nodiscard]] size_t samples() const
     {
-      for (int x = 0; x < size.x; ++x)
-      {
-        const bool inside = encoded[at(x, y, z)] < 0;
-        bool freeze = x == 0 || y == 0 || z == 0 || x == size.x - 1 || y == size.y - 1 || z == size.z - 1 ||
-                      encoded[at(x, y, z)] == 0;
+      return count();
+    }
 
-        for (int dz = -1; dz <= 1 && !freeze; ++dz)
+    // The encoded distance redistance should leave at sample.
+    [[nodiscard]] int expectedAt(const glm::ivec3 sample) const
+    {
+      const size_t index = at(sample - m_min);
+      return m_fixed[index] != 0 ? m_encoded[index] : terrain::encodeDistance(m_field[index]);
+    }
+
+  private:
+    glm::ivec3 m_min;
+    glm::ivec3 m_size;
+    std::vector<int16_t> m_encoded;
+    std::vector<float> m_field;
+    std::vector<uint8_t> m_fixed;
+
+    [[nodiscard]] size_t count() const
+    {
+      return static_cast<size_t>(m_size.x) * static_cast<size_t>(m_size.y) * static_cast<size_t>(m_size.z);
+    }
+
+    [[nodiscard]] size_t at(const glm::ivec3 local) const
+    {
+      return static_cast<size_t>(local.x + m_size.x * (local.y + m_size.y * local.z));
+    }
+
+    [[nodiscard]] bool onBorder(const glm::ivec3 local) const
+    {
+      return local.x == 0 || local.y == 0 || local.z == 0 || local.x == m_size.x - 1 || local.y == m_size.y - 1 ||
+             local.z == m_size.z - 1;
+    }
+
+    template <typename Visit>
+    void forEach(const Visit& visit) const
+    {
+      for (int z = 0; z < m_size.z; ++z)
+      {
+        for (int y = 0; y < m_size.y; ++y)
         {
-          for (int dy = -1; dy <= 1 && !freeze; ++dy)
+          for (int x = 0; x < m_size.x; ++x)
           {
-            for (int dx = -1; dx <= 1 && !freeze; ++dx)
+            visit(glm::ivec3(x, y, z));
+          }
+        }
+      }
+    }
+
+    [[nodiscard]] bool signChangesAround(const glm::ivec3 local) const
+    {
+      const bool inside = m_encoded[at(local)] < 0;
+
+      for (int dz = -1; dz <= 1; ++dz)
+      {
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+          for (int dx = -1; dx <= 1; ++dx)
+          {
+            if ((m_encoded[at(local + glm::ivec3(dx, dy, dz))] < 0) != inside)
             {
-              freeze = (encoded[at(x + dx, y + dy, z + dz)] < 0) != inside;
+              return true;
             }
           }
         }
-
-        fixed[at(x, y, z)] = freeze ? 1 : 0;
-
-        if (!freeze)
-        {
-          field[at(x, y, z)] = inside ? -terrain::bandVoxels : terrain::bandVoxels;
-        }
       }
+
+      return false;
     }
-  }
 
-  for (bool changed = true; changed;)
-  {
-    changed = false;
-    std::vector<float> next = field;
-
-    for (int z = 1; z < size.z - 1; ++z)
+    void freeze(const glm::ivec3 local)
     {
-      for (int y = 1; y < size.y - 1; ++y)
+      const size_t index = at(local);
+      const bool frozen = onBorder(local) || m_encoded[index] == 0 || signChangesAround(local);
+
+      m_fixed[index] = frozen ? 1 : 0;
+
+      if (!frozen)
       {
-        for (int x = 1; x < size.x - 1; ++x)
+        m_field[index] = m_encoded[index] < 0 ? -terrain::bandVoxels : terrain::bandVoxels;
+      }
+    }
+
+    [[nodiscard]] float nearest(const glm::ivec3 local, const glm::ivec3 step) const
+    {
+      return std::min(std::abs(m_field[at(local - step)]), std::abs(m_field[at(local + step)]));
+    }
+
+    // One Jacobi pass; whether any sample changed.
+    bool pass()
+    {
+      std::vector<float> next = m_field;
+      bool changed = false;
+
+      forEach([&](const glm::ivec3 local)
+      {
+        const size_t index = at(local);
+
+        if (onBorder(local) || m_fixed[index] != 0)
         {
-          if (fixed[at(x, y, z)] != 0)
-          {
-            continue;
-          }
+          return;
+        }
 
-          const float a = std::min(std::abs(field[at(x - 1, y, z)]), std::abs(field[at(x + 1, y, z)]));
-          const float b = std::min(std::abs(field[at(x, y - 1, z)]), std::abs(field[at(x, y + 1, z)]));
-          const float c = std::min(std::abs(field[at(x, y, z - 1)]), std::abs(field[at(x, y, z + 1)]));
-          const float current = field[at(x, y, z)];
-          const float magnitude = std::min(std::abs(current), referenceUpwind(a, b, c));
-          const float value = std::signbit(current) ? -magnitude : magnitude;
+        const float current = m_field[index];
+        const float upwind = referenceUpwind(nearest(local, { 1, 0, 0 }), nearest(local, { 0, 1, 0 }),
+                                             nearest(local, { 0, 0, 1 }));
+        const float magnitude = std::min(std::abs(current), upwind);
+        next[index] = std::signbit(current) ? -magnitude : magnitude;
+        changed = changed || next[index] != current;
+      });
 
-          changed = changed || value != current;
-          next[at(x, y, z)] = value;
+      m_field.swap(next);
+      return changed;
+    }
+  };
+
+  // The largest difference, in encoded units, between the volume and the reference over box.
+  int worstDifference(const terrain::TerrainVolume& volume, const ReferenceRedistance& reference,
+                      const terrain::SampleBox& box)
+  {
+    int worst = 0;
+
+    for (int z = box.min.z; z < box.max.z; ++z)
+    {
+      for (int y = box.min.y; y < box.max.y; ++y)
+      {
+        for (int x = box.min.x; x < box.max.x; ++x)
+        {
+          const glm::ivec3 sample(x, y, z);
+          worst = std::max(worst, std::abs(volume.distanceAtSample(sample) - reference.expectedAt(sample)));
         }
       }
     }
 
-    field.swap(next);
+    return worst;
   }
+}
+
+// On a grid large enough for the parallel passes, redistance must agree everywhere in the box with a plain reference.
+TEST(TerrainRedistanceTest, MatchesAFullJacobiReferenceOnALargeBox)
+{
+  const terrain::TerrainVolume volume = dugGround();
+  const terrain::SampleBox box{ { 4, 0, 4 }, { 84, 44, 84 } };
+  const ReferenceRedistance reference(volume, box);
+  ASSERT_GT(reference.samples(), 65536u);
 
   terrain::TerrainVolume redistanced(1.0f);
   redistanced.restoreChunks(volume.snapshotChunks());
@@ -536,22 +615,6 @@ TEST(TerrainRedistanceTest, MatchesAFullJacobiReferenceOnALargeBox)
   ASSERT_FALSE(edits.empty());
   terrain::commit(redistanced, edits);
 
-  int worst = 0;
-
-  for (int z = box.min.z; z < box.max.z; ++z)
-  {
-    for (int y = box.min.y; y < box.max.y; ++y)
-    {
-      for (int x = box.min.x; x < box.max.x; ++x)
-      {
-        const glm::ivec3 local = glm::ivec3(x, y, z) - gridMin;
-        const size_t index = at(local.x, local.y, local.z);
-        const int expected = fixed[index] != 0 ? encoded[index] : terrain::encodeDistance(field[index]);
-        worst = std::max(worst, std::abs(redistanced.distanceAtSample({ x, y, z }) - expected));
-      }
-    }
-  }
-
   // A unit or two of the encoding allows for floating-point contraction differing between this file and TerrainOps.
-  EXPECT_LE(worst, 2);
+  EXPECT_LE(worstDifference(redistanced, reference, box), 2);
 }
