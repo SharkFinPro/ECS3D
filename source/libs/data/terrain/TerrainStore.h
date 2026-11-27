@@ -39,7 +39,8 @@ namespace terrain
 
   inline constexpr float minVoxelSize = 1.0e-3f;
   inline constexpr float maxVoxelSize = 1000.0f;
-  inline constexpr size_t maxPaletteSize = 255;
+  // The most materials the renderer can show at once.
+  inline constexpr size_t maxPaletteSize = 16;
   inline constexpr size_t maxMaterialNameLength = 256;
 
   [[nodiscard]] bool isValidDescription(const TerrainDescription& description);

@@ -184,6 +184,9 @@ public:
                                             std::string path, std::string className, std::string body,
                                             std::optional<TerrainRestore> terrain = std::nullopt);
 
+  // For a Terrain asset the bodies are terrain description bodies (terrain/TerrainAddition.h) and only the palette
+  // differs; validation then compares the live palette instead of the registry record, which a palette edit leaves
+  // alone.
   // Re-registering an existing uuid with a new record: a prefab body edit, or "Save as Prefab" over a
   // name that already exists. Distinct from addAsset because addAsset's reverse is a removeAsset, which
   // would delete the asset rather than put its previous body back.
@@ -280,7 +283,9 @@ public:
   // with a null scene (or a scene whose uuid differs from the recorded one) is targetMissing, naming the
   // scene's uuid. terrains is read by terrainStroke: a null store, or one without the terrain, is
   // targetMissing, and a chunk whose live hash is not the recorded after chunk is targetChanged, both naming
-  // the terrain's uuid. It is also read by a terrain asset command that adds the terrain back (undo of a removeAsset,
+  // the terrain's uuid. It is also read by a Terrain replaceAsset, whose live palette must equal the after (undo) or
+  // before (redo) palette: a null store, or one without the terrain, is targetMissing, any other palette
+  // targetChanged. It is also read by a terrain asset command that adds the terrain back (undo of a removeAsset,
   // redo of an addAsset): a null store is targetMissing and a store that already holds the terrain is targetChanged.
   [[nodiscard]] Validation validateForUndo(const ObjectManager& objectManager,
                                            const AssetRegistry* assetRegistry,
@@ -332,6 +337,8 @@ private:
   [[nodiscard]] Validation validateTerrainStroke(const terrain::TerrainStore* terrains, bool forUndo) const;
   [[nodiscard]] Validation validateTerrainReAdd(const uuids::uuid& assetUUID,
                                                 const terrain::TerrainStore* terrains) const;
+  [[nodiscard]] static Validation validateTerrainPalette(const uuids::uuid& assetUUID, const std::string& body,
+                                                         const terrain::TerrainStore* terrains);
 
   struct ComponentEditData {
     uuids::uuid objectUUID;

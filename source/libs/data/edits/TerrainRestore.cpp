@@ -37,7 +37,9 @@ std::shared_ptr<const terrain::TerrainVolume> applyTerrainRestore(
   AssetRegistry& assetRegistry, SceneManager& sceneManager, const std::shared_ptr<ComponentRegistry>& componentRegistry,
   terrain::TerrainStore& store, const TerrainRestore& restore)
 {
-  if (!replication::applyAddAssetWithTerrain(assetRegistry, sceneManager, componentRegistry, store,
+  // A body over a held terrain is a palette replacement, which must not take the restore's chunks.
+  if (store.find(restore.description.uuid) != nullptr ||
+      !replication::applyAddAssetWithTerrain(assetRegistry, sceneManager, componentRegistry, store,
                                              terrainRestoreAssetJson(restore), false))
   {
     return nullptr;

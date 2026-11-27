@@ -254,9 +254,12 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
 // applyAddAsset, then, for a terrain addAsset that carries a description body (terrain/TerrainAddition.h), the
 // terrain's empty volume in the store; expectUpload also records the upload expectation, which only the server does.
 // Everything is checked first, so a refusal leaves registry and store untouched: an unusable description, a uuid the
-// store holds a terrain for, or a uuid the registry holds as any other type. The store step runs only when the
-// registry really holds a Terrain record under the uuid afterwards. *created, when given, receives the description of
-// a terrain that was created. A terrain addAsset without a body behaves as applyAddAsset does.
+// store holds a terrain for (unless it is a palette replacement), or a uuid the registry holds as any other type. The
+// store step runs only when the registry really holds a Terrain record under the uuid afterwards. *created, when
+// given, receives the description of a terrain that was created. A body over a uuid the registry holds as a Terrain
+// record and the store holds replaces only that terrain's palette: it is refused when the voxel size differs, the
+// volume and chunks are untouched, nothing is expected from an upload and *created stays unset. A terrain addAsset
+// without a body behaves as applyAddAsset does.
 bool applyAddAssetWithTerrain(AssetRegistry& assetRegistry,
                               SceneManager& sceneManager,
                               const std::shared_ptr<ComponentRegistry>& componentRegistry,
