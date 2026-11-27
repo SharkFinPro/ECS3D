@@ -133,7 +133,11 @@ before chunk (redo) is `targetChanged`, both naming the terrain. The payload for
 `HistoryOutcome::terrainPayload` holds a `TerrainSetChunks` carrying every chunk's before (undo) or after (redo).
 The caller sends it with `packSetChunksEdits`, which splits it into `terrainEdit` setChunks messages of at most
 `maxTerrainChunksEntries` entries and `maxSetChunksMessageBytes`, and applies it to its own volume with
-`predictSetChunks`, as a brush is predicted. `recordBatch` refuses a `terrainStroke`.
+`predictSetChunks`, as a brush is predicted; the caller applies that prediction before the next undo or redo, or
+validation reads a stale volume and refuses. Null and air are the same chunk when comparing. The factory throws
+`std::invalid_argument` for an empty chunk list, a repeated coordinate or one beyond `maxChunkCoord`, since the server
+refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
+coordinate. `recordBatch` refuses a `terrainStroke`.
 
 ## Editor wiring
 

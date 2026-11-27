@@ -220,7 +220,9 @@ public:
                                                         const nlohmann::json& after);
 
   // Every chunk a stroke changed, with the chunk from before and after it. Undo restores the before chunks, redo
-  // the after chunks; validation compares the live volume against the other side by hash.
+  // the after chunks; validation compares the live volume against the other side by hash. Throws
+  // std::invalid_argument for an empty list, a repeated coordinate or one the wire cannot carry, which the server
+  // would refuse as a whole.
   [[nodiscard]] static EditCommand terrainStroke(const uuids::uuid& terrainUUID,
                                                  std::vector<TerrainStrokeChunk> chunks);
 

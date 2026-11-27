@@ -41,9 +41,12 @@ void predictSetChunks(terrain::TerrainVolume& volume, const TerrainSetChunks& pa
 bool terrainChunksDiffer(const std::shared_ptr<const terrain::TerrainChunk>& first,
                          const std::shared_ptr<const terrain::TerrainChunk>& second)
 {
-  if (!first || !second)
+  const bool firstAir = !first || first->isAir();
+  const bool secondAir = !second || second->isAir();
+
+  if (firstAir || secondAir)
   {
-    return static_cast<bool>(first) != static_cast<bool>(second);
+    return firstAir != secondAir;
   }
 
   return first->hash() != second->hash();

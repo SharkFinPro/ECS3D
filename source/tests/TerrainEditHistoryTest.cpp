@@ -490,25 +490,32 @@ TEST(TerrainEditHistory, UndoAndRedoPayloadsCarryTheBeforeAndAfterChunks)
 
 TEST(TerrainEditHistory, LargeSetChunksSplitIntoMessagesWithinBothLimits)
 {
-  constexpr int total = 1500;
+  // The worst entry is 24 header bytes (3 x int32, hash, size) plus maxEncodedChunkBytes: 32768 samples / 128 per run
+  // = 256 runs, each 1 + 128 * 2 distance bytes and 1 + 128 material bytes = 386, so 1 + 256 * 386 = 98817 and
+  // 98841 per entry. The 32 MiB budget (33554432) holds floor(33554432 / 98841) = 339 of them, below the 1024-entry
+  // cap, so the byte limit binds; the entry cap only guards against a smaller maxEncodedChunkBytes.
+  constexpr std::size_t perMessage = 339;
+  static_assert(perMessage < terrain::maxTerrainChunksEntries);
+  constexpr int total = 3 * perMessage + 1;
+
   constexpr std::size_t worstEntry = terrain::setChunkEntryHeaderBytes + terrain::maxEncodedChunkBytes;
-  const std::size_t perMessage = std::min(terrain::maxTerrainChunksEntries, edits::maxSetChunksMessageBytes / worstEntry);
+  const std::size_t expectedCounts[] = { perMessage, perMessage, perMessage, 1 };
 
   const auto payload = uniformChunks(total);
   const auto messages = edits::packSetChunksEdits(payload, 42);
-  ASSERT_GT(messages.size(), 1u);
-  EXPECT_EQ(messages.size(), (static_cast<std::size_t>(total) + perMessage - 1) / perMessage);
+  ASSERT_EQ(messages.size(), 4u);
 
   std::size_t next = 0;
-  for (const auto& message : messages)
+  for (std::size_t m = 0; m < messages.size(); ++m)
   {
-    const auto unpacked = terrain::unpackTerrainEdit(message);
+    const auto unpacked = terrain::unpackTerrainEdit(messages[m]);
     ASSERT_TRUE(unpacked.has_value());
     EXPECT_EQ(unpacked->kind, terrain::TerrainEditKind::setChunks);
     EXPECT_EQ(unpacked->terrain, terrainId);
     EXPECT_EQ(unpacked->strokeId, 42u);
-    EXPECT_LE(unpacked->chunks.size(), terrain::maxTerrainChunksEntries);
+    EXPECT_EQ(unpacked->chunks.size(), expectedCounts[m]);
     EXPECT_LE(unpacked->chunks.size() * worstEntry, edits::maxSetChunksMessageBytes);
+    EXPECT_LE(messages[m].size(), 64u * 1024u * 1024u);
 
     for (const auto& entry : unpacked->chunks)
     {
@@ -523,4 +530,79 @@ TEST(TerrainEditHistory, LargeSetChunksSplitIntoMessagesWithinBothLimits)
 
   EXPECT_EQ(edits::packSetChunksEdits(uniformChunks(10)).size(), 1u);
   EXPECT_TRUE(edits::packSetChunksEdits(uniformChunks(0)).empty());
+}
+
+TEST(TerrainEditHistory, AirIsTheSameAsNullWhenComparingChunks)
+{
+  const auto air = terrain::TerrainChunk::uniform(terrain::airDistance, 0);
+  ASSERT_TRUE(air);
+  ASSERT_TRUE(air->isAir());
+  const auto ground = foreignChunk();
+  ASSERT_FALSE(ground->isAir());
+
+  EXPECT_FALSE(edits::terrainChunksDiffer(air, nullptr));
+  EXPECT_FALSE(edits::terrainChunksDiffer(nullptr, air));
+  EXPECT_TRUE(edits::terrainChunksDiffer(ground, nullptr));
+  EXPECT_TRUE(edits::terrainChunksDiffer(air, ground));
+
+  constexpr terrain::ChunkCoord coord{ 50, 0, 0 };
+
+  {
+    World world;
+    world.history.record(edits::EditCommand::terrainStroke(terrainId, { { coord, ground, air } }));
+    const auto outcome = world.undo();
+    EXPECT_TRUE(outcome.ok());
+    ASSERT_TRUE(outcome.terrainPayload.has_value());
+    edits::predictSetChunks(*world.editor.volume, *outcome.terrainPayload);
+    EXPECT_EQ(world.editor.volume->chunk(coord)->hash(), ground->hash());
+    EXPECT_TRUE(world.redo().ok());
+  }
+
+  {
+    World world;
+    world.editor.volume->setChunk(coord, ground);
+    const BeforeList before{ { coord, air } };
+    world.editor.volume->setChunk(coord, nullptr);
+    EXPECT_FALSE(edits::commandForTerrainStroke(terrainId, before, *world.editor.volume).has_value());
+    world.editor.volume->setChunk(coord, ground);
+    EXPECT_TRUE(edits::commandForTerrainStroke(terrainId, before, *world.editor.volume).has_value());
+  }
+}
+
+TEST(TerrainEditHistory, TheFactoryRefusesWhatTheServerWouldRefuse)
+{
+  const auto ground = foreignChunk();
+  constexpr terrain::ChunkCoord coord{ 1, 2, 3 };
+
+  EXPECT_NO_THROW((void)edits::EditCommand::terrainStroke(terrainId, { { coord, nullptr, ground } }));
+  EXPECT_NO_THROW((void)edits::EditCommand::terrainStroke(
+    terrainId, { { coord, nullptr, ground }, { { 1, 2, 4 }, nullptr, ground } }));
+  EXPECT_NO_THROW((void)edits::EditCommand::terrainStroke(
+    terrainId, { { { terrain::maxChunkCoord, -terrain::maxChunkCoord, 0 }, nullptr, ground } }));
+
+  EXPECT_THROW((void)edits::EditCommand::terrainStroke(terrainId, {}), std::invalid_argument);
+  EXPECT_THROW((void)edits::EditCommand::terrainStroke(
+                 terrainId, { { coord, nullptr, ground }, { coord, ground, nullptr } }),
+               std::invalid_argument);
+  EXPECT_THROW((void)edits::EditCommand::terrainStroke(
+                 terrainId, { { { terrain::maxChunkCoord + 1, 0, 0 }, nullptr, ground } }),
+               std::invalid_argument);
+  EXPECT_THROW((void)edits::EditCommand::terrainStroke(
+                 terrainId, { { { 0, -terrain::maxChunkCoord - 1, 0 }, nullptr, ground } }),
+               std::invalid_argument);
+}
+
+TEST(TerrainEditHistory, ARepeatedCoordinateInTheBeforeListKeepsTheFirstEntry)
+{
+  World world;
+  constexpr terrain::ChunkCoord coord{ 7, 0, 0 };
+  const auto ground = foreignChunk();
+  world.editor.volume->setChunk(coord, ground);
+
+  const BeforeList before{ { coord, nullptr }, { coord, ground } };
+  const auto command = edits::commandForTerrainStroke(terrainId, before, *world.editor.volume);
+  ASSERT_TRUE(command.has_value());
+  ASSERT_EQ(command->terrainStrokeChunks()->size(), 1u);
+  EXPECT_EQ(command->terrainStrokeChunks()->front().before, nullptr);
+  EXPECT_EQ(command->terrainStrokeChunks()->front().after, ground);
 }

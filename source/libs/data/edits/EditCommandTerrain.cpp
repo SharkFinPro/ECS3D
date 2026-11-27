@@ -2,6 +2,8 @@
 #include "TerrainSetChunks.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
+#include <stdexcept>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -9,6 +11,25 @@ namespace edits {
 
 EditCommand EditCommand::terrainStroke(const uuids::uuid& terrainUUID, std::vector<TerrainStrokeChunk> chunks)
 {
+  if (chunks.empty())
+  {
+    throw std::invalid_argument("A terrain stroke needs at least one chunk");
+  }
+
+  std::unordered_set<terrain::ChunkCoord> seen;
+  for (const auto& chunk : chunks)
+  {
+    if (!terrain::isValidChunkCoord(chunk.coord))
+    {
+      throw std::invalid_argument("A terrain stroke chunk coordinate is beyond what the wire can carry");
+    }
+
+    if (!seen.insert(chunk.coord).second)
+    {
+      throw std::invalid_argument("A terrain stroke names the same chunk coordinate twice");
+    }
+  }
+
   EditCommand command;
   command.m_kind = CommandKind::terrainStroke;
   command.m_data = TerrainStrokeData{ terrainUUID, std::move(chunks) };

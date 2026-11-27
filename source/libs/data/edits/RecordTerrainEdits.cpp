@@ -1,6 +1,7 @@
 #include "RecordTerrainEdits.h"
 #include "TerrainSetChunks.h"
 #include "terrain/TerrainVolume.h"
+#include <unordered_set>
 #include <vector>
 
 namespace edits {
@@ -12,9 +13,15 @@ std::optional<EditCommand> commandForTerrainStroke(
 {
   std::vector<TerrainStrokeChunk> chunks;
   chunks.reserve(before.size());
+  std::unordered_set<terrain::ChunkCoord> seen;
 
   for (const auto& [coord, beforeChunk] : before)
   {
+    if (!seen.insert(coord).second)
+    {
+      continue;
+    }
+
     auto after = volume.chunk(coord);
 
     if (terrainChunksDiffer(beforeChunk, after))

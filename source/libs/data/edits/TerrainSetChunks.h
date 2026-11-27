@@ -33,7 +33,7 @@ inline constexpr std::size_t maxSetChunksMessageBytes = 32 * 1024 * 1024;
 // Sets each entry on the volume the way the server will, without touching a revision.
 void predictSetChunks(terrain::TerrainVolume& volume, const TerrainSetChunks& payload);
 
-// One side null and the other not, or both held with different hashes.
+// Whether the two differ as the volume holds them: null and air are the same, and two held chunks differ by hash.
 [[nodiscard]] bool terrainChunksDiffer(const std::shared_ptr<const terrain::TerrainChunk>& first,
                                        const std::shared_ptr<const terrain::TerrainChunk>& second);
 
