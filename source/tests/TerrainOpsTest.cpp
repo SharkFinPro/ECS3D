@@ -223,3 +223,28 @@ TEST(TerrainOpsTest, UniformHintSkipsWholeChunksAndMatchesTheSampleEdit)
     EXPECT_EQ(hinted[index].second->hash(), sampled[index].second->hash());
   }
 }
+
+TEST(TerrainOpsTest, ParallelEditsMatchSerialOnes)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 1, 0, 0 }, ramp());
+  const terrain::SampleBox box{ { -10, 0, 0 }, { terrain::chunkSize * 4, terrain::chunkSize * 2, terrain::chunkSize } };
+
+  const auto edit = [](const glm::ivec3 sample, int16_t& distance, uint8_t& material)
+  {
+    distance = static_cast<int16_t>((sample.x * 31 + sample.y * 17 + sample.z * 7) % 400 - 200);
+    material = static_cast<uint8_t>(sample.x % 5);
+  };
+
+  const auto serial = terrain::editSamples(volume, box, edit);
+  const auto parallel = terrain::editSamples(volume, box, edit, {}, {}, true);
+
+  ASSERT_EQ(serial.size(), parallel.size());
+  for (size_t index = 0; index < serial.size(); ++index)
+  {
+    EXPECT_EQ(serial[index].first, parallel[index].first);
+    ASSERT_NE(serial[index].second, nullptr);
+    ASSERT_NE(parallel[index].second, nullptr);
+    EXPECT_EQ(serial[index].second->hash(), parallel[index].second->hash());
+  }
+}

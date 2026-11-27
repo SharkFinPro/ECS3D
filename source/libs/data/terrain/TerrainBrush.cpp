@@ -246,7 +246,7 @@ namespace terrain
 
       // The margin keeps a rounding difference from skipping a sample the edit would reach.
       return glm::dot(gap, gap) > influence * influence * 1.001f;
-    });
+    }, true);
   }
 
   void pack(net::Message& message, const BrushOp& op)

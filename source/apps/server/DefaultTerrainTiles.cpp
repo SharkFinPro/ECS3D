@@ -206,7 +206,7 @@ void matchEdgeColumns(terrain::TerrainVolume& volume, const GlobalGround& ground
       distance = ground.distanceAt(offsetX + sample.x, sample.y, offsetZ + sample.z);
     };
 
-    terrain::commit(volume, terrain::editSamples(volume, strip, edit));
+    terrain::commit(volume, terrain::editSamples(volume, strip, edit, {}, {}, true));
   }
 }
 

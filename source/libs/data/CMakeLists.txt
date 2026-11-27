@@ -166,6 +166,11 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DLog
 )
 
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
 if(WIN32)
   # ProjectOrigin asks the system for the Documents folder.
   target_link_libraries(${PROJECT_NAME} PRIVATE shell32 ole32)

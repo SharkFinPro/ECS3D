@@ -171,7 +171,7 @@ namespace basin::caves
         material = defaultterrain::interiorMaterial;
       };
 
-      terrain::commit(volume, terrain::editSamples(volume, local, edit));
+      terrain::commit(volume, terrain::editSamples(volume, local, edit, {}, {}, true));
     }
   }
 

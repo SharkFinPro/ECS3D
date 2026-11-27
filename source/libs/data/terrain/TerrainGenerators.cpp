@@ -74,7 +74,7 @@ namespace terrain
       {
         distance = distanceAt(sample.y, surfaceAt(sample.x, sample.z));
         sampleMaterial = material;
-      }, uniformHint);
+      }, uniformHint, {}, true);
     }
 
     bool validCommon(const float thickness, const uint8_t material)

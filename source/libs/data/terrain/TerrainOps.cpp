@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <exception>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -24,6 +26,9 @@ namespace terrain
       return before->isUniform() == after->isUniform() && std::ranges::equal(before->distances(), after->distances()) &&
              std::ranges::equal(before->materials(), after->materials());
     }
+
+    constexpr int maxEditThreads = 8;
+    constexpr int minParallelChunks = 4;
 
     bool withinEditLimits(const SampleBox& box)
     {
@@ -96,7 +101,7 @@ namespace terrain
   }
 
   ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
-                         const UniformChunkHint& uniformHint, const ChunkSkip& skipChunk)
+                         const UniformChunkHint& uniformHint, const ChunkSkip& skipChunk, const bool parallel)
   {
     if (box.empty())
     {
@@ -111,7 +116,7 @@ namespace terrain
     const ChunkCoord first = chunkOfSample(box.min);
     const ChunkCoord last = chunkOfSample(box.max - glm::ivec3(1));
 
-    ChunkEdits edits;
+    std::vector<ChunkCoord> coords;
 
     for (int32_t cz = first.z; cz <= last.z; ++cz)
     {
@@ -119,101 +124,145 @@ namespace terrain
       {
         for (int32_t cx = first.x; cx <= last.x; ++cx)
         {
-          const ChunkCoord coord{ cx, cy, cz };
-          const auto current = volume.chunk(coord);
-          const glm::ivec3 origin = chunkOrigin(coord);
-          const glm::ivec3 low = glm::max(box.min, origin);
-          const glm::ivec3 high = glm::min(box.max, origin + glm::ivec3(chunkSize));
-
-          if (skipChunk && skipChunk({ low, high }))
-          {
-            continue;
-          }
-
-          if (uniformHint && low == origin && high == origin + glm::ivec3(chunkSize))
-          {
-            int16_t hintDistance = 0;
-            uint8_t hintMaterial = 0;
-
-            if (uniformHint(coord, hintDistance, hintMaterial) && hintMaterial != reservedMaterial)
-            {
-              const auto filled = TerrainChunk::uniform(
-                static_cast<int16_t>(std::clamp(static_cast<int>(hintDistance), -static_cast<int>(airDistance),
-                                                static_cast<int>(airDistance))),
-                hintMaterial);
-
-              if (filled)
-              {
-                if (!sameContent(current, filled))
-                {
-                  edits.emplace_back(coord, filled->isAir() ? nullptr : filled);
-                }
-
-                continue;
-              }
-            }
-          }
-
-          std::vector<int16_t> distances;
-          std::vector<uint8_t> materials;
-
-          if (!current)
-          {
-            distances.assign(samplesPerChunk, airDistance);
-            materials.assign(samplesPerChunk, 0);
-          }
-          else if (current->isUniform())
-          {
-            distances.assign(samplesPerChunk, current->distances().front());
-            materials.assign(samplesPerChunk, current->materials().front());
-          }
-          else
-          {
-            distances.assign(current->distances().begin(), current->distances().end());
-            materials.assign(current->materials().begin(), current->materials().end());
-          }
-
-          bool changed = false;
-
-          for (int z = low.z; z < high.z; ++z)
-          {
-            for (int y = low.y; y < high.y; ++y)
-            {
-              for (int x = low.x; x < high.x; ++x)
-              {
-                const auto index = static_cast<size_t>(sampleIndex(x - origin.x, y - origin.y, z - origin.z));
-                const uint8_t inputMaterial = materials[index];
-                const int16_t inputDistance = distances[index];
-                int16_t distance = inputDistance;
-                uint8_t material = inputMaterial;
-
-                edit({ x, y, z }, distance, material);
-
-                const auto outputDistance = static_cast<int16_t>(
-                  std::clamp(static_cast<int>(distance), -static_cast<int>(airDistance), static_cast<int>(airDistance)));
-                const uint8_t outputMaterial = material == reservedMaterial ? inputMaterial : material;
-
-                changed = changed || outputDistance != inputDistance || outputMaterial != inputMaterial;
-                distances[index] = outputDistance;
-                materials[index] = outputMaterial;
-              }
-            }
-          }
-
-          if (!changed)
-          {
-            continue;
-          }
-
-          auto rebuilt = TerrainChunk::dense(std::move(distances), std::move(materials));
-
-          if (sameContent(current, rebuilt))
-          {
-            continue;
-          }
-
-          edits.emplace_back(coord, rebuilt->isAir() ? nullptr : std::move(rebuilt));
+          coords.push_back({ cx, cy, cz });
         }
+      }
+    }
+
+    const auto processChunk = [&](const ChunkCoord coord) -> std::optional<ChunkEdits::value_type>
+    {
+      const auto current = volume.chunk(coord);
+      const glm::ivec3 origin = chunkOrigin(coord);
+      const glm::ivec3 low = glm::max(box.min, origin);
+      const glm::ivec3 high = glm::min(box.max, origin + glm::ivec3(chunkSize));
+
+      if (skipChunk && skipChunk({ low, high }))
+      {
+        return std::nullopt;
+      }
+
+      if (uniformHint && low == origin && high == origin + glm::ivec3(chunkSize))
+      {
+        int16_t hintDistance = 0;
+        uint8_t hintMaterial = 0;
+
+        if (uniformHint(coord, hintDistance, hintMaterial) && hintMaterial != reservedMaterial)
+        {
+          const auto filled = TerrainChunk::uniform(
+            static_cast<int16_t>(std::clamp(static_cast<int>(hintDistance), -static_cast<int>(airDistance),
+                                            static_cast<int>(airDistance))),
+            hintMaterial);
+
+          if (filled)
+          {
+            if (sameContent(current, filled))
+            {
+              return std::nullopt;
+            }
+
+            return ChunkEdits::value_type(coord, filled->isAir() ? nullptr : filled);
+          }
+        }
+      }
+
+      std::vector<int16_t> distances;
+      std::vector<uint8_t> materials;
+
+      if (!current)
+      {
+        distances.assign(samplesPerChunk, airDistance);
+        materials.assign(samplesPerChunk, 0);
+      }
+      else if (current->isUniform())
+      {
+        distances.assign(samplesPerChunk, current->distances().front());
+        materials.assign(samplesPerChunk, current->materials().front());
+      }
+      else
+      {
+        distances.assign(current->distances().begin(), current->distances().end());
+        materials.assign(current->materials().begin(), current->materials().end());
+      }
+
+      bool changed = false;
+
+      for (int z = low.z; z < high.z; ++z)
+      {
+        for (int y = low.y; y < high.y; ++y)
+        {
+          for (int x = low.x; x < high.x; ++x)
+          {
+            const auto index = static_cast<size_t>(sampleIndex(x - origin.x, y - origin.y, z - origin.z));
+            const uint8_t inputMaterial = materials[index];
+            const int16_t inputDistance = distances[index];
+            int16_t distance = inputDistance;
+            uint8_t material = inputMaterial;
+
+            edit({ x, y, z }, distance, material);
+
+            const auto outputDistance = static_cast<int16_t>(
+              std::clamp(static_cast<int>(distance), -static_cast<int>(airDistance), static_cast<int>(airDistance)));
+            const uint8_t outputMaterial = material == reservedMaterial ? inputMaterial : material;
+
+            changed = changed || outputDistance != inputDistance || outputMaterial != inputMaterial;
+            distances[index] = outputDistance;
+            materials[index] = outputMaterial;
+          }
+        }
+      }
+
+      if (!changed)
+      {
+        return std::nullopt;
+      }
+
+      auto rebuilt = TerrainChunk::dense(std::move(distances), std::move(materials));
+
+      if (sameContent(current, rebuilt))
+      {
+        return std::nullopt;
+      }
+
+      return ChunkEdits::value_type(coord, rebuilt->isAir() ? nullptr : std::move(rebuilt));
+    };
+
+    std::vector<std::optional<ChunkEdits::value_type>> results(coords.size());
+    const auto count = static_cast<int>(coords.size());
+    std::exception_ptr failure;
+
+    // Chunks are independent and written to their own slot, so the order and content of the result do not depend on
+    // how many threads run.
+#pragma omp parallel for schedule(dynamic, 1) num_threads(maxEditThreads) if (parallel && count >= minParallelChunks)
+    for (int index = 0; index < count; ++index)
+    {
+      try
+      {
+        results[static_cast<size_t>(index)] = processChunk(coords[static_cast<size_t>(index)]);
+      }
+      catch (...)
+      {
+#pragma omp critical(terrainEditFailure)
+        {
+          if (!failure)
+          {
+            failure = std::current_exception();
+          }
+        }
+      }
+    }
+
+    if (failure)
+    {
+      std::rethrow_exception(failure);
+    }
+
+    ChunkEdits edits;
+
+    for (auto& result : results)
+    {
+      if (result)
+      {
+        edits.push_back(std::move(*result));
       }
     }
 
@@ -253,6 +302,51 @@ namespace terrain
 
     std::vector<uint8_t> fixed(static_cast<size_t>(total), 0);
 
+    // A sample is frozen when its 3x3x3 neighborhood holds both signs. The window's lowest and highest sign are found
+    // one axis at a time, which reads each sample a few times instead of 27.
+    std::vector<uint8_t> lowest(static_cast<size_t>(total));
+    std::vector<uint8_t> highest(static_cast<size_t>(total));
+
+    for (size_t index = 0; index < lowest.size(); ++index)
+    {
+      lowest[index] = highest[index] = encoded[index] < 0 ? 1 : 0;
+    }
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      const size_t step = axis == 0 ? 1 : (axis == 1 ? static_cast<size_t>(size.x)
+                                                     : static_cast<size_t>(size.x) * static_cast<size_t>(size.y));
+      const int extent = size[axis];
+      const std::vector<uint8_t> previousLowest = lowest;
+      const std::vector<uint8_t> previousHighest = highest;
+
+#pragma omp parallel for num_threads(maxEditThreads) if (total >= 65536)
+      for (int z = 0; z < size.z; ++z)
+      {
+        for (int y = 0; y < size.y; ++y)
+        {
+          for (int x = 0; x < size.x; ++x)
+          {
+            const size_t index = at(x, y, z);
+            const int along = axis == 0 ? x : (axis == 1 ? y : z);
+
+            if (along > 0)
+            {
+              lowest[index] = std::min(lowest[index], previousLowest[index - step]);
+              highest[index] = std::max(highest[index], previousHighest[index - step]);
+            }
+
+            if (along < extent - 1)
+            {
+              lowest[index] = std::min(lowest[index], previousLowest[index + step]);
+              highest[index] = std::max(highest[index], previousHighest[index + step]);
+            }
+          }
+        }
+      }
+    }
+
+#pragma omp parallel for num_threads(maxEditThreads) if (total >= 65536)
     for (int z = 0; z < size.z; ++z)
     {
       for (int y = 0; y < size.y; ++y)
@@ -260,32 +354,69 @@ namespace terrain
         for (int x = 0; x < size.x; ++x)
         {
           const size_t index = at(x, y, z);
-          const bool inside = encoded[index] < 0;
           const bool interior = x > 0 && y > 0 && z > 0 && x < size.x - 1 && y < size.y - 1 && z < size.z - 1;
-          bool freeze = !interior || encoded[index] == 0;
-
-          for (int dz = -1; dz <= 1 && !freeze; ++dz)
-          {
-            for (int dy = -1; dy <= 1 && !freeze; ++dy)
-            {
-              for (int dx = -1; dx <= 1 && !freeze; ++dx)
-              {
-                freeze = (encoded[at(x + dx, y + dy, z + dz)] < 0) != inside;
-              }
-            }
-          }
+          const bool freeze = !interior || encoded[index] == 0 || lowest[index] != highest[index];
 
           fixed[index] = freeze ? 1 : 0;
 
           if (!freeze)
           {
-            field[index] = inside ? -bandVoxels : bandVoxels;
+            field[index] = encoded[index] < 0 ? -bandVoxels : bandVoxels;
           }
         }
       }
     }
 
-    for (int repeat = 0; repeat < 2; ++repeat)
+    // Only a frozen sample inside the band can pull its neighbors below the band, and a value grows by at least
+    // 1/sqrt(3) per step, so a sample farther than this from every such source keeps its starting value and the
+    // sweeps need not visit it.
+    constexpr int reach = 7;
+    std::vector<uint8_t> sourceRow(static_cast<size_t>(size.y) * static_cast<size_t>(size.z), 0);
+    int sourceMinX = size.x;
+    int sourceMaxX = -1;
+
+    for (int z = 0; z < size.z; ++z)
+    {
+      for (int y = 0; y < size.y; ++y)
+      {
+        for (int x = 0; x < size.x; ++x)
+        {
+          const size_t index = at(x, y, z);
+
+          if (fixed[index] != 0 && std::abs(field[index]) < bandVoxels)
+          {
+            sourceRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] = 1;
+            sourceMinX = std::min(sourceMinX, x);
+            sourceMaxX = std::max(sourceMaxX, x);
+          }
+        }
+      }
+    }
+
+    std::vector<uint8_t> activeRow(sourceRow.size(), 0);
+
+    for (int z = 0; z < size.z; ++z)
+    {
+      for (int y = 0; y < size.y; ++y)
+      {
+        bool closeToSource = false;
+
+        for (int dz = std::max(z - reach, 0); dz <= std::min(z + reach, size.z - 1) && !closeToSource; ++dz)
+        {
+          for (int dy = std::max(y - reach, 0); dy <= std::min(y + reach, size.y - 1) && !closeToSource; ++dy)
+          {
+            closeToSource = sourceRow[static_cast<size_t>(dz) * static_cast<size_t>(size.y) + static_cast<size_t>(dy)] != 0;
+          }
+        }
+
+        activeRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] = closeToSource ? 1 : 0;
+      }
+    }
+
+    const int sweepLow = std::max(1, sourceMinX - reach);
+    const int sweepHigh = std::min(size.x - 2, sourceMaxX + reach);
+
+    for (int repeat = 0; repeat < 2 && sourceMaxX >= 0; ++repeat)
     {
       for (int order = 0; order < 8; ++order)
       {
@@ -301,9 +432,14 @@ namespace terrain
           {
             const int y = reverseY ? size.y - 1 - j : j;
 
-            for (int i = 1; i < size.x - 1; ++i)
+            if (activeRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] == 0)
             {
-              const int x = reverseX ? size.x - 1 - i : i;
+              continue;
+            }
+
+            for (int i = sweepLow; i <= sweepHigh; ++i)
+            {
+              const int x = reverseX ? sweepLow + sweepHigh - i : i;
               const size_t index = at(x, y, z);
 
               if (fixed[index] != 0)
@@ -317,7 +453,7 @@ namespace terrain
 
               // The upwind solution is at least the smallest neighbor plus 1/sqrt(3), so a sample already within
               // that of its smallest neighbor cannot improve.
-              if (std::abs(field[index]) <= std::min({ a, b, c }) + 0.5f)
+              if (std::abs(field[index]) <= std::min(a, std::min(b, c)) + 0.5f)
               {
                 continue;
               }
@@ -340,6 +476,6 @@ namespace terrain
       {
         distance = encodeDistance(field[index]);
       }
-    });
+    }, {}, {}, true);
   }
 }
