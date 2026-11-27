@@ -354,9 +354,9 @@ private:
   // snapshot does not drop the upload.
   void queueTerrainUpload(const uuids::uuid& terrain, std::shared_ptr<const terrain::TerrainVolume> volume);
 
-  // Applies a terrain an undo or redo brings back to the registry and store and queues its chunks for upload. False,
-  // with nothing changed, when the editor refuses the add.
-  bool restoreTerrain(const edits::TerrainRestore& restore);
+  // Brings back a terrain an undo or redo re-adds: the editor's registry and store, then send (the addAsset), then the
+  // chunk upload, rolled back as edits::restoreTerrainAndSend does.
+  edits::TerrainRestoreResult restoreTerrain(const edits::TerrainRestore& restore, const std::function<void()>& send);
 
   // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.
   void selectPlacedTerrain();

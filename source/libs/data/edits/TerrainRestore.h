@@ -4,12 +4,17 @@
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 #include <nlohmann/json_fwd.hpp>
+#include <functional>
 #include <memory>
 #include <string>
 
 class AssetRegistry;
 class ComponentRegistry;
 class SceneManager;
+
+namespace terrain {
+  class TerrainUpload;
+}
 
 namespace edits {
 
@@ -37,6 +42,25 @@ struct TerrainRestore {
 [[nodiscard]] std::shared_ptr<const terrain::TerrainVolume> applyTerrainRestore(
   AssetRegistry& assetRegistry, SceneManager& sceneManager, const std::shared_ptr<ComponentRegistry>& componentRegistry,
   terrain::TerrainStore& store, const TerrainRestore& restore);
+
+enum class TerrainRestoreResult {
+  applied,
+  // The registry or store already holds the uuid: nothing changed.
+  refused,
+  // Something threw before send completed: the registry, store and queued upload are back as they were.
+  failed,
+  // send completed and queueing the chunks then threw: local state is rolled back, but the server has the addAsset.
+  failedAfterSend
+};
+
+// Brings a terrain back in the order that keeps the editor and the server consistent: apply to the local registry and
+// store, call send (the addAsset), then queue the chunks on upload, so the server never expects chunks the editor
+// cannot send. Any throw rolls the local state back and is logged. A caller that gets failedAfterSend sends the
+// removeAsset.
+[[nodiscard]] TerrainRestoreResult restoreTerrainAndSend(
+  AssetRegistry& assetRegistry, SceneManager& sceneManager, const std::shared_ptr<ComponentRegistry>& componentRegistry,
+  terrain::TerrainStore& store, terrain::TerrainUpload& upload, const TerrainRestore& restore,
+  const std::function<void()>& send);
 
 }
 

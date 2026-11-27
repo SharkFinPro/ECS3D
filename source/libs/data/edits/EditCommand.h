@@ -178,7 +178,8 @@ public:
                                                      std::size_t siblingIndex, std::string prefabBody);
 
   // terrain is set only for a Terrain asset, whose volume lives outside the registry: undo removes the asset and
-  // redo brings it back with those chunks (HistoryOutcome::terrainRestore). It must name the same uuid.
+  // redo brings it back with those chunks (HistoryOutcome::terrainRestore). Throws std::invalid_argument when the
+  // restore names another uuid.
   [[nodiscard]] static EditCommand addAsset(const uuids::uuid& assetUUID, AssetType type,
                                             std::string path, std::string className, std::string body,
                                             std::optional<TerrainRestore> terrain = std::nullopt);
@@ -197,6 +198,7 @@ public:
 
   // The whole removed record (including a prefab body and its displayName rename override), so undo can
   // re-add it exactly as addAsset would. terrain is set only for a Terrain asset: undo re-adds it and its chunks.
+  // Throws std::invalid_argument when the restore names another uuid.
   [[nodiscard]] static EditCommand removeAsset(const uuids::uuid& assetUUID, AssetType type,
                                                std::string path, std::string className, std::string body,
                                                std::string displayName,

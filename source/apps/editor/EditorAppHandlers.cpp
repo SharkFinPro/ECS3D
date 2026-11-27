@@ -69,7 +69,7 @@ bool EditorApp::addAsset(const nlohmann::json& asset, const bool requireApplied,
 {
   // Derived before the local apply: the command's before state is the record this registry is about
   // to lose. Same for the two ops below.
-  auto command = recordHistory ? edits::commandForAddAsset(asset, *m_assetRegistry, m_terrainStore.get())
+  auto command = recordHistory ? edits::commandForAddAsset(asset, *m_assetRegistry)
                                : std::nullopt;
 
   const bool applied = replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
@@ -202,21 +202,22 @@ void EditorApp::queueTerrainUpload(const uuids::uuid& terrain, std::shared_ptr<c
   m_createdTerrains[terrain] = std::chrono::steady_clock::now();
 }
 
-bool EditorApp::restoreTerrain(const edits::TerrainRestore& restore)
+edits::TerrainRestoreResult EditorApp::restoreTerrain(const edits::TerrainRestore& restore,
+                                                      const std::function<void()>& send)
 {
-  const auto upload = edits::applyTerrainRestore(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
-                                                 *m_terrainStore, restore);
-  if (!upload)
+  if (m_terrainUpload.done())
   {
-    return false;
+    m_terrainUploadSent = 0;
   }
 
-  if (!restore.chunks.empty())
+  const auto result = edits::restoreTerrainAndSend(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
+                                                   *m_terrainStore, m_terrainUpload, restore, send);
+  if (result == edits::TerrainRestoreResult::applied && !restore.chunks.empty())
   {
-    queueTerrainUpload(restore.description.uuid, upload);
+    m_createdTerrains[restore.description.uuid] = std::chrono::steady_clock::now();
   }
 
-  return true;
+  return result;
 }
 
 void EditorApp::selectPlacedTerrain()

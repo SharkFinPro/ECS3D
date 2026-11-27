@@ -48,7 +48,7 @@ asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it
 before state from the replicated view while that view still holds it, and records what comes back; an edit
 nothing faithful can be derived for (a stale view, an op with no matching kind, a creating op with no
 usable uuid) is logged at debug and
-skipped rather than refused. Terrain asset add and remove are recorded when the caller passes the `TerrainStore`, see
+skipped rather than refused. Terrain asset removal is recorded when the caller passes a `TerrainStore` that holds the terrain completely and a terrain create is recorded by the create flow, see
 [Terrain assets](#terrain-assets). The `replaceAsset` kind exists for the other asset recording: an `addAsset` over a uuid - or a
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
@@ -187,20 +187,27 @@ immutable chunks, nothing copied) and the display name. They are the existing ki
 kinds. `makeTerrainRestore` sets the description's chunk count to the chunks held, since the server waits for exactly that
 many after the addAsset and a count left from before a sculpt would hold Play forever.
 
-Recording reads the store at the moment the op is sent: `commandForRemoveAsset` and `commandForAddAsset` take a
-`const terrain::TerrainStore*` (default null, which records nothing for a terrain). A remove needs the store to hold the
-terrain's description and volume. The create flow cannot use `commandForAddAsset`, because its store has no volume until the
-generated chunks are restored into it, so `EditorApp::onCreateTerrain` sends the addAsset without recording
-(`addAsset(..., recordHistory = false)`) and records `commandForTerrainAdd` once the chunks are in the store. A create is
+Recording reads the store at the moment the op is sent. `commandForRemoveAsset` takes a `const terrain::TerrainStore*`
+(default null, which records nothing for a terrain) and needs it to hold the terrain's description and a volume with at
+least `description.chunkCount` chunks. A shorter volume is a join stream or upload that has not landed, and an undo would
+re-add a partial terrain and lose the rest, so that delete is not recorded (logged at info; `markEdited` still holds the
+project dirty). `chunkCount` is the stream's expectation and a sculpt does not refresh it, so a terrain whose sculpts
+erased chunks reads short as well and its delete goes unrecorded, the safe side; the same reading holds Play and saving.
+`commandForAddAsset` never derives a terrain command. `EditorApp::onCreateTerrain` sends the addAsset without recording
+(`addAsset(..., recordHistory = false)`) and records `commandForTerrainAdd` once the chunks are in the store.
+`EditCommand::addAsset`/`removeAsset` throw `std::invalid_argument` when the `TerrainRestore` names another uuid. A create is
 therefore two entries, the asset and then the placement object (a grouped sceneEdit): the first Ctrl+Z removes the object,
 the next removes the terrain asset, and redo brings them back in the opposite order, the asset first. Grouping them is
 impossible, since a group must be all sceneEdit kinds.
 
 Undo of a delete and redo of a create re-add the terrain. `HistoryOutcome::terrainRestore` is set beside the addAsset
-`messagePayload`, which carries only the description. `reportHistoryOutcome` then applies the restore to the editor's own
-registry and store through `applyTerrainRestore` (the same `applyAddAssetWithTerrain` a create uses, so the snapshot that
-follows keeps the description and chunks instead of creating an empty default terrain), queues the chunks on
-`m_terrainUpload` and sends the addAsset. The server expects those chunks, so Play is held until the re-upload lands. Undo
+`messagePayload`, which carries only the description. `reportHistoryOutcome` then calls `restoreTerrainAndSend` (`edits/TerrainRestore.h`): it applies the restore to the
+editor's own registry and store through `applyTerrainRestore` (the same `applyAddAssetWithTerrain` a create uses, so the
+snapshot that follows keeps the description and chunks instead of creating an empty default terrain), sends the addAsset,
+then queues the chunks on `m_terrainUpload`, so the server never expects chunks the editor has no queue for. The server
+expects those chunks, so Play is held until the re-upload lands. Any throw rolls the registry, store and queue back and
+logs an error. The editor then clears the edit history, as it does for a refused restore, and when the throw came after the
+send (`TerrainRestoreResult::failedAfterSend`) it also sends the removeAsset. Undo
 of a create and redo of a delete send the removeAsset as any asset kind does and set `HistoryOutcome::terrainRemoved`,
 whose pending upload the editor drops.
 

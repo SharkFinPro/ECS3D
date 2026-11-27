@@ -432,6 +432,11 @@ EditCommand EditCommand::instantiatePrefab(const uuids::uuid& prefabUUID, const 
 EditCommand EditCommand::addAsset(const uuids::uuid& assetUUID, const AssetType type, std::string path,
                                   std::string className, std::string body, std::optional<TerrainRestore> terrain)
 {
+  if (terrain && terrain->description.uuid != assetUUID)
+  {
+    throw std::invalid_argument("A terrain restore must name the asset's uuid");
+  }
+
   EditCommand command;
   command.m_kind = CommandKind::addAsset;
   command.m_data = AddAssetData{
@@ -482,6 +487,11 @@ EditCommand EditCommand::removeAsset(const uuids::uuid& assetUUID, const AssetTy
                                      std::string className, std::string body, std::string displayName,
                                      std::optional<TerrainRestore> terrain)
 {
+  if (terrain && terrain->description.uuid != assetUUID)
+  {
+    throw std::invalid_argument("A terrain restore must name the asset's uuid");
+  }
+
   EditCommand command;
   command.m_kind = CommandKind::removeAsset;
   command.m_data = RemoveAssetData{
