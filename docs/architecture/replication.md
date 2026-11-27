@@ -119,10 +119,15 @@ and the server routes a `terrainChunks` message whose entries are all hash-only 
 `TerrainEditEcho::requestFull`, which sends those chunks in full to the requester alone at the next flush. A view
 that is predicting a stroke passes the stroke's touched chunks as a hold to `TerrainViewSync::apply`
 (`applyTerrainChunks`): held entries, full or hash-only, are skipped and counted in `held`, and nothing is requested
-for them, since the echo describes a server behind the prediction. The hold lasts while the stroke is active. The
-contract of `TerrainBrushSession` is that it ends a stroke by sending the redistance, then one such request for every
-touched chunk, so the server's final state replaces the prediction; an in-flight full echo that arrives after release
-may briefly apply until those final chunks arrive. A
+for them, since the echo describes a server behind the prediction. `TerrainBrushSession` ends a stroke by sending the
+redistance, then one such request for every touched chunk and every chunk its local redistance changed, and the hold
+covers those chunks until a full entry for each arrives (`confirmChunks`): the server may still be applying the
+stroke when it flushes, so a hash-only echo after release can describe a state before the redistance. Any full entry
+for a chunk ends the wait for that chunk, so another editor's echo or a stream restart can end it early; that is
+transient, since the view then applies what the server sent. The wait also ends when no answer can come: the
+connection is lost, a snapshot reports a new project load, the store's volume for the terrain is no longer the one the
+stroke finished on (`dropAwaitingIfReplaced`), or `TerrainBrushSession::awaitTimeout` has passed since the release
+(`expireAwaiting`, checked each frame). A
 disconnect forgets the connection's requests and its standing as a sender (`TerrainEditEcho::forget`), and a project
 load drops every recorded edit and request (`TerrainEditEcho::clear`), since they describe volumes that were replaced;
 a terrain the snapshot reconcile adds, drops or replaces likewise drops its own pending records

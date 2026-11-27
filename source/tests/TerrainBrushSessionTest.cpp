@@ -20,11 +20,13 @@
 
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 #include <uuid.h>
 
@@ -62,24 +64,96 @@ namespace {
     }
   }
 
-  // The release ends with one request for the server's final state of every touched chunk, after the redistance.
-  void expectFinalChunkRequest(const net::Message& message, const TerrainStroke::Finished& finished)
+  // The coordinates whose chunk hash differs between the two maps; a missing chunk counts as different.
+  std::unordered_set<terrain::ChunkCoord> changedBetween(const terrain::TerrainVolume::ChunkMap& before,
+                                                         const terrain::TerrainVolume::ChunkMap& after)
+  {
+    std::unordered_set<terrain::ChunkCoord> changed;
+
+    for (const auto& [coord, chunk] : after)
+    {
+      const auto match = before.find(coord);
+
+      if (match == before.end() || match->second->hash() != chunk->hash())
+      {
+        changed.insert(coord);
+      }
+    }
+
+    return changed;
+  }
+
+  // The release ends with one request for the server's final state of every touched chunk and every chunk the local
+  // redistance changed, after the redistance, and for nothing else.
+  void expectFinalChunkRequest(const net::Message& message, const TerrainStroke::Finished& finished,
+                               const std::unordered_set<terrain::ChunkCoord>& redistanceChanged)
   {
     ASSERT_EQ(message.getType(), net::MessageType::terrainChunks);
     const auto request = terrain::unpackTerrainChunks(message);
     ASSERT_TRUE(request.has_value());
     EXPECT_TRUE(terrain::isChunkRequest(*request));
     EXPECT_EQ(request->terrain, terrainId);
-    ASSERT_EQ(request->entries.size(), finished.before.size());
 
+    std::unordered_set<terrain::ChunkCoord> expected = redistanceChanged;
     for (const auto& entry : finished.before)
     {
-      const bool listed = std::any_of(request->entries.begin(), request->entries.end(),
-                                      [&entry](const terrain::ReceivedChunk& wanted) {
-                                        return wanted.coord == entry.first;
-                                      });
-      EXPECT_TRUE(listed);
+      expected.insert(entry.first);
     }
+
+    std::unordered_set<terrain::ChunkCoord> requested;
+    for (const terrain::ReceivedChunk& wanted : request->entries)
+    {
+      requested.insert(wanted.coord);
+    }
+
+    EXPECT_EQ(request->entries.size(), requested.size());
+    EXPECT_EQ(requested, expected);
+  }
+
+  // The coordinates the last message of the recorder requests.
+  std::vector<terrain::ChunkCoord> requestedCoords(const Recorder& recorder)
+  {
+    std::vector<terrain::ChunkCoord> coords;
+    const auto request = terrain::unpackTerrainChunks(recorder.sent.back());
+    EXPECT_TRUE(request.has_value());
+
+    if (request)
+    {
+      for (const terrain::ReceivedChunk& entry : request->entries)
+      {
+        coords.push_back(entry.coord);
+      }
+    }
+
+    return coords;
+  }
+
+  // The server's full answer for the given chunks, read from the stroke's own volume.
+  terrain::TerrainChunksPayload fullAnswer(const Env& env, const std::vector<terrain::ChunkCoord>& coords)
+  {
+    terrain::TerrainChunksPayload answer;
+    answer.terrain = terrainId;
+
+    for (const terrain::ChunkCoord& coord : coords)
+    {
+      terrain::ReceivedChunk entry;
+      entry.coord = coord;
+      entry.revision = 2;
+      entry.chunk = env.volume->chunk(coord);
+      entry.hash = entry.chunk ? entry.chunk->hash() : 0;
+      answer.entries.push_back(entry);
+    }
+
+    return answer;
+  }
+
+  // A stroke dragged and released, leaving the session awaiting the server's final chunks.
+  std::vector<terrain::ChunkCoord> releaseAwaiting(TerrainBrushSession& session, Env& env, Recorder& recorder)
+  {
+    drag(session, env, templateOp(terrain::BrushOp::Kind::add), recorder);
+    EXPECT_TRUE(session.end(recorder.sender()).has_value());
+    EXPECT_TRUE(session.awaitingFinalChunks());
+    return requestedCoords(recorder);
   }
 }
 
@@ -159,12 +233,13 @@ TEST(TerrainBrushSessionTest, BrushEditsGoOutInOrderAndRedistanceOnlyAtRelease)
     EXPECT_TRUE(after.x > before.x || after.z > before.z);
   }
 
+  const terrain::TerrainVolume::ChunkMap beforeRelease = env.volume->snapshotChunks();
   const std::optional<TerrainStroke::Finished> finished = session.end(recorder.sender());
   ASSERT_TRUE(finished.has_value());
 
   const std::vector<terrain::TerrainEditPayload> all = recorder.payloads();
   expectRedistanceTail(all, duringDrag.size(), *finished);
-  expectFinalChunkRequest(recorder.sent.back(), *finished);
+  expectFinalChunkRequest(recorder.sent.back(), *finished, changedBetween(beforeRelease, env.volume->snapshotChunks()));
 }
 
 TEST(TerrainBrushSessionTest, StrokeIdsIncreaseAndAreNeverZero)
@@ -290,6 +365,152 @@ TEST(TerrainBrushSessionTest, CancelDropsTheStrokeWithoutSendingARedistance)
   EXPECT_EQ(recorder.sent.size(), sentBeforeCancel);
   EXPECT_FALSE(session.end(recorder.sender()).has_value());
   EXPECT_EQ(recorder.sent.size(), sentBeforeCancel);
+}
+
+TEST(TerrainBrushSessionTest, ARefusedBeginKeepsTheWaitAndTheTerrainOfTheLastStroke)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  const auto other = uuids::uuid::from_string("22222222-2222-2222-2222-222222222222").value();
+  releaseAwaiting(session, env, recorder);
+
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_FALSE(session.begin(other, env.volume, templateOp(terrain::BrushOp::Kind::add), hitAt({ nan, 10.0f, 40.0f }),
+                             recorder.sender()));
+  EXPECT_TRUE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.terrain(), terrainId);
+  EXPECT_NE(session.holdFor(terrainId), nullptr);
+
+  EXPECT_TRUE(session.begin(other, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_EQ(session.terrain(), other);
+  EXPECT_FALSE(session.awaitingFinalChunks());
+}
+
+TEST(TerrainBrushSessionTest, ABeginOnTheSameTerrainKeepsTheWait)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_TRUE(session.awaitingFinalChunks());
+}
+
+TEST(TerrainBrushSessionTest, CancelEndsTheWaitForAReleasedStroke)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+
+  session.cancel();
+
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.holdFor(terrainId), nullptr);
+}
+
+TEST(TerrainBrushSessionTest, EndingASecondStrokeWithoutEditingEndsTheWait)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  ASSERT_TRUE(session.awaitingFinalChunks());
+  const size_t sent = recorder.sent.size();
+
+  EXPECT_FALSE(session.endFor(env.volume, false, recorder.sender()).has_value());
+
+  EXPECT_FALSE(session.active());
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(recorder.sent.size(), sent);
+}
+
+TEST(TerrainBrushSessionTest, AFullAnswerForEveryRequestedChunkEndsTheWait)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  const std::vector<terrain::ChunkCoord> requested = releaseAwaiting(session, env, recorder);
+  ASSERT_GT(requested.size(), 1u);
+
+  const std::vector<terrain::ChunkCoord> first(requested.begin(), requested.begin() + 1);
+  session.confirmChunks(fullAnswer(env, first));
+  EXPECT_TRUE(session.awaitingFinalChunks());
+
+  session.confirmChunks(fullAnswer(env, requested));
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.holdFor(terrainId), nullptr);
+}
+
+TEST(TerrainBrushSessionTest, AVolumeThatIsNoLongerTheOneTheStrokeFinishedOnEndsTheWait)
+{
+  Env env;
+  Env replacement;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+
+  session.dropAwaitingIfReplaced(env.volume);
+  EXPECT_TRUE(session.awaitingFinalChunks());
+
+  session.dropAwaitingIfReplaced(replacement.volume);
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.holdFor(terrainId), nullptr);
+}
+
+TEST(TerrainBrushSessionTest, ARemovedTerrainEndsTheWait)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+
+  session.dropAwaitingIfReplaced(env.volume);
+  ASSERT_TRUE(session.awaitingFinalChunks());
+
+  session.dropAwaitingIfReplaced(nullptr);
+
+  EXPECT_FALSE(session.awaitingFinalChunks());
+}
+
+TEST(TerrainBrushSessionTest, ANewLoadEndsTheWait)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+  ASSERT_NE(session.holdFor(terrainId), nullptr);
+
+  session.clearAwaiting();
+
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.holdFor(terrainId), nullptr);
+}
+
+TEST(TerrainBrushSessionTest, TheWaitHoldsUntilTheTimeoutAndThenExpires)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  releaseAwaiting(session, env, recorder);
+  const auto now = std::chrono::steady_clock::now();
+
+  session.expireAwaiting(now);
+  EXPECT_TRUE(session.awaitingFinalChunks());
+
+  session.expireAwaiting(now + TerrainBrushSession::awaitTimeout / 2);
+  EXPECT_TRUE(session.awaitingFinalChunks());
+
+  session.expireAwaiting(now + TerrainBrushSession::awaitTimeout + std::chrono::seconds(1));
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.holdFor(terrainId), nullptr);
 }
 
 TEST(TerrainBrushSessionTest, TheStoreRevisionsStayAtTheConfirmedOnes)

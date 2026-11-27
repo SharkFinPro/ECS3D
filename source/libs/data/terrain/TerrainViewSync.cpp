@@ -29,21 +29,28 @@ namespace terrain
   ViewApplyOutcome TerrainViewSync::apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message,
                                           const ChunkHold* hold)
   {
-    ViewApplyOutcome outcome;
-
     const auto payload = unpackTerrainChunks(message);
     if (!payload)
     {
+      ViewApplyOutcome outcome;
       outcome.malformed = true;
       outcome.log.push_back({ LogLevel::warn, "Refused a malformed terrainChunks message ("
                                                 + std::to_string(message.size()) + " bytes)" });
       return outcome;
     }
 
-    outcome.terrain = payload->terrain;
-    forgetCompletionIfIncomplete(store, payload->terrain);
-    outcome.result = applyTerrainChunks(store, *payload, hold);
-    const std::string name = uuids::to_string(payload->terrain);
+    return apply(store, scenes, *payload, hold);
+  }
+
+  ViewApplyOutcome TerrainViewSync::apply(TerrainStore& store, const SceneManager& scenes,
+                                          const TerrainChunksPayload& payload, const ChunkHold* hold)
+  {
+    ViewApplyOutcome outcome;
+
+    outcome.terrain = payload.terrain;
+    forgetCompletionIfIncomplete(store, payload.terrain);
+    outcome.result = applyTerrainChunks(store, payload, hold);
+    const std::string name = uuids::to_string(payload.terrain);
 
     if (outcome.result.unknownTerrain)
     {
@@ -53,7 +60,7 @@ namespace terrain
 
     if (!outcome.result.missing.empty())
     {
-      outcome.request = makeChunkRequest(*payload, outcome.result.missing);
+      outcome.request = makeChunkRequest(payload, outcome.result.missing);
       outcome.log.push_back({ LogLevel::info, "Terrain " + name + ": requested "
                                                 + std::to_string(outcome.result.missing.size())
                                                 + " chunk(s) whose hash did not match" });
@@ -61,14 +68,14 @@ namespace terrain
 
     if (outcome.result.applied > 0)
     {
-      invalidateTerrainBounds(scenes, payload->terrain);
+      invalidateTerrainBounds(scenes, payload.terrain);
     }
 
-    const TerrainDescription* description = store.description(payload->terrain);
-    const auto volume = store.find(payload->terrain);
+    const TerrainDescription* description = store.description(payload.terrain);
+    const auto volume = store.find(payload.terrain);
 
     if (description && volume && description->chunkCount > 0 && volume->chunks().size() >= description->chunkCount &&
-        m_completed.insert(payload->terrain).second)
+        m_completed.insert(payload.terrain).second)
     {
       outcome.log.push_back({ LogLevel::info, "Terrain " + name + " complete: "
                                                 + std::to_string(volume->chunks().size()) + " chunk(s)" });

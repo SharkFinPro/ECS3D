@@ -20,6 +20,8 @@
 #include <DefaultDockLayout.h>
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
+#include <TerrainBrushSession.h>
+#include <TerrainToolState.h>
 #include <scenes/SceneManager.h>
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainUpload.h>
@@ -46,6 +48,7 @@ struct ImDrawList;
 struct ImGuiDockNode;
 struct ImVec2;
 class Component;
+class Terrain;
 class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
@@ -76,6 +79,10 @@ class ViewportGizmo;
 
 namespace input {
   struct InputSnapshot;
+}
+
+namespace gizmo {
+  struct View;
 }
 
 namespace net {
@@ -287,6 +294,12 @@ private:
   // Edge-detect the mouse so viewport picking only requests on a fresh click.
   bool m_mouseWasPressed = false;
 
+  // Terrain mode: the viewport brush for the one selected terrain object, and the stroke it is drawing. The
+  // brush's volume is the editor's own store volume, edited ahead of the server's echo.
+  TerrainToolState m_terrainTool;
+  TerrainBrushSession m_terrainBrush;
+  bool m_terrainPointerWasDown = false;
+
   // The groups drawn through drawGroup in displaySceneStatus; the readout is placed separately.
   static constexpr std::size_t sceneStatusGroupCount = 5;
 
@@ -299,7 +312,7 @@ private:
   void launchServer();
   void connectToServer();
 
-  void registerEditors() const;
+  void registerEditors();
 
   void setupKeybinds();
 
@@ -402,6 +415,50 @@ private:
   void expirePlayerSlotRequest();
 
   void handlePicking();
+
+  // The terrain component of the selection when exactly one object is selected and its terrain has a volume.
+  [[nodiscard]] std::shared_ptr<Terrain> selectedTerrain() const;
+
+  [[nodiscard]] TerrainModeContext terrainModeContext() const;
+
+  void loadTerrainTool();
+
+  // Leaves terrain mode when the selection or the server's editability no longer allows it, ending the stroke.
+  void refreshTerrainMode();
+
+  void toggleTerrainMode();
+
+  void setTerrainTool(TerrainTool tool);
+
+  void scaleTerrainBrushRadius(float factor);
+
+  void growTerrainBrush();
+
+  void shrinkTerrainBrush();
+
+  void sendTerrainEdit(const net::Message& message) const;
+
+  // Sends the release redistance and makes the Terrain component's bounds follow; a stroke whose volume was
+  // replaced is dropped instead.
+  void endTerrainStroke();
+
+  // The Sculpt toggle and the tool strip, drawn inside the Terrain inspector section.
+  void drawTerrainSculpt(const std::shared_ptr<Terrain>& component);
+
+  void drawTerrainSculptToggle();
+
+  void drawTerrainToolStrip();
+
+  // The brush sliders and, when the terrain's voxel size caps the radius, the note saying so.
+  void drawTerrainBrushControls(const std::shared_ptr<Terrain>& component);
+
+  // Feeds one frame's pointer to the stroke and makes the terrain's bounds follow what it changed.
+  void driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
+                         const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit);
+
+  // The per-frame viewport work of terrain mode, run from the scene overlay: the cursor raycast and ring, and the
+  // stroke's begin, move and end.
+  void updateTerrainMode(const gizmo::View& view, bool sceneHovered);
 
   void applyPick(const std::optional<uuids::uuid>& picked, bool toggle) const;
 

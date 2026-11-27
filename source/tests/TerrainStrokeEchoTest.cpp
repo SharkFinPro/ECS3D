@@ -148,7 +148,10 @@ namespace {
 
       for (const net::Message& message : echoed)
       {
-        const terrain::ChunkHold* hold = useHold && session.active() ? &session.touched() : nullptr;
+        const auto payload = terrain::unpackTerrainChunks(message);
+        ASSERT_TRUE(payload.has_value());
+        session.confirmChunks(*payload);
+        const terrain::ChunkHold* hold = useHold ? session.holdFor(terrainId) : nullptr;
         const terrain::ViewApplyOutcome outcome = sync.apply(view.store, scenes, message, hold);
         heldEntries += outcome.result.held;
 
@@ -248,7 +251,7 @@ INSTANTIATE_TEST_SUITE_P(Kinds, TerrainStrokeEchoTest,
                          ::testing::Values(terrain::BrushOp::Kind::add, terrain::BrushOp::Kind::smooth,
                                            terrain::BrushOp::Kind::flatten));
 
-TEST(TerrainChunkHoldTest, TheSessionHoldsItsTouchedChunksOnlyForItsTerrainWhileActive)
+TEST(TerrainChunkHoldTest, TheSessionHoldsItsTouchedChunksOnlyForItsTerrainUntilTheirFinalStateArrives)
 {
   Env env;
   TerrainBrushSession session;
@@ -265,7 +268,8 @@ TEST(TerrainChunkHoldTest, TheSessionHoldsItsTouchedChunksOnlyForItsTerrainWhile
   EXPECT_EQ(session.holdFor(otherTerrain), nullptr);
 
   static_cast<void>(session.end(send));
-  EXPECT_EQ(session.holdFor(terrainId), nullptr);
+  EXPECT_NE(session.holdFor(terrainId), nullptr);
+  EXPECT_TRUE(session.awaitingFinalChunks());
 }
 
 TEST(TerrainChunkHoldTest, AHeldCoordinateIsSkippedWhateverTheEntryCarriesAndAnotherIsApplied)
@@ -317,4 +321,34 @@ TEST(TerrainChunkHoldTest, AHeldHashOnlyMismatchIsNotRequestedButAnUnheldOneIs)
   const terrain::ViewApplyOutcome open = sync.apply(env.store, scenes, message);
   EXPECT_EQ(open.result.missing.size(), 1u);
   EXPECT_TRUE(open.request.has_value());
+}
+
+TEST(TerrainChunkHoldTest, AReleasedStrokeKeepsHoldingUntilTheChunkArrivesInFull)
+{
+  Env env;
+  TerrainBrushSession session;
+  terrain::BrushOp op;
+  op.radius = 10.0f;
+  const auto send = [](const net::Message&) {};
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, op, hitAt({ 40.0f, 10.0f, 40.0f }), send));
+  const terrain::ChunkHold touched = session.touched();
+  ASSERT_FALSE(touched.empty());
+  static_cast<void>(session.end(send));
+
+  const terrain::ChunkCoord coord = *touched.begin();
+  const auto chunk = terrain::TerrainChunk::uniform(static_cast<int16_t>(-100), 3);
+  const auto hashOnly = terrain::unpackTerrainChunks(
+    terrain::packTerrainChunks(terrainId, std::vector<terrain::ChunkEntry>{ terrain::makeHashOnlyEntry(coord, 9, 5) }));
+  const auto full = terrain::unpackTerrainChunks(
+    terrain::packTerrainChunks(terrainId, std::vector<terrain::ChunkEntry>{ terrain::makeChunkEntry(coord, 9, chunk) }));
+  ASSERT_TRUE(hashOnly && full);
+
+  session.confirmChunks(*hashOnly);
+  ASSERT_NE(session.holdFor(terrainId), nullptr);
+  EXPECT_TRUE(session.holdFor(terrainId)->contains(coord));
+
+  session.confirmChunks(*full);
+  EXPECT_FALSE(session.awaitingFinalChunks());
+  EXPECT_EQ(session.holdFor(terrainId), nullptr);
 }

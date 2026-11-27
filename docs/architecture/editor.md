@@ -180,6 +180,22 @@ the queue. On an untitled template the menu item calls `SaveUI::blockAssetWrites
 (`TerrainCreateFlow::gate`), since the terrain would have no folder to be saved into. A generation or decode error
 shows in the form and leaves nothing created.
 
+Terrain mode is the viewport brush for the one selected terrain object. `EditorApp` owns a `TerrainToolState` and
+builds its `TerrainModeContext` every frame: exactly one selected object whose Terrain collider names a volume in
+`m_terrainStore`, `m_serverEditable`, and a stopped scene. `refreshTerrainMode` runs after the network step, so a
+change of selection, a lost connection, a started Play or a volume that vanished leaves the mode and ends any stroke.
+The mode is entered from the Sculpt checkbox the Terrain section draws (`registerColliderEditors` takes a
+`drawSculpt` callback, and `EditorApp::drawTerrainSculpt` draws it only for the selected object's own component, so a
+prefab body shows none) or with the `terrainMode` keybind. While it is on, the section shows a radio button per tool
+(Add, Subtract, Smooth, Flatten) and Radius, Strength and Falloff, all written through
+`editorTerrainSettings::writeBrush` for the current tool; the tool keybinds only switch the tool (`writeLastTool`)
+and never enter the mode, and the radius keybinds scale the current tool's radius by 1.25 or 0.8. A brush radius
+above `maxBrushRadiusVoxels` voxels is clamped (`effectiveBrushRadius`) when a stroke begins and when the ring is
+drawn, since the server refuses a larger brush. The headless parts are `TerrainStroke.h` (spacing along the pointer
+path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
+[viewport-gizmos.md](viewport-gizmos.md). Undo of strokes and the unsaved flag are not wired yet, and a new brush
+always paints material 0.
+
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`
 (`EditorLayoutSettings`). It restores the text in the style-setup hook, before the first frame, and saves it when

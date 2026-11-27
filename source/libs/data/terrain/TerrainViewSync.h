@@ -56,6 +56,10 @@ namespace terrain
     ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message,
                            const ChunkHold* hold = nullptr);
 
+    // The same for a message the caller has already decoded, so a caller that inspects the payload first decodes once.
+    ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const TerrainChunksPayload& payload,
+                           const ChunkHold* hold = nullptr);
+
   private:
     void forgetCompletionIfIncomplete(const TerrainStore& store, const uuids::uuid& terrain);
 

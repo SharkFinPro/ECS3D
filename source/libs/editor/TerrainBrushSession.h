@@ -12,6 +12,7 @@
 #include <terrain/TerrainVolume.h>
 #include <Protocol.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -83,15 +84,21 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
 }
 
 // Performs a stroke's applications against the editor's own volume and sends each one as a terrainEdit, so the view
-// predicts what the server will compute. The store's revisions are never touched. While the stroke is active the
-// view holds touched() out of the server's echo (TerrainViewSync::apply), since the echo describes a server that is
-// behind the prediction; the hold ends with the stroke. At release the session asks the server for the final state of
-// every touched chunk, which arrives after the redistance and replaces the prediction with the confirmed chunks and
-// their revisions; an echo already in flight may apply briefly before they arrive.
+// predicts what the server will compute. The store's revisions are never touched. The view holds the stroke's touched
+// chunks out of the server's echo (TerrainViewSync::apply), since the echo describes a server that is behind the
+// prediction. At release the session asks the server for the final state of every touched chunk, and the hold lasts
+// until that answer arrives: an echo flushed between the server's last brush and its redistance still describes the
+// unfinished stroke. The answer arrives after the redistance and replaces the prediction with the confirmed chunks and
+// their revisions. An answer that never comes (a project load, a replaced volume, a failed flush) must not hold the
+// terrain forever, so the wait also ends when the store's volume is no longer the one the stroke finished on, on a
+// new load and after awaitTimeout.
 class TerrainBrushSession
 {
 public:
   using Send = std::function<void(const net::Message&)>;
+
+  // Long enough for the server's next echo flush and the round trip, short enough that a lost answer is not noticed.
+  static constexpr std::chrono::seconds awaitTimeout{ 5 };
 
   [[nodiscard]] bool active() const
   {
@@ -115,10 +122,76 @@ public:
   }
 
   // The hold for an echo message about the given terrain: the touched chunks while a stroke of that terrain is
-  // active, otherwise none.
-  [[nodiscard]] const terrain::ChunkHold* holdFor(const uuids::uuid& terrainUuid) const
+  // active, plus the chunks of a released stroke whose final state has not arrived; none when there are neither.
+  [[nodiscard]] const terrain::ChunkHold* holdFor(const uuids::uuid& terrainUuid)
   {
-    return m_stroke.active() && terrainUuid == m_terrain ? &m_stroke.touched() : nullptr;
+    if (terrainUuid != m_terrain || (!m_stroke.active() && m_awaiting.empty()))
+    {
+      return nullptr;
+    }
+
+    if (!m_stroke.active())
+    {
+      return &m_awaiting;
+    }
+
+    m_hold = m_awaiting;
+    m_hold.insert(m_stroke.touched().begin(), m_stroke.touched().end());
+    return &m_hold;
+  }
+
+  // Call with each terrainChunks message before applying it: a chunk the server sent in full ends the wait for that
+  // chunk, so the message about to be applied replaces the prediction. Hash-only entries (an echo of an edit the view
+  // predicted) leave the wait alone.
+  void confirmChunks(const terrain::TerrainChunksPayload& payload)
+  {
+    if (payload.terrain != m_terrain || m_awaiting.empty())
+    {
+      return;
+    }
+
+    for (const terrain::ReceivedChunk& entry : payload.entries)
+    {
+      if (entry.chunk)
+      {
+        m_awaiting.erase(entry.coord);
+      }
+    }
+
+    if (m_awaiting.empty())
+    {
+      m_awaitingVolume.reset();
+    }
+  }
+
+  // Drops the wait when the store's volume for the released stroke's terrain is not the one the stroke finished on:
+  // the answer describes a volume that is gone.
+  void dropAwaitingIfReplaced(const std::shared_ptr<terrain::TerrainVolume>& current)
+  {
+    if (!m_awaiting.empty() && current != m_awaitingVolume)
+    {
+      clearAwaiting();
+    }
+  }
+
+  // Drops the wait once awaitTimeout has passed since the release, as a backstop for an answer that never arrives.
+  void expireAwaiting(const std::chrono::steady_clock::time_point now)
+  {
+    if (!m_awaiting.empty() && now - m_awaitingSince >= awaitTimeout)
+    {
+      clearAwaiting();
+    }
+  }
+
+  void clearAwaiting()
+  {
+    m_awaiting.clear();
+    m_awaitingVolume.reset();
+  }
+
+  [[nodiscard]] bool awaitingFinalChunks() const
+  {
+    return !m_awaiting.empty();
   }
 
   // Starts a stroke and performs its first application. False, with nothing sent, when a stroke is already active,
@@ -133,17 +206,20 @@ public:
 
     templateOp.radius = effectiveBrushRadius(templateOp.radius, *volume);
 
-    m_terrain = terrainUuid;
-    m_volume = volume;
-
     const terrain::BrushOp first = m_stroke.begin(m_nextStrokeId, templateOp, hit);
 
     if (!m_stroke.active())
     {
-      m_volume.reset();
       return false;
     }
 
+    if (terrainUuid != m_terrain)
+    {
+      clearAwaiting();
+    }
+
+    m_terrain = terrainUuid;
+    m_volume = volume;
     ++m_nextStrokeId;
     perform(first, send);
     return true;
@@ -252,11 +328,13 @@ public:
     return result;
   }
 
-  // Drops the stroke without sending anything, for a volume that was replaced under it.
+  // Drops the stroke and the wait for a released one without sending anything, for a volume that was replaced under
+  // it or a connection that is gone.
   void cancel()
   {
     static_cast<void>(m_stroke.end());
     m_volume.reset();
+    clearAwaiting();
   }
 
 private:
@@ -279,19 +357,35 @@ private:
       touched.push_back(entry.first);
     }
 
+    std::vector<terrain::ChunkCoord> requested = touched;
+    std::unordered_set<terrain::ChunkCoord> known(touched.begin(), touched.end());
+
     for (const terrain::SampleBox& piece : redistanceBoxes(finished->box, touched))
     {
       if (commitLocally)
       {
-        terrain::commit(*volume, terrain::redistance(*volume, piece));
+        const terrain::ChunkEdits edits = terrain::redistance(*volume, piece);
+        terrain::commit(*volume, edits);
+
+        for (const auto& edit : edits)
+        {
+          if (known.insert(edit.first).second)
+          {
+            requested.push_back(edit.first);
+          }
+        }
       }
 
       send(terrain::packRedistanceEdit(m_terrain, finished->strokeId, piece));
     }
 
+    // A send that throws leaves nothing awaited: no answer is coming for a request that was not sent in full.
     if (commitLocally)
     {
-      requestFinalChunks(touched, send);
+      requestFinalChunks(requested, send);
+      m_awaiting.insert(requested.begin(), requested.end());
+      m_awaitingVolume = volume;
+      m_awaitingSince = std::chrono::steady_clock::now();
     }
 
     return finished;
@@ -332,6 +426,11 @@ private:
   TerrainStroke m_stroke;
   uuids::uuid m_terrain;
   std::shared_ptr<terrain::TerrainVolume> m_volume;
+  // Chunks of a released stroke of m_terrain that were requested and have not arrived in full.
+  terrain::ChunkHold m_awaiting;
+  std::shared_ptr<terrain::TerrainVolume> m_awaitingVolume;
+  std::chrono::steady_clock::time_point m_awaitingSince;
+  terrain::ChunkHold m_hold;
   uint64_t m_nextStrokeId = 1;
 };
 

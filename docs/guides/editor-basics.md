@@ -72,6 +72,23 @@ The selected object shows a gizmo for moving, rotating or scaling it.
 - The gizmo is hidden, and takes no clicks, while the View is set to a scene camera instead of the Editor
   Camera. Its mode and option controls stay usable for when you switch back.
 
+### Terrain mode
+
+Select one object that has a Terrain collider and check Sculpt in its Terrain section (or press T) to shape the
+terrain with a brush. It works only while the editor can edit the server.
+
+- Pick Add, Subtract, Smooth or Flatten in the Terrain section, or press Alt+1 to Alt+4. Radius, Strength and
+  Falloff are remembered for each tool. PageUp and PageDown grow and shrink the current tool's radius.
+- A ring follows the cursor on the terrain. Left-drag to sculpt; Flatten levels to the height where you press.
+  Right-drag still flies the camera.
+- Ctrl+click picking and the transform gizmo are off while Sculpt is on. Changing the selection, starting Play or
+  losing the connection to the server turns Sculpt off.
+- Looking through a scene camera instead of the Editor Camera hides the ring and blocks sculpting, but Sculpt
+  stays on for when you switch back.
+- Sculpting works only while the scene is stopped.
+- A radius larger than 64 voxels is limited to that size.
+- Undoing strokes is not available yet.
+
 ## Scene Status
 
 The "Scene Status" panel along the top holds the play controls and some view choices. On a narrow window the
