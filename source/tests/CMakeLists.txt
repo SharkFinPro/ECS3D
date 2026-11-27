@@ -249,6 +249,7 @@ add_executable(${PROJECT_NAME}
   TerrainEditEchoFlushTest.cpp
   TerrainEditEchoTest.cpp
   TerrainEditFlowTest.cpp
+  TerrainEditHistoryBudgetTest.cpp
   TerrainEditHistoryPlayTest.cpp
   TerrainEditHistoryTest.cpp
   TerrainEditTest.cpp
