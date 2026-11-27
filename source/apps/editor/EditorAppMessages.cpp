@@ -152,6 +152,11 @@ void EditorApp::handleTerrainChunks(const net::Message& message)
   {
     m_netClient->send(*outcome.request);
   }
+
+  if (payload && m_pendingTerrainUndo == payload->terrain)
+  {
+    clearUndoRedoPending();
+  }
 }
 
 namespace {

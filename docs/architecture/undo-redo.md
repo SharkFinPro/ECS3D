@@ -139,6 +139,23 @@ validation reads a stale volume and refuses. Null and air are the same chunk whe
 refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
 coordinate. `recordBatch` refuses a `terrainStroke`.
 
+### Terrain strokes in the editor
+
+`TerrainBrushSession::finish` adds every chunk the release redistance changed that no brush touched to
+`Finished::before`, with its pointer from before that redistance piece's commit, and sets `Finished::predicted` when the
+redistance was also committed to the editor's volume. `TerrainBrushSession::Advance::finished` carries the stroke only
+then (not for a replaced volume, lost editing or a stroke that recorded nothing). `EditorApp::finishTerrainStroke`
+turns it into `commandForTerrainStroke` and records it on `m_playHistory.current()`, so a stroke drawn while playing
+lands on the play history that Stop discards; the terrain returns to its Start state through the chunks the server sends
+on Stop. The dirty flag is held (`SaveUI::beginUncommittedEdit`) from the press to the end of the stroke, however it
+ends, and the recorded command then moves the history position like any other edit.
+
+Undo and redo are refused with "finish the terrain stroke first" while a stroke is active or the final state of the last
+one has not arrived. `reportHistoryOutcome` applies `terrainPayload` to the editor's volume with `predictSetChunks`,
+invalidates the terrain's bounds and sends `packSetChunksEdits`. The server answers with a hash-only terrainChunks
+echo that matches the prediction, and that message about the pending terrain (`m_pendingTerrainUndo`) is what releases
+the in-flight gate, rather than a snapshot.
+
 ## Editor wiring
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with

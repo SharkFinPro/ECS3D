@@ -233,6 +233,7 @@ add_executable(${PROJECT_NAME}
   TerrainBrushSessionFlowTest.cpp
   TerrainBrushSessionTest.cpp
   TerrainBrushSessionTestHelpers.h
+  TerrainBrushSessionUndoTest.cpp
   TerrainBrushTest.cpp
   TerrainBrushWireTest.cpp
   TerrainChunkTest.cpp
@@ -248,6 +249,7 @@ add_executable(${PROJECT_NAME}
   TerrainEditEchoFlushTest.cpp
   TerrainEditEchoTest.cpp
   TerrainEditFlowTest.cpp
+  TerrainEditHistoryPlayTest.cpp
   TerrainEditHistoryTest.cpp
   TerrainEditTest.cpp
   TerrainFileRecoveryTest.cpp

@@ -243,8 +243,9 @@ public:
 
   // Ends the stroke and sends one redistance for each piece of its box that holds a chunk the stroke touched, after
   // applying the same redistance to the volume, piece by piece in the order the server will, so each piece sees the
-  // one before it. Then asks for the server's final state of every touched chunk. Returns the finished stroke (its
-  // before list is what an undo needs), or nullopt when none was active. A stroke that changed nothing sends nothing.
+  // one before it. Then asks for the server's final state of every touched chunk. Returns the finished stroke, or
+  // nullopt when none was active. Its before list holds every chunk the stroke or its redistance changed, which is
+  // what an undo needs, and predicted is true. A stroke that changed nothing sends nothing.
   // The stroke is over before the first message is sent, so if send throws the exception propagates, the session is
   // idle and the messages not yet sent are lost.
   std::optional<TerrainStroke::Finished> end(const Send& send)
@@ -255,7 +256,8 @@ public:
   // Ends the stroke for a frame that knows the store's current volume for the terrain and whether the connection can
   // still edit. Without editing the stroke is dropped and nothing is sent. When the volume was replaced under the
   // stroke the server still applied its brushes, so the redistance pieces (which depend only on the stroke's box and
-  // touched chunks) are sent, but the replaced volume is left alone and no final state is requested.
+  // touched chunks) are sent, but the replaced volume is left alone and no final state is requested, and the returned
+  // stroke's predicted is false.
   std::optional<TerrainStroke::Finished> endFor(const std::shared_ptr<terrain::TerrainVolume>& current,
                                                 const bool editable, const Send& send)
   {
@@ -279,6 +281,10 @@ public:
     bool changed = false;
     // The stroke ended this frame (it was active before and is not now).
     bool ended = false;
+    // The stroke that ended this frame with its prediction committed to the volume and something recorded, for the
+    // caller to record as an undo step; unset for a stroke whose volume was replaced, one dropped for lack of editing
+    // and one that changed nothing.
+    std::optional<TerrainStroke::Finished> finished;
   };
 
   // One frame of the pointer. makeTemplate is called only when a stroke begins, so the brush settings are read once
@@ -314,7 +320,11 @@ public:
         result.changed = moveTo(*hit, send) > 0;
         break;
       case TerrainStrokeStep::end:
-        static_cast<void>(endFor(volume, editable, send));
+        if (std::optional<TerrainStroke::Finished> finished = endFor(volume, editable, send);
+            finished && finished->predicted && !finished->before.empty())
+        {
+          result.finished = std::move(finished);
+        }
         break;
       case TerrainStrokeStep::none:
         if (wasActive && pointer.pressed)
@@ -365,15 +375,19 @@ private:
       if (commitLocally)
       {
         const terrain::ChunkEdits edits = terrain::redistance(*volume, piece);
-        terrain::commit(*volume, edits);
 
+        // A chunk only the redistance changed joins before with its pointer from ahead of this commit, so an undo
+        // restores it too.
         for (const auto& edit : edits)
         {
           if (known.insert(edit.first).second)
           {
             requested.push_back(edit.first);
+            finished->before.emplace_back(edit.first, volume->chunk(edit.first));
           }
         }
+
+        terrain::commit(*volume, edits);
       }
 
       send(terrain::packRedistanceEdit(m_terrain, finished->strokeId, piece));
@@ -382,6 +396,7 @@ private:
     // A send that throws leaves nothing awaited: no answer is coming for a request that was not sent in full.
     if (commitLocally)
     {
+      finished->predicted = true;
       requestFinalChunks(requested, send);
       m_awaiting.insert(requested.begin(), requested.end());
       m_awaitingVolume = volume;

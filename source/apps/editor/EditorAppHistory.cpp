@@ -3,6 +3,9 @@
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <edits/TerrainSetChunks.h>
+#include <terrain/TerrainBinding.h>
+#include <terrain/TerrainStore.h>
 #include <SaveUI.h>
 #include <NetClient.h>
 #include <Log.h>
@@ -54,6 +57,12 @@ void EditorApp::undo()
     return;
   }
 
+  if (m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks())
+  {
+    logMessage("Info", "Can't undo: finish the terrain stroke first.");
+    return;
+  }
+
   // A non-reversible command (see AGENTS.md's Editor Undo/Redo section) stays on top of the stack,
   // refused, rather than being handed to EditHistory::undo(), which would treat "a kind with no reverse"
   // as a validation conflict and drop it along with everything older beneath it.
@@ -79,7 +88,8 @@ void EditorApp::undo()
   edits::HistoryOutcome outcome;
   try
   {
-    outcome = m_playHistory.current().undo(*scene->getObjectManager(), m_assetRegistry.get(), scene.get());
+    outcome = m_playHistory.current().undo(*scene->getObjectManager(), m_assetRegistry.get(), scene.get(),
+                                              m_terrainStore.get());
   }
   catch (const std::exception& e)
   {
@@ -99,6 +109,12 @@ void EditorApp::redo()
   if (!m_serverEditable)
   {
     logMessage("Info", "Can't redo: the connected server is read-only.");
+    return;
+  }
+
+  if (m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks())
+  {
+    logMessage("Info", "Can't redo: finish the terrain stroke first.");
     return;
   }
 
@@ -124,7 +140,8 @@ void EditorApp::redo()
   edits::HistoryOutcome outcome;
   try
   {
-    outcome = m_playHistory.current().redo(*scene->getObjectManager(), m_assetRegistry.get(), scene.get());
+    outcome = m_playHistory.current().redo(*scene->getObjectManager(), m_assetRegistry.get(), scene.get(),
+                                           m_terrainStore.get());
   }
   catch (const std::exception& e)
   {
@@ -149,7 +166,9 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
       // reparentObject, reorderObject, renameObject, addComponent, removeComponent, duplicateObject,
       // instantiatePrefab) is the sceneEdit json form - a single command's own op, or one replication::
       // buildBatch of a grouped entry's ops (see EditHistory::undo/redo) - chunked into a sceneEdit
-      // message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit.
+      // message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit, and a terrain
+      // stroke is the terrainChunks form: setChunks terrainEdit messages, applied to the editor's own
+      // volume first as the prediction the server's hash-only echo then confirms.
       if (outcome.messagePayload)
       {
         m_netClient->send(*outcome.messagePayload);
@@ -163,6 +182,23 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
           message.write(chunk);
         }
         m_netClient->send(message);
+      }
+      else if (outcome.terrainPayload)
+      {
+        const edits::TerrainSetChunks& payload = *outcome.terrainPayload;
+
+        if (const auto volume = m_terrainStore->find(payload.terrain))
+        {
+          edits::predictSetChunks(*volume, payload);
+          terrain::invalidateTerrainBounds(*m_sceneManager, payload.terrain);
+        }
+
+        for (const net::Message& message : edits::packSetChunksEdits(payload))
+        {
+          m_netClient->send(message);
+        }
+
+        m_pendingTerrainUndo = payload.terrain;
       }
       noteRecordedEdit();
       break;

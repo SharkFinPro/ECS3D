@@ -11,8 +11,10 @@
 #include <terrain/TerrainRaycast.h>
 #include <terrain/TerrainStore.h>
 #include <terrain/TerrainVolume.h>
+#include <edits/RecordTerrainEdits.h>
 #include <EditorTerrainSettings.h>
 #include <GuiComponents.h>
+#include <SaveUI.h>
 #include <Gizmo.h>
 #include <NetClient.h>
 #include <ProfileScope.h>
@@ -151,9 +153,29 @@ void EditorApp::endTerrainStroke()
   }
 
   const uuids::uuid terrainUuid = m_terrainBrush.terrain();
-  static_cast<void>(m_terrainBrush.endFor(m_terrainStore->find(terrainUuid), m_serverEditable,
-                                          [this](const net::Message& message) { sendTerrainEdit(message); }));
+  const auto volume = m_terrainStore->find(terrainUuid);
+  const auto finished = m_terrainBrush.endFor(volume, m_serverEditable,
+                                              [this](const net::Message& message) { sendTerrainEdit(message); });
+  finishTerrainStroke(terrainUuid, finished, volume);
   terrain::invalidateTerrainBounds(*m_sceneManager, terrainUuid);
+}
+
+void EditorApp::finishTerrainStroke(const uuids::uuid& terrainUuid,
+                                    const std::optional<TerrainStroke::Finished>& finished,
+                                    const std::shared_ptr<terrain::TerrainVolume>& volume)
+{
+  m_saveUI->endUncommittedEdit();
+
+  if (!finished || !finished->predicted || !volume)
+  {
+    return;
+  }
+
+  if (auto command = edits::commandForTerrainStroke(terrainUuid, finished->before, *volume))
+  {
+    m_playHistory.current().record(std::move(*command));
+    noteRecordedEdit();
+  }
 }
 
 namespace {
@@ -294,6 +316,7 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
                                   const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit)
 {
   const size_t tool = toolIndex(m_terrainTool.tool());
+  const bool wasActive = m_terrainBrush.active();
 
   const TerrainBrushSession::Advance advanced = m_terrainBrush.advance(
     terrainUuid, volume, m_serverEditable, pointer, hit,
@@ -301,6 +324,16 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
       return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
     },
     [this](const net::Message& message) { sendTerrainEdit(message); });
+
+  if (!wasActive && m_terrainBrush.active())
+  {
+    m_saveUI->beginUncommittedEdit();
+  }
+
+  if (advanced.ended)
+  {
+    finishTerrainStroke(terrainUuid, advanced.finished, volume);
+  }
 
   if (advanced.changed || advanced.ended)
   {

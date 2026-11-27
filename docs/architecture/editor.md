@@ -193,8 +193,8 @@ and never enter the mode, and the radius keybinds scale the current tool's radiu
 above `maxBrushRadiusVoxels` voxels is clamped (`effectiveBrushRadius`) when a stroke begins and when the ring is
 drawn, since the server refuses a larger brush. The headless parts are `TerrainStroke.h` (spacing along the pointer
 path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
-[viewport-gizmos.md](viewport-gizmos.md). Undo of strokes and the unsaved flag are not wired yet, and a new brush
-always paints material 0.
+[viewport-gizmos.md](viewport-gizmos.md). A finished stroke is one undo step ([undo-redo.md](undo-redo.md)), and the
+unsaved flag is held for the length of a stroke. A new brush always paints material 0.
 
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`

@@ -68,6 +68,7 @@ void EditorApp::beginUndoRedoPending()
 void EditorApp::clearUndoRedoPending()
 {
   m_undoRedoGate.clear();
+  m_pendingTerrainUndo.reset();
 }
 
 void EditorApp::clearEditHistory()
