@@ -15,20 +15,100 @@ std::uint64_t EditHistory::newToken()
   return ++counter;
 }
 
-void EditHistory::pushUndo(std::vector<EditCommand> entry)
+namespace {
+  std::size_t entryBytes(const std::vector<EditCommand>& entry)
+  {
+    std::size_t bytes = 0;
+
+    for (const auto& command : entry)
+    {
+      bytes += command.pinnedBytes();
+    }
+
+    return bytes;
+  }
+}
+
+EditHistory::EditHistory(const std::size_t pinnedByteBudget)
+  : m_pinnedByteBudget(pinnedByteBudget)
+{}
+
+EditHistory::EditHistory(EditHistory&& other) noexcept
+  : m_undoStack(std::move(other.m_undoStack)),
+    m_redoStack(std::move(other.m_redoStack)),
+    m_undoIds(std::move(other.m_undoIds)),
+    m_redoIds(std::move(other.m_redoIds)),
+    m_baseToken(other.m_baseToken),
+    m_pinnedByteBudget(other.m_pinnedByteBudget),
+    m_pinnedBytes(other.m_pinnedBytes)
 {
+  other.m_undoStack.clear();
+  other.m_redoStack.clear();
+  other.m_undoIds.clear();
+  other.m_redoIds.clear();
+  other.m_pinnedBytes = 0;
+}
+
+EditHistory& EditHistory::operator=(EditHistory&& other) noexcept
+{
+  if (this != &other)
+  {
+    m_undoStack = std::move(other.m_undoStack);
+    m_redoStack = std::move(other.m_redoStack);
+    m_undoIds = std::move(other.m_undoIds);
+    m_redoIds = std::move(other.m_redoIds);
+    m_baseToken = other.m_baseToken;
+    m_pinnedByteBudget = other.m_pinnedByteBudget;
+    m_pinnedBytes = other.m_pinnedBytes;
+
+    other.m_undoStack.clear();
+    other.m_redoStack.clear();
+    other.m_undoIds.clear();
+    other.m_redoIds.clear();
+    other.m_pinnedBytes = 0;
+  }
+
+  return *this;
+}
+
+std::size_t EditHistory::pinnedBytes() const
+{
+  return m_pinnedBytes;
+}
+
+void EditHistory::clearRedoStack()
+{
+  for (const auto& entry : m_redoStack)
+  {
+    m_pinnedBytes -= entryBytes(entry);
+  }
+
   m_redoStack.clear();
   m_redoIds.clear();
+}
 
+void EditHistory::trimOldestUndo()
+{
+  m_pinnedBytes -= entryBytes(m_undoStack.front());
+  m_undoStack.pop_front();
+  m_undoIds.pop_front();
+  // The oldest state still reachable by undo is no longer the one the history started from.
+  m_baseToken = newToken();
+}
+
+void EditHistory::pushUndo(std::vector<EditCommand> entry)
+{
+  clearRedoStack();
+
+  const auto bytes = entryBytes(entry);
   m_undoStack.push_back(std::move(entry));
   m_undoIds.push_back(newToken());
+  m_pinnedBytes += bytes;
 
-  if (m_undoStack.size() > maxDepth)
+  // The entry just recorded is never trimmed, so one stroke over the budget is still undoable.
+  while (m_undoStack.size() > 1 && (m_undoStack.size() > maxDepth || m_pinnedBytes > m_pinnedByteBudget))
   {
-    // The oldest state still reachable by undo is no longer the one the history started from.
-    m_undoStack.pop_front();
-    m_undoIds.pop_front();
-    m_baseToken = newToken();
+    trimOldestUndo();
   }
 }
 
@@ -37,6 +117,11 @@ void EditHistory::dropUndoStack()
   if (m_undoStack.empty())
   {
     return;
+  }
+
+  for (const auto& entry : m_undoStack)
+  {
+    m_pinnedBytes -= entryBytes(entry);
   }
 
   m_undoStack.clear();
@@ -268,8 +353,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
     const auto validation = command.validateForRedo(objectManager, assetRegistry, scene, terrains);
     if (!validation.ok())
     {
-      m_redoStack.clear();
-      m_redoIds.clear();
+      clearRedoStack();
       return { toHistoryResult(validation.failure), validation.conflict };
     }
 
@@ -300,24 +384,21 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
   {
     if (command.targetsSceneScripts())
     {
-      m_redoStack.clear();
-      m_redoIds.clear();
+      clearRedoStack();
       return { HistoryResult::notUndoable, command.primaryUUID() };
     }
 
     const auto validation = command.validateForRedo(*scratch, assetRegistry, nullptr, terrains);
     if (!validation.ok())
     {
-      m_redoStack.clear();
-      m_redoIds.clear();
+      clearRedoStack();
       return { toHistoryResult(validation.failure), validation.conflict };
     }
 
     const auto redoJSON = command.buildRedoJSON(*scratch);
     if (replication::applySceneEdit(*scratch, redoJSON, assetRegistry) != replication::SceneEditResult::applied)
     {
-      m_redoStack.clear();
-      m_redoIds.clear();
+      clearRedoStack();
       return { HistoryResult::targetChanged, command.primaryUUID() };
     }
 
@@ -336,6 +417,7 @@ void EditHistory::reportUndoRejected()
 {
   if (!m_redoStack.empty())
   {
+    m_pinnedBytes -= entryBytes(m_redoStack.back());
     m_redoStack.pop_back();
     m_redoIds.pop_back();
   }
@@ -345,6 +427,7 @@ void EditHistory::reportRedoRejected()
 {
   if (!m_undoStack.empty())
   {
+    m_pinnedBytes -= entryBytes(m_undoStack.back());
     m_undoStack.pop_back();
     m_undoIds.pop_back();
   }
@@ -353,8 +436,7 @@ void EditHistory::reportRedoRejected()
 void EditHistory::clear()
 {
   dropUndoStack();
-  m_redoStack.clear();
-  m_redoIds.clear();
+  clearRedoStack();
 }
 
 namespace {

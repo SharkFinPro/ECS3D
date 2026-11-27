@@ -231,6 +231,10 @@ public:
   // The recorded chunks of a terrainStroke; null for every other kind.
   [[nodiscard]] const std::vector<TerrainStrokeChunk>* terrainStrokeChunks() const;
 
+  // The bytes of every non-null before and after chunk a terrainStroke holds, counting a chunk shared between
+  // two sides twice; 0 for every other kind.
+  [[nodiscard]] std::size_t pinnedBytes() const;
+
   // True for the kinds that act on a scene's script list rather than on the object tree. They are never
   // grouped (a batch sceneEdit refuses them), and validating one needs the scene.
   [[nodiscard]] bool targetsSceneScripts() const;
