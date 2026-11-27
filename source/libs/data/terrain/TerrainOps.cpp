@@ -95,7 +95,8 @@ namespace terrain
     }
   }
 
-  ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit)
+  ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
+                         const UniformChunkHint& uniformHint)
   {
     if (box.empty())
     {
@@ -120,22 +121,54 @@ namespace terrain
         {
           const ChunkCoord coord{ cx, cy, cz };
           const auto current = volume.chunk(coord);
-
-          std::vector<int16_t> distances(samplesPerChunk, airDistance);
-          std::vector<uint8_t> materials(samplesPerChunk, 0);
-
-          if (current)
-          {
-            for (int i = 0; i < samplesPerChunk; ++i)
-            {
-              distances[static_cast<size_t>(i)] = current->distanceAtIndex(i);
-              materials[static_cast<size_t>(i)] = current->materialAtIndex(i);
-            }
-          }
-
           const glm::ivec3 origin = chunkOrigin(coord);
           const glm::ivec3 low = glm::max(box.min, origin);
           const glm::ivec3 high = glm::min(box.max, origin + glm::ivec3(chunkSize));
+
+          if (uniformHint && low == origin && high == origin + glm::ivec3(chunkSize))
+          {
+            int16_t hintDistance = 0;
+            uint8_t hintMaterial = 0;
+
+            if (uniformHint(coord, hintDistance, hintMaterial) && hintMaterial != reservedMaterial)
+            {
+              const auto filled = TerrainChunk::uniform(
+                static_cast<int16_t>(std::clamp(static_cast<int>(hintDistance), -static_cast<int>(airDistance),
+                                                static_cast<int>(airDistance))),
+                hintMaterial);
+
+              if (filled)
+              {
+                if (!sameContent(current, filled))
+                {
+                  edits.emplace_back(coord, filled->isAir() ? nullptr : filled);
+                }
+
+                continue;
+              }
+            }
+          }
+
+          std::vector<int16_t> distances;
+          std::vector<uint8_t> materials;
+
+          if (!current)
+          {
+            distances.assign(samplesPerChunk, airDistance);
+            materials.assign(samplesPerChunk, 0);
+          }
+          else if (current->isUniform())
+          {
+            distances.assign(samplesPerChunk, current->distances().front());
+            materials.assign(samplesPerChunk, current->materials().front());
+          }
+          else
+          {
+            distances.assign(current->distances().begin(), current->distances().end());
+            materials.assign(current->materials().begin(), current->materials().end());
+          }
+
+          bool changed = false;
 
           for (int z = low.z; z < high.z; ++z)
           {
@@ -145,16 +178,26 @@ namespace terrain
               {
                 const auto index = static_cast<size_t>(sampleIndex(x - origin.x, y - origin.y, z - origin.z));
                 const uint8_t inputMaterial = materials[index];
-                int16_t distance = distances[index];
+                const int16_t inputDistance = distances[index];
+                int16_t distance = inputDistance;
                 uint8_t material = inputMaterial;
 
                 edit({ x, y, z }, distance, material);
 
-                distances[index] = static_cast<int16_t>(
+                const auto outputDistance = static_cast<int16_t>(
                   std::clamp(static_cast<int>(distance), -static_cast<int>(airDistance), static_cast<int>(airDistance)));
-                materials[index] = material == reservedMaterial ? inputMaterial : material;
+                const uint8_t outputMaterial = material == reservedMaterial ? inputMaterial : material;
+
+                changed = changed || outputDistance != inputDistance || outputMaterial != inputMaterial;
+                distances[index] = outputDistance;
+                materials[index] = outputMaterial;
               }
             }
+          }
+
+          if (!changed)
+          {
+            continue;
           }
 
           auto rebuilt = TerrainChunk::dense(std::move(distances), std::move(materials));
@@ -196,17 +239,11 @@ namespace terrain
     std::vector<int16_t> encoded(static_cast<size_t>(total));
     std::vector<float> field(static_cast<size_t>(total));
 
-    for (int z = 0; z < size.z; ++z)
+    volume.readDistances({ gridMin, gridMin + size }, encoded);
+
+    for (size_t index = 0; index < encoded.size(); ++index)
     {
-      for (int y = 0; y < size.y; ++y)
-      {
-        for (int x = 0; x < size.x; ++x)
-        {
-          const int16_t distance = volume.distanceAtSample(gridMin + glm::ivec3(x, y, z));
-          encoded[at(x, y, z)] = distance;
-          field[at(x, y, z)] = decodeDistance(distance);
-        }
-      }
+      field[index] = decodeDistance(encoded[index]);
     }
 
     std::vector<uint8_t> fixed(static_cast<size_t>(total), 0);

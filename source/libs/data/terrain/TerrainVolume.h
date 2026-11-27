@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <unordered_map>
 
 namespace terrain
@@ -37,6 +38,10 @@ namespace terrain
     [[nodiscard]] int16_t distanceAtSample(glm::ivec3 sample) const;
 
     [[nodiscard]] uint8_t materialAtSample(glm::ivec3 sample) const;
+
+    // Copies the box's distances into out, x fastest then y then z, reading absent chunks as air. out must hold the
+    // box's sample count.
+    void readDistances(const SampleBox& box, std::span<int16_t> out) const;
 
     [[nodiscard]] SampleBox occupiedBounds() const;
 

@@ -189,3 +189,37 @@ TEST(TerrainOpsTest, OutOfRangeWritesAreClamped)
   EXPECT_EQ(chunk->distanceAt(1, 0, 0), terrain::airDistance);
   EXPECT_EQ(chunk->materialAt(1, 0, 0), 5);
 }
+
+TEST(TerrainOpsTest, UniformHintSkipsWholeChunksAndMatchesTheSampleEdit)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 1, 0, 0 }, ramp());
+  const terrain::SampleBox box{ { 0, 0, 0 }, { terrain::chunkSize * 2, terrain::chunkSize, terrain::chunkSize } };
+  int visited = 0;
+
+  const auto edit = [&visited](glm::ivec3, int16_t& distance, uint8_t& material)
+  {
+    ++visited;
+    distance = -terrain::airDistance;
+    material = 4;
+  };
+  const auto hint = [](const terrain::ChunkCoord, int16_t& distance, uint8_t& material)
+  {
+    distance = -terrain::airDistance;
+    material = 4;
+    return true;
+  };
+
+  const auto hinted = terrain::editSamples(volume, box, edit, hint);
+  EXPECT_EQ(visited, 0);
+
+  const auto sampled = terrain::editSamples(volume, box, edit);
+  EXPECT_EQ(visited, 2 * terrain::samplesPerChunk);
+
+  ASSERT_EQ(hinted.size(), sampled.size());
+  for (size_t index = 0; index < hinted.size(); ++index)
+  {
+    EXPECT_EQ(hinted[index].first, sampled[index].first);
+    EXPECT_EQ(hinted[index].second->hash(), sampled[index].second->hash());
+  }
+}

@@ -369,3 +369,29 @@ TEST(TerrainVolumeTest, IsAirWithinAHugeBoxWalksTheHeldChunks)
   EXPECT_TRUE(volume.isAirWithin({ { 0, -1000000, -1000000 }, { 9000, 1000000, 1000000 } }));
   EXPECT_FALSE(volume.isAirWithin({ { 0, -1000000, -1000000 }, { 9601, 1000000, 1000000 } }));
 }
+
+TEST(TerrainVolumeTest, ReadDistancesMatchesPerSampleReadsAcrossChunkKinds)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 0, 0, 0 }, ramp(-500));
+  volume.setChunk({ 1, 0, 0 }, solid());
+  volume.setChunk({ -1, -1, 0 }, ramp(40));
+
+  const terrain::SampleBox box{ { -40, -35, -2 }, { 70, 6, 3 } };
+  const glm::ivec3 size = box.max - box.min;
+  std::vector<int16_t> out(static_cast<size_t>(size.x) * static_cast<size_t>(size.y) * static_cast<size_t>(size.z));
+
+  volume.readDistances(box, out);
+
+  for (int z = 0; z < size.z; ++z)
+  {
+    for (int y = 0; y < size.y; ++y)
+    {
+      for (int x = 0; x < size.x; ++x)
+      {
+        const auto index = static_cast<size_t>(x + size.x * (y + size.y * z));
+        ASSERT_EQ(out[index], volume.distanceAtSample(box.min + glm::ivec3(x, y, z)));
+      }
+    }
+  }
+}

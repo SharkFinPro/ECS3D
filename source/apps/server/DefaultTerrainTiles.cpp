@@ -94,13 +94,18 @@ class GlobalGround
 {
 public:
   GlobalGround()
-    : m_heights(static_cast<size_t>(basin::worldColumns) * static_cast<size_t>(basin::worldColumns))
+    : m_heights(static_cast<size_t>(basin::worldColumns) * static_cast<size_t>(basin::worldColumns)),
+      m_quantized(m_heights.size())
   {
+    constexpr float full = static_cast<float>(basin::maxHeight);
+
     for (int z = 0; z < basin::worldColumns; ++z)
     {
       for (int x = 0; x < basin::worldColumns; ++x)
       {
-        m_heights[index(x, z)] = basin::groundAt(static_cast<float>(x), static_cast<float>(z));
+        const float height = basin::groundAt(static_cast<float>(x), static_cast<float>(z));
+        m_heights[index(x, z)] = height;
+        m_quantized[index(x, z)] = static_cast<float>(std::lround(height / full * 65535.0f)) / 65535.0f * full;
       }
     }
   }
@@ -113,9 +118,7 @@ public:
   // The height as the fill stores it: a 16-bit fraction of the full scale.
   [[nodiscard]] float quantized(const int x, const int z) const
   {
-    constexpr float full = static_cast<float>(basin::maxHeight);
-
-    return static_cast<float>(std::lround(at(x, z) / full * 65535.0f)) / 65535.0f * full;
+    return m_quantized[index(std::clamp(x, 0, basin::worldColumns - 1), std::clamp(z, 0, basin::worldColumns - 1))];
   }
 
   // The distance to the surface in voxels at global column (x, z) and height y, from the fill's first order estimate
@@ -160,6 +163,7 @@ private:
   }
 
   std::vector<float> m_heights;
+  std::vector<float> m_quantized;
 };
 
 std::vector<float> tileHeights(const GlobalGround& ground, const int row, const int col)

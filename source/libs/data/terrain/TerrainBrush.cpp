@@ -113,30 +113,13 @@ namespace terrain
     {
       const SampleBox grown{ box.min - glm::ivec3(1), box.max + glm::ivec3(1) };
       Field raw(grown.min, grown.max);
-      ChunkCoord cachedCoord{};
-      std::shared_ptr<const TerrainChunk> cached;
-      bool hasCached = false;
+      std::vector<int16_t> encoded(raw.values.size());
 
-      for (int z = grown.min.z; z < grown.max.z; ++z)
+      volume.readDistances(grown, encoded);
+
+      for (size_t index = 0; index < encoded.size(); ++index)
       {
-        for (int y = grown.min.y; y < grown.max.y; ++y)
-        {
-          for (int x = grown.min.x; x < grown.max.x; ++x)
-          {
-            const glm::ivec3 sample(x, y, z);
-            const ChunkCoord coord = chunkOfSample(sample);
-
-            if (!hasCached || !(coord == cachedCoord))
-            {
-              cached = volume.chunk(coord);
-              cachedCoord = coord;
-              hasCached = true;
-            }
-
-            raw.values[raw.at(x, y, z)] = cached ? decodeDistance(cached->distanceAtIndex(indexInChunk(sample)))
-                                                 : bandVoxels;
-          }
-        }
+        raw.values[index] = decodeDistance(encoded[index]);
       }
 
       Field scratch(grown.min, grown.max);

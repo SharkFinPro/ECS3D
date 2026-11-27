@@ -2,6 +2,7 @@
 #include <glm/common.hpp>
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -108,6 +109,63 @@ namespace terrain
   {
     const auto found = m_chunks.find(chunkOfSample(sample));
     return found == m_chunks.end() ? uint8_t{ 0 } : found->second->materialAtIndex(indexInChunk(sample));
+  }
+
+  void TerrainVolume::readDistances(const SampleBox& box, const std::span<int16_t> out) const
+  {
+    if (box.empty())
+    {
+      return;
+    }
+
+    const glm::ivec3 size = box.max - box.min;
+    assert(out.size() >= static_cast<size_t>(size.x) * static_cast<size_t>(size.y) * static_cast<size_t>(size.z));
+
+    const ChunkCoord first = chunkOfSample(box.min);
+    const ChunkCoord last = chunkOfSample(box.max - glm::ivec3(1));
+
+    for (int32_t cz = first.z; cz <= last.z; ++cz)
+    {
+      for (int32_t cy = first.y; cy <= last.y; ++cy)
+      {
+        for (int32_t cx = first.x; cx <= last.x; ++cx)
+        {
+          const ChunkCoord coord{ cx, cy, cz };
+          const auto found = m_chunks.find(coord);
+          const TerrainChunk* chunk = found == m_chunks.end() ? nullptr : found->second.get();
+          const glm::ivec3 origin = chunkOrigin(coord);
+          const glm::ivec3 low = glm::max(box.min, origin);
+          const glm::ivec3 high = glm::min(box.max, origin + glm::ivec3(chunkSize));
+          const auto count = static_cast<size_t>(high.x - low.x);
+
+          for (int z = low.z; z < high.z; ++z)
+          {
+            for (int y = low.y; y < high.y; ++y)
+            {
+              int16_t* destination =
+                out.data() + (static_cast<size_t>(z - box.min.z) * static_cast<size_t>(size.y) +
+                              static_cast<size_t>(y - box.min.y)) * static_cast<size_t>(size.x) +
+                static_cast<size_t>(low.x - box.min.x);
+
+              if (!chunk)
+              {
+                std::fill_n(destination, count, airDistance);
+              }
+              else if (chunk->isUniform())
+              {
+                std::fill_n(destination, count, chunk->distanceAtIndex(0));
+              }
+              else
+              {
+                const int16_t* source =
+                  chunk->distances().data() + sampleIndex(low.x - origin.x, y - origin.y, z - origin.z);
+                std::copy_n(source, count, destination);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   SampleBox TerrainVolume::occupiedBounds() const

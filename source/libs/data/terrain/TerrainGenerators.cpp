@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace terrain
 {
@@ -34,13 +35,46 @@ namespace terrain
       const int bottom = floorDiv(static_cast<int32_t>(lowVoxels), chunkSize) * chunkSize;
       const SampleBox box{ { 0, bottom, 0 }, { columns, static_cast<int32_t>(highVoxels), rows } };
 
+      const auto distanceAt = [voxelSize](const int y, const Surface& surface)
+      {
+        const float above = static_cast<float>(y) * voxelSize - surface.height;
+        return encodeDistance(above * surface.inverseNorm / voxelSize);
+      };
+
+      // Distance only grows with height, so a chunk is all air when the lowest sample of every column is air, and all
+      // solid when the highest is. Those chunks never need their samples visited.
+      const auto uniformHint = [&](const ChunkCoord coord, int16_t& distance, uint8_t& hintMaterial)
+      {
+        const glm::ivec3 origin = chunkOrigin(coord);
+        bool allAir = true;
+        bool allSolid = true;
+
+        for (int v = origin.z; v < origin.z + chunkSize && (allAir || allSolid); ++v)
+        {
+          for (int u = origin.x; u < origin.x + chunkSize && (allAir || allSolid); ++u)
+          {
+            const Surface surface = surfaceAt(u, v);
+            allAir = allAir && distanceAt(origin.y, surface) == airDistance;
+            allSolid = allSolid && distanceAt(origin.y + chunkSize - 1, surface) == -airDistance;
+          }
+        }
+
+        if (!allAir && !allSolid)
+        {
+          return false;
+        }
+
+        distance = allAir ? airDistance : static_cast<int16_t>(-airDistance);
+        hintMaterial = material;
+
+        return true;
+      };
+
       return editSamples(volume, box, [&](const glm::ivec3 sample, int16_t& distance, uint8_t& sampleMaterial)
       {
-        const Surface surface = surfaceAt(sample.x, sample.z);
-        const float above = static_cast<float>(sample.y) * voxelSize - surface.height;
-        distance = encodeDistance(above * surface.inverseNorm / voxelSize);
+        distance = distanceAt(sample.y, surfaceAt(sample.x, sample.z));
         sampleMaterial = material;
-      });
+      }, uniformHint);
     }
 
     bool validCommon(const float thickness, const uint8_t material)
@@ -104,17 +138,24 @@ namespace terrain
       return Surface{ heightAt(u, v), 1.0f / std::sqrt(1.0f + gradX * gradX + gradZ * gradZ) };
     };
 
+    // Each column's surface is read once per sample of its column, so it is computed once here.
+    std::vector<Surface> surfaces(heightmap.pixels.size());
     float smallestInverseNorm = 1.0f;
 
     for (int v = 0; v < rows; ++v)
     {
       for (int u = 0; u < width; ++u)
       {
-        smallestInverseNorm = std::min(smallestInverseNorm, surfaceAt(u, v).inverseNorm);
+        const Surface surface = surfaceAt(u, v);
+        surfaces[static_cast<size_t>(v) * static_cast<size_t>(width) + static_cast<size_t>(u)] = surface;
+        smallestInverseNorm = std::min(smallestInverseNorm, surface.inverseNorm);
       }
     }
 
     return generate(volume, width, rows, toHeight(*lowest), toHeight(*highest), 1.0 / smallestInverseNorm, thickness,
-                    material, surfaceAt);
+                    material, [&surfaces, width](const int u, const int v)
+    {
+      return surfaces[static_cast<size_t>(v) * static_cast<size_t>(width) + static_cast<size_t>(u)];
+    });
   }
 }
