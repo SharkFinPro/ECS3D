@@ -70,12 +70,18 @@ public:
   // realistically produces while still being a hard, named limit instead of unbounded growth.
   static constexpr std::size_t maxDepth = 100;
 
-  // Entry ids identify states (see position()), so a copy would duplicate them.
+  // A terrain stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound
+  // memory. Past this many pinned bytes over both stacks the oldest undo entries are trimmed.
+  static constexpr std::size_t maxPinnedBytes = 512ull * 1024 * 1024;
+
   EditHistory() = default;
+  explicit EditHistory(const std::size_t pinnedByteBudget);
+
+  // Entry ids identify states (see position()), so a copy would duplicate them. A moved-from history is empty.
   EditHistory(const EditHistory&) = delete;
   EditHistory& operator=(const EditHistory&) = delete;
-  EditHistory(EditHistory&&) noexcept = default;
-  EditHistory& operator=(EditHistory&&) noexcept = default;
+  EditHistory(EditHistory&& other) noexcept;
+  EditHistory& operator=(EditHistory&& other) noexcept;
 
   // Pushes onto the undo stack and clears the redo stack - any new command invalidates whatever redo
   // path existed, since redoing it now would apply on top of a scene that has since moved on. Drops the
@@ -169,10 +175,15 @@ public:
   // position as soon as the request is built, before the server confirms it.
   [[nodiscard]] std::uint64_t position() const;
 
+  // The bytes the entries on both stacks pin (EditCommand::pinnedBytes), kept exact on every path.
+  [[nodiscard]] std::size_t pinnedBytes() const;
+
 private:
   [[nodiscard]] static std::uint64_t newToken();
   void pushUndo(std::vector<EditCommand> entry);
   void dropUndoStack();
+  void clearRedoStack();
+  void trimOldestUndo();
   void moveUndoToRedo();
   void moveRedoToUndo();
 
@@ -184,6 +195,8 @@ private:
   std::deque<std::uint64_t> m_undoIds;
   std::deque<std::uint64_t> m_redoIds;
   std::uint64_t m_baseToken = newToken();
+  std::size_t m_pinnedByteBudget = maxPinnedBytes;
+  std::size_t m_pinnedBytes = 0;
 };
 
 }

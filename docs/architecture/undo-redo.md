@@ -139,6 +139,14 @@ validation reads a stale volume and refuses. Null and air are the same chunk whe
 refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
 coordinate. `recordBatch` refuses a `terrainStroke`.
 
+A stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound memory.
+`EditCommand::pinnedBytes()` sums `byteSize()` over those chunks (0 for every other kind, no deduplication), and
+`EditHistory` keeps the total over both stacks exact (`pinnedBytes()`). When recording leaves the total over
+`maxPinnedBytes` (512 MiB; a constructor takes another budget), the oldest undo entries are trimmed until it fits.
+The entry just recorded is never trimmed, so a single stroke over the budget is still undoable. A trim treats the
+save point like a depth trim: it gives the base state a fresh token, a save point still on the stack survives and one
+that was trimmed never matches again.
+
 ## Editor wiring
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with

@@ -2,6 +2,7 @@
 #include "TerrainSetChunks.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
+#include <cstddef>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -44,6 +45,25 @@ const std::vector<TerrainStrokeChunk>* EditCommand::terrainStrokeChunks() const
   }
 
   return nullptr;
+}
+
+std::size_t EditCommand::pinnedBytes() const
+{
+  const auto* data = std::get_if<TerrainStrokeData>(&m_data);
+  if (!data)
+  {
+    return 0;
+  }
+
+  std::size_t bytes = 0;
+
+  for (const auto& chunk : data->chunks)
+  {
+    bytes += chunk.before ? chunk.before->byteSize() : 0;
+    bytes += chunk.after ? chunk.after->byteSize() : 0;
+  }
+
+  return bytes;
 }
 
 Validation EditCommand::validateTerrainStroke(const terrain::TerrainStore* terrains, const bool forUndo) const
