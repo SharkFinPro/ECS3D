@@ -239,7 +239,7 @@ public:
   [[nodiscard]] const std::vector<TerrainStrokeChunk>* terrainStrokeChunks() const;
 
   // The bytes of every non-null before and after chunk a terrainStroke holds, counting a chunk shared between
-  // two sides twice; 0 for every other kind.
+  // two sides twice, or of the chunk map a terrain addAsset/removeAsset holds; 0 for every other command.
   [[nodiscard]] std::size_t pinnedBytes() const;
 
   // The terrain an undo (forUndo) or redo of this command adds back, with its chunks; nullopt unless it is a terrain

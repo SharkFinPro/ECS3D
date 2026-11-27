@@ -704,3 +704,32 @@ TEST(TerrainAssetUndo, ATerrainCommandRefusesARestoreThatNamesAnotherUuid)
                                                                  "", "", "Hills", restore)),
                std::invalid_argument);
 }
+
+TEST(TerrainAssetUndo, ATerrainAssetCommandPinsTheBytesOfTheChunksItHolds)
+{
+  terrain::TerrainDescription description;
+  description.uuid = terrainId;
+  terrain::TerrainVolume::ChunkMap chunks;
+  chunks[{ 0, 0, 0 }] = solid();
+  chunks[{ 1, 0, 0 }] = noise(3);
+  const auto restore = edits::makeTerrainRestore(description, chunks, "Hills");
+  const std::size_t expected = solid()->byteSize() + noise(3)->byteSize();
+  ASSERT_GT(expected, 0u);
+
+  const auto add =
+    edits::EditCommand::addAsset(terrainId, AssetType::Terrain, terrainAssetPath(terrainId), "", "", restore);
+  const auto remove = edits::EditCommand::removeAsset(terrainId, AssetType::Terrain, terrainAssetPath(terrainId), "",
+                                                      "", "Hills", restore);
+  EXPECT_EQ(add.pinnedBytes(), expected);
+  EXPECT_EQ(remove.pinnedBytes(), expected);
+
+  const auto bare = edits::EditCommand::removeAsset(terrainId, AssetType::Terrain, terrainAssetPath(terrainId), "",
+                                                    "", "Hills");
+  EXPECT_EQ(bare.pinnedBytes(), 0u);
+
+  edits::EditHistory history(expected - 1);
+  history.record(remove);
+  history.record(add);
+  EXPECT_EQ(history.undoDepth(), 1u);
+  EXPECT_EQ(history.pinnedBytes(), expected);
+}

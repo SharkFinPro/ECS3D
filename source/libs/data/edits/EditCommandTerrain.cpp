@@ -48,8 +48,35 @@ const std::vector<TerrainStrokeChunk>* EditCommand::terrainStrokeChunks() const
   return nullptr;
 }
 
+namespace {
+  std::size_t restoreBytes(const std::optional<TerrainRestore>& restore)
+  {
+    std::size_t bytes = 0;
+
+    if (restore)
+    {
+      for (const auto& entry : restore->chunks)
+      {
+        bytes += entry.second ? entry.second->byteSize() : 0;
+      }
+    }
+
+    return bytes;
+  }
+}
+
 std::size_t EditCommand::pinnedBytes() const
 {
+  if (const auto* add = std::get_if<AddAssetData>(&m_data))
+  {
+    return restoreBytes(add->terrain);
+  }
+
+  if (const auto* remove = std::get_if<RemoveAssetData>(&m_data))
+  {
+    return restoreBytes(remove->terrain);
+  }
+
   const auto* data = std::get_if<TerrainStrokeData>(&m_data);
   if (!data)
   {
