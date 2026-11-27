@@ -94,9 +94,19 @@ namespace terrain
   TerrainChunk::TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, const bool uniformContent)
     : m_distances(std::move(distances)),
       m_materials(std::move(materials)),
-      m_isUniform(uniformContent),
-      m_groundBricks(groundBricksOf(m_distances, uniformContent))
+      m_isUniform(uniformContent)
   {}
+
+  uint64_t TerrainChunk::groundBricks() const
+  {
+    if (!m_groundBricksKnown.load(std::memory_order_acquire))
+    {
+      m_groundBricks.store(groundBricksOf(m_distances, m_isUniform), std::memory_order_relaxed);
+      m_groundBricksKnown.store(true, std::memory_order_release);
+    }
+
+    return m_groundBricks.load(std::memory_order_relaxed);
+  }
 
   bool TerrainChunk::isAirWithin(const SampleBox& local) const
   {
@@ -109,13 +119,15 @@ namespace terrain
 
     const glm::ivec3 first = low / brickSize;
     const glm::ivec3 last = (high - glm::ivec3(1)) / brickSize;
+    const uint64_t bricks = groundBricks();
+
     for (int z = first.z; z <= last.z; ++z)
     {
       for (int y = first.y; y <= last.y; ++y)
       {
         for (int x = first.x; x <= last.x; ++x)
         {
-          if (((m_groundBricks >> brickIndex(x, y, z)) & 1u) != 0)
+          if (((bricks >> brickIndex(x, y, z)) & 1u) != 0)
           {
             return false;
           }

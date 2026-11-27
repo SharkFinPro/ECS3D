@@ -116,6 +116,20 @@ public:
   // from one call to the next. Empty when not active or the pointer did not move far enough. At most
   // maxApplicationsPerMove are returned; past that only the last ones of the segment are kept, so the brush ends at
   // hit rather than lagging behind it.
+  // The pointer is held still over hit: one more application there, which restarts the spacing from it. Nothing when
+  // not active or the hit point is not finite.
+  [[nodiscard]] std::optional<terrain::BrushOp> holdAt(const terrain::RayHit& hit)
+  {
+    if (!m_active || !finite(hit.point))
+    {
+      return std::nullopt;
+    }
+
+    m_last = glm::dvec3(hit.point);
+    m_sinceLast = 0.0;
+    return opAt(hit.point);
+  }
+
   [[nodiscard]] std::vector<terrain::BrushOp> moveTo(const terrain::RayHit& hit)
   {
     std::vector<terrain::BrushOp> due;

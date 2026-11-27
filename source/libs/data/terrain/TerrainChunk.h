@@ -56,8 +56,12 @@ namespace terrain
     bool m_isUniform;
     // Computed on first use: most chunks a generator or an edit builds are never hashed, and the hash is never 0.
     mutable std::atomic<uint64_t> m_hash{ 0 };
-    // One bit per brick, set when the brick holds a sample other than airDistance.
-    uint64_t m_groundBricks = 0;
+    // One bit per brick, set when the brick holds a sample other than airDistance. Computed on the first query, since
+    // most chunks an edit builds are replaced before anything asks.
+    mutable std::atomic<uint64_t> m_groundBricks{ 0 };
+    mutable std::atomic<bool> m_groundBricksKnown{ false };
+
+    [[nodiscard]] uint64_t groundBricks() const;
   };
 }
 

@@ -9,6 +9,7 @@
 #include <terrain/TerrainVolume.h>
 #include <Protocol.h>
 
+#include <chrono>
 #include <cstddef>
 #include <optional>
 #include <stdexcept>
@@ -218,4 +219,40 @@ TEST(TerrainBrushSessionTest, ASendThatThrowsAtReleaseLeavesTheSessionIdleAndLos
   // The failed session takes a new stroke.
   EXPECT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
                             hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+}
+
+TEST(TerrainBrushSessionFlowTest, AHeldPointerAppliesAgainAndRefreshesItsSurface)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  const auto makeTemplate = [] { return templateOp(terrain::BrushOp::Kind::add); };
+  const auto hit = hitAt({ 40.0f, 10.0f, 40.0f });
+  auto now = std::chrono::steady_clock::time_point{} + std::chrono::hours(1);
+
+  session.advance(terrainId, env.volume, true, pressedAt(false), hit, makeTemplate, recorder.sender(), now);
+  ASSERT_TRUE(session.active());
+  const auto surfaceAtPress = session.strokeSurface();
+  const size_t afterPress = recorder.payloads().size();
+
+  // Held still for less than the interval: nothing more.
+  now += TerrainBrushSession::holdInterval / 2;
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender(), now);
+  EXPECT_EQ(recorder.payloads().size(), afterPress);
+
+  // Held past the interval: one more application at the same place.
+  now += TerrainBrushSession::holdInterval;
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender(), now);
+  EXPECT_EQ(recorder.payloads().size(), afterPress + 1);
+  EXPECT_EQ(session.strokeSurface(), surfaceAtPress);
+
+  // Held past the surface refresh: the cursor now aims at the grown terrain.
+  now += TerrainBrushSession::surfaceRefresh;
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender(), now);
+  EXPECT_NE(session.strokeSurface(), surfaceAtPress);
+
+  // Without a clock a still pointer applies nothing.
+  const size_t beforeUntimed = recorder.payloads().size();
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender());
+  EXPECT_EQ(recorder.payloads().size(), beforeUntimed);
 }

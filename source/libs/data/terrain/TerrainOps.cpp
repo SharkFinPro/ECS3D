@@ -331,23 +331,27 @@ namespace terrain
 
     std::vector<uint8_t> fixed(static_cast<size_t>(total), 0);
 
-    // A sample is frozen when its 3x3x3 neighborhood holds both signs. The window's lowest and highest sign are found
-    // one axis at a time, which reads each sample a few times instead of 27.
-    std::vector<uint8_t> lowest(static_cast<size_t>(total));
-    std::vector<uint8_t> highest(static_cast<size_t>(total));
+    // A sample is frozen when its 3x3x3 neighborhood holds both signs. Each sample starts as one bit for its sign (1
+    // outside, 2 inside), and the window's bits are ORed one axis at a time, so a neighborhood holding both reads 3.
+    std::vector<uint8_t> signs(static_cast<size_t>(total));
 
-    for (size_t index = 0; index < lowest.size(); ++index)
+    forEachSlice(size.z, total, [&](const int z)
     {
-      lowest[index] = highest[index] = encoded[index] < 0 ? 1 : 0;
-    }
+      const size_t begin = at(0, 0, z);
+      const size_t end = begin + static_cast<size_t>(size.x) * static_cast<size_t>(size.y);
+
+      for (size_t index = begin; index < end; ++index)
+      {
+        signs[index] = encoded[index] < 0 ? 2 : 1;
+      }
+    });
 
     for (int axis = 0; axis < 3; ++axis)
     {
       const size_t step = axis == 0 ? 1 : (axis == 1 ? static_cast<size_t>(size.x)
                                                      : static_cast<size_t>(size.x) * static_cast<size_t>(size.y));
       const int extent = size[axis];
-      const std::vector<uint8_t> previousLowest = lowest;
-      const std::vector<uint8_t> previousHighest = highest;
+      const std::vector<uint8_t> previous = signs;
 
       forEachSlice(size.z, total, [&](const int z)
       {
@@ -357,18 +361,19 @@ namespace terrain
           {
             const size_t index = at(x, y, z);
             const int along = axis == 0 ? x : (axis == 1 ? y : z);
+            uint8_t seen = previous[index];
 
             if (along > 0)
             {
-              lowest[index] = std::min(lowest[index], previousLowest[index - step]);
-              highest[index] = std::max(highest[index], previousHighest[index - step]);
+              seen |= previous[index - step];
             }
 
             if (along < extent - 1)
             {
-              lowest[index] = std::min(lowest[index], previousLowest[index + step]);
-              highest[index] = std::max(highest[index], previousHighest[index + step]);
+              seen |= previous[index + step];
             }
+
+            signs[index] = seen;
           }
         }
       });
@@ -382,7 +387,7 @@ namespace terrain
         {
           const size_t index = at(x, y, z);
           const bool interior = x > 0 && y > 0 && z > 0 && x < size.x - 1 && y < size.y - 1 && z < size.z - 1;
-          const bool freeze = !interior || encoded[index] == 0 || lowest[index] != highest[index];
+          const bool freeze = !interior || encoded[index] == 0 || signs[index] == 3;
 
           fixed[index] = freeze ? 1 : 0;
 

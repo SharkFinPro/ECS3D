@@ -2,6 +2,7 @@
 #include <glm/common.hpp>
 #include <glm/vector_relational.hpp>
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 
 namespace terrain
@@ -77,14 +78,16 @@ namespace terrain
         return;
       }
 
-      const auto distances = chunk->distances();
-      const auto materials = chunk->materials();
+      // Raw pointers and a plain loop so the conversion vectorizes; the values are decodeDistance's exactly.
+      const int16_t* distances = chunk->distances().data() + startIndex;
+      constexpr auto scale = static_cast<float>(distanceScale);
 
       for (int i = 0; i < count; ++i)
       {
-        distance[i] = decodeDistance(distances[static_cast<size_t>(startIndex + i)]);
-        material[i] = materials[static_cast<size_t>(startIndex + i)];
+        distance[i] = static_cast<float>(distances[i]) / scale;
       }
+
+      std::copy_n(chunk->materials().data() + startIndex, count, material);
     }
 
     const TerrainChunk* findChunk(const TerrainVolume::ChunkMap& chunks, const ChunkCoord coord)

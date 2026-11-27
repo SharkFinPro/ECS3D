@@ -100,6 +100,13 @@ public:
   // Long enough for the server's next echo flush and the round trip, short enough that a lost answer is not noticed.
   static constexpr std::chrono::seconds awaitTimeout{ 5 };
 
+  // A pointer held still applies the brush again this often.
+  static constexpr std::chrono::milliseconds holdInterval{ 100 };
+
+  // While the pointer is held still, the surface the cursor aims at catches up with the stroke this often, so a held
+  // Add grows a mound toward the camera and a held Subtract digs deeper, at a pace far below one step per frame.
+  static constexpr std::chrono::milliseconds surfaceRefresh{ 250 };
+
   [[nodiscard]] bool active() const
   {
     return m_stroke.active();
@@ -304,10 +311,12 @@ public:
   // One frame of the pointer. makeTemplate is called only when a stroke begins, so the brush settings are read once
   // per press. A frame that cannot paint (no hit, off the scene, the camera flying) breaks the stroke's path so the
   // next hit does not bridge the gap. A volume that differs from the stroke's ends it as endFor does. Without editing
-  // no stroke begins: nothing is predicted and nothing is sent.
+  // no stroke begins: nothing is predicted and nothing is sent. With now, a stroke held still applies again every
+  // holdInterval and refreshes its surface every surfaceRefresh; without it a still pointer applies nothing.
   Advance advance(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
                   const bool editable, TerrainPointer pointer, const std::optional<terrain::RayHit>& hit,
-                  const std::function<terrain::BrushOp()>& makeTemplate, const Send& send)
+                  const std::function<terrain::BrushOp()>& makeTemplate, const Send& send,
+                  const std::optional<std::chrono::steady_clock::time_point> now = std::nullopt)
   {
     Advance result;
     const bool wasActive = m_stroke.active();
@@ -329,9 +338,20 @@ public:
     {
       case TerrainStrokeStep::begin:
         result.changed = begin(terrainUuid, volume, makeTemplate(), *hit, send);
+
+        if (now)
+        {
+          m_lastApplication = *now;
+          m_surfaceTakenAt = *now;
+        }
         break;
       case TerrainStrokeStep::move:
         result.changed = moveTo(*hit, send) > 0;
+
+        if (now)
+        {
+          result.changed = hold(*hit, *now, result.changed, send) || result.changed;
+        }
         break;
       case TerrainStrokeStep::end:
         if (std::optional<TerrainStroke::Finished> finished = endFor(volume, editable, send);
@@ -439,6 +459,38 @@ private:
     }
   }
 
+  // A frame of the stroke: an application from movement restarts the hold clock; a still pointer applies again once
+  // holdInterval has passed, and its surface catches up once surfaceRefresh has.
+  bool hold(const terrain::RayHit& hit, const std::chrono::steady_clock::time_point now, const bool moved,
+            const Send& send)
+  {
+    if (moved)
+    {
+      m_lastApplication = now;
+      return false;
+    }
+
+    bool applied = false;
+
+    if (now - m_lastApplication >= holdInterval)
+    {
+      m_lastApplication = now;
+
+      if (const std::optional<terrain::BrushOp> op = m_stroke.holdAt(hit))
+      {
+        applied = perform(*op, send);
+      }
+    }
+
+    if (now - m_surfaceTakenAt >= surfaceRefresh)
+    {
+      m_surfaceTakenAt = now;
+      m_surface = snapshotSurface(*m_volume);
+    }
+
+    return applied;
+  }
+
   // A brush the server would refuse (a center out of range) is neither applied nor sent.
   bool perform(const terrain::BrushOp& op, const Send& send)
   {
@@ -464,6 +516,8 @@ private:
 
   TerrainStroke m_stroke;
   std::shared_ptr<const terrain::TerrainVolume> m_surface;
+  std::chrono::steady_clock::time_point m_lastApplication;
+  std::chrono::steady_clock::time_point m_surfaceTakenAt;
   uuids::uuid m_terrain;
   std::shared_ptr<terrain::TerrainVolume> m_volume;
   // Chunks of a released stroke of m_terrain that were requested and have not arrived in full.

@@ -369,7 +369,7 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
       [this, tool] {
         return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
       },
-      [this](const net::Message& message) { sendTerrainEdit(message); });
+      [this](const net::Message& message) { sendTerrainEdit(message); }, std::chrono::steady_clock::now());
   }
   catch (...)
   {
