@@ -77,8 +77,9 @@ The selected object shows a gizmo for moving, rotating or scaling it.
 Select one object that has a Terrain collider and check Sculpt in its Terrain section (or press T) to shape the
 terrain with a brush. It works only while the editor can edit the server.
 
-- Pick Add, Subtract, Smooth or Flatten in the Terrain section, or press Alt+1 to Alt+4. Radius, Strength and
-  Falloff are remembered for each tool. PageUp and PageDown grow and shrink the current tool's radius.
+- Pick Add, Subtract, Smooth, Flatten or Paint in the Terrain section, or press Alt+1 to Alt+5. Radius, Strength and
+  Falloff are remembered for each tool. Add and Paint use the material chosen in the Material list: Add gives new
+  ground that material and Paint recolors existing ground without changing its shape. PageUp and PageDown grow and shrink the current tool's radius.
 - A ring follows the cursor on the terrain. Left-drag to sculpt; Flatten levels to the height where you press. A
   stroke follows the ground as it was when you pressed, so a drag draws along the terrain instead of piling toward
   the camera; drag up past the horizon to raise a column on an upright plane through the stroke's last point. Ground
@@ -196,6 +197,7 @@ The default keybinds are:
 | Terrain: Subtract | Alt+2 |
 | Terrain: Smooth | Alt+3 |
 | Terrain: Flatten | Alt+4 |
+| Terrain: Paint | Alt+5 |
 | Terrain: Grow Brush | PageUp |
 | Terrain: Shrink Brush | PageDown |
 

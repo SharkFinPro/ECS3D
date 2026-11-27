@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <memory>
 #include <optional>
 #include <unordered_set>
@@ -642,13 +643,122 @@ TEST(TerrainBrushHelpersTest, TheTemplateCarriesTheToolKindAndTheSettings)
   brush.strength = 0.3f;
   brush.falloff = 0.9f;
 
-  const terrain::BrushOp smooth = terrainBrushTemplate(TerrainTool::smooth, brush);
+  const terrain::BrushOp smooth = terrainBrushTemplate(TerrainTool::smooth, brush, 0);
   EXPECT_EQ(smooth.kind, terrain::BrushOp::Kind::smooth);
   EXPECT_FLOAT_EQ(smooth.radius, 7.0f);
   EXPECT_FLOAT_EQ(smooth.strength, 0.3f);
   EXPECT_FLOAT_EQ(smooth.falloff, 0.9f);
 
-  EXPECT_EQ(terrainBrushTemplate(TerrainTool::subtract, brush).kind, terrain::BrushOp::Kind::subtract);
-  EXPECT_EQ(terrainBrushTemplate(TerrainTool::flatten, brush).kind, terrain::BrushOp::Kind::flatten);
-  EXPECT_EQ(terrainBrushTemplate(TerrainTool::add, brush).kind, terrain::BrushOp::Kind::add);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::subtract, brush, 0).kind, terrain::BrushOp::Kind::subtract);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::flatten, brush, 0).kind, terrain::BrushOp::Kind::flatten);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::add, brush, 0).kind, terrain::BrushOp::Kind::add);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::paint, brush, 0).kind, terrain::BrushOp::Kind::paint);
+}
+
+TEST(TerrainBrushHelpersTest, TheTemplateCarriesTheMaterialForPaintAndAdd)
+{
+  const editorTerrainSettings::BrushSettings brush;
+
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::paint, brush, 6).material, 6);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::add, brush, 3).material, 3);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::subtract, brush, 5).material, 5);
+}
+
+namespace {
+  size_t countOfKind(const Recorder& recorder, const terrain::TerrainEditKind kind)
+  {
+    size_t count = 0;
+
+    for (const auto& payload : recorder.payloads())
+    {
+      count += payload.kind == kind ? 1 : 0;
+    }
+
+    return count;
+  }
+
+  size_t chunkRequests(const Recorder& recorder)
+  {
+    size_t count = 0;
+
+    for (const net::Message& message : recorder.sent)
+    {
+      count += message.getType() == net::MessageType::terrainChunks ? 1 : 0;
+    }
+
+    return count;
+  }
+}
+
+TEST(TerrainBrushSessionTest, AStrokeRedistancesAtReleaseUnlessItIsAPaintStroke)
+{
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::add));
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::subtract));
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::smooth));
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::flatten));
+  EXPECT_FALSE(strokeRedistances(terrain::BrushOp::Kind::paint));
+}
+
+TEST(TerrainBrushSessionTest, APaintStrokeSendsNoRedistanceButStillRequestsItsChunksAndAwaitsThem)
+{
+  Env added;
+  Recorder addRecorder;
+  TerrainBrushSession addSession;
+  drag(addSession, added, templateOp(terrain::BrushOp::Kind::add), addRecorder);
+  ASSERT_TRUE(addSession.end(addRecorder.sender()).has_value());
+  ASSERT_GT(countOfKind(addRecorder, terrain::TerrainEditKind::redistance), 0u);
+
+  Env painted;
+  Recorder recorder;
+  TerrainBrushSession session;
+  terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);
+  paint.material = 5;
+  drag(session, painted, paint, recorder);
+  const size_t brushes = countOfKind(recorder, terrain::TerrainEditKind::brush);
+  ASSERT_GT(brushes, 0u);
+
+  const std::optional<TerrainStroke::Finished> finished = session.end(recorder.sender());
+
+  ASSERT_TRUE(finished.has_value());
+  EXPECT_TRUE(finished->predicted);
+  EXPECT_EQ(countOfKind(recorder, terrain::TerrainEditKind::redistance), 0u);
+  EXPECT_EQ(countOfKind(recorder, terrain::TerrainEditKind::brush), brushes);
+  EXPECT_GT(chunkRequests(recorder), 0u);
+  EXPECT_TRUE(session.awaitingFinalChunks());
+  EXPECT_EQ(requestedCoords(recorder).size(), finished->before.size());
+}
+
+TEST(TerrainBrushSessionTest, APaintStrokeChangesMaterialsAndLeavesEveryDistanceBitIdentical)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  const terrain::TerrainVolume::ChunkMap before = env.volume->snapshotChunks();
+
+  terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);
+  paint.material = 5;
+  drag(session, env, paint, recorder);
+  ASSERT_TRUE(session.end(recorder.sender()).has_value());
+
+  const terrain::TerrainVolume::ChunkMap after = env.volume->snapshotChunks();
+  ASSERT_EQ(after.size(), before.size());
+
+  bool materialChanged = false;
+
+  for (const auto& [coord, chunk] : before)
+  {
+    const auto match = after.find(coord);
+    ASSERT_NE(match, after.end());
+
+    const std::span<const int16_t> oldDistances = chunk->distances();
+    const std::span<const int16_t> newDistances = match->second->distances();
+    ASSERT_EQ(oldDistances.size(), newDistances.size());
+    EXPECT_TRUE(std::equal(oldDistances.begin(), oldDistances.end(), newDistances.begin()));
+
+    const std::span<const uint8_t> oldMaterials = chunk->materials();
+    const std::span<const uint8_t> newMaterials = match->second->materials();
+    materialChanged |= !std::equal(oldMaterials.begin(), oldMaterials.end(), newMaterials.begin());
+  }
+
+  EXPECT_TRUE(materialChanged);
 }

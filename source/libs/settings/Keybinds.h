@@ -46,6 +46,7 @@ enum class EditorAction {
   terrainSubtract,
   terrainSmooth,
   terrainFlatten,
+  terrainPaint,
   terrainRadiusUp,
   terrainRadiusDown,
   count  // sentinel: the number of real actions above, not a real action itself

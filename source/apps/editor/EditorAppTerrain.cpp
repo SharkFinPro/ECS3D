@@ -36,18 +36,23 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace {
-  constexpr std::array<const char*, terrainToolCount> toolLabels = { "Add", "Subtract", "Smooth", "Flatten" };
+  constexpr std::array<const char*, terrainToolCount> toolLabels = { "Add", "Subtract", "Smooth", "Flatten", "Paint" };
 
   const std::array<glm::vec4, terrainToolCount> toolColors = {
     glm::vec4(0.35f, 0.9f, 0.45f, 1.0f),
     glm::vec4(0.95f, 0.4f, 0.35f, 1.0f),
     glm::vec4(0.4f, 0.7f, 1.0f, 1.0f),
-    glm::vec4(1.0f, 0.75f, 0.3f, 1.0f)
+    glm::vec4(1.0f, 0.75f, 0.3f, 1.0f),
+    glm::vec4(0.8f, 0.5f, 0.95f, 1.0f)
   };
+
+  // The renderer draws these many default colors by index when a terrain has no palette.
+  constexpr size_t defaultMaterialCount = 8;
 
   constexpr float radiusGrowFactor = 1.25f;
   constexpr float radiusShrinkFactor = 0.8f;
@@ -55,6 +60,27 @@ namespace {
   [[nodiscard]] size_t toolIndex(const TerrainTool tool)
   {
     return static_cast<size_t>(tool);
+  }
+
+  // The palette's size, or the renderer's default color count for a terrain without one.
+  [[nodiscard]] size_t selectableMaterials(const terrain::TerrainStore& store, const uuids::uuid& terrainUuid)
+  {
+    const terrain::TerrainDescription* description = store.description(terrainUuid);
+    return description && !description->palette.empty() ? description->palette.size() : defaultMaterialCount;
+  }
+
+  [[nodiscard]] std::string materialLabel(const terrain::TerrainStore& store, const uuids::uuid& terrainUuid,
+                                          const uint8_t index)
+  {
+    const terrain::TerrainDescription* description = store.description(terrainUuid);
+
+    if (description && !description->palette.empty())
+    {
+      const std::string& name = description->palette[std::min<size_t>(index, description->palette.size() - 1)].name;
+      return std::to_string(index) + ": " + name;
+    }
+
+    return "Default " + std::to_string(index);
   }
 }
 
@@ -338,10 +364,20 @@ void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& compone
   bool edited = false;
 
   edited |= gc::labeledDrag("Radius", &brush.radius, 0.25f);
-  edited |= gc::accentSlider("Strength", &brush.strength, editorTerrainSettings::minStrength,
-                             editorTerrainSettings::maxStrength);
-  edited |= gc::accentSlider("Falloff", &brush.falloff, editorTerrainSettings::minFalloff,
-                             editorTerrainSettings::maxFalloff);
+
+  // Paint sets materials inside the radius at full weight, so strength and falloff would change nothing.
+  if (m_terrainTool.tool() != TerrainTool::paint)
+  {
+    edited |= gc::accentSlider("Strength", &brush.strength, editorTerrainSettings::minStrength,
+                               editorTerrainSettings::maxStrength);
+    edited |= gc::accentSlider("Falloff", &brush.falloff, editorTerrainSettings::minFalloff,
+                               editorTerrainSettings::maxFalloff);
+  }
+
+  if (m_terrainTool.tool() == TerrainTool::add || m_terrainTool.tool() == TerrainTool::paint)
+  {
+    drawTerrainMaterialSelector(component->getTerrainUUID());
+  }
 
   if (edited)
   {
@@ -359,6 +395,32 @@ void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& compone
   }
 }
 
+void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
+{
+  const size_t entries = selectableMaterials(*m_terrainStore, terrainUuid);
+  const uint8_t active = clampMaterial(m_terrainTool.activeMaterial(), entries);
+
+  if (!ImGui::BeginCombo("Material", materialLabel(*m_terrainStore, terrainUuid, active).c_str()))
+  {
+    return;
+  }
+
+  for (size_t index = 0; index < entries; ++index)
+  {
+    const auto material = static_cast<uint8_t>(index);
+    ImGui::PushID(static_cast<int>(index));
+
+    if (ImGui::Selectable(materialLabel(*m_terrainStore, terrainUuid, material).c_str(), material == active))
+    {
+      m_terrainTool.setActiveMaterial(material);
+    }
+
+    ImGui::PopID();
+  }
+
+  ImGui::EndCombo();
+}
+
 void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
                                   const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit)
 {
@@ -373,8 +435,11 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
   {
     advanced = m_terrainBrush.advance(
       terrainUuid, volume, m_serverEditable, pointer, hit,
-      [this, tool] {
-        return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
+      [this, tool, terrainUuid] {
+        const uint8_t material =
+          clampMaterial(m_terrainTool.activeMaterial(), selectableMaterials(*m_terrainStore, terrainUuid));
+        return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool),
+                                    material);
       },
       [this](const net::Message& message) { sendTerrainEdit(message); }, std::chrono::steady_clock::now());
   }

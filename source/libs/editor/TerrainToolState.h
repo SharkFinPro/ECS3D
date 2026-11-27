@@ -7,9 +7,9 @@
 #include <optional>
 #include <uuid.h>
 
-enum class TerrainTool : uint8_t { add, subtract, smooth, flatten };
+enum class TerrainTool : uint8_t { add, subtract, smooth, flatten, paint };
 
-inline constexpr size_t terrainToolCount = 4;
+inline constexpr size_t terrainToolCount = 5;
 
 [[nodiscard]] inline terrain::BrushOp::Kind brushKind(const TerrainTool tool)
 {
@@ -21,10 +21,24 @@ inline constexpr size_t terrainToolCount = 4;
       return terrain::BrushOp::Kind::smooth;
     case TerrainTool::flatten:
       return terrain::BrushOp::Kind::flatten;
+    case TerrainTool::paint:
+      return terrain::BrushOp::Kind::paint;
     case TerrainTool::add:
     default:
       return terrain::BrushOp::Kind::add;
   }
+}
+
+// The palette index a brush may use: index itself while the palette holds it, else the last entry. An empty palette
+// draws the renderer's default colors by index, so 0 stays meaningful.
+[[nodiscard]] inline uint8_t clampMaterial(const uint8_t index, const size_t paletteSize)
+{
+  if (index < paletteSize)
+  {
+    return index;
+  }
+
+  return paletteSize == 0 ? 0 : static_cast<uint8_t>(paletteSize - 1);
 }
 
 // Whether terrain mode may be on: an object with a Terrain component is selected, the server accepts edits and the
@@ -58,6 +72,17 @@ public:
   void setTool(const TerrainTool tool)
   {
     m_tool = tool;
+  }
+
+  // The palette index Add's new ground and Paint write; a session choice that outlives the mode.
+  [[nodiscard]] uint8_t activeMaterial() const
+  {
+    return m_activeMaterial;
+  }
+
+  void setActiveMaterial(const uint8_t material)
+  {
+    m_activeMaterial = material;
   }
 
   // Turns the mode on for the context's object; refused (returns false, stays off) when the context is not eligible.
@@ -117,6 +142,7 @@ private:
 
   std::optional<uuids::uuid> m_terrainObject;
   TerrainTool m_tool = TerrainTool::add;
+  uint8_t m_activeMaterial = 0;
 };
 
 #endif //TERRAINTOOLSTATE_H

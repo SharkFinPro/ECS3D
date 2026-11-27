@@ -479,6 +479,7 @@ private:
 
   // The brush sliders and, when the terrain's voxel size caps the radius, the note saying so.
   void drawTerrainBrushControls(const std::shared_ptr<Terrain>& component);
+  void drawTerrainMaterialSelector(const uuids::uuid& terrainUuid);
 
   // Feeds one frame's pointer to the stroke and makes the terrain's bounds follow what it changed.
   void driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,

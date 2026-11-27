@@ -189,8 +189,11 @@ change of selection, a lost connection, a started Play or a volume that vanished
 The mode is entered from the Sculpt checkbox the Terrain section draws (`registerColliderEditors` takes a
 `drawSculpt` callback, and `EditorApp::drawTerrainSculpt` draws it only for the selected object's own component, so a
 prefab body shows none) or with the `terrainMode` keybind. While it is on, the section shows a radio button per tool
-(Add, Subtract, Smooth, Flatten) and Radius, Strength and Falloff, all written through
-`editorTerrainSettings::writeBrush` for the current tool; the tool keybinds only switch the tool (`writeLastTool`)
+(Add, Subtract, Smooth, Flatten, Paint) and Radius, Strength and Falloff, all written through
+`editorTerrainSettings::writeBrush` for the current tool (Paint hides Strength and Falloff, which it ignores). Add and
+Paint also show a Material combo over the terrain's palette (the eight renderer default colors when it has none) that
+sets `TerrainToolState::activeMaterial`, a session choice that `clampMaterial` bounds when the stroke template is built;
+a Paint stroke changes materials only, so `strokeRedistances` makes its release send and predict no redistance; the tool keybinds only switch the tool (`writeLastTool`)
 and never enter the mode, and the radius keybinds scale the current tool's radius by 1.25 or 0.8. A brush radius
 above `maxBrushRadiusVoxels` voxels is clamped (`effectiveBrushRadius`) when a stroke begins and when the ring is
 drawn, since the server refuses a larger brush. The headless parts are `TerrainStroke.h` (spacing along the pointer

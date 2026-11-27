@@ -5,11 +5,11 @@
 
 class SettingsStore;
 
-// Terrain brush preferences, kept per tool. A tool is a plain index (add, subtract, smooth, flatten, in the editor's
+// Terrain brush preferences, kept per tool. A tool is a plain index (add, subtract, smooth, flatten, paint, in the editor's
 // TerrainTool order) because settings must not depend on the editor lib or data. Radius is in terrain-local world
 // units, which the engine authors at 5 units per meter.
 namespace editorTerrainSettings {
-  inline constexpr std::size_t toolCount = 4;
+  inline constexpr std::size_t toolCount = 5;
 
   inline constexpr float defaultRadius = 10.0f;
   inline constexpr float minRadius = 0.1f;
@@ -35,7 +35,7 @@ namespace editorTerrainSettings {
     float falloff = defaultFalloff;
   };
 
-  // The tool's id ("add", "subtract", "smooth", "flatten"), the settings-key fragment, or nullptr for an
+  // The tool's id ("add", "subtract", "smooth", "flatten", "paint"), the settings-key fragment, or nullptr for an
   // out-of-range index.
   [[nodiscard]] const char* toolId(std::size_t tool);
 

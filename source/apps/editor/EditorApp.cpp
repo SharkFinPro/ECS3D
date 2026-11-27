@@ -617,6 +617,7 @@ void EditorApp::setupKeybinds()
   m_keybindDispatcher->on(EditorAction::terrainSubtract, [this] { setTerrainTool(TerrainTool::subtract); });
   m_keybindDispatcher->on(EditorAction::terrainSmooth, [this] { setTerrainTool(TerrainTool::smooth); });
   m_keybindDispatcher->on(EditorAction::terrainFlatten, [this] { setTerrainTool(TerrainTool::flatten); });
+  m_keybindDispatcher->on(EditorAction::terrainPaint, [this] { setTerrainTool(TerrainTool::paint); });
   m_keybindDispatcher->on(EditorAction::terrainRadiusUp, [this] { growTerrainBrush(); });
   m_keybindDispatcher->on(EditorAction::terrainRadiusDown, [this] { shrinkTerrainBrush(); });
 

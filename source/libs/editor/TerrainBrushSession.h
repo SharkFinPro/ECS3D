@@ -73,12 +73,14 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
   return std::min(radius, terrain::maxBrushRadiusVoxels * volume.voxelSize());
 }
 
-// The operation a stroke of tool applies at each point; the material is the first palette entry.
+// The operation a stroke of tool applies at each point; material is what Paint writes and Add's new ground takes.
 [[nodiscard]] inline terrain::BrushOp terrainBrushTemplate(const TerrainTool tool,
-                                                           const editorTerrainSettings::BrushSettings& brush)
+                                                           const editorTerrainSettings::BrushSettings& brush,
+                                                           const uint8_t material)
 {
   terrain::BrushOp op;
   op.kind = brushKind(tool);
+  op.material = material;
   op.radius = brush.radius;
   op.strength = brush.strength;
   op.falloff = brush.falloff;
@@ -252,6 +254,7 @@ public:
 
     m_terrain = terrainUuid;
     m_volume = volume;
+    m_redistances = strokeRedistances(templateOp.kind);
     // Subtract only ever takes material away, so it cannot climb toward the camera; it aims at the live terrain, so
     // erasing reaches whatever is still there, nearer than the press or not.
     m_surface = templateOp.kind == terrain::BrushOp::Kind::subtract ? nullptr : snapshotSurface(*volume);
@@ -429,7 +432,10 @@ private:
     std::vector<terrain::ChunkCoord> requested = touched;
     std::unordered_set<terrain::ChunkCoord> known(touched.begin(), touched.end());
 
-    for (const terrain::SampleBox& piece : redistanceBoxes(finished->box, touched))
+    const std::vector<terrain::SampleBox> pieces =
+      m_redistances ? redistanceBoxes(finished->box, touched) : std::vector<terrain::SampleBox>{};
+
+    for (const terrain::SampleBox& piece : pieces)
     {
       if (commitLocally)
       {
@@ -548,6 +554,7 @@ private:
   std::shared_ptr<terrain::TerrainVolume> m_awaitingVolume;
   std::chrono::steady_clock::time_point m_awaitingSince;
   terrain::ChunkHold m_hold;
+  bool m_redistances = true;
   uint64_t m_nextStrokeId = 1;
 };
 

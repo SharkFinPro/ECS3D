@@ -23,6 +23,13 @@
 #include <utility>
 #include <vector>
 
+// Whether a stroke of this kind ends with a redistance. Paint writes materials only, and redistancing a field that
+// was never redistanced could move its distances.
+[[nodiscard]] constexpr bool strokeRedistances(const terrain::BrushOp::Kind kind)
+{
+  return kind != terrain::BrushOp::Kind::paint;
+}
+
 // One press-drag-release of a brush.
 class TerrainStroke
 {

@@ -59,12 +59,13 @@ namespace {
 
 TEST_F(EditorTerrainSettings, ToolIdsMatchTheEditorOrder)
 {
-  EXPECT_EQ(editorTerrainSettings::toolCount, 4u);
+  EXPECT_EQ(editorTerrainSettings::toolCount, 5u);
   EXPECT_STREQ(editorTerrainSettings::toolId(0), "add");
   EXPECT_STREQ(editorTerrainSettings::toolId(1), "subtract");
   EXPECT_STREQ(editorTerrainSettings::toolId(2), "smooth");
   EXPECT_STREQ(editorTerrainSettings::toolId(3), "flatten");
-  EXPECT_EQ(editorTerrainSettings::toolId(4), nullptr);
+  EXPECT_STREQ(editorTerrainSettings::toolId(4), "paint");
+  EXPECT_EQ(editorTerrainSettings::toolId(5), nullptr);
 }
 
 TEST_F(EditorTerrainSettings, EveryToolReadsTheDefaultsFromAnEmptyStore)
@@ -81,6 +82,42 @@ TEST_F(EditorTerrainSettings, EveryToolReadsTheDefaultsFromAnEmptyStore)
   }
 
   EXPECT_EQ(editorTerrainSettings::readLastTool(store), 0u);
+}
+
+TEST_F(EditorTerrainSettings, ThePaintToolRoundTripsItsBrushAndBecomesTheLastTool)
+{
+  {
+    SettingsStore store(m_file);
+    editorTerrainSettings::writeBrush(store, 4, { 3.0f, 0.2f, 0.6f });
+    editorTerrainSettings::writeLastTool(store, 4);
+    store.flush();
+  }
+
+  const SettingsStore reloaded(m_file);
+  const editorTerrainSettings::BrushSettings paint = editorTerrainSettings::readBrush(reloaded, 4);
+
+  EXPECT_FLOAT_EQ(paint.radius, 3.0f);
+  EXPECT_FLOAT_EQ(paint.strength, 0.2f);
+  EXPECT_FLOAT_EQ(paint.falloff, 0.6f);
+  EXPECT_EQ(editorTerrainSettings::readLastTool(reloaded), 4u);
+  EXPECT_EQ(readFile().at("editor.terrain.tool").get<std::string>(), "paint");
+}
+
+TEST_F(EditorTerrainSettings, AFileWithOnlyTheFourOriginalToolsStillLoadsAndPaintReadsDefaults)
+{
+  {
+    SettingsStore store(m_file);
+    editorTerrainSettings::writeBrush(store, 3, { 4.0f, 0.9f, 0.1f });
+    editorTerrainSettings::writeLastTool(store, 3);
+    store.flush();
+  }
+
+  const SettingsStore reloaded(m_file);
+
+  EXPECT_FLOAT_EQ(editorTerrainSettings::readBrush(reloaded, 3).radius, 4.0f);
+  EXPECT_EQ(editorTerrainSettings::readLastTool(reloaded), 3u);
+  EXPECT_FLOAT_EQ(editorTerrainSettings::readBrush(reloaded, 4).radius, editorTerrainSettings::defaultRadius);
+  EXPECT_FLOAT_EQ(editorTerrainSettings::readBrush(reloaded, 4).strength, editorTerrainSettings::defaultStrength);
 }
 
 TEST_F(EditorTerrainSettings, BrushesRoundTripPerToolWithoutAffectingTheOthers)
@@ -208,12 +245,12 @@ TEST_F(EditorTerrainSettings, AnOutOfRangeToolReadsDefaultsAndWritesNothing)
 {
   SettingsStore store(m_file);
 
-  editorTerrainSettings::writeBrush(store, 4, { 50.0f, 0.1f, 0.1f });
+  editorTerrainSettings::writeBrush(store, 5, { 50.0f, 0.1f, 0.1f });
   editorTerrainSettings::writeBrush(store, static_cast<std::size_t>(-1), { 50.0f, 0.1f, 0.1f });
 
   EXPECT_FALSE(store.hasPendingWrite());
 
-  const editorTerrainSettings::BrushSettings brush = editorTerrainSettings::readBrush(store, 4);
+  const editorTerrainSettings::BrushSettings brush = editorTerrainSettings::readBrush(store, 5);
 
   EXPECT_FLOAT_EQ(brush.radius, 10.0f);
   EXPECT_FLOAT_EQ(brush.strength, 0.5f);
@@ -240,7 +277,7 @@ TEST_F(EditorTerrainSettings, TheLastToolRoundTripsAsItsId)
 
 TEST_F(EditorTerrainSettings, AnUnknownOrMistypedLastToolReadsZero)
 {
-  writeFile(R"({"editor.terrain.tool": "paint"})");
+  writeFile(R"({"editor.terrain.tool": "erode"})");
   EXPECT_EQ(editorTerrainSettings::readLastTool(SettingsStore(m_file)), 0u);
 
   writeFile(R"({"editor.terrain.tool": 2})");
@@ -255,7 +292,7 @@ TEST_F(EditorTerrainSettings, AnOutOfRangeLastToolWritesNothing)
   SettingsStore store(m_file);
 
   editorTerrainSettings::writeLastTool(store, 1);
-  editorTerrainSettings::writeLastTool(store, 4);
+  editorTerrainSettings::writeLastTool(store, 5);
 
   EXPECT_EQ(editorTerrainSettings::readLastTool(store), 1u);
 }
