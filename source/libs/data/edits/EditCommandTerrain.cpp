@@ -3,6 +3,7 @@
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 #include <cstddef>
+#include <optional>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -85,6 +86,55 @@ Validation EditCommand::validateTerrainStroke(const terrain::TerrainStore* terra
   }
 
   return {};
+}
+
+Validation EditCommand::validateTerrainReAdd(const uuids::uuid& assetUUID, const terrain::TerrainStore* terrains) const
+{
+  if (!terrains)
+  {
+    return { ValidationFailure::targetMissing, assetUUID };
+  }
+
+  if (terrains->find(assetUUID))
+  {
+    return { ValidationFailure::targetChanged, assetUUID };
+  }
+
+  return {};
+}
+
+std::optional<TerrainRestore> EditCommand::terrainToRestore(const bool forUndo) const
+{
+  if (forUndo)
+  {
+    if (const auto* data = std::get_if<RemoveAssetData>(&m_data))
+    {
+      return data->terrain;
+    }
+  }
+  else if (const auto* data = std::get_if<AddAssetData>(&m_data))
+  {
+    return data->terrain;
+  }
+
+  return std::nullopt;
+}
+
+std::optional<uuids::uuid> EditCommand::terrainToRemove(const bool forUndo) const
+{
+  if (forUndo)
+  {
+    if (const auto* data = std::get_if<AddAssetData>(&m_data); data && data->terrain)
+    {
+      return data->assetUUID;
+    }
+  }
+  else if (const auto* data = std::get_if<RemoveAssetData>(&m_data); data && data->terrain)
+  {
+    return data->assetUUID;
+  }
+
+  return std::nullopt;
 }
 
 TerrainSetChunks EditCommand::buildUndoTerrainChunks() const

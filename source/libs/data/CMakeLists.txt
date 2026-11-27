@@ -39,6 +39,8 @@ add_library(${PROJECT_NAME}
   edits/RecordEdits.h
   edits/RecordTerrainEdits.cpp
   edits/RecordTerrainEdits.h
+  edits/TerrainRestore.cpp
+  edits/TerrainRestore.h
   edits/TerrainSetChunks.cpp
   edits/TerrainSetChunks.h
   scenes/SceneManager.cpp

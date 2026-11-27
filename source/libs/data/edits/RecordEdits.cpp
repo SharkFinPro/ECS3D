@@ -1,4 +1,5 @@
 #include "RecordEdits.h"
+#include "RecordTerrainEdits.h"
 #include "AssetWireType.h"
 #include "Replication.h"
 #include "assets/AssetRegistry.h"
@@ -8,6 +9,7 @@
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneScriptEdits.h"
+#include "terrain/TerrainStore.h"
 #include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -491,7 +493,8 @@ std::optional<std::vector<EditCommand>> commandsForSceneEdit(const nlohmann::jso
   return commands;
 }
 
-std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const AssetRegistry& view)
+std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const AssetRegistry& view,
+                                              const terrain::TerrainStore* terrains)
 {
   if (!asset.is_object())
   {
@@ -510,11 +513,16 @@ std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const
     return std::nullopt;
   }
 
-  // A terrain's volume lives outside the registry, so undoing its record would discard data that redo cannot
-  // restore. The op still applies; it just is not recorded.
+  // A terrain's volume lives outside the registry: the command carries it from the store, which must already hold the
+  // new terrain, and an add over a uuid the registry holds replaces nothing a terrain command could restore.
   if (type == AssetType::Terrain)
   {
-    return std::nullopt;
+    if (!terrains || view.getByUUID(assetUUID.value()))
+    {
+      return std::nullopt;
+    }
+
+    return commandForTerrainAdd(asset, *terrains);
   }
 
   // Prefabs and scenes carry their display name where the file assets carry a path (AssetRecord::path).
@@ -587,7 +595,8 @@ std::optional<EditCommand> commandForRenameAsset(const nlohmann::json& op, const
 }
 
 std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const AssetRegistry& view,
-                                                 const SceneManager& sceneManager)
+                                                 const SceneManager& sceneManager,
+                                                 const terrain::TerrainStore* terrains)
 {
   if (!op.is_object())
   {
@@ -608,7 +617,16 @@ std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const
 
   if (record->type == AssetType::Terrain)
   {
-    return std::nullopt;
+    const auto* description = terrains ? terrains->description(assetUUID.value()) : nullptr;
+    const auto volume = terrains ? terrains->find(assetUUID.value()) : nullptr;
+    if (!description || !volume)
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::removeAsset(assetUUID.value(), record->type, record->path, record->className, record->body,
+                                    record->displayName,
+                                    makeTerrainRestore(*description, volume->snapshotChunks(), record->displayName));
   }
 
   if (record->type == AssetType::Scene)

@@ -299,6 +299,8 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
         break;
       case PayloadForm::networkMessage:
         outcome.messagePayload = command.buildUndoMessage(objectManager);
+        outcome.terrainRestore = command.terrainToRestore(true);
+        outcome.terrainRemoved = command.terrainToRemove(true);
         break;
       case PayloadForm::terrainChunks:
         outcome.terrainPayload = command.buildUndoTerrainChunks();
@@ -385,6 +387,8 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
         break;
       case PayloadForm::networkMessage:
         outcome.messagePayload = command.buildRedoMessage(objectManager);
+        outcome.terrainRestore = command.terrainToRestore(false);
+        outcome.terrainRemoved = command.terrainToRemove(false);
         break;
       case PayloadForm::terrainChunks:
         outcome.terrainPayload = command.buildRedoTerrainChunks();

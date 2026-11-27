@@ -21,6 +21,8 @@ namespace terrain
     // A nil uuid means no texture.
     uuids::uuid albedoTexture;
     uuids::uuid specularTexture;
+
+    bool operator==(const TerrainMaterial&) const = default;
   };
 
   struct TerrainDescription
@@ -31,6 +33,8 @@ namespace terrain
     // The chunk count a snapshot carries so a receiver knows when it holds the whole terrain; the store does not
     // derive it.
     uint32_t chunkCount = 0;
+
+    bool operator==(const TerrainDescription&) const = default;
   };
 
   inline constexpr float minVoxelSize = 1.0e-3f;

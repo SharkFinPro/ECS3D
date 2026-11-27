@@ -3,6 +3,8 @@
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <edits/RecordEdits.h>
+#include <edits/RecordTerrainEdits.h>
+#include <edits/TerrainRestore.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
@@ -63,11 +65,12 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
   static_cast<void>(addAsset(asset, false));
 }
 
-bool EditorApp::addAsset(const nlohmann::json& asset, const bool requireApplied)
+bool EditorApp::addAsset(const nlohmann::json& asset, const bool requireApplied, const bool recordHistory)
 {
   // Derived before the local apply: the command's before state is the record this registry is about
   // to lose. Same for the two ops below.
-  auto command = edits::commandForAddAsset(asset, *m_assetRegistry);
+  auto command = recordHistory ? edits::commandForAddAsset(asset, *m_assetRegistry, m_terrainStore.get())
+                               : std::nullopt;
 
   const bool applied = replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
                                                              *m_terrainStore, asset, false);
@@ -77,6 +80,11 @@ bool EditorApp::addAsset(const nlohmann::json& asset, const bool requireApplied)
   }
 
   m_netClient->send(replication::packAddAsset(asset));
+
+  if (!recordHistory)
+  {
+    return true;
+  }
 
   if (command)
   {
@@ -93,9 +101,9 @@ bool EditorApp::addAsset(const nlohmann::json& asset, const bool requireApplied)
 }
 
 // The terrain asset record goes first, which makes our own store hold an empty volume that takes the generated chunks;
-// the same chunks go up to the server, which waits for them before it lets the scene play. The object that shows
-// the terrain is an ordinary scene edit, so it is recorded for undo like any other added object. The asset record is
-// not undoable, so undoing the object leaves the terrain in the Assets panel.
+// the same chunks go up to the server, which waits for them before it lets the scene play. Both the asset and the
+// object that shows the terrain are recorded for undo, as two entries: the first Ctrl+Z removes the object, the next
+// removes the terrain asset, and redo brings them back in the opposite order, re-uploading the chunks.
 void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
 {
   const auto scene = m_sceneManager->getCurrentScene();
@@ -112,13 +120,33 @@ void EditorApp::onCreateTerrain(GeneratedTerrain&& generated)
     throw std::runtime_error("The terrain could not be created.");
   }
 
-  if (!addAsset(asset, true))
+  if (!addAsset(asset, true, false))
   {
     throw std::runtime_error("The editor did not accept the new terrain.");
   }
 
   // Past this point the terrain is created and sent, so a failure here must not reopen the form for a second create.
   queueCreatedTerrainUpload(generated);
+
+  // The chunks are in the store now, which is where the command reads them from.
+  try
+  {
+    if (auto command = edits::commandForTerrainAdd(asset, *m_terrainStore))
+    {
+      m_playHistory.current().record(std::move(*command));
+      noteRecordedEdit();
+    }
+    else
+    {
+      m_saveUI->markEdited();
+      logUnrecordedEdit("a terrain addAsset");
+    }
+  }
+  catch (const std::exception& e)
+  {
+    m_saveUI->markEdited();
+    Log::error(LogCategory::editor, std::string("The new terrain failed to record: ") + e.what());
+  }
 
   const auto objectUUID = randomUuid();
 
@@ -154,19 +182,41 @@ void EditorApp::queueCreatedTerrainUpload(const GeneratedTerrain& generated)
       Log::error(LogCategory::editor, "The editor's terrain store lost the new terrain right after creating it.");
     }
 
-    if (m_terrainUpload.done())
-    {
-      m_terrainUploadSent = 0;
-    }
-
-    m_terrainUpload.add(generated.description.uuid, generated.volume);
-    m_createdTerrains[generated.description.uuid] = std::chrono::steady_clock::now();
+    queueTerrainUpload(generated.description.uuid, generated.volume);
   }
   catch (const std::exception& e)
   {
     Log::error(LogCategory::editor, std::string("The new terrain's chunks could not be queued for upload: ") +
                                       e.what());
   }
+}
+
+void EditorApp::queueTerrainUpload(const uuids::uuid& terrain, std::shared_ptr<const terrain::TerrainVolume> volume)
+{
+  if (m_terrainUpload.done())
+  {
+    m_terrainUploadSent = 0;
+  }
+
+  m_terrainUpload.add(terrain, std::move(volume));
+  m_createdTerrains[terrain] = std::chrono::steady_clock::now();
+}
+
+bool EditorApp::restoreTerrain(const edits::TerrainRestore& restore)
+{
+  const auto upload = edits::applyTerrainRestore(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
+                                                 *m_terrainStore, restore);
+  if (!upload)
+  {
+    return false;
+  }
+
+  if (!restore.chunks.empty())
+  {
+    queueTerrainUpload(restore.description.uuid, upload);
+  }
+
+  return true;
 }
 
 void EditorApp::selectPlacedTerrain()
@@ -238,7 +288,7 @@ void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
     return;
   }
 
-  auto command = edits::commandForRemoveAsset(op, *m_assetRegistry, *m_sceneManager);
+  auto command = edits::commandForRemoveAsset(op, *m_assetRegistry, *m_sceneManager, m_terrainStore.get());
 
   if (!replication::applyRemoveAsset(*m_assetRegistry, *m_sceneManager, op))
   {

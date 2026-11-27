@@ -11,6 +11,7 @@
 #include <edits/EditHistory.h>
 #include <edits/HistoryScope.h>
 #include <edits/PlaySessionHistory.h>
+#include <edits/TerrainRestore.h>
 #include <UndoRequestGate.h>
 #include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
@@ -337,8 +338,9 @@ private:
   void onAddAsset(const nlohmann::json& asset);
 
   // Applies the asset locally and sends it. With requireApplied, a local refusal sends and records nothing and the
-  // result is false; without it the asset is always sent, as every other asset path does.
-  bool addAsset(const nlohmann::json& asset, bool requireApplied);
+  // result is false; without it the asset is always sent, as every other asset path does. Without recordHistory the
+  // caller records the edit itself.
+  bool addAsset(const nlohmann::json& asset, bool requireApplied, bool recordHistory = true);
 
   // Announces a generated terrain, queues its chunks for upload and places an object for it in the scene. Throws
   // std::runtime_error, with nothing sent, when there is no active scene, the description is unusable, or the
@@ -347,6 +349,14 @@ private:
 
   // Restores the generated chunks into the store's new volume and queues them for upload; logs a failure, never throws.
   void queueCreatedTerrainUpload(const GeneratedTerrain& generated);
+
+  // Queues the chunks of a terrain the server expects an upload for, and notes it as recently created so an older
+  // snapshot does not drop the upload.
+  void queueTerrainUpload(const uuids::uuid& terrain, std::shared_ptr<const terrain::TerrainVolume> volume);
+
+  // Applies a terrain an undo or redo brings back to the registry and store and queues its chunks for upload. False,
+  // with nothing changed, when the editor refuses the add.
+  bool restoreTerrain(const edits::TerrainRestore& restore);
 
   // Selects the object a terrain create placed once the server's rebroadcast has brought it into the scene.
   void selectPlacedTerrain();

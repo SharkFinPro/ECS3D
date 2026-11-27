@@ -167,8 +167,10 @@ Create sends the terrain through `EditorApp::onCreateTerrain`:
   editor's own store gets the empty volume. A local refusal sends nothing, and the form is not editable while the
   server is not.
 - The generated chunks are restored into the store and queued on `m_terrainUpload` for the server.
+- The asset is recorded for undo once the chunks are in the store (`commandForTerrainAdd`), so redo can upload them again.
 - A `terrainCreate::placementEdit` batch (a root object with a Terrain component) goes through `onSceneEdit`, so it is
-  recorded for undo. The asset record itself is not undoable.
+  recorded for undo as the next entry. Ctrl+Z removes the object first and the terrain asset second; see
+  [undo-redo.md](undo-redo.md#terrain-assets).
 - The object is selected once the server's rebroadcast brings it in, waiting up to 10 s, and the pending selection is
   dropped if the user selects something else first.
 

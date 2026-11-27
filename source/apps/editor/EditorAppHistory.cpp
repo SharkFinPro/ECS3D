@@ -194,6 +194,23 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
       // view ahead of the server, which the echo's hash mismatch repairs with a full chunk request.
       if (outcome.messagePayload)
       {
+        // A terrain comes back through the same steps as a create: the editor's own registry and store first, so the
+        // snapshot that follows keeps the description and chunks, then the addAsset, then the chunk upload the server
+        // holds Play for.
+        if (outcome.terrainRestore && !restoreTerrain(*outcome.terrainRestore))
+        {
+          logMessage("Error", "The terrain " + action + " could not be applied (the editor refused the terrain); "
+                              "clearing the edit history.");
+          m_playHistory.current().clear();
+          break;
+        }
+
+        if (outcome.terrainRemoved)
+        {
+          m_terrainUpload.forget(*outcome.terrainRemoved);
+          m_createdTerrains.erase(*outcome.terrainRemoved);
+        }
+
         m_netClient->send(*outcome.messagePayload);
       }
       else if (outcome.jsonPayload)

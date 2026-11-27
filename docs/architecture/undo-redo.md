@@ -48,8 +48,8 @@ asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it
 before state from the replicated view while that view still holds it, and records what comes back; an edit
 nothing faithful can be derived for (a stale view, an op with no matching kind, a creating op with no
 usable uuid) is logged at debug and
-skipped rather than refused. Adding or removing a terrain asset is not recorded either, because its record does
-not carry the volume and an undo would bring back an empty terrain. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
+skipped rather than refused. Terrain asset add and remove are recorded when the caller passes the `TerrainStore`, see
+[Terrain assets](#terrain-assets). The `replaceAsset` kind exists for the other asset recording: an `addAsset` over a uuid - or a
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
 and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. A `renameAsset` of a scene
@@ -178,6 +178,35 @@ The terrain a request changed is staged while its payload is built and bound to 
 terrain. The server answers with a hash-only terrainChunks echo that matches the prediction, and that message about
 the bound terrain releases the gate (`noteTerrainChunks`), rather than a snapshot. A gate that already timed out
 releases nothing and drops the bound terrain, so a late echo cannot release an unrelated later request.
+
+## Terrain assets
+
+A terrain's volume lives outside the asset registry, so its `addAsset` and `removeAsset` commands hold a
+`TerrainRestore` (`edits/TerrainRestore.h`) beside the record fields: the description, a `ChunkMap` snapshot (shared
+immutable chunks, nothing copied) and the display name. They are the existing kinds with an optional terrain part, not new
+kinds. `makeTerrainRestore` sets the description's chunk count to the chunks held, since the server waits for exactly that
+many after the addAsset and a count left from before a sculpt would hold Play forever.
+
+Recording reads the store at the moment the op is sent: `commandForRemoveAsset` and `commandForAddAsset` take a
+`const terrain::TerrainStore*` (default null, which records nothing for a terrain). A remove needs the store to hold the
+terrain's description and volume. The create flow cannot use `commandForAddAsset`, because its store has no volume until the
+generated chunks are restored into it, so `EditorApp::onCreateTerrain` sends the addAsset without recording
+(`addAsset(..., recordHistory = false)`) and records `commandForTerrainAdd` once the chunks are in the store. A create is
+therefore two entries, the asset and then the placement object (a grouped sceneEdit): the first Ctrl+Z removes the object,
+the next removes the terrain asset, and redo brings them back in the opposite order, the asset first. Grouping them is
+impossible, since a group must be all sceneEdit kinds.
+
+Undo of a delete and redo of a create re-add the terrain. `HistoryOutcome::terrainRestore` is set beside the addAsset
+`messagePayload`, which carries only the description. `reportHistoryOutcome` then applies the restore to the editor's own
+registry and store through `applyTerrainRestore` (the same `applyAddAssetWithTerrain` a create uses, so the snapshot that
+follows keeps the description and chunks instead of creating an empty default terrain), queues the chunks on
+`m_terrainUpload` and sends the addAsset. The server expects those chunks, so Play is held until the re-upload lands. Undo
+of a create and redo of a delete send the removeAsset as any asset kind does and set `HistoryOutcome::terrainRemoved`,
+whose pending upload the editor drops.
+
+Validation is the asset kinds' (record absent or present), plus the store: a command that adds the terrain back is
+`targetChanged` when the store already holds the uuid and `targetMissing` for a null store. Undo of a create does not
+compare the volume, because strokes recorded after it sit above it on the stack and are undone first.
 
 ## Editor wiring
 
