@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <exception>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -154,27 +155,59 @@ void EditorApp::endTerrainStroke()
 
   const uuids::uuid terrainUuid = m_terrainBrush.terrain();
   const auto volume = m_terrainStore->find(terrainUuid);
-  const auto finished = m_terrainBrush.endFor(volume, m_serverEditable,
-                                              [this](const net::Message& message) { sendTerrainEdit(message); });
-  finishTerrainStroke(terrainUuid, finished, volume);
+  const bool sentBrushes = !m_terrainBrush.touched().empty();
+
+  std::optional<TerrainStroke::Finished> finished;
+  try
+  {
+    finished = m_terrainBrush.endFor(volume, m_serverEditable,
+                                     [this](const net::Message& message) { sendTerrainEdit(message); });
+  }
+  catch (...)
+  {
+    // The session clears the stroke before it sends, so a failed send still ends it.
+    finishTerrainStroke(terrainUuid, std::nullopt, volume, sentBrushes);
+    terrain::invalidateTerrainBounds(*m_sceneManager, terrainUuid);
+    throw;
+  }
+
+  finishTerrainStroke(terrainUuid, finished, volume, sentBrushes);
   terrain::invalidateTerrainBounds(*m_sceneManager, terrainUuid);
+}
+
+void EditorApp::cancelTerrainStroke()
+{
+  const bool wasActive = m_terrainBrush.active();
+  const bool sentBrushes = !m_terrainBrush.touched().empty();
+  const uuids::uuid terrainUuid = m_terrainBrush.terrain();
+
+  m_terrainBrush.cancel();
+
+  if (wasActive)
+  {
+    finishTerrainStroke(terrainUuid, std::nullopt, nullptr, sentBrushes);
+  }
 }
 
 void EditorApp::finishTerrainStroke(const uuids::uuid& terrainUuid,
                                     const std::optional<TerrainStroke::Finished>& finished,
-                                    const std::shared_ptr<terrain::TerrainVolume>& volume)
+                                    const std::shared_ptr<terrain::TerrainVolume>& volume, const bool sentBrushes)
 {
   m_saveUI->endUncommittedEdit();
 
-  if (!finished || !finished->predicted || !volume)
+  if (finished && finished->predicted && volume)
   {
-    return;
+    if (auto command = edits::commandForTerrainStroke(terrainUuid, finished->before, *volume))
+    {
+      m_playHistory.current().record(std::move(*command));
+      noteRecordedEdit();
+      return;
+    }
   }
 
-  if (auto command = edits::commandForTerrainStroke(terrainUuid, finished->before, *volume))
+  if (sentBrushes)
   {
-    m_playHistory.current().record(std::move(*command));
-    noteRecordedEdit();
+    m_saveUI->markEdited();
   }
 }
 
@@ -317,27 +350,46 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
 {
   const size_t tool = toolIndex(m_terrainTool.tool());
   const bool wasActive = m_terrainBrush.active();
+  const bool sentBrushes = !m_terrainBrush.touched().empty();
 
-  const TerrainBrushSession::Advance advanced = m_terrainBrush.advance(
-    terrainUuid, volume, m_serverEditable, pointer, hit,
-    [this, tool] {
-      return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
-    },
-    [this](const net::Message& message) { sendTerrainEdit(message); });
+  TerrainBrushSession::Advance advanced;
+  std::exception_ptr failure;
+
+  try
+  {
+    advanced = m_terrainBrush.advance(
+      terrainUuid, volume, m_serverEditable, pointer, hit,
+      [this, tool] {
+        return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
+      },
+      [this](const net::Message& message) { sendTerrainEdit(message); });
+  }
+  catch (...)
+  {
+    failure = std::current_exception();
+  }
 
   if (!wasActive && m_terrainBrush.active())
   {
     m_saveUI->beginUncommittedEdit();
   }
 
-  if (advanced.ended)
+  // A failed send still ends a stroke that was ending: the session clears it before sending.
+  const bool ended = wasActive && !m_terrainBrush.active();
+
+  if (ended)
   {
-    finishTerrainStroke(terrainUuid, advanced.finished, volume);
+    finishTerrainStroke(terrainUuid, advanced.finished, volume, sentBrushes);
   }
 
-  if (advanced.changed || advanced.ended)
+  if (advanced.changed || ended)
   {
     terrain::invalidateTerrainBounds(*m_sceneManager, terrainUuid);
+  }
+
+  if (failure)
+  {
+    std::rethrow_exception(failure);
   }
 }
 

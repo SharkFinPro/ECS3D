@@ -286,6 +286,7 @@ add_executable(${PROJECT_NAME}
   TerrainStrokeEchoTest.cpp
   TerrainStrokeTest.cpp
   TerrainToolStateTest.cpp
+  TerrainUndoStateTest.cpp
   TerrainUploadTest.cpp
   TerrainViewSyncTest.cpp
   TerrainVolumeSourceTest.cpp

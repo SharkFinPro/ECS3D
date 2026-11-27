@@ -465,7 +465,7 @@ void EditorApp::run()
         m_serverEditable = false;
         m_remoteStats.disconnected();
         // The server will never answer a released stroke's final-state request now.
-        m_terrainBrush.cancel();
+        cancelTerrainStroke();
 
         if (!m_terrainUpload.done())
         {

@@ -147,14 +147,29 @@ redistance was also committed to the editor's volume. `TerrainBrushSession::Adva
 then (not for a replaced volume, lost editing or a stroke that recorded nothing). `EditorApp::finishTerrainStroke`
 turns it into `commandForTerrainStroke` and records it on `m_playHistory.current()`, so a stroke drawn while playing
 lands on the play history that Stop discards; the terrain returns to its Start state through the chunks the server sends
-on Stop. The dirty flag is held (`SaveUI::beginUncommittedEdit`) from the press to the end of the stroke, however it
-ends, and the recorded command then moves the history position like any other edit.
+on Stop. The dirty flag is held (`SaveUI::beginUncommittedEdit`) from the press until the stroke ends.
 
-Undo and redo are refused with "finish the terrain stroke first" while a stroke is active or the final state of the last
-one has not arrived. `reportHistoryOutcome` applies `terrainPayload` to the editor's volume with `predictSetChunks`,
-invalidates the terrain's bounds and sends `packSetChunksEdits`. The server answers with a hash-only terrainChunks
-echo that matches the prediction, and that message about the pending terrain (`m_pendingTerrainUndo`) is what releases
-the in-flight gate, rather than a snapshot.
+Every end of an active stroke goes through `finishTerrainStroke`: a release, leaving the mode, a replaced volume, lost
+editing, a lost connection (`cancelTerrainStroke`) and a send that throws while the release is sent (the session clears
+the stroke first, so the end is still reported and the exception then propagates). Each releases the dirty hold. A
+stroke that recorded a step moves the history position like any other edit; one that sent brushes but recorded none
+calls `SaveUI::markEdited`, since the server changed and the history cannot reverse it. A stroke that sent nothing does
+neither.
+
+`TerrainUndoState` (`editor/TerrainUndoState.h`, headless) holds the decisions. While a stroke is active every undo and
+redo is refused with "finish the terrain stroke first". While the final state of a released stroke has not arrived
+only a request whose top entry (`EditHistory::nextUndoKind`/`nextUndoPrimaryUUID`, or the redo pair) is a
+`terrainStroke` of the brush session's terrain is refused, with "waiting for the server's final terrain"; every other
+kind proceeds. `reportHistoryOutcome` packs `packSetChunksEdits` first (a failure clears the history and sends
+nothing), applies `terrainPayload` to the editor's volume with `predictSetChunks`, invalidates the terrain's bounds and
+sends the messages. A send that fails partway is logged and leaves the view ahead of the server until the echo's hash
+mismatch makes the view request full chunks.
+
+The terrain a request changed is staged while its payload is built and bound to the in-flight gate when
+`beginUndoRedoPending` begins it, replacing whatever an earlier request bound, so a structural request waits on no
+terrain. The server answers with a hash-only terrainChunks echo that matches the prediction, and that message about
+the bound terrain releases the gate (`noteTerrainChunks`), rather than a snapshot. A gate that already timed out
+releases nothing and drops the bound terrain, so a late echo cannot release an unrelated later request.
 
 ## Editor wiring
 

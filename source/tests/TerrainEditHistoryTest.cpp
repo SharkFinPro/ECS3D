@@ -244,6 +244,28 @@ TEST(TerrainEditHistory, TwentyStrokesUndoAndRedoThroughTheWireBackToEveryState)
   EXPECT_FALSE(world.history.canRedo());
 }
 
+TEST(TerrainEditHistory, TheHistoryNamesTheTerrainOfTheTopEntryOfEachStack)
+{
+  World world;
+  EXPECT_FALSE(world.history.nextUndoPrimaryUUID().has_value());
+  EXPECT_FALSE(world.history.nextRedoPrimaryUUID().has_value());
+
+  ASSERT_TRUE(sculptNth(world, 0));
+
+  ASSERT_TRUE(world.history.nextUndoPrimaryUUID().has_value());
+  EXPECT_EQ(*world.history.nextUndoPrimaryUUID(), terrainId);
+  EXPECT_EQ(world.history.nextUndoKind(), edits::CommandKind::terrainStroke);
+  EXPECT_FALSE(world.history.nextRedoPrimaryUUID().has_value());
+
+  const auto outcome = world.undo();
+  ASSERT_TRUE(outcome.ok());
+  world.apply(outcome);
+
+  EXPECT_FALSE(world.history.nextUndoPrimaryUUID().has_value());
+  ASSERT_TRUE(world.history.nextRedoPrimaryUUID().has_value());
+  EXPECT_EQ(*world.history.nextRedoPrimaryUUID(), terrainId);
+}
+
 TEST(TerrainEditHistory, AStrokeThatErasesAChunkToAirUndoesAndRedoes)
 {
   World world;

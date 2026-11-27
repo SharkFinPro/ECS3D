@@ -3,6 +3,7 @@
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <edits/EditHistory.h>
 #include <edits/TerrainSetChunks.h>
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainStore.h>
@@ -49,6 +50,28 @@ void EditorApp::logMessage(const std::string& level, const std::string& message)
   m_errorMessages.push_back("[" + level + "] " + message);
 }
 
+bool EditorApp::refuseForTerrainStroke(const bool isUndo)
+{
+  const edits::EditHistory& history = m_playHistory.current();
+
+  TerrainUndoContext context;
+  context.strokeActive = m_terrainBrush.active();
+  context.awaitingFinalChunks = m_terrainBrush.awaitingFinalChunks();
+  context.topKind = isUndo ? history.nextUndoKind() : history.nextRedoKind();
+  context.topUuid = isUndo ? history.nextUndoPrimaryUUID() : history.nextRedoPrimaryUUID();
+  context.brushTerrain = m_terrainBrush.terrain();
+
+  const TerrainUndoRefusal refusal = decideTerrainUndoRefusal(context);
+
+  if (refusal == TerrainUndoRefusal::none)
+  {
+    return false;
+  }
+
+  logMessage("Info", terrainUndoRefusalMessage(refusal, isUndo));
+  return true;
+}
+
 void EditorApp::undo()
 {
   if (!m_serverEditable)
@@ -57,9 +80,8 @@ void EditorApp::undo()
     return;
   }
 
-  if (m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks())
+  if (refuseForTerrainStroke(true))
   {
-    logMessage("Info", "Can't undo: finish the terrain stroke first.");
     return;
   }
 
@@ -112,9 +134,8 @@ void EditorApp::redo()
     return;
   }
 
-  if (m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks())
+  if (refuseForTerrainStroke(false))
   {
-    logMessage("Info", "Can't redo: finish the terrain stroke first.");
     return;
   }
 
@@ -167,8 +188,10 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
       // instantiatePrefab) is the sceneEdit json form - a single command's own op, or one replication::
       // buildBatch of a grouped entry's ops (see EditHistory::undo/redo) - chunked into a sceneEdit
       // message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit, and a terrain
-      // stroke is the terrainChunks form: setChunks terrainEdit messages, applied to the editor's own
-      // volume first as the prediction the server's hash-only echo then confirms.
+      // stroke is the terrainChunks form: setChunks terrainEdit messages. They are packed first, so a pack
+      // failure leaves the view and the server untouched; then applied to the editor's own volume as the
+      // prediction the server's hash-only echo confirms; then sent. A send that fails partway leaves the
+      // view ahead of the server, which the echo's hash mismatch repairs with a full chunk request.
       if (outcome.messagePayload)
       {
         m_netClient->send(*outcome.messagePayload);
@@ -187,18 +210,39 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
       {
         const edits::TerrainSetChunks& payload = *outcome.terrainPayload;
 
+        std::vector<net::Message> messages;
+        try
+        {
+          messages = edits::packSetChunksEdits(payload);
+        }
+        catch (const std::exception& e)
+        {
+          logMessage("Error", "The terrain " + action + " could not be packed (" + e.what() +
+                              "); clearing the edit history.");
+          m_playHistory.current().clear();
+          break;
+        }
+
         if (const auto volume = m_terrainStore->find(payload.terrain))
         {
           edits::predictSetChunks(*volume, payload);
           terrain::invalidateTerrainBounds(*m_sceneManager, payload.terrain);
         }
 
-        for (const net::Message& message : edits::packSetChunksEdits(payload))
-        {
-          m_netClient->send(message);
-        }
+        m_terrainUndo.stage(payload.terrain);
 
-        m_pendingTerrainUndo = payload.terrain;
+        try
+        {
+          for (const net::Message& message : messages)
+          {
+            m_netClient->send(message);
+          }
+        }
+        catch (const std::exception& e)
+        {
+          logMessage("Error", "The terrain " + action + " could not be sent in full (" + e.what() +
+                              "); the server's terrain may differ from this view until its chunks arrive.");
+        }
       }
       noteRecordedEdit();
       break;
