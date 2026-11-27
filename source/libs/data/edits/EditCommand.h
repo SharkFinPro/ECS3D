@@ -2,15 +2,23 @@
 #define EDITCOMMAND_H
 
 #include "assets/AssetRegistry.h"
+#include "terrain/TerrainTypes.h"
 #include <nlohmann/json_fwd.hpp>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <uuid.h>
 #include <variant>
+#include <vector>
 
 class ObjectManager;
 class SceneAsset;
+
+namespace terrain {
+  class TerrainChunk;
+  class TerrainStore;
+}
 
 namespace net {
   class Message;
@@ -22,6 +30,8 @@ namespace net {
 // edit and wait for the rebroadcast" like every other change, or two connected editors would disagree
 // about what undo even means.
 namespace edits {
+
+struct TerrainSetChunks;
 
 enum class CommandKind {
   componentEdit,
@@ -41,17 +51,20 @@ enum class CommandKind {
   addSceneScript,
   removeSceneScript,
   reorderSceneScript,
-  setSceneScriptFields
+  setSceneScriptFields,
+  terrainStroke
 };
 
 // Whether a command's undo/redo payload is a structural sceneEdit op (nlohmann::json, built by
 // Replication.h's build* functions and sent as a sceneEdit message by the caller) or an already
 // wire-ready net::Message (editComponent/addAsset/replaceAsset/renameAsset/removeAsset, built by
 // Replication.h's pack* functions). Fixed per kind, so a caller branches on this rather than guessing
-// which accessor to call.
+// which accessor to call. terrainChunks is a terrain setChunks (TerrainSetChunks) that the caller packs into
+// terrainEdit messages with packSetChunksEdits and also applies to its own volume as a prediction.
 enum class PayloadForm {
   sceneEdit,
-  networkMessage
+  networkMessage,
+  terrainChunks
 };
 
 // Why an undo/redo did not hand back a payload. Kept distinct rather than a bool, the same reasoning as
@@ -75,6 +88,16 @@ struct Validation {
   {
     return failure == ValidationFailure::none;
   }
+};
+
+// One chunk a sculpt stroke changed. Chunks are immutable, so comparing the pointers compares the content a
+// command recorded; null means air.
+struct TerrainStrokeChunk {
+  terrain::ChunkCoord coord;
+  std::shared_ptr<const terrain::TerrainChunk> before;
+  std::shared_ptr<const terrain::TerrainChunk> after;
+
+  friend bool operator==(const TerrainStrokeChunk&, const TerrainStrokeChunk&) = default;
 };
 
 // One editor mutation: what kind it was, the uuid(s) it targets, and its before/after state in
@@ -196,7 +219,17 @@ public:
                                                         const nlohmann::json& before,
                                                         const nlohmann::json& after);
 
+  // Every chunk a stroke changed, with the chunk from before and after it. Undo restores the before chunks, redo
+  // the after chunks; validation compares the live volume against the other side by hash. Throws
+  // std::invalid_argument for an empty list, a repeated coordinate or one the wire cannot carry, which the server
+  // would refuse as a whole.
+  [[nodiscard]] static EditCommand terrainStroke(const uuids::uuid& terrainUUID,
+                                                 std::vector<TerrainStrokeChunk> chunks);
+
   [[nodiscard]] CommandKind kind() const;
+
+  // The recorded chunks of a terrainStroke; null for every other kind.
+  [[nodiscard]] const std::vector<TerrainStrokeChunk>* terrainStrokeChunks() const;
 
   // True for the kinds that act on a scene's script list rather than on the object tree. They are never
   // grouped (a batch sceneEdit refuses them), and validating one needs the scene.
@@ -225,16 +258,20 @@ public:
   // revert away from. AssetRegistry may be null when the command cannot be an asset op (only
   // addAsset/renameAsset/removeAsset read it). scene is read only by the scene script kinds; one validated
   // with a null scene (or a scene whose uuid differs from the recorded one) is targetMissing, naming the
-  // scene's uuid.
+  // scene's uuid. terrains is read only by terrainStroke: a null store, or one without the terrain, is
+  // targetMissing, and a chunk whose live hash is not the recorded after chunk is targetChanged, both naming
+  // the terrain's uuid.
   [[nodiscard]] Validation validateForUndo(const ObjectManager& objectManager,
                                            const AssetRegistry* assetRegistry,
-                                           const SceneAsset* scene = nullptr) const;
+                                           const SceneAsset* scene = nullptr,
+                                           const terrain::TerrainStore* terrains = nullptr) const;
 
   // Compares this command's "before" state against the live scene/registry - what redo is about to
   // move forward from.
   [[nodiscard]] Validation validateForRedo(const ObjectManager& objectManager,
                                            const AssetRegistry* assetRegistry,
-                                           const SceneAsset* scene = nullptr) const;
+                                           const SceneAsset* scene = nullptr,
+                                           const terrain::TerrainStore* terrains = nullptr) const;
 
   // Preconditions: payloadForm() == sceneEdit, and isReversible() for the Undo direction (redo is only
   // ever attempted on a command that already passed isReversible() once, when it was undone).
@@ -244,6 +281,11 @@ public:
   // Preconditions: payloadForm() == networkMessage, same reversibility note as above.
   [[nodiscard]] net::Message buildUndoMessage(const ObjectManager& objectManager) const;
   [[nodiscard]] net::Message buildRedoMessage(const ObjectManager& objectManager) const;
+
+  // Preconditions: payloadForm() == terrainChunks. Undo carries every chunk's before chunk, redo every chunk's
+  // after chunk (null = air).
+  [[nodiscard]] TerrainSetChunks buildUndoTerrainChunks() const;
+  [[nodiscard]] TerrainSetChunks buildRedoTerrainChunks() const;
 
   // The uuid to report when a refusal is not about a specific field conflict (isReversible() is false,
   // or the history has nothing else to name). Validation failures carry their own conflicting uuid,
@@ -266,6 +308,7 @@ private:
   [[nodiscard]] Validation validateSceneScriptRedo(const SceneAsset* scene) const;
   [[nodiscard]] nlohmann::json buildSceneScriptUndoJSON() const;
   [[nodiscard]] nlohmann::json buildSceneScriptRedoJSON() const;
+  [[nodiscard]] Validation validateTerrainStroke(const terrain::TerrainStore* terrains, bool forUndo) const;
 
   struct ComponentEditData {
     uuids::uuid objectUUID;
@@ -435,12 +478,19 @@ private:
     friend bool operator==(const SetSceneScriptFieldsData&, const SetSceneScriptFieldsData&) = default;
   };
 
+  struct TerrainStrokeData {
+    uuids::uuid terrainUUID;
+    std::vector<TerrainStrokeChunk> chunks;
+
+    friend bool operator==(const TerrainStrokeData&, const TerrainStrokeData&) = default;
+  };
+
   using CommandData = std::variant<ComponentEditData, AddObjectData, RemoveObjectData, ReparentObjectData,
                                    ReorderObjectData, RenameObjectData, AddComponentData,
                                    RemoveComponentData, DuplicateObjectData, InstantiatePrefabData,
                                    AddAssetData, ReplaceAssetData, RenameAssetData, RemoveAssetData,
                                    AddSceneScriptData, RemoveSceneScriptData, ReorderSceneScriptData,
-                                   SetSceneScriptFieldsData>;
+                                   SetSceneScriptFieldsData, TerrainStrokeData>;
 
   CommandKind m_kind = CommandKind::componentEdit;
   CommandData m_data;

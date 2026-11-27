@@ -119,6 +119,26 @@ The four scene script ops each have an undo kind (`addSceneScript`, `removeScene
 scene passed to `EditHistory::undo`/`redo`; with no scene they are refused, naming the scene's uuid. `recordBatch` refuses
 them, since group undo simulates on a scratch `ObjectManager` that has no script list.
 
+## Terrain strokes
+
+A finished sculpt stroke is one `terrainStroke` command (`EditCommand::terrainStroke`): the terrain's uuid and, for each
+chunk the stroke changed, the chunk from before and after it (chunks are immutable, so the pointers are the
+recorded state; null is air). `commandForTerrainStroke` (`edits/RecordTerrainEdits.h`) builds it from
+`TerrainStroke::Finished::before` and the volume as it stands after the stroke, drops a chunk whose hash did not
+change, and returns nullopt when none did, so a stroke that changed nothing records nothing.
+
+Undo and redo validate against the `TerrainStore` passed as the last argument of `EditHistory::undo`/`redo`: a null
+store or an unknown terrain is `targetMissing`, and a live chunk whose hash is not the recorded after chunk (undo) or
+before chunk (redo) is `targetChanged`, both naming the terrain. The payload form is `PayloadForm::terrainChunks`:
+`HistoryOutcome::terrainPayload` holds a `TerrainSetChunks` carrying every chunk's before (undo) or after (redo).
+The caller sends it with `packSetChunksEdits`, which splits it into `terrainEdit` setChunks messages of at most
+`maxTerrainChunksEntries` entries and `maxSetChunksMessageBytes`, and applies it to its own volume with
+`predictSetChunks`, as a brush is predicted; the caller applies that prediction before the next undo or redo, or
+validation reads a stale volume and refuses. Null and air are the same chunk when comparing. The factory throws
+`std::invalid_argument` for an empty chunk list, a repeated coordinate or one beyond `maxChunkCoord`, since the server
+refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
+coordinate. `recordBatch` refuses a `terrainStroke`.
+
 ## Editor wiring
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with

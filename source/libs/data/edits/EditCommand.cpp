@@ -578,6 +578,8 @@ PayloadForm EditCommand::payloadForm() const
     case CommandKind::renameAsset:
     case CommandKind::removeAsset:
       return PayloadForm::networkMessage;
+    case CommandKind::terrainStroke:
+      return PayloadForm::terrainChunks;
     default:
       return PayloadForm::sceneEdit;
   }
@@ -611,6 +613,7 @@ uuids::uuid EditCommand::primaryUUID() const
     case CommandKind::removeSceneScript: return std::get<RemoveSceneScriptData>(m_data).sceneUUID;
     case CommandKind::reorderSceneScript: return std::get<ReorderSceneScriptData>(m_data).sceneUUID;
     case CommandKind::setSceneScriptFields: return std::get<SetSceneScriptFieldsData>(m_data).sceneUUID;
+    case CommandKind::terrainStroke: return std::get<TerrainStrokeData>(m_data).terrainUUID;
   }
 
   throw std::logic_error("EditCommand: unhandled kind");
@@ -702,6 +705,8 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
       return "Reorder " + sceneScriptLabel(std::get<ReorderSceneScriptData>(m_data).className);
     case CommandKind::setSceneScriptFields:
       return "Edit " + sceneScriptLabel(std::get<SetSceneScriptFieldsData>(m_data).className);
+    case CommandKind::terrainStroke:
+      return "Sculpt Terrain";
   }
 
   throw std::logic_error("EditCommand::describeForMenu: unhandled kind");
@@ -931,7 +936,8 @@ nlohmann::json EditCommand::buildSceneScriptRedoJSON() const
 
 Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
                                         const AssetRegistry* assetRegistry,
-                                        const SceneAsset* scene) const
+                                        const SceneAsset* scene,
+                                        const terrain::TerrainStore* terrains) const
 {
   if (!isReversible())
   {
@@ -1198,6 +1204,8 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
     case CommandKind::reorderSceneScript:
     case CommandKind::setSceneScriptFields:
       return validateSceneScriptUndo(scene);
+    case CommandKind::terrainStroke:
+      return validateTerrainStroke(terrains, true);
     default:
       return { ValidationFailure::notUndoable, primaryUUID() };
   }
@@ -1205,7 +1213,8 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
 
 Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
                                         const AssetRegistry* assetRegistry,
-                                        const SceneAsset* scene) const
+                                        const SceneAsset* scene,
+                                        const terrain::TerrainStore* terrains) const
 {
   if (!isReversible())
   {
@@ -1487,6 +1496,8 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
     case CommandKind::reorderSceneScript:
     case CommandKind::setSceneScriptFields:
       return validateSceneScriptRedo(scene);
+    case CommandKind::terrainStroke:
+      return validateTerrainStroke(terrains, false);
     default:
       return { ValidationFailure::notUndoable, primaryUUID() };
   }
