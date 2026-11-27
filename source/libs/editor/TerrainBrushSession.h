@@ -11,6 +11,7 @@
 #include <terrain/TerrainReplication.h>
 #include <terrain/TerrainVolume.h>
 #include <Protocol.h>
+#include <glm/geometric.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -100,7 +101,9 @@ public:
   // Long enough for the server's next echo flush and the round trip, short enough that a lost answer is not noticed.
   static constexpr std::chrono::seconds awaitTimeout{ 5 };
 
-  // A pointer held still applies the brush again this often.
+  // A pointer held still applies the brush again this often. A stroke without a snapshot surface (Subtract) aims at
+  // the live terrain, so each application already reaches deeper; it repeats at surfaceRefresh instead, to dig at the
+  // pace a held Add grows.
   static constexpr std::chrono::milliseconds holdInterval{ 100 };
 
   // While the pointer is held still, the surface the cursor aims at catches up with the stroke this often, so a held
@@ -356,6 +359,14 @@ public:
         }
         break;
       case TerrainStrokeStep::move:
+        // A Subtract stroke aims at the live terrain, so the cursor leaving the hole it dug lands on the surface well
+        // above the hole's bottom. Bridging that jump would cut a straight trench through the ground at the hole's
+        // depth, so a jump of more than a brush radius starts a new segment at the hit instead.
+        if (!m_surface && glm::length(hit->point - m_stroke.lastPoint()) > m_stroke.radius())
+        {
+          m_stroke.breakPath();
+        }
+
         result.changed = moveTo(*hit, send) > 0;
 
         if (now)
@@ -482,7 +493,7 @@ private:
 
     bool applied = false;
 
-    if (now - m_lastApplication >= holdInterval)
+    if (now - m_lastApplication >= (m_surface ? holdInterval : std::chrono::milliseconds(surfaceRefresh)))
     {
       m_lastApplication = now;
 

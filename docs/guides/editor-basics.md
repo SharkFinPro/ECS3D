@@ -84,7 +84,8 @@ terrain with a brush. It works only while the editor can edit the server.
   the camera; drag up past the horizon to raise a column on an upright plane through the stroke's last point. Ground
   more than two brush radii from the stroke's last point (a wall behind a column) does not catch the line. Hold
   still to keep building: Add slowly grows toward the camera and Subtract digs deeper. Subtract always works on the
-  terrain that is there now, so erasing reaches whatever is left, even nearer than where you pressed.
+  terrain that is there now, so erasing reaches whatever is left, even nearer than where you pressed, and it finds
+  terrain anywhere under its ring, not only under the cursor.
   Right-drag still flies the camera.
 - Ctrl+click picking and the transform gizmo are off while Sculpt is on. Changing the selection, starting Play or
   losing the connection to the server turns Sculpt off.
