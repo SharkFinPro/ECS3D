@@ -2,10 +2,12 @@
 
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainOps.h"
+#include "terrain/TerrainParallel.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
 #include <glm/vec3.hpp>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -247,4 +249,32 @@ TEST(TerrainOpsTest, ParallelEditsMatchSerialOnes)
     ASSERT_NE(parallel[index].second, nullptr);
     EXPECT_EQ(serial[index].second->hash(), parallel[index].second->hash());
   }
+}
+
+TEST(TerrainOpsTest, ParallelForRunsEveryIndexOnceAndRethrows)
+{
+  std::vector<std::atomic<int>> hits(257);
+
+  for (int round = 0; round < 20; ++round)
+  {
+    terrain::parallelFor(static_cast<int>(hits.size()), [&hits](const int index)
+    {
+      ++hits[static_cast<size_t>(index)];
+    });
+  }
+
+  for (const auto& hit : hits)
+  {
+    EXPECT_EQ(hit.load(), 20);
+  }
+
+  EXPECT_THROW(terrain::parallelFor(64, [](const int index)
+  {
+    if (index == 13)
+    {
+      throw std::runtime_error("boom");
+    }
+  }), std::runtime_error);
+
+  terrain::parallelFor(0, [](int) { FAIL(); });
 }

@@ -74,6 +74,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainGenerators.cpp
   terrain/TerrainGenerators.h
   terrain/TerrainOps.cpp
+  terrain/TerrainParallel.cpp
+  terrain/TerrainParallel.h
   terrain/TerrainOps.h
   terrain/TerrainPlaySnapshot.cpp
   terrain/TerrainPlaySnapshot.h
@@ -165,11 +167,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DNetProtocol
   ECS3DLog
 )
-
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-  target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
-endif()
 
 if(WIN32)
   # ProjectOrigin asks the system for the Documents folder.

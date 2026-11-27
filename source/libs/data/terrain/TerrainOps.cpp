@@ -1,9 +1,9 @@
 #include "TerrainOps.h"
+#include "TerrainParallel.h"
 #include <glm/common.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <exception>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -27,8 +27,24 @@ namespace terrain
              std::ranges::equal(before->materials(), after->materials());
     }
 
-    constexpr int maxEditThreads = 8;
     constexpr int minParallelChunks = 4;
+    constexpr int64_t minParallelSamples = 65536;
+
+    // Runs body once per z slice, in parallel when the grid is big enough to repay it.
+    template <typename Body>
+    void forEachSlice(const int slices, const int64_t samples, const Body& body)
+    {
+      if (samples >= minParallelSamples)
+      {
+        parallelFor(slices, body);
+        return;
+      }
+
+      for (int slice = 0; slice < slices; ++slice)
+      {
+        body(slice);
+      }
+    }
 
     bool withinEditLimits(const SampleBox& box)
     {
@@ -100,8 +116,8 @@ namespace terrain
     }
   }
 
-  ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
-                         const UniformChunkHint& uniformHint, const ChunkSkip& skipChunk, const bool parallel)
+  ChunkEdits editRows(const TerrainVolume& volume, const SampleBox& box, const RowEdit& editRow,
+                      const UniformChunkHint& uniformHint, const ChunkSkip& skipChunk, const bool parallel)
   {
     if (box.empty())
     {
@@ -190,24 +206,9 @@ namespace terrain
       {
         for (int y = low.y; y < high.y; ++y)
         {
-          for (int x = low.x; x < high.x; ++x)
-          {
-            const auto index = static_cast<size_t>(sampleIndex(x - origin.x, y - origin.y, z - origin.z));
-            const uint8_t inputMaterial = materials[index];
-            const int16_t inputDistance = distances[index];
-            int16_t distance = inputDistance;
-            uint8_t material = inputMaterial;
+          const auto row = static_cast<size_t>(sampleIndex(low.x - origin.x, y - origin.y, z - origin.z));
 
-            edit({ x, y, z }, distance, material);
-
-            const auto outputDistance = static_cast<int16_t>(
-              std::clamp(static_cast<int>(distance), -static_cast<int>(airDistance), static_cast<int>(airDistance)));
-            const uint8_t outputMaterial = material == reservedMaterial ? inputMaterial : material;
-
-            changed = changed || outputDistance != inputDistance || outputMaterial != inputMaterial;
-            distances[index] = outputDistance;
-            materials[index] = outputMaterial;
-          }
+          changed = editRow({ low.x, y, z }, high.x - low.x, distances.data() + row, materials.data() + row) || changed;
         }
       }
 
@@ -218,7 +219,7 @@ namespace terrain
 
       auto rebuilt = TerrainChunk::dense(std::move(distances), std::move(materials));
 
-      if (sameContent(current, rebuilt))
+      if (!rebuilt || sameContent(current, rebuilt))
       {
         return std::nullopt;
       }
@@ -228,32 +229,23 @@ namespace terrain
 
     std::vector<std::optional<ChunkEdits::value_type>> results(coords.size());
     const auto count = static_cast<int>(coords.size());
-    std::exception_ptr failure;
+    const auto editChunk = [&](const int index)
+    {
+      results[static_cast<size_t>(index)] = processChunk(coords[static_cast<size_t>(index)]);
+    };
 
     // Chunks are independent and written to their own slot, so the order and content of the result do not depend on
     // how many threads run.
-#pragma omp parallel for schedule(dynamic, 1) num_threads(maxEditThreads) if (parallel && count >= minParallelChunks)
-    for (int index = 0; index < count; ++index)
+    if (parallel && count >= minParallelChunks)
     {
-      try
-      {
-        results[static_cast<size_t>(index)] = processChunk(coords[static_cast<size_t>(index)]);
-      }
-      catch (...)
-      {
-#pragma omp critical(terrainEditFailure)
-        {
-          if (!failure)
-          {
-            failure = std::current_exception();
-          }
-        }
-      }
+      parallelFor(count, editChunk);
     }
-
-    if (failure)
+    else
     {
-      std::rethrow_exception(failure);
+      for (int index = 0; index < count; ++index)
+      {
+        editChunk(index);
+      }
     }
 
     ChunkEdits edits;
@@ -267,6 +259,37 @@ namespace terrain
     }
 
     return edits;
+  }
+
+  ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
+                         const UniformChunkHint& uniformHint, const ChunkSkip& skipChunk, const bool parallel)
+  {
+    const auto editRow = [&edit](const glm::ivec3 first, const int count, int16_t* distances, uint8_t* materials)
+    {
+      bool changed = false;
+
+      for (int offset = 0; offset < count; ++offset)
+      {
+        const uint8_t inputMaterial = materials[offset];
+        const int16_t inputDistance = distances[offset];
+        int16_t distance = inputDistance;
+        uint8_t material = inputMaterial;
+
+        edit({ first.x + offset, first.y, first.z }, distance, material);
+
+        const auto outputDistance = static_cast<int16_t>(
+          std::clamp(static_cast<int>(distance), -static_cast<int>(airDistance), static_cast<int>(airDistance)));
+        const uint8_t outputMaterial = material == reservedMaterial ? inputMaterial : material;
+
+        changed = changed || outputDistance != inputDistance || outputMaterial != inputMaterial;
+        distances[offset] = outputDistance;
+        materials[offset] = outputMaterial;
+      }
+
+      return changed;
+    };
+
+    return editRows(volume, box, editRow, uniformHint, skipChunk, parallel);
   }
 
   ChunkEdits redistance(const TerrainVolume& volume, const SampleBox& box)
@@ -295,10 +318,16 @@ namespace terrain
 
     volume.readDistances({ gridMin, gridMin + size }, encoded);
 
-    for (size_t index = 0; index < encoded.size(); ++index)
+    forEachSlice(size.z, total, [&](const int z)
     {
-      field[index] = decodeDistance(encoded[index]);
-    }
+      const size_t begin = at(0, 0, z);
+      const size_t end = begin + static_cast<size_t>(size.x) * static_cast<size_t>(size.y);
+
+      for (size_t index = begin; index < end; ++index)
+      {
+        field[index] = decodeDistance(encoded[index]);
+      }
+    });
 
     std::vector<uint8_t> fixed(static_cast<size_t>(total), 0);
 
@@ -320,8 +349,7 @@ namespace terrain
       const std::vector<uint8_t> previousLowest = lowest;
       const std::vector<uint8_t> previousHighest = highest;
 
-#pragma omp parallel for num_threads(maxEditThreads) if (total >= 65536)
-      for (int z = 0; z < size.z; ++z)
+      forEachSlice(size.z, total, [&](const int z)
       {
         for (int y = 0; y < size.y; ++y)
         {
@@ -343,11 +371,10 @@ namespace terrain
             }
           }
         }
-      }
+      });
     }
 
-#pragma omp parallel for num_threads(maxEditThreads) if (total >= 65536)
-    for (int z = 0; z < size.z; ++z)
+    forEachSlice(size.z, total, [&](const int z)
     {
       for (int y = 0; y < size.y; ++y)
       {
@@ -365,17 +392,17 @@ namespace terrain
           }
         }
       }
-    }
+    });
 
     // Only a frozen sample inside the band can pull its neighbors below the band, and a value grows by at least
     // 1/sqrt(3) per step, so a sample farther than this from every such source keeps its starting value and the
     // sweeps need not visit it.
     constexpr int reach = 7;
     std::vector<uint8_t> sourceRow(static_cast<size_t>(size.y) * static_cast<size_t>(size.z), 0);
-    int sourceMinX = size.x;
-    int sourceMaxX = -1;
+    std::vector<int> sliceMinX(static_cast<size_t>(size.z), size.x);
+    std::vector<int> sliceMaxX(static_cast<size_t>(size.z), -1);
 
-    for (int z = 0; z < size.z; ++z)
+    forEachSlice(size.z, total, [&](const int z)
     {
       for (int y = 0; y < size.y; ++y)
       {
@@ -386,12 +413,15 @@ namespace terrain
           if (fixed[index] != 0 && std::abs(field[index]) < bandVoxels)
           {
             sourceRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] = 1;
-            sourceMinX = std::min(sourceMinX, x);
-            sourceMaxX = std::max(sourceMaxX, x);
+            sliceMinX[static_cast<size_t>(z)] = std::min(sliceMinX[static_cast<size_t>(z)], x);
+            sliceMaxX[static_cast<size_t>(z)] = std::max(sliceMaxX[static_cast<size_t>(z)], x);
           }
         }
       }
-    }
+    });
+
+    const int sourceMinX = *std::ranges::min_element(sliceMinX);
+    const int sourceMaxX = *std::ranges::max_element(sliceMaxX);
 
     std::vector<uint8_t> activeRow(sourceRow.size(), 0);
 
@@ -467,15 +497,24 @@ namespace terrain
       }
     }
 
-    return editSamples(volume, box, [&](const glm::ivec3 sample, int16_t& distance, uint8_t&)
+    return editRows(volume, box, [&](const glm::ivec3 first, const int count, int16_t* distances, uint8_t*)
     {
-      const glm::ivec3 local = sample - gridMin;
-      const size_t index = at(local.x, local.y, local.z);
+      const glm::ivec3 local = first - gridMin;
+      const size_t base = at(local.x, local.y, local.z);
+      bool touched = false;
 
-      if (fixed[index] == 0 && field[index] != decodeDistance(distance))
+      for (int offset = 0; offset < count; ++offset)
       {
-        distance = encodeDistance(field[index]);
+        const size_t index = base + static_cast<size_t>(offset);
+
+        if (fixed[index] == 0 && field[index] != decodeDistance(distances[offset]))
+        {
+          distances[offset] = encodeDistance(field[index]);
+          touched = true;
+        }
       }
+
+      return touched;
     }, {}, {}, true);
   }
 }

@@ -170,75 +170,105 @@ namespace terrain
     const Field blurred = op.kind == BrushOp::Kind::smooth ? blurredField(volume, box)
                                                            : Field(glm::ivec3(0), glm::ivec3(0));
 
-    return editSamples(volume, box, [&](const glm::ivec3 sample, int16_t& distance, uint8_t& material)
+    const float influenceSquared = influence * influence;
+
+    const auto editRow = [&](const glm::ivec3 first, const int count, int16_t* distances, uint8_t* materials)
     {
-      const glm::vec3 position = glm::vec3(sample) * voxelSize;
-      const glm::vec3 offset = position - op.center;
-      const float reachSquared = glm::dot(offset, offset);
+      const float positionY = static_cast<float>(first.y) * voxelSize;
+      const float positionZ = static_cast<float>(first.z) * voxelSize;
+      const float offsetY = positionY - op.center.y;
+      const float offsetZ = positionZ - op.center.z;
+      const float rest = influenceSquared * 1.001f - (offsetY * offsetY + offsetZ * offsetZ);
 
-      // The box is a cube around the sphere, so most corner samples leave here without a square root.
-      if (reachSquared > influence * influence)
+      // The row's samples inside the influence sphere form one run; the margin keeps rounding from trimming a sample
+      // the exact test below would keep.
+      if (rest < 0.0f)
       {
-        return;
+        return false;
       }
 
-      const float reach = std::sqrt(reachSquared);
+      const float halfRun = std::sqrt(rest) / voxelSize + 1.0f;
+      const int runFirst = std::max(first.x, static_cast<int>(std::floor(op.center.x / voxelSize - halfRun)));
+      const int runEnd = std::min(first.x + count, static_cast<int>(std::ceil(op.center.x / voxelSize + halfRun)) + 1);
+      bool touched = false;
 
-      if (reach > influence)
+      for (int x = runFirst; x < runEnd; ++x)
       {
-        return;
+        const float positionX = static_cast<float>(x) * voxelSize;
+        const float offsetX = positionX - op.center.x;
+        const float reachSquared = offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ;
+
+        if (reachSquared > influenceSquared)
+        {
+          continue;
+        }
+
+        const float reach = std::sqrt(reachSquared);
+
+        if (reach > influence)
+        {
+          continue;
+        }
+
+        const float weight = weightAt(op, influence, reach);
+
+        if (weight <= 0.0f)
+        {
+          continue;
+        }
+
+        const int offset = x - first.x;
+        const int16_t distance = distances[offset];
+        const float before = decodeDistance(distance);
+        const float sphere = (reach - op.radius) / voxelSize;
+        bool paintsRaisedGround = false;
+        float target = before;
+
+        switch (op.kind)
+        {
+          case BrushOp::Kind::add:
+            target = std::min(before, sphere);
+            paintsRaisedGround = true;
+            break;
+          case BrushOp::Kind::subtract:
+            target = std::max(before, -sphere);
+            break;
+          case BrushOp::Kind::smooth:
+            target = blurred.values[blurred.at(x, first.y, first.z)];
+            break;
+          case BrushOp::Kind::flatten:
+            target = glm::dot(glm::vec3(positionX, positionY, positionZ) - op.planePoint, normal) / voxelSize;
+            paintsRaisedGround = true;
+            break;
+          case BrushOp::Kind::paint:
+            if (reach <= op.radius && std::abs(before) <= 1.0f)
+            {
+              materials[offset] = op.material;
+              touched = true;
+            }
+            continue;
+        }
+
+        if (!std::isfinite(target))
+        {
+          continue;
+        }
+
+        const int16_t after = encodeDistance(before + weight * (target - before));
+
+        if (paintsRaisedGround && distance >= 0 && after < 0)
+        {
+          materials[offset] = op.material;
+        }
+
+        distances[offset] = after;
+        touched = true;
       }
 
-      const float weight = weightAt(op, influence, reach);
+      return touched;
+    };
 
-      if (weight <= 0.0f)
-      {
-        return;
-      }
-
-      const float before = decodeDistance(distance);
-      const float sphere = (reach - op.radius) / voxelSize;
-      bool paintsRaisedGround = false;
-      float target = before;
-
-      switch (op.kind)
-      {
-        case BrushOp::Kind::add:
-          target = std::min(before, sphere);
-          paintsRaisedGround = true;
-          break;
-        case BrushOp::Kind::subtract:
-          target = std::max(before, -sphere);
-          break;
-        case BrushOp::Kind::smooth:
-          target = blurred.values[blurred.at(sample.x, sample.y, sample.z)];
-          break;
-        case BrushOp::Kind::flatten:
-          target = glm::dot(position - op.planePoint, normal) / voxelSize;
-          paintsRaisedGround = true;
-          break;
-        case BrushOp::Kind::paint:
-          if (reach <= op.radius && std::abs(before) <= 1.0f)
-          {
-            material = op.material;
-          }
-          return;
-      }
-
-      if (!std::isfinite(target))
-      {
-        return;
-      }
-
-      const int16_t after = encodeDistance(before + weight * (target - before));
-
-      if (paintsRaisedGround && distance >= 0 && after < 0)
-      {
-        material = op.material;
-      }
-
-      distance = after;
-    }, {}, [&](const SampleBox& covered)
+    return editRows(volume, box, editRow, {}, [&](const SampleBox& covered)
     {
       const glm::vec3 nearest = glm::clamp(op.center, glm::vec3(covered.min) * voxelSize,
                                            glm::vec3(covered.max - glm::ivec3(1)) * voxelSize);
