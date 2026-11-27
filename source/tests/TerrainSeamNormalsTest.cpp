@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -102,6 +103,15 @@ namespace {
     return tilt;
   }
 
+  // The material a vertex is wholly made of: its full-weight slot. A vertex of a mixed-material triangle lists the
+  // triangle's materials, so its slot order is not its own; every copy of a vertex shares this one.
+  uint8_t ownMaterial(const vke::SurfaceVertex& vertex)
+  {
+    const auto full = std::ranges::find(vertex.weights, uint8_t{ 255 });
+    return full == vertex.weights.end() ? vertex.materials[0]
+                                        : vertex.materials[static_cast<size_t>(full - vertex.weights.begin())];
+  }
+
   // How many vertices of a exist in b (the key is the position along the plane, which must match bit for bit), and how
   // many of those have bit-identical normals. Both tiles compute a seam vertex from the same sample values with the
   // same operations, so equality is exact.
@@ -124,7 +134,8 @@ namespace {
       }
 
       ++result.shared;
-      result.identical += ours.normal == theirs->second.normal && ours.material == theirs->second.material ? 1 : 0;
+      const bool sameMaterial = ownMaterial(ours) == ownMaterial(theirs->second);
+      result.identical += ours.normal == theirs->second.normal && sameMaterial ? 1 : 0;
       result.widestNormalGap = std::max(result.widestNormalGap, degreesBetween(ours.normal, theirs->second.normal));
     }
 
