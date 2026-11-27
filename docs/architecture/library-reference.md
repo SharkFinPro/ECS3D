@@ -133,7 +133,7 @@ change to the surfaces under one exclusive lock, so no fill sees an edit before 
 volume itself. Bounds are the occupied chunks plus an air sample, rounded to `surfaceBoundsStep`. A terrain that
 outgrows them gets a larger surface built behind the drawn one, promoted as soon as its `pendingFraction()` is no
 higher than the drawn surface's (so a terrain whose chunks change every frame still shows its growth), and one past
-`maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are reported once per frame per terrain.
+`maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are reported once per frame per terrain. `RenderSystem::setTerrainStore` gives it each terrain's palette, which `GpuAssetCache` resolves through the headless `TerrainPaletteBinding.h` (first 16 entries; a nil texture is white, a texture that does not resolve draws `missing_texture.png`, logged once per asset) and hands to `VolumeSurface::setPalette` on the drawn and the growing surface only when it differs from what that surface was last given, so a texture that resolves later re-applies once; textures repeat `terrainTextureRepeatsPerUnit` (0.1) times per world unit.
 Surfaces are released through the engine's deferred release on a new voxel size, a project reset, or when no object
 draws the terrain. The decisions are the headless `TerrainSurfacePlan.h`, and the model matrix has no scale because
 terrain space is metric. A terrain is pickable (`RenderSystem::requestPick` answers with its object uuid; the first

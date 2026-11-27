@@ -4,6 +4,7 @@
 #include "MissingAssetFallback.h"
 #include <array>
 #include "SharedAssetLoads.h"
+#include "TerrainPaletteBinding.h"
 #include "TerrainSurfacePlan.h"
 #include "TransformPushGate.h"
 #include <terrain/TerrainTypes.h>
@@ -14,6 +15,7 @@
 #include <objects/components/collisions/ConvexHull.h>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -112,9 +114,13 @@ public:
   // larger one built behind it, and a new voxel size or open sides starts over. openSides is a mask of
   // terrain::TerrainSide bits: the surface is left open on those sides (see Terrain::getOpenSides). Null when there
   // is no volume, nothing is held yet, or the terrain is too spread out (logged once per terrain).
+  // The palette's first maxTerrainPaletteMaterials entries become the surface's materials (see
+  // resolveTerrainPalette) and are handed to its surfaces only when they differ from what each was last given;
+  // an empty palette draws the engine's default flat colors.
   std::shared_ptr<vke::VolumeSurface> getTerrainSurface(const uuids::uuid& terrainUUID,
                                                         const std::shared_ptr<const terrain::TerrainVolume>& volume,
-                                                        uint8_t openSides);
+                                                        uint8_t openSides,
+                                                        std::span<const terrain::TerrainMaterial> palette);
 
   // A read for the inspector; reflects the last frame's getTerrainSurface.
   [[nodiscard]] terrain::TerrainSurfaceStatus terrainSurfaceStatus(const uuids::uuid& terrainUUID) const;
@@ -139,7 +145,14 @@ private:
     bool loggedTooLarge = false;
     // The desired bounds a failed creation was tried for, so it is not retried (and logged) every frame.
     std::optional<terrain::SampleBox> failedFor;
+    TerrainPaletteApplication<vke::Texture2D> currentPalette;
+    TerrainPaletteApplication<vke::Texture2D> replacementPalette;
+    bool loggedPaletteTruncated = false;
+    bool loggedPaletteFailure = false;
   };
+
+  void applyTerrainPalette(const uuids::uuid& terrainUUID, CachedTerrainSurface& cached,
+                           std::span<const terrain::TerrainMaterial> palette);
 
   void releaseTerrainSurfaces(CachedTerrainSurface& cached);
 

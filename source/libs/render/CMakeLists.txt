@@ -30,6 +30,7 @@ add_library(${PROJECT_NAME}
   TerrainShadowVotes.h
   TerrainSideVotes.h
   TerrainSurfaceFeed.h
+  TerrainPaletteBinding.h
   TerrainSurfacePlan.h
   TerrainSurfaceSampling.cpp
   TerrainSurfaceSampling.h

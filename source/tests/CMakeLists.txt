@@ -285,6 +285,7 @@ add_executable(${PROJECT_NAME}
   TerrainStreamFocusTest.cpp
   TerrainStreamPlanTest.cpp
   TerrainStreamerLifecycleTest.cpp
+  TerrainPaletteBindingTest.cpp
   TerrainStreamerTest.cpp
   TerrainStrokeEchoTest.cpp
   TerrainStrokeTest.cpp

@@ -137,6 +137,7 @@ EditorApp::EditorApp(LaunchOptions options)
     m_projectIdentity.setOwnProject(fingerprintProject(location.projectFile, location.root), m_options.launchLocalServer);
   }
   m_renderSystem = std::make_shared<RenderSystem>();
+  m_renderSystem->setTerrainStore(m_terrainStore);
 
   m_componentEditor = std::make_shared<ComponentEditor>();
   registerEditors();
