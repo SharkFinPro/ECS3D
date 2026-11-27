@@ -173,7 +173,16 @@ namespace terrain
     return editSamples(volume, box, [&](const glm::ivec3 sample, int16_t& distance, uint8_t& material)
     {
       const glm::vec3 position = glm::vec3(sample) * voxelSize;
-      const float reach = glm::length(position - op.center);
+      const glm::vec3 offset = position - op.center;
+      const float reachSquared = glm::dot(offset, offset);
+
+      // The box is a cube around the sphere, so most corner samples leave here without a square root.
+      if (reachSquared > influence * influence)
+      {
+        return;
+      }
+
+      const float reach = std::sqrt(reachSquared);
 
       if (reach > influence)
       {
@@ -229,6 +238,14 @@ namespace terrain
       }
 
       distance = after;
+    }, {}, [&](const SampleBox& covered)
+    {
+      const glm::vec3 nearest = glm::clamp(op.center, glm::vec3(covered.min) * voxelSize,
+                                           glm::vec3(covered.max - glm::ivec3(1)) * voxelSize);
+      const glm::vec3 gap = nearest - op.center;
+
+      // The margin keeps a rounding difference from skipping a sample the edit would reach.
+      return glm::dot(gap, gap) > influence * influence * 1.001f;
     });
   }
 

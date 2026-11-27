@@ -96,7 +96,7 @@ namespace terrain
   }
 
   ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
-                         const UniformChunkHint& uniformHint)
+                         const UniformChunkHint& uniformHint, const ChunkSkip& skipChunk)
   {
     if (box.empty())
     {
@@ -124,6 +124,11 @@ namespace terrain
           const glm::ivec3 origin = chunkOrigin(coord);
           const glm::ivec3 low = glm::max(box.min, origin);
           const glm::ivec3 high = glm::min(box.max, origin + glm::ivec3(chunkSize));
+
+          if (skipChunk && skipChunk({ low, high }))
+          {
+            continue;
+          }
 
           if (uniformHint && low == origin && high == origin + glm::ivec3(chunkSize))
           {
@@ -309,6 +314,14 @@ namespace terrain
               const float a = std::min(std::abs(field[at(x - 1, y, z)]), std::abs(field[at(x + 1, y, z)]));
               const float b = std::min(std::abs(field[at(x, y - 1, z)]), std::abs(field[at(x, y + 1, z)]));
               const float c = std::min(std::abs(field[at(x, y, z - 1)]), std::abs(field[at(x, y, z + 1)]));
+
+              // The upwind solution is at least the smallest neighbor plus 1/sqrt(3), so a sample already within
+              // that of its smallest neighbor cannot improve.
+              if (std::abs(field[index]) <= std::min({ a, b, c }) + 0.5f)
+              {
+                continue;
+              }
+
               const float magnitude = std::min(std::abs(field[index]), solveEikonal(a, b, c));
 
               field[index] = std::signbit(field[index]) ? -magnitude : magnitude;
@@ -323,7 +336,7 @@ namespace terrain
       const glm::ivec3 local = sample - gridMin;
       const size_t index = at(local.x, local.y, local.z);
 
-      if (fixed[index] == 0)
+      if (fixed[index] == 0 && field[index] != decodeDistance(distance))
       {
         distance = encodeDistance(field[index]);
       }

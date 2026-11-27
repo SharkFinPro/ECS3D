@@ -28,12 +28,17 @@ namespace terrain
   // every sample of it, so the samples are never visited. It must match the edit exactly.
   using UniformChunkHint = std::function<bool(ChunkCoord coord, int16_t& distance, uint8_t& material)>;
 
+  // Asked for each chunk the box touches with the samples of it the box covers: returns true when the edit leaves every
+  // one of them unchanged, so the chunk is not rebuilt at all. It must never answer true for a sample the edit changes.
+  using ChunkSkip = std::function<bool(const SampleBox& covered)>;
+
   // Rebuilds every chunk the box touches and returns only the chunks whose content changed; a result that is air is
   // emitted as nullptr. A distance written outside the band is clamped, and the reserved material keeps the input's.
   // Returns empty edits for an empty box, a box over maxEditChunks chunks or a box with a chunk outside
   // isValidChunkCoord. Never mutates the volume.
   [[nodiscard]] ChunkEdits editSamples(const TerrainVolume& volume, const SampleBox& box, const SampleEdit& edit,
-                                       const UniformChunkHint& uniformHint = {});
+                                       const UniformChunkHint& uniformHint = {},
+                                       const ChunkSkip& skipChunk = {});
 
   // One maximum brush box (160 samples per axis) with its one-sample margin; callers split larger regions so a single
   // redistance stays a bounded synchronous cost.
