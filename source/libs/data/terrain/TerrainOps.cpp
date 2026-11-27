@@ -446,54 +446,71 @@ namespace terrain
     const int sweepLow = std::max(1, sourceMinX - reach);
     const int sweepHigh = std::min(size.x - 2, sourceMaxX + reach);
 
-    for (int repeat = 0; repeat < 2 && sourceMaxX >= 0; ++repeat)
+    // Each pass computes every sample from the previous pass's values only, so slices can run in parallel and the
+    // result does not depend on thread count or order. Magnitudes only shrink and a value moves one sample per pass,
+    // so it settles within a handful of passes, at the same fixed point a sweeping order converges to.
+    constexpr int maxPasses = 64;
+    std::vector<float> nextField = field;
+    std::vector<uint8_t> sliceChanged(static_cast<size_t>(size.z));
+
+    for (int pass = 0; pass < maxPasses && sourceMaxX >= 0; ++pass)
     {
-      for (int order = 0; order < 8; ++order)
+      std::ranges::fill(sliceChanged, 0);
+
+      forEachSlice(size.z, total, [&](const int z)
       {
-        const bool reverseX = (order & 1) != 0;
-        const bool reverseY = (order & 2) != 0;
-        const bool reverseZ = (order & 4) != 0;
-
-        for (int k = 1; k < size.z - 1; ++k)
+        if (z < 1 || z > size.z - 2)
         {
-          const int z = reverseZ ? size.z - 1 - k : k;
+          return;
+        }
 
-          for (int j = 1; j < size.y - 1; ++j)
+        bool any = false;
+
+        for (int y = 1; y < size.y - 1; ++y)
+        {
+          if (activeRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] == 0)
           {
-            const int y = reverseY ? size.y - 1 - j : j;
+            continue;
+          }
 
-            if (activeRow[static_cast<size_t>(z) * static_cast<size_t>(size.y) + static_cast<size_t>(y)] == 0)
+          for (int x = sweepLow; x <= sweepHigh; ++x)
+          {
+            const size_t index = at(x, y, z);
+
+            if (fixed[index] != 0)
             {
               continue;
             }
 
-            for (int i = sweepLow; i <= sweepHigh; ++i)
+            const float current = field[index];
+            const float a = std::min(std::abs(field[at(x - 1, y, z)]), std::abs(field[at(x + 1, y, z)]));
+            const float b = std::min(std::abs(field[at(x, y - 1, z)]), std::abs(field[at(x, y + 1, z)]));
+            const float c = std::min(std::abs(field[at(x, y, z - 1)]), std::abs(field[at(x, y, z + 1)]));
+
+            // The upwind solution is at least the smallest neighbor plus 1/sqrt(3), so a sample already within
+            // that of its smallest neighbor cannot improve.
+            if (std::abs(current) <= std::min(a, std::min(b, c)) + 0.5f)
             {
-              const int x = reverseX ? sweepLow + sweepHigh - i : i;
-              const size_t index = at(x, y, z);
-
-              if (fixed[index] != 0)
-              {
-                continue;
-              }
-
-              const float a = std::min(std::abs(field[at(x - 1, y, z)]), std::abs(field[at(x + 1, y, z)]));
-              const float b = std::min(std::abs(field[at(x, y - 1, z)]), std::abs(field[at(x, y + 1, z)]));
-              const float c = std::min(std::abs(field[at(x, y, z - 1)]), std::abs(field[at(x, y, z + 1)]));
-
-              // The upwind solution is at least the smallest neighbor plus 1/sqrt(3), so a sample already within
-              // that of its smallest neighbor cannot improve.
-              if (std::abs(field[index]) <= std::min(a, std::min(b, c)) + 0.5f)
-              {
-                continue;
-              }
-
-              const float magnitude = std::min(std::abs(field[index]), solveEikonal(a, b, c));
-
-              field[index] = std::signbit(field[index]) ? -magnitude : magnitude;
+              nextField[index] = current;
+              continue;
             }
+
+            const float magnitude = std::min(std::abs(current), solveEikonal(a, b, c));
+            const float value = std::signbit(current) ? -magnitude : magnitude;
+
+            nextField[index] = value;
+            any = any || value != current;
           }
         }
+
+        sliceChanged[static_cast<size_t>(z)] = any ? 1 : 0;
+      });
+
+      field.swap(nextField);
+
+      if (std::ranges::none_of(sliceChanged, [](const uint8_t changed) { return changed != 0; }))
+      {
+        break;
       }
     }
 
