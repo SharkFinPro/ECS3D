@@ -85,7 +85,8 @@ public:
 
   // Pushes onto the undo stack and clears the redo stack - any new command invalidates whatever redo
   // path existed, since redoing it now would apply on top of a scene that has since moved on. Drops the
-  // oldest entry (front) rather than refusing to record, once the stack exceeds maxDepth.
+  // oldest entry (front) rather than refusing to record, once the stack exceeds maxDepth or its pinned
+  // terrain bytes exceed the byte budget (the entry just recorded is always kept).
   void record(EditCommand command);
 
   // Groups several commands into one undo/redo entry (a multi-object delete or duplicate): one Ctrl+Z

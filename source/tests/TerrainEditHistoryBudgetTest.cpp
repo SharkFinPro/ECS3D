@@ -222,6 +222,33 @@ TEST(TerrainEditHistoryBudget, ASavePointSurvivesTrimmingOlderEntriesAndIsLostWh
   EXPECT_EQ(reachable.count(savePoint), 0u);
 }
 
+TEST(TerrainEditHistoryBudget, TrimmingTheOldestEntryInvalidatesTheEmptyStackSavePoint)
+{
+  World trimmed(2);
+  const std::uint64_t trimmedSavePoint = trimmed.history.position();
+  for (int i = 0; i < 5; ++i)
+  {
+    trimmed.record(i);
+  }
+
+  ASSERT_EQ(trimmed.history.undoDepth(), 2u);
+  undoAllPositions(trimmed);
+  ASSERT_FALSE(trimmed.history.canUndo());
+  EXPECT_NE(trimmed.history.position(), trimmedSavePoint);
+
+  World control;
+  const std::uint64_t controlSavePoint = control.history.position();
+  for (int i = 0; i < 5; ++i)
+  {
+    control.record(i);
+  }
+
+  ASSERT_EQ(control.history.undoDepth(), 5u);
+  undoAllPositions(control);
+  ASSERT_FALSE(control.history.canUndo());
+  EXPECT_EQ(control.history.position(), controlSavePoint);
+}
+
 TEST(TerrainEditHistoryBudget, TheTotalTracksEveryPathThatAddsOrRemovesEntries)
 {
   World world;

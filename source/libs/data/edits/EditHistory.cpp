@@ -100,9 +100,10 @@ void EditHistory::pushUndo(std::vector<EditCommand> entry)
 {
   clearRedoStack();
 
-  m_pinnedBytes += entryBytes(entry);
+  const auto bytes = entryBytes(entry);
   m_undoStack.push_back(std::move(entry));
   m_undoIds.push_back(newToken());
+  m_pinnedBytes += bytes;
 
   // The entry just recorded is never trimmed, so one stroke over the budget is still undoable.
   while (m_undoStack.size() > 1 && (m_undoStack.size() > maxDepth || m_pinnedBytes > m_pinnedByteBudget))
