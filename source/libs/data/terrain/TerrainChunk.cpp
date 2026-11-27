@@ -146,29 +146,18 @@ namespace terrain
       return nullptr;
     }
 
-    for (size_t i = 0; i < distances.size(); ++i)
+    // Branch-free min/max passes the compiler can vectorize; reservedMaterial is the largest uint8_t.
+    const auto [lowestDistance, highestDistance] = std::ranges::minmax(distances);
+    const auto [lowestMaterial, highestMaterial] = std::ranges::minmax(materials);
+
+    if (lowestDistance < -airDistance || highestDistance > airDistance || highestMaterial == reservedMaterial)
     {
-      if (!validSample(distances[i], materials[i]))
-      {
-        return nullptr;
-      }
+      return nullptr;
     }
 
-    const int16_t firstDistance = distances.front();
-    const uint8_t firstMaterial = materials.front();
-
-    const bool equalDistances = std::ranges::all_of(distances, [firstDistance](const int16_t value)
+    if (lowestDistance == highestDistance && lowestMaterial == highestMaterial)
     {
-      return value == firstDistance;
-    });
-    const bool equalMaterials = std::ranges::all_of(materials, [firstMaterial](const uint8_t value)
-    {
-      return value == firstMaterial;
-    });
-
-    if (equalDistances && equalMaterials)
-    {
-      return uniform(firstDistance, firstMaterial);
+      return uniform(lowestDistance, lowestMaterial);
     }
 
     return std::shared_ptr<const TerrainChunk>(new TerrainChunk(std::move(distances), std::move(materials), false));
