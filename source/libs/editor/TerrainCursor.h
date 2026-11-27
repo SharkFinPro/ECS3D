@@ -54,19 +54,11 @@ struct TerrainFrame
   return hit;
 }
 
-// The cursor's hit during a stroke, in terrain-local space. It aims at surface, the terrain as it was when the stroke
-// began, so the brush cannot climb the material it just added toward the camera. A ray that misses that surface (over
-// the sky) lands instead on the upright plane through anchor, the stroke's last point, that faces the camera, so
-// dragging up off the ground raises a column. Nothing when the ray misses both or looks straight up or down.
-[[nodiscard]] inline std::optional<terrain::RayHit> strokeCursorHit(const terrain::TerrainVolume& surface,
-                                                                    const glm::vec3& anchor, const gizmo::Ray& ray,
+// Where the ray crosses the upright plane through anchor that faces the camera; nothing when it looks straight up or
+// down or the crossing is behind it or past maxDistance.
+[[nodiscard]] inline std::optional<terrain::RayHit> uprightPlaneHit(const glm::vec3& anchor, const gizmo::Ray& ray,
                                                                     const float maxDistance)
 {
-  if (std::optional<terrain::RayHit> hit = terrain::raycast(surface, ray.origin, ray.direction, maxDistance))
-  {
-    return hit;
-  }
-
   const float length = glm::length(ray.direction);
   glm::vec3 facing(ray.direction.x, 0.0f, ray.direction.z);
   const float across = glm::length(facing);
@@ -88,6 +80,38 @@ struct TerrainFrame
   }
 
   return terrain::RayHit{ ray.origin + direction * distance, -facing, distance };
+}
+
+// The cursor's hit during a stroke, in terrain-local space. It aims at surface, the terrain as it was when the stroke
+// began, so the brush cannot climb the material it just added toward the camera. A ray that misses that surface (over
+// the sky) lands instead on the upright plane through anchor, the stroke's last point, that faces the camera, so
+// dragging up off the ground raises a column. A surface hit farther than maxJump from anchor (a wall behind a column
+// being drawn down) gives way to that plane too, so the line carries on instead of leaping onto it. Nothing when the
+// ray misses both.
+[[nodiscard]] inline std::optional<terrain::RayHit> strokeCursorHit(const terrain::TerrainVolume& surface,
+                                                                    const glm::vec3& anchor, const gizmo::Ray& ray,
+                                                                    const float maxDistance, const float maxJump)
+{
+  const std::optional<terrain::RayHit> onSurface = terrain::raycast(surface, ray.origin, ray.direction, maxDistance);
+
+  if (onSurface && glm::length(onSurface->point - anchor) <= maxJump)
+  {
+    return onSurface;
+  }
+
+  const std::optional<terrain::RayHit> onPlane = uprightPlaneHit(anchor, ray, maxDistance);
+
+  if (!onSurface)
+  {
+    return onPlane;
+  }
+
+  if (onPlane && glm::length(onPlane->point - anchor) < glm::length(onSurface->point - anchor))
+  {
+    return onPlane;
+  }
+
+  return onSurface;
 }
 
 inline constexpr size_t brushRingSegments = 48;

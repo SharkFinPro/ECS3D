@@ -81,7 +81,10 @@ terrain with a brush. It works only while the editor can edit the server.
   Falloff are remembered for each tool. PageUp and PageDown grow and shrink the current tool's radius.
 - A ring follows the cursor on the terrain. Left-drag to sculpt; Flatten levels to the height where you press. A
   stroke follows the ground as it was when you pressed, so a drag draws along the terrain instead of piling toward
-  the camera; drag up past the horizon to raise a column on an upright plane through the stroke's last point.
+  the camera; drag up past the horizon to raise a column on an upright plane through the stroke's last point. Ground
+  more than two brush radii from the stroke's last point (a wall behind a column) does not catch the line. Hold
+  still to keep building: Add slowly grows toward the camera and Subtract digs deeper. Subtract always works on the
+  terrain that is there now, so erasing reaches whatever is left, even nearer than where you pressed.
   Right-drag still flies the camera.
 - Ctrl+click picking and the transform gizmo are off while Sculpt is on. Changing the selection, starting Play or
   losing the connection to the server turns Sculpt off.

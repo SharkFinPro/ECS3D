@@ -55,6 +55,12 @@ public:
     return m_strokeId;
   }
 
+  // The radius every application of the active stroke uses.
+  [[nodiscard]] float radius() const
+  {
+    return m_template.radius;
+  }
+
   // Where the last application landed, or the first hit; meaningful only while active.
   [[nodiscard]] glm::vec3 lastPoint() const
   {

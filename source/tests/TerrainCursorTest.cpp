@@ -131,13 +131,13 @@ TEST(StrokeCursorHitTest, AimsAtTheStartingSurfaceAndFallsBackToAnUprightPlane)
 
   // Looking down at the ground: the hit is on it, where the stroke's material would not be.
   const gizmo::Ray down{ { 32.0f, 40.0f, 20.0f }, glm::normalize(glm::vec3(0.0f, -1.0f, 0.5f)) };
-  const auto onGround = strokeCursorHit(ground, { 32.0f, 10.0f, 30.0f }, down, 1000.0f);
+  const auto onGround = strokeCursorHit(ground, { 32.0f, 10.0f, 35.0f }, down, 1000.0f, 4.0f);
   ASSERT_TRUE(onGround.has_value());
   EXPECT_NEAR(onGround->point.y, 10.0f, 1.0f);
 
   // Aiming above the horizon: the ray lands on the upright plane through the anchor that faces the camera.
   const gizmo::Ray up{ { 32.0f, 20.0f, 0.0f }, glm::normalize(glm::vec3(0.0f, 0.5f, 1.0f)) };
-  const auto onPlane = strokeCursorHit(ground, { 32.0f, 10.0f, 30.0f }, up, 1000.0f);
+  const auto onPlane = strokeCursorHit(ground, { 32.0f, 10.0f, 30.0f }, up, 1000.0f, 4.0f);
   ASSERT_TRUE(onPlane.has_value());
   EXPECT_NEAR(onPlane->point.z, 30.0f, 1.0e-3f);
   EXPECT_NEAR(onPlane->point.y, 35.0f, 1.0e-3f);
@@ -145,5 +145,13 @@ TEST(StrokeCursorHitTest, AimsAtTheStartingSurfaceAndFallsBackToAnUprightPlane)
 
   // Straight up: no plane faces the ray, so nothing.
   const gizmo::Ray straightUp{ { 32.0f, 20.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } };
-  EXPECT_FALSE(strokeCursorHit(ground, { 32.0f, 10.0f, 30.0f }, straightUp, 1000.0f).has_value());
+  EXPECT_FALSE(strokeCursorHit(ground, { 32.0f, 10.0f, 30.0f }, straightUp, 1000.0f, 4.0f).has_value());
+
+  // Drawing a column down toward ground far behind it: the plane through the column wins over the distant ground.
+  const gizmo::Ray downAcross{ { 32.0f, 30.0f, 0.0f }, glm::normalize(glm::vec3(0.0f, -0.5f, 1.0f)) };
+  ASSERT_TRUE(terrain::raycast(ground, downAcross.origin, downAcross.direction, 1000.0f).has_value());
+  const auto onColumn = strokeCursorHit(ground, { 32.0f, 20.0f, 20.0f }, downAcross, 1000.0f, 4.0f);
+  ASSERT_TRUE(onColumn.has_value());
+  EXPECT_NEAR(onColumn->point.z, 20.0f, 1.0e-3f);
+  EXPECT_NEAR(onColumn->point.y, 20.0f, 1.0e-3f);
 }

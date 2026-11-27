@@ -118,7 +118,8 @@ public:
   }
 
   // The terrain as it was when the active stroke began, for the cursor to aim at (strokeCursorHit), so a stroke
-  // follows the ground it started on instead of climbing the material it adds; null when no stroke is active.
+  // follows the ground it started on instead of climbing the material it adds; null when no stroke is active and for
+  // a Subtract stroke, which aims at the live terrain.
   [[nodiscard]] const std::shared_ptr<const terrain::TerrainVolume>& strokeSurface() const
   {
     return m_surface;
@@ -128,6 +129,13 @@ public:
   [[nodiscard]] glm::vec3 strokePoint() const
   {
     return m_stroke.lastPoint();
+  }
+
+  // How far one frame's cursor may jump along the surface before the stroke keeps to its upright plane instead
+  // (strokeCursorHit's maxJump): two brush radii.
+  [[nodiscard]] float strokeJumpLimit() const
+  {
+    return 2.0f * m_stroke.radius();
   }
 
   [[nodiscard]] const uuids::uuid& terrain() const
@@ -240,7 +248,9 @@ public:
 
     m_terrain = terrainUuid;
     m_volume = volume;
-    m_surface = snapshotSurface(*volume);
+    // Subtract only ever takes material away, so it cannot climb toward the camera; it aims at the live terrain, so
+    // erasing reaches whatever is still there, nearer than the press or not.
+    m_surface = templateOp.kind == terrain::BrushOp::Kind::subtract ? nullptr : snapshotSurface(*volume);
     ++m_nextStrokeId;
     perform(first, send);
     return true;
@@ -482,7 +492,7 @@ private:
       }
     }
 
-    if (now - m_surfaceTakenAt >= surfaceRefresh)
+    if (m_surface && now - m_surfaceTakenAt >= surfaceRefresh)
     {
       m_surfaceTakenAt = now;
       m_surface = snapshotSurface(*m_volume);

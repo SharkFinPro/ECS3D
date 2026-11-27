@@ -256,3 +256,19 @@ TEST(TerrainBrushSessionFlowTest, AHeldPointerAppliesAgainAndRefreshesItsSurface
   session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender());
   EXPECT_EQ(recorder.payloads().size(), beforeUntimed);
 }
+
+TEST(TerrainBrushSessionFlowTest, ASubtractStrokeAimsAtTheLiveTerrain)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::subtract),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_EQ(session.strokeSurface(), nullptr);
+  static_cast<void>(session.end(recorder.sender()));
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_NE(session.strokeSurface(), nullptr);
+}

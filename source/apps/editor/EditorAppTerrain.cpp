@@ -250,7 +250,7 @@ namespace {
 
     if (const auto& surface = brush.strokeSurface())
     {
-      return strokeCursorHit(*surface, brush.strokePoint(), ray, view.farPlane);
+      return strokeCursorHit(*surface, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit());
     }
 
     return terrain::raycast(volume, ray.origin, ray.direction, view.farPlane);
