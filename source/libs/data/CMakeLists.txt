@@ -28,6 +28,7 @@ add_library(${PROJECT_NAME}
   edits/AssetWireType.h
   edits/EditCommand.cpp
   edits/EditCommand.h
+  edits/EditCommandTerrain.cpp
   edits/EditHistory.cpp
   edits/EditHistory.h
   edits/HistoryScope.cpp
@@ -36,6 +37,10 @@ add_library(${PROJECT_NAME}
   edits/PlaySessionHistory.h
   edits/RecordEdits.cpp
   edits/RecordEdits.h
+  edits/RecordTerrainEdits.cpp
+  edits/RecordTerrainEdits.h
+  edits/TerrainSetChunks.cpp
+  edits/TerrainSetChunks.h
   scenes/SceneManager.cpp
   scenes/SceneManager.h
   scenes/SceneAsset.cpp

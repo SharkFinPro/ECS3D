@@ -157,7 +157,7 @@ namespace {
 }
 
 HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const AssetRegistry* assetRegistry,
-                                 const SceneAsset* scene)
+                                 const SceneAsset* scene, const terrain::TerrainStore* terrains)
 {
   if (m_undoStack.empty())
   {
@@ -179,7 +179,7 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
       return { HistoryResult::notUndoable, conflict };
     }
 
-    const auto validation = command.validateForUndo(objectManager, assetRegistry, scene);
+    const auto validation = command.validateForUndo(objectManager, assetRegistry, scene, terrains);
     if (!validation.ok())
     {
       dropUndoStack();
@@ -187,13 +187,17 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
     }
 
     HistoryOutcome outcome{ HistoryResult::applied };
-    if (command.payloadForm() == PayloadForm::sceneEdit)
+    switch (command.payloadForm())
     {
-      outcome.jsonPayload = command.buildUndoJSON(objectManager);
-    }
-    else
-    {
-      outcome.messagePayload = command.buildUndoMessage(objectManager);
+      case PayloadForm::sceneEdit:
+        outcome.jsonPayload = command.buildUndoJSON(objectManager);
+        break;
+      case PayloadForm::networkMessage:
+        outcome.messagePayload = command.buildUndoMessage(objectManager);
+        break;
+      case PayloadForm::terrainChunks:
+        outcome.terrainPayload = command.buildUndoTerrainChunks();
+        break;
     }
 
     moveUndoToRedo();
@@ -220,7 +224,7 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
       return { HistoryResult::notUndoable, conflict };
     }
 
-    const auto validation = command.validateForUndo(*scratch, assetRegistry);
+    const auto validation = command.validateForUndo(*scratch, assetRegistry, nullptr, terrains);
     if (!validation.ok())
     {
       dropUndoStack();
@@ -246,7 +250,7 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
 }
 
 HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const AssetRegistry* assetRegistry,
-                                 const SceneAsset* scene)
+                                 const SceneAsset* scene, const terrain::TerrainStore* terrains)
 {
   if (m_redoStack.empty())
   {
@@ -261,7 +265,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
 
     // Every entry that reached the redo stack already passed isReversible() when it was undone, so redo
     // only needs to check whether the "before" state it expects still holds.
-    const auto validation = command.validateForRedo(objectManager, assetRegistry, scene);
+    const auto validation = command.validateForRedo(objectManager, assetRegistry, scene, terrains);
     if (!validation.ok())
     {
       m_redoStack.clear();
@@ -270,13 +274,17 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
     }
 
     HistoryOutcome outcome{ HistoryResult::applied };
-    if (command.payloadForm() == PayloadForm::sceneEdit)
+    switch (command.payloadForm())
     {
-      outcome.jsonPayload = command.buildRedoJSON(objectManager);
-    }
-    else
-    {
-      outcome.messagePayload = command.buildRedoMessage(objectManager);
+      case PayloadForm::sceneEdit:
+        outcome.jsonPayload = command.buildRedoJSON(objectManager);
+        break;
+      case PayloadForm::networkMessage:
+        outcome.messagePayload = command.buildRedoMessage(objectManager);
+        break;
+      case PayloadForm::terrainChunks:
+        outcome.terrainPayload = command.buildRedoTerrainChunks();
+        break;
     }
 
     moveRedoToUndo();
@@ -297,7 +305,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
       return { HistoryResult::notUndoable, command.primaryUUID() };
     }
 
-    const auto validation = command.validateForRedo(*scratch, assetRegistry);
+    const auto validation = command.validateForRedo(*scratch, assetRegistry, nullptr, terrains);
     if (!validation.ok())
     {
       m_redoStack.clear();
