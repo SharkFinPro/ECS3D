@@ -4,6 +4,7 @@
 #include "EditCommand.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainTypes.h"
+#include <nlohmann/json_fwd.hpp>
 #include <memory>
 #include <optional>
 #include <span>
@@ -11,6 +12,7 @@
 #include <uuid.h>
 
 namespace terrain {
+  class TerrainStore;
   class TerrainVolume;
 }
 
@@ -23,6 +25,14 @@ namespace edits {
   const uuids::uuid& terrainUUID,
   std::span<const std::pair<terrain::ChunkCoord, std::shared_ptr<const terrain::TerrainChunk>>> before,
   const terrain::TerrainVolume& volume);
+
+
+// The command for an addAsset that creates a terrain the store already holds: the description the asset carries (its
+// chunk count set to the chunks the store's volume holds), the display name and a snapshot of the chunks. nullopt for
+// an unusable description or a terrain the store does not hold. The editor calls it after the new terrain's chunks
+// are in its store, since undo of the add removes the asset and redo has to bring the chunks back.
+[[nodiscard]] std::optional<EditCommand> commandForTerrainAdd(const nlohmann::json& asset,
+                                                              const terrain::TerrainStore& store);
 
 }
 

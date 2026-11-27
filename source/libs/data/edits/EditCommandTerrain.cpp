@@ -3,6 +3,7 @@
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 #include <cstddef>
+#include <optional>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -47,8 +48,35 @@ const std::vector<TerrainStrokeChunk>* EditCommand::terrainStrokeChunks() const
   return nullptr;
 }
 
+namespace {
+  std::size_t restoreBytes(const std::optional<TerrainRestore>& restore)
+  {
+    std::size_t bytes = 0;
+
+    if (restore)
+    {
+      for (const auto& entry : restore->chunks)
+      {
+        bytes += entry.second ? entry.second->byteSize() : 0;
+      }
+    }
+
+    return bytes;
+  }
+}
+
 std::size_t EditCommand::pinnedBytes() const
 {
+  if (const auto* add = std::get_if<AddAssetData>(&m_data))
+  {
+    return restoreBytes(add->terrain);
+  }
+
+  if (const auto* remove = std::get_if<RemoveAssetData>(&m_data))
+  {
+    return restoreBytes(remove->terrain);
+  }
+
   const auto* data = std::get_if<TerrainStrokeData>(&m_data);
   if (!data)
   {
@@ -85,6 +113,55 @@ Validation EditCommand::validateTerrainStroke(const terrain::TerrainStore* terra
   }
 
   return {};
+}
+
+Validation EditCommand::validateTerrainReAdd(const uuids::uuid& assetUUID, const terrain::TerrainStore* terrains) const
+{
+  if (!terrains)
+  {
+    return { ValidationFailure::targetMissing, assetUUID };
+  }
+
+  if (terrains->find(assetUUID))
+  {
+    return { ValidationFailure::targetChanged, assetUUID };
+  }
+
+  return {};
+}
+
+std::optional<TerrainRestore> EditCommand::terrainToRestore(const bool forUndo) const
+{
+  if (forUndo)
+  {
+    if (const auto* data = std::get_if<RemoveAssetData>(&m_data))
+    {
+      return data->terrain;
+    }
+  }
+  else if (const auto* data = std::get_if<AddAssetData>(&m_data))
+  {
+    return data->terrain;
+  }
+
+  return std::nullopt;
+}
+
+std::optional<uuids::uuid> EditCommand::terrainToRemove(const bool forUndo) const
+{
+  if (forUndo)
+  {
+    if (const auto* data = std::get_if<AddAssetData>(&m_data); data && data->terrain)
+    {
+      return data->assetUUID;
+    }
+  }
+  else if (const auto* data = std::get_if<RemoveAssetData>(&m_data); data && data->terrain)
+  {
+    return data->assetUUID;
+  }
+
+  return std::nullopt;
 }
 
 TerrainSetChunks EditCommand::buildUndoTerrainChunks() const

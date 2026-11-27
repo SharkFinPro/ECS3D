@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -194,7 +195,47 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
       // view ahead of the server, which the echo's hash mismatch repairs with a full chunk request.
       if (outcome.messagePayload)
       {
-        m_netClient->send(*outcome.messagePayload);
+        // A terrain comes back through the same steps as a create: the editor's own registry and store first, so the
+        // snapshot that follows keeps the description and chunks, then the addAsset, then the chunk upload the server
+        // holds Play for. A failure rolls the editor back and clears the history, since the entry cannot be replayed.
+        if (outcome.terrainRestore)
+        {
+          const auto result = restoreTerrain(*outcome.terrainRestore,
+                                             [this, &outcome] { m_netClient->send(*outcome.messagePayload); });
+          if (result != edits::TerrainRestoreResult::applied)
+          {
+            if (result == edits::TerrainRestoreResult::failedAfterSend)
+            {
+              try
+              {
+                m_netClient->send(replication::packRemoveAsset(
+                  replication::buildRemoveAsset(outcome.terrainRestore->description.uuid)));
+              }
+              catch (const std::exception& e)
+              {
+                Log::error(LogCategory::editor, std::string("The server's copy of the terrain could not be removed: ") +
+                                                  e.what());
+              }
+            }
+
+            logMessage("Error", "The terrain " + action + " could not be applied (" +
+                                  (result == edits::TerrainRestoreResult::refused ? "the editor refused the terrain"
+                                                                                   : "it failed and was rolled back") +
+                                  "); clearing the edit history.");
+            m_playHistory.current().clear();
+            break;
+          }
+        }
+        else
+        {
+          if (outcome.terrainRemoved)
+          {
+            m_terrainUpload.forget(*outcome.terrainRemoved);
+            m_createdTerrains.erase(*outcome.terrainRemoved);
+          }
+
+          m_netClient->send(*outcome.messagePayload);
+        }
       }
       else if (outcome.jsonPayload)
       {

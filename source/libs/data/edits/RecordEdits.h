@@ -46,7 +46,8 @@ namespace edits {
 
 // An addAsset over a uuid the registry already holds is a record replacement (a prefab body edit, or
 // "Save as Prefab" over an existing name), so it derives a replaceAsset carrying the current record as
-// its before state rather than an addAsset.
+// its before state rather than an addAsset. A terrain addAsset is never derived here: its chunks are not in the
+// registry, so the create flow records its own command with commandForTerrainAdd.
 [[nodiscard]] std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset,
                                                             const AssetRegistry& view);
 
@@ -54,10 +55,14 @@ namespace edits {
                                                                const AssetRegistry& view);
 
 // A scene record carries the whole scene (SceneAsset::serialize()) as its body, so undo re-adds it with its
-// objects and scripts; nullopt when the SceneManager has no scene under the uuid.
+// objects and scripts; nullopt when the SceneManager has no scene under the uuid. A terrain record carries its
+// description and chunks from the store, so undo re-adds them. It is not recorded without a store that holds the
+// terrain, or while the store's volume holds fewer chunks than the description's chunkCount (the terrain has not fully
+// arrived, and an undo would bring back a partial one); that refusal is logged at info.
 [[nodiscard]] std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op,
                                                                const AssetRegistry& view,
-                                                               const SceneManager& sceneManager);
+                                                               const SceneManager& sceneManager,
+                                                               const terrain::TerrainStore* terrains = nullptr);
 
 }
 

@@ -58,6 +58,12 @@ struct HistoryOutcome {
   std::optional<net::Message> messagePayload;
   std::optional<TerrainSetChunks> terrainPayload;
 
+  // Beside messagePayload when it is a terrain asset op: the terrain an addAsset payload brings back, which the caller
+  // applies to its own registry and store and uploads (the payload carries only the description), or the terrain a
+  // removeAsset payload removes, whose pending upload the caller drops.
+  std::optional<TerrainRestore> terrainRestore;
+  std::optional<uuids::uuid> terrainRemoved;
+
   [[nodiscard]] bool ok() const
   {
     return result == HistoryResult::applied;

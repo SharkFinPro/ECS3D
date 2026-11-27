@@ -1,4 +1,5 @@
 #include "RecordEdits.h"
+#include "RecordTerrainEdits.h"
 #include "AssetWireType.h"
 #include "Replication.h"
 #include "assets/AssetRegistry.h"
@@ -8,6 +9,8 @@
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneScriptEdits.h"
+#include "terrain/TerrainStore.h"
+#include <Log.h>
 #include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -15,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <uuid.h>
 #include <vector>
 
 namespace edits {
@@ -510,8 +514,7 @@ std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const
     return std::nullopt;
   }
 
-  // A terrain's volume lives outside the registry, so undoing its record would discard data that redo cannot
-  // restore. The op still applies; it just is not recorded.
+  // A terrain's chunks live outside the registry, so the create flow records its own command (commandForTerrainAdd).
   if (type == AssetType::Terrain)
   {
     return std::nullopt;
@@ -587,7 +590,8 @@ std::optional<EditCommand> commandForRenameAsset(const nlohmann::json& op, const
 }
 
 std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const AssetRegistry& view,
-                                                 const SceneManager& sceneManager)
+                                                 const SceneManager& sceneManager,
+                                                 const terrain::TerrainStore* terrains)
 {
   if (!op.is_object())
   {
@@ -608,7 +612,28 @@ std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const
 
   if (record->type == AssetType::Terrain)
   {
-    return std::nullopt;
+    const auto* description = terrains ? terrains->description(assetUUID.value()) : nullptr;
+    const auto volume = terrains ? terrains->find(assetUUID.value()) : nullptr;
+    if (!description || !volume)
+    {
+      return std::nullopt;
+    }
+
+    // A volume short of chunkCount is a join stream or upload that has not landed, and an undo would re-add the
+    // partial terrain and lose the rest. A sculpt does not refresh chunkCount, so one that erased chunks reads short
+    // too: that delete goes unrecorded, the safe side, and the same reading holds Play and saving.
+    if (volume->chunks().size() < description->chunkCount)
+    {
+      Log::info(LogCategory::editor, "The delete of terrain " + uuids::to_string(assetUUID.value()) +
+                                       " cannot be undone because it has not fully arrived: " +
+                                       std::to_string(volume->chunks().size()) + " of " +
+                                       std::to_string(description->chunkCount) + " chunk(s) received.");
+      return std::nullopt;
+    }
+
+    return EditCommand::removeAsset(assetUUID.value(), record->type, record->path, record->className, record->body,
+                                    record->displayName,
+                                    makeTerrainRestore(*description, volume->snapshotChunks(), record->displayName));
   }
 
   if (record->type == AssetType::Scene)

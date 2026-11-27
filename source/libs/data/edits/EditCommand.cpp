@@ -430,8 +430,13 @@ EditCommand EditCommand::instantiatePrefab(const uuids::uuid& prefabUUID, const 
 }
 
 EditCommand EditCommand::addAsset(const uuids::uuid& assetUUID, const AssetType type, std::string path,
-                                  std::string className, std::string body)
+                                  std::string className, std::string body, std::optional<TerrainRestore> terrain)
 {
+  if (terrain && terrain->description.uuid != assetUUID)
+  {
+    throw std::invalid_argument("A terrain restore must name the asset's uuid");
+  }
+
   EditCommand command;
   command.m_kind = CommandKind::addAsset;
   command.m_data = AddAssetData{
@@ -439,7 +444,8 @@ EditCommand EditCommand::addAsset(const uuids::uuid& assetUUID, const AssetType 
     .type = type,
     .path = std::move(path),
     .className = std::move(className),
-    .body = std::move(body)
+    .body = std::move(body),
+    .terrain = std::move(terrain)
   };
   return command;
 }
@@ -478,8 +484,14 @@ EditCommand EditCommand::renameAsset(const uuids::uuid& assetUUID, std::string b
 }
 
 EditCommand EditCommand::removeAsset(const uuids::uuid& assetUUID, const AssetType type, std::string path,
-                                     std::string className, std::string body, std::string displayName)
+                                     std::string className, std::string body, std::string displayName,
+                                     std::optional<TerrainRestore> terrain)
 {
+  if (terrain && terrain->description.uuid != assetUUID)
+  {
+    throw std::invalid_argument("A terrain restore must name the asset's uuid");
+  }
+
   EditCommand command;
   command.m_kind = CommandKind::removeAsset;
   command.m_data = RemoveAssetData{
@@ -488,7 +500,8 @@ EditCommand EditCommand::removeAsset(const uuids::uuid& assetUUID, const AssetTy
     .path = std::move(path),
     .className = std::move(className),
     .body = std::move(body),
-    .displayName = std::move(displayName)
+    .displayName = std::move(displayName),
+    .terrain = std::move(terrain)
   };
   return command;
 }
@@ -1197,7 +1210,7 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
         return { ValidationFailure::targetChanged, data.assetUUID };
       }
 
-      return {};
+      return data.terrain ? validateTerrainReAdd(data.assetUUID, terrains) : Validation{};
     }
     case CommandKind::addSceneScript:
     case CommandKind::removeSceneScript:
@@ -1429,7 +1442,7 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
         return { ValidationFailure::targetChanged, data.assetUUID };
       }
 
-      return {};
+      return data.terrain ? validateTerrainReAdd(data.assetUUID, terrains) : Validation{};
     }
     case CommandKind::replaceAsset:
     {
@@ -1688,6 +1701,11 @@ net::Message EditCommand::buildUndoMessage(const ObjectManager& objectManager) c
     case CommandKind::removeAsset:
     {
       const auto& data = std::get<RemoveAssetData>(m_data);
+      if (data.terrain)
+      {
+        return replication::packAddAsset(terrainRestoreAssetJson(*data.terrain));
+      }
+
       return replication::packAddAsset(
         buildAddAssetJSON(data.assetUUID, data.type, data.path, data.className, data.body,
                           data.displayName));
@@ -1711,6 +1729,11 @@ net::Message EditCommand::buildRedoMessage(const ObjectManager& objectManager) c
     case CommandKind::addAsset:
     {
       const auto& data = std::get<AddAssetData>(m_data);
+      if (data.terrain)
+      {
+        return replication::packAddAsset(terrainRestoreAssetJson(*data.terrain));
+      }
+
       return replication::packAddAsset(
         buildAddAssetJSON(data.assetUUID, data.type, data.path, data.className, data.body));
     }

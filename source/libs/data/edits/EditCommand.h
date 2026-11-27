@@ -1,6 +1,7 @@
 #ifndef EDITCOMMAND_H
 #define EDITCOMMAND_H
 
+#include "TerrainRestore.h"
 #include "assets/AssetRegistry.h"
 #include "terrain/TerrainTypes.h"
 #include <nlohmann/json_fwd.hpp>
@@ -176,8 +177,12 @@ public:
                                                      const std::optional<uuids::uuid>& parentUUID,
                                                      std::size_t siblingIndex, std::string prefabBody);
 
+  // terrain is set only for a Terrain asset, whose volume lives outside the registry: undo removes the asset and
+  // redo brings it back with those chunks (HistoryOutcome::terrainRestore). Throws std::invalid_argument when the
+  // restore names another uuid.
   [[nodiscard]] static EditCommand addAsset(const uuids::uuid& assetUUID, AssetType type,
-                                            std::string path, std::string className, std::string body);
+                                            std::string path, std::string className, std::string body,
+                                            std::optional<TerrainRestore> terrain = std::nullopt);
 
   // Re-registering an existing uuid with a new record: a prefab body edit, or "Save as Prefab" over a
   // name that already exists. Distinct from addAsset because addAsset's reverse is a removeAsset, which
@@ -192,10 +197,12 @@ public:
                                                std::string afterDisplayName);
 
   // The whole removed record (including a prefab body and its displayName rename override), so undo can
-  // re-add it exactly as addAsset would.
+  // re-add it exactly as addAsset would. terrain is set only for a Terrain asset: undo re-adds it and its chunks.
+  // Throws std::invalid_argument when the restore names another uuid.
   [[nodiscard]] static EditCommand removeAsset(const uuids::uuid& assetUUID, AssetType type,
                                                std::string path, std::string className, std::string body,
-                                               std::string displayName);
+                                               std::string displayName,
+                                               std::optional<TerrainRestore> terrain = std::nullopt);
 
   // The four scene script kinds name a scene's script by class, and the scene by uuid: that uuid is what
   // a refusal reports as its conflict (also when no scene is passed to validate against). index is where
@@ -232,8 +239,17 @@ public:
   [[nodiscard]] const std::vector<TerrainStrokeChunk>* terrainStrokeChunks() const;
 
   // The bytes of every non-null before and after chunk a terrainStroke holds, counting a chunk shared between
-  // two sides twice; 0 for every other kind.
+  // two sides twice, or of the chunk map a terrain addAsset/removeAsset holds; 0 for every other command.
   [[nodiscard]] std::size_t pinnedBytes() const;
+
+  // The terrain an undo (forUndo) or redo of this command adds back, with its chunks; nullopt unless it is a terrain
+  // addAsset or removeAsset in the adding direction. The caller applies it to its own registry and store and uploads
+  // the chunks, since the addAsset payload carries only the description.
+  [[nodiscard]] std::optional<TerrainRestore> terrainToRestore(bool forUndo) const;
+
+  // The terrain an undo (forUndo) or redo of this command removes; nullopt unless it is a terrain asset command in
+  // the removing direction.
+  [[nodiscard]] std::optional<uuids::uuid> terrainToRemove(bool forUndo) const;
 
   // True for the kinds that act on a scene's script list rather than on the object tree. They are never
   // grouped (a batch sceneEdit refuses them), and validating one needs the scene.
@@ -262,9 +278,10 @@ public:
   // revert away from. AssetRegistry may be null when the command cannot be an asset op (only
   // addAsset/renameAsset/removeAsset read it). scene is read only by the scene script kinds; one validated
   // with a null scene (or a scene whose uuid differs from the recorded one) is targetMissing, naming the
-  // scene's uuid. terrains is read only by terrainStroke: a null store, or one without the terrain, is
+  // scene's uuid. terrains is read by terrainStroke: a null store, or one without the terrain, is
   // targetMissing, and a chunk whose live hash is not the recorded after chunk is targetChanged, both naming
-  // the terrain's uuid.
+  // the terrain's uuid. It is also read by a terrain asset command that adds the terrain back (undo of a removeAsset,
+  // redo of an addAsset): a null store is targetMissing and a store that already holds the terrain is targetChanged.
   [[nodiscard]] Validation validateForUndo(const ObjectManager& objectManager,
                                            const AssetRegistry* assetRegistry,
                                            const SceneAsset* scene = nullptr,
@@ -313,6 +330,8 @@ private:
   [[nodiscard]] nlohmann::json buildSceneScriptUndoJSON() const;
   [[nodiscard]] nlohmann::json buildSceneScriptRedoJSON() const;
   [[nodiscard]] Validation validateTerrainStroke(const terrain::TerrainStore* terrains, bool forUndo) const;
+  [[nodiscard]] Validation validateTerrainReAdd(const uuids::uuid& assetUUID,
+                                                const terrain::TerrainStore* terrains) const;
 
   struct ComponentEditData {
     uuids::uuid objectUUID;
@@ -410,6 +429,7 @@ private:
     std::string path;      // file path (model/texture/script) or display name (prefab/scene)
     std::string className; // scripts only
     std::string body;      // prefabs only
+    std::optional<TerrainRestore> terrain;
 
     friend bool operator==(const AddAssetData&, const AddAssetData&) = default;
   };
@@ -442,6 +462,7 @@ private:
     std::string className;
     std::string body;
     std::string displayName;
+    std::optional<TerrainRestore> terrain;
 
     friend bool operator==(const RemoveAssetData&, const RemoveAssetData&) = default;
   };
