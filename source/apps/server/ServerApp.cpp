@@ -40,6 +40,7 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <future>
 #include <memory>
 #include <random>
 #include <string>
@@ -99,22 +100,32 @@ ServerApp::ServerApp(LaunchOptions options)
   std::mt19937 rng{ std::random_device{}() };
   m_projectPacker->setProjectLoadId(uuids::uuid_random_generator{ rng }());
 
-  loadStartupProject();
+  // Built once the project is located, since the project's own scripts compile with the built-in ones.
+  if (!m_options.project.empty())
+  {
+    m_projectRoot = locateProject(m_options.project).root;
+  }
 
-  // Built after the project is located, since the project's own scripts compile with the built-in ones.
   const auto scriptDirs = scripting::scriptDirectories(scripting::defaultUserScriptsDir, m_projectRoot);
   m_scriptSystem = std::make_shared<ScriptSystem>(makeScriptEngineFactory(m_host, scriptDirs), scriptDirs);
 
   // Compiling the user scripts is the slowest part of boot; doing it before listening keeps it off the
-  // first editor's join, whose snapshot would otherwise wait on it.
-  try
+  // first editor's join, whose snapshot would otherwise wait on it. It touches no project data, so it runs
+  // beside the project load, which is the other long step.
+  auto warmUp = std::async(std::launch::async, [system = m_scriptSystem]
   {
-    m_scriptSystem->warmUp();
-  }
-  catch (const std::exception& e)
-  {
-    Log::error(LogCategory::server, std::string("Script runtime failed to initialize at startup: ") + e.what());
-  }
+    try
+    {
+      system->warmUp();
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::server, std::string("Script runtime failed to initialize at startup: ") + e.what());
+    }
+  });
+
+  loadStartupProject();
+  warmUp.get();
 
   m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
 

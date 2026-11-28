@@ -11,7 +11,9 @@
 #include <terrain/TerrainReplication.h>
 #include <terrain/TerrainVolume.h>
 #include <Protocol.h>
+#include <glm/geometric.hpp>
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -100,6 +102,15 @@ public:
   // Long enough for the server's next echo flush and the round trip, short enough that a lost answer is not noticed.
   static constexpr std::chrono::seconds awaitTimeout{ 5 };
 
+  // A pointer held still applies the brush again this often. A stroke without a snapshot surface (Subtract) aims at
+  // the live terrain, so each application already reaches deeper; it repeats at surfaceRefresh instead, to dig at the
+  // pace a held Add grows.
+  static constexpr std::chrono::milliseconds holdInterval{ 100 };
+
+  // While the pointer is held still, the surface the cursor aims at catches up with the stroke this often, so a held
+  // Add grows a mound toward the camera and a held Subtract digs deeper, at a pace far below one step per frame.
+  static constexpr std::chrono::milliseconds surfaceRefresh{ 250 };
+
   [[nodiscard]] bool active() const
   {
     return m_stroke.active();
@@ -108,6 +119,27 @@ public:
   [[nodiscard]] const std::shared_ptr<terrain::TerrainVolume>& volume() const
   {
     return m_volume;
+  }
+
+  // The terrain as it was when the active stroke began, for the cursor to aim at (strokeCursorHit), so a stroke
+  // follows the ground it started on instead of climbing the material it adds; null when no stroke is active and for
+  // a Subtract stroke, which aims at the live terrain.
+  [[nodiscard]] const std::shared_ptr<const terrain::TerrainVolume>& strokeSurface() const
+  {
+    return m_surface;
+  }
+
+  // Where the active stroke's last application landed.
+  [[nodiscard]] glm::vec3 strokePoint() const
+  {
+    return m_stroke.lastPoint();
+  }
+
+  // How far one frame's cursor may jump along the surface before the stroke keeps to its upright plane instead
+  // (strokeCursorHit's maxJump): two brush radii.
+  [[nodiscard]] float strokeJumpLimit() const
+  {
+    return 2.0f * m_stroke.radius();
   }
 
   [[nodiscard]] const uuids::uuid& terrain() const
@@ -220,6 +252,9 @@ public:
 
     m_terrain = terrainUuid;
     m_volume = volume;
+    // Subtract only ever takes material away, so it cannot climb toward the camera; it aims at the live terrain, so
+    // erasing reaches whatever is still there, nearer than the press or not.
+    m_surface = templateOp.kind == terrain::BrushOp::Kind::subtract ? nullptr : snapshotSurface(*volume);
     ++m_nextStrokeId;
     perform(first, send);
     return true;
@@ -290,10 +325,12 @@ public:
   // One frame of the pointer. makeTemplate is called only when a stroke begins, so the brush settings are read once
   // per press. A frame that cannot paint (no hit, off the scene, the camera flying) breaks the stroke's path so the
   // next hit does not bridge the gap. A volume that differs from the stroke's ends it as endFor does. Without editing
-  // no stroke begins: nothing is predicted and nothing is sent.
+  // no stroke begins: nothing is predicted and nothing is sent. With now, a stroke held still applies again every
+  // holdInterval and refreshes its surface every surfaceRefresh; without it a still pointer applies nothing.
   Advance advance(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
                   const bool editable, TerrainPointer pointer, const std::optional<terrain::RayHit>& hit,
-                  const std::function<terrain::BrushOp()>& makeTemplate, const Send& send)
+                  const std::function<terrain::BrushOp()>& makeTemplate, const Send& send,
+                  const std::optional<std::chrono::steady_clock::time_point> now = std::nullopt)
   {
     Advance result;
     const bool wasActive = m_stroke.active();
@@ -315,9 +352,29 @@ public:
     {
       case TerrainStrokeStep::begin:
         result.changed = begin(terrainUuid, volume, makeTemplate(), *hit, send);
+
+        if (now)
+        {
+          m_lastApplication = *now;
+          m_surfaceTakenAt = *now;
+        }
         break;
       case TerrainStrokeStep::move:
+        // A Subtract stroke aims at the live terrain, so the cursor leaving the hole it dug lands on the surface well
+        // above the hole's bottom. Bridging that rise would cut a straight trench through the ground at the hole's
+        // depth, so a height change of more than a brush radius starts a new segment at the hit instead. A fast drag
+        // across level ground still bridges.
+        if (!m_surface && std::abs(hit->point.y - m_stroke.lastPoint().y) > m_stroke.radius())
+        {
+          m_stroke.breakPath();
+        }
+
         result.changed = moveTo(*hit, send) > 0;
+
+        if (now)
+        {
+          result.changed = hold(*hit, *now, result.changed, send) || result.changed;
+        }
         break;
       case TerrainStrokeStep::end:
         if (std::optional<TerrainStroke::Finished> finished = endFor(volume, editable, send);
@@ -344,6 +401,7 @@ public:
   {
     static_cast<void>(m_stroke.end());
     m_volume.reset();
+    m_surface.reset();
     clearAwaiting();
   }
 
@@ -351,6 +409,7 @@ private:
   std::optional<TerrainStroke::Finished> finish(const bool commitLocally, const Send& send)
   {
     std::optional<TerrainStroke::Finished> finished = m_stroke.end();
+    m_surface.reset();
 
     if (!finished)
     {
@@ -423,6 +482,38 @@ private:
     }
   }
 
+  // A frame of the stroke: an application from movement restarts the hold clock; a still pointer applies again once
+  // holdInterval has passed, and its surface catches up once surfaceRefresh has.
+  bool hold(const terrain::RayHit& hit, const std::chrono::steady_clock::time_point now, const bool moved,
+            const Send& send)
+  {
+    if (moved)
+    {
+      m_lastApplication = now;
+      return false;
+    }
+
+    bool applied = false;
+
+    if (now - m_lastApplication >= (m_surface ? holdInterval : std::chrono::milliseconds(surfaceRefresh)))
+    {
+      m_lastApplication = now;
+
+      if (const std::optional<terrain::BrushOp> op = m_stroke.holdAt(hit))
+      {
+        applied = perform(*op, send);
+      }
+    }
+
+    if (m_surface && now - m_surfaceTakenAt >= surfaceRefresh)
+    {
+      m_surfaceTakenAt = now;
+      m_surface = snapshotSurface(*m_volume);
+    }
+
+    return applied;
+  }
+
   // A brush the server would refuse (a center out of range) is neither applied nor sent.
   bool perform(const terrain::BrushOp& op, const Send& send)
   {
@@ -438,7 +529,18 @@ private:
     return true;
   }
 
+  // Copies the chunk pointers only: chunks are immutable, so later edits never reach the copy.
+  [[nodiscard]] static std::shared_ptr<const terrain::TerrainVolume> snapshotSurface(const terrain::TerrainVolume& volume)
+  {
+    auto surface = std::make_shared<terrain::TerrainVolume>(volume.voxelSize());
+    surface->restoreChunks(volume.snapshotChunks());
+    return surface;
+  }
+
   TerrainStroke m_stroke;
+  std::shared_ptr<const terrain::TerrainVolume> m_surface;
+  std::chrono::steady_clock::time_point m_lastApplication;
+  std::chrono::steady_clock::time_point m_surfaceTakenAt;
   uuids::uuid m_terrain;
   std::shared_ptr<terrain::TerrainVolume> m_volume;
   // Chunks of a released stroke of m_terrain that were requested and have not arrived in full.

@@ -68,11 +68,20 @@ namespace terrain
       {
         for (int y = 0; y < chunkSize; ++y)
         {
-          for (int x = 0; x < chunkSize; ++x)
+          const int16_t* row = distances.data() + sampleIndex(0, y, z);
+
+          for (int bx = 0; bx < bricksPerAxis; ++bx)
           {
-            if (distances[static_cast<size_t>(sampleIndex(x, y, z))] != airDistance)
+            int16_t lowest = airDistance;
+            for (int x = bx * brick; x < (bx + 1) * brick; ++x)
             {
-              bricks |= uint64_t{ 1 } << brickIndex(x / brick, y / brick, z / brick);
+              lowest = std::min(lowest, row[x]);
+            }
+
+            // Distances never exceed airDistance, so a value below it is exactly one that is not air.
+            if (lowest != airDistance)
+            {
+              bricks |= uint64_t{ 1 } << brickIndex(bx, y / brick, z / brick);
             }
           }
         }
@@ -85,10 +94,19 @@ namespace terrain
   TerrainChunk::TerrainChunk(std::vector<int16_t> distances, std::vector<uint8_t> materials, const bool uniformContent)
     : m_distances(std::move(distances)),
       m_materials(std::move(materials)),
-      m_isUniform(uniformContent),
-      m_hash(hashContent(m_distances, m_materials, uniformContent)),
-      m_groundBricks(groundBricksOf(m_distances, uniformContent))
+      m_isUniform(uniformContent)
   {}
+
+  uint64_t TerrainChunk::groundBricks() const
+  {
+    if (!m_groundBricksKnown.load(std::memory_order_acquire))
+    {
+      m_groundBricks.store(groundBricksOf(m_distances, m_isUniform), std::memory_order_relaxed);
+      m_groundBricksKnown.store(true, std::memory_order_release);
+    }
+
+    return m_groundBricks.load(std::memory_order_relaxed);
+  }
 
   bool TerrainChunk::isAirWithin(const SampleBox& local) const
   {
@@ -101,13 +119,15 @@ namespace terrain
 
     const glm::ivec3 first = low / brickSize;
     const glm::ivec3 last = (high - glm::ivec3(1)) / brickSize;
+    const uint64_t bricks = groundBricks();
+
     for (int z = first.z; z <= last.z; ++z)
     {
       for (int y = first.y; y <= last.y; ++y)
       {
         for (int x = first.x; x <= last.x; ++x)
         {
-          if (((m_groundBricks >> brickIndex(x, y, z)) & 1u) != 0)
+          if (((bricks >> brickIndex(x, y, z)) & 1u) != 0)
           {
             return false;
           }
@@ -138,29 +158,18 @@ namespace terrain
       return nullptr;
     }
 
-    for (size_t i = 0; i < distances.size(); ++i)
+    // Branch-free min/max passes the compiler can vectorize; reservedMaterial is the largest uint8_t.
+    const auto [lowestDistance, highestDistance] = std::ranges::minmax(distances);
+    const auto [lowestMaterial, highestMaterial] = std::ranges::minmax(materials);
+
+    if (lowestDistance < -airDistance || highestDistance > airDistance || highestMaterial == reservedMaterial)
     {
-      if (!validSample(distances[i], materials[i]))
-      {
-        return nullptr;
-      }
+      return nullptr;
     }
 
-    const int16_t firstDistance = distances.front();
-    const uint8_t firstMaterial = materials.front();
-
-    const bool equalDistances = std::ranges::all_of(distances, [firstDistance](const int16_t value)
+    if (lowestDistance == highestDistance && lowestMaterial == highestMaterial)
     {
-      return value == firstDistance;
-    });
-    const bool equalMaterials = std::ranges::all_of(materials, [firstMaterial](const uint8_t value)
-    {
-      return value == firstMaterial;
-    });
-
-    if (equalDistances && equalMaterials)
-    {
-      return uniform(firstDistance, firstMaterial);
+      return uniform(lowestDistance, lowestMaterial);
     }
 
     return std::shared_ptr<const TerrainChunk>(new TerrainChunk(std::move(distances), std::move(materials), false));
@@ -210,7 +219,15 @@ namespace terrain
 
   uint64_t TerrainChunk::hash() const
   {
-    return m_hash;
+    uint64_t hash = m_hash.load(std::memory_order_relaxed);
+
+    if (hash == 0)
+    {
+      hash = hashContent(m_distances, m_materials, m_isUniform);
+      m_hash.store(hash, std::memory_order_relaxed);
+    }
+
+    return hash;
   }
 
   size_t TerrainChunk::byteSize() const

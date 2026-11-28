@@ -18,6 +18,8 @@ namespace editorTerrainSettings {
   inline constexpr float maxRadius = 1000.0f;
 
   inline constexpr float defaultStrength = 0.5f;
+  // Subtract starts gentler: it aims at the live terrain, so each application already reaches what the last exposed.
+  inline constexpr float defaultSubtractStrength = 0.1f;
   inline constexpr float minStrength = 0.0f;
   inline constexpr float maxStrength = 1.0f;
 
@@ -36,6 +38,9 @@ namespace editorTerrainSettings {
   // The tool's id ("add", "subtract", "smooth", "flatten"), the settings-key fragment, or nullptr for an
   // out-of-range index.
   [[nodiscard]] const char* toolId(std::size_t tool);
+
+  // The strength a tool starts at: defaultSubtractStrength for subtract, defaultStrength for the rest.
+  [[nodiscard]] float defaultStrengthFor(std::size_t tool);
 
   // A non-finite input (a hand-edited settings file) returns the matching default.
   [[nodiscard]] float clampRadius(float radius);

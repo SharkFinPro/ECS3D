@@ -60,6 +60,19 @@ namespace defaultterrain
         return length > 0.0f ? gradY / length : 1.0f;
       }
 
+      // For a sample whose six neighbors all lie inside the chunk and the columns, so no read needs clamping.
+      [[nodiscard]] float interiorNormalY(const size_t index) const
+      {
+        constexpr size_t stepY = terrain::chunkSize;
+        constexpr size_t stepZ = static_cast<size_t>(terrain::chunkSize) * terrain::chunkSize;
+        const float gradX = static_cast<float>(m_distances[index + 1] - m_distances[index - 1]);
+        const float gradY = static_cast<float>(m_distances[index + stepY] - m_distances[index - stepY]);
+        const float gradZ = static_cast<float>(m_distances[index + stepZ] - m_distances[index - stepZ]);
+        const float length = std::sqrt(gradX * gradX + gradY * gradY + gradZ * gradZ);
+
+        return length > 0.0f ? gradY / length : 1.0f;
+      }
+
     private:
       [[nodiscard]] int distanceAt(glm::ivec3 sample) const
       {
@@ -92,10 +105,12 @@ namespace defaultterrain
     {
       const auto source = volume.chunk(coord);
       const glm::ivec3 origin = terrain::chunkOrigin(coord);
-      const std::vector<int16_t> distances(source->distances().begin(), source->distances().end());
-      std::vector<uint8_t> materials(source->materials().begin(), source->materials().end());
+      const auto sourceDistances = source->distances();
+      const std::vector<int16_t> distances(sourceDistances.begin(), sourceDistances.end());
+      const auto sourceMaterials = source->materials();
+      std::vector<uint8_t> materials;
       const SlopeReader reader(volume, coord, distances, columns);
-      bool changed = false;
+      constexpr int last = terrain::chunkSize - 1;
 
       for (int z = 0; z < terrain::chunkSize; ++z)
       {
@@ -110,14 +125,25 @@ namespace defaultterrain
             }
 
             const glm::ivec3 sample = origin + glm::ivec3(x, y, z);
-            const uint8_t material = materialFor(sample, reader.normalY(sample));
-            changed = changed || material != materials[index];
-            materials[index] = material;
+            const bool interior = x > 0 && y > 0 && z > 0 && x < last && y < last && z < last &&
+                                  sample.x > 0 && sample.x < columns - 1 && sample.z > 0 && sample.z < columns - 1;
+            const float normalY = interior ? reader.interiorNormalY(index) : reader.normalY(sample);
+            const uint8_t material = materialFor(sample, normalY);
+
+            if (material != sourceMaterials[index])
+            {
+              if (materials.empty())
+              {
+                materials.assign(sourceMaterials.begin(), sourceMaterials.end());
+              }
+
+              materials[index] = material;
+            }
           }
         }
       }
 
-      return changed ? terrain::TerrainChunk::dense(distances, std::move(materials)) : nullptr;
+      return materials.empty() ? nullptr : terrain::TerrainChunk::dense(distances, std::move(materials));
     }
   }
 

@@ -76,7 +76,7 @@ TEST_F(EditorTerrainSettings, EveryToolReadsTheDefaultsFromAnEmptyStore)
     const editorTerrainSettings::BrushSettings brush = editorTerrainSettings::readBrush(store, tool);
 
     EXPECT_FLOAT_EQ(brush.radius, 10.0f) << tool;
-    EXPECT_FLOAT_EQ(brush.strength, 0.5f) << tool;
+    EXPECT_FLOAT_EQ(brush.strength, tool == 1 ? editorTerrainSettings::defaultSubtractStrength : 0.5f) << tool;
     EXPECT_FLOAT_EQ(brush.falloff, 0.5f) << tool;
   }
 
@@ -274,6 +274,7 @@ TEST_F(EditorTerrainSettings, WritingStoresTheClampedValueNotTheRawOne)
 
   editorTerrainSettings::writeBrush(store, 1, { notANumber, infinity, -infinity });
   EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.radius", -1.0f), editorTerrainSettings::defaultRadius);
-  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.strength", -1.0f), editorTerrainSettings::defaultStrength);
+  EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.strength", -1.0f),
+                  editorTerrainSettings::defaultSubtractStrength);
   EXPECT_FLOAT_EQ(store.get<float>("editor.terrain.subtract.falloff", -1.0f), editorTerrainSettings::defaultFalloff);
 }

@@ -1,4 +1,5 @@
 #include "TerrainEditEcho.h"
+#include "TerrainParallel.h"
 #include "TerrainReplication.h"
 #include <exception>
 #include <iterator>
@@ -188,11 +189,31 @@ namespace terrain
 
       try
       {
+        // Revisions are handed out in order, one chunk at a time, and only then are the chunks encoded and hashed,
+        // which share nothing and so run in parallel.
+        struct Pending
+        {
+          ChunkState* state;
+          ChunkCoord coord;
+          uint32_t revision;
+          std::shared_ptr<const TerrainChunk> chunk;
+        };
+
+        std::vector<Pending> pending;
+        pending.reserve(states.size());
+
         for (auto& entry : states)
         {
-          const auto chunk = volume->chunk(entry.first);
-          entry.second.full = makeChunkEntry(entry.first, revisionFor(store, terrain, entry.first, chunk), chunk);
+          auto chunk = volume->chunk(entry.first);
+          const uint32_t revision = revisionFor(store, terrain, entry.first, chunk);
+          pending.push_back({ &entry.second, entry.first, revision, std::move(chunk) });
         }
+
+        parallelFor(static_cast<int>(pending.size()), [&pending](const int index)
+        {
+          Pending& item = pending[static_cast<size_t>(index)];
+          item.state->full = makeChunkEntry(item.coord, item.revision, item.chunk);
+        });
       }
       catch (...)
       {

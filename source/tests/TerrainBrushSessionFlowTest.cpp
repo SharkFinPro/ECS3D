@@ -9,6 +9,7 @@
 #include <terrain/TerrainVolume.h>
 #include <Protocol.h>
 
+#include <chrono>
 #include <cstddef>
 #include <optional>
 #include <stdexcept>
@@ -218,4 +219,81 @@ TEST(TerrainBrushSessionTest, ASendThatThrowsAtReleaseLeavesTheSessionIdleAndLos
   // The failed session takes a new stroke.
   EXPECT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
                             hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+}
+
+TEST(TerrainBrushSessionFlowTest, AHeldPointerAppliesAgainAndRefreshesItsSurface)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  const auto makeTemplate = [] { return templateOp(terrain::BrushOp::Kind::add); };
+  const auto hit = hitAt({ 40.0f, 10.0f, 40.0f });
+  auto now = std::chrono::steady_clock::time_point{} + std::chrono::hours(1);
+
+  session.advance(terrainId, env.volume, true, pressedAt(false), hit, makeTemplate, recorder.sender(), now);
+  ASSERT_TRUE(session.active());
+  const auto surfaceAtPress = session.strokeSurface();
+  const size_t afterPress = recorder.payloads().size();
+
+  // Held still for less than the interval: nothing more.
+  now += TerrainBrushSession::holdInterval / 2;
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender(), now);
+  EXPECT_EQ(recorder.payloads().size(), afterPress);
+
+  // Held past the interval: one more application at the same place.
+  now += TerrainBrushSession::holdInterval;
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender(), now);
+  EXPECT_EQ(recorder.payloads().size(), afterPress + 1);
+  EXPECT_EQ(session.strokeSurface(), surfaceAtPress);
+
+  // Held past the surface refresh: the cursor now aims at the grown terrain.
+  now += TerrainBrushSession::surfaceRefresh;
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender(), now);
+  EXPECT_NE(session.strokeSurface(), surfaceAtPress);
+
+  // Without a clock a still pointer applies nothing.
+  const size_t beforeUntimed = recorder.payloads().size();
+  session.advance(terrainId, env.volume, true, pressedAt(true), hit, makeTemplate, recorder.sender());
+  EXPECT_EQ(recorder.payloads().size(), beforeUntimed);
+}
+
+TEST(TerrainBrushSessionFlowTest, ASubtractStrokeAimsAtTheLiveTerrain)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::subtract),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_EQ(session.strokeSurface(), nullptr);
+  static_cast<void>(session.end(recorder.sender()));
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_NE(session.strokeSurface(), nullptr);
+}
+
+TEST(TerrainBrushSessionFlowTest, ASubtractJumpStartsANewSegmentInsteadOfCuttingATrench)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  const auto makeTemplate = [] { return templateOp(terrain::BrushOp::Kind::subtract, 4.0f); };
+
+  session.advance(terrainId, env.volume, true, pressedAt(false), hitAt({ 40.0f, 2.0f, 40.0f }), makeTemplate,
+                  recorder.sender());
+  ASSERT_TRUE(session.active());
+  const size_t afterPress = recorder.payloads().size();
+
+  // From the bottom of a hole up to the surface far beyond a brush radius: one application at the hit, none between.
+  session.advance(terrainId, env.volume, true, pressedAt(true), hitAt({ 60.0f, 10.0f, 40.0f }), makeTemplate,
+                  recorder.sender());
+  ASSERT_EQ(recorder.payloads().size(), afterPress + 1);
+  EXPECT_FLOAT_EQ(recorder.payloads().back().brush.center.x, 60.0f);
+
+  // A fast drag across level ground is no rise out of a hole: it still bridges with spaced applications.
+  const size_t beforeDrag = recorder.payloads().size();
+  session.advance(terrainId, env.volume, true, pressedAt(true), hitAt({ 80.0f, 10.0f, 40.0f }), makeTemplate,
+                  recorder.sender());
+  EXPECT_GT(recorder.payloads().size(), beforeDrag + 1);
 }

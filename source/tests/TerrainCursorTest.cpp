@@ -2,6 +2,7 @@
 
 #include "TerrainCursor.h"
 
+#include <terrain/TerrainBrush.h>
 #include <terrain/TerrainGenerators.h>
 #include <terrain/TerrainOps.h>
 #include <terrain/TerrainRaycast.h>
@@ -122,4 +123,98 @@ TEST(TerrainFrameTest, AWorldRayHitsTheSamePointOfARotatedTerrainAsALocalOne)
   const terrain::RayHit world = hitToWorld(frame, *hit);
   expectNear(world.point, frame.pointToWorld(hit->point), 1.0e-4f);
   EXPECT_NEAR(glm::dot(glm::normalize(world.normal), frame.directionToWorld({ 0.0f, 1.0f, 0.0f })), 1.0f, 1.0e-3f);
+}
+
+TEST(StrokeCursorHitTest, AimsAtTheStartingSurfaceAndFallsBackToAnUprightPlane)
+{
+  terrain::TerrainVolume ground(1.0f);
+  terrain::commit(ground, terrain::fillFlat(ground, { 64, 64 }, 10.0f, 4.0f, 1));
+
+  // Looking down at the ground: the hit is on it, where the stroke's material would not be.
+  const gizmo::Ray down{ { 32.0f, 40.0f, 20.0f }, glm::normalize(glm::vec3(0.0f, -1.0f, 0.5f)) };
+  const auto onGround = strokeCursorHit(ground, ground, { 32.0f, 10.0f, 35.0f }, down, 1000.0f, 4.0f);
+  ASSERT_TRUE(onGround.has_value());
+  EXPECT_NEAR(onGround->point.y, 10.0f, 1.0f);
+
+  // Aiming above the horizon: the ray lands on the upright plane through the anchor that faces the camera.
+  const gizmo::Ray up{ { 32.0f, 20.0f, 0.0f }, glm::normalize(glm::vec3(0.0f, 0.5f, 1.0f)) };
+  const auto onPlane = strokeCursorHit(ground, ground, { 32.0f, 10.0f, 30.0f }, up, 1000.0f, 4.0f);
+  ASSERT_TRUE(onPlane.has_value());
+  EXPECT_NEAR(onPlane->point.z, 30.0f, 1.0e-3f);
+  EXPECT_NEAR(onPlane->point.y, 35.0f, 1.0e-3f);
+  EXPECT_NEAR(onPlane->normal.z, -1.0f, 1.0e-6f);
+
+  // Straight up: no plane faces the ray, so nothing.
+  const gizmo::Ray straightUp{ { 32.0f, 20.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } };
+  EXPECT_FALSE(strokeCursorHit(ground, ground, { 32.0f, 10.0f, 30.0f }, straightUp, 1000.0f, 4.0f).has_value());
+
+  // Drawing a column down toward ground far behind it: the plane through the column wins over the distant ground.
+  const gizmo::Ray downAcross{ { 32.0f, 30.0f, 0.0f }, glm::normalize(glm::vec3(0.0f, -0.5f, 1.0f)) };
+  ASSERT_TRUE(terrain::raycast(ground, downAcross.origin, downAcross.direction, 1000.0f).has_value());
+  const auto onColumn = strokeCursorHit(ground, ground, { 32.0f, 20.0f, 20.0f }, downAcross, 1000.0f, 4.0f);
+  ASSERT_TRUE(onColumn.has_value());
+  EXPECT_NEAR(onColumn->point.z, 20.0f, 1.0e-3f);
+  EXPECT_NEAR(onColumn->point.y, 20.0f, 1.0e-3f);
+}
+
+TEST(StrokeCursorHitTest, OverDrawnMaterialTheStrokeStaysNearItInsteadOfTheGroundBehind)
+{
+  terrain::TerrainVolume surface(1.0f);
+  terrain::commit(surface, terrain::fillFlat(surface, { 64, 64 }, 10.0f, 4.0f, 1));
+
+  terrain::TerrainVolume live(1.0f);
+  terrain::commit(live, terrain::fillFlat(live, { 64, 64 }, 10.0f, 4.0f, 1));
+  terrain::BrushOp blob;
+  blob.kind = terrain::BrushOp::Kind::add;
+  blob.center = { 32.0f, 22.0f, 10.0f };
+  blob.radius = 6.0f;
+  blob.strength = 1.0f;
+  blob.falloff = 0.0f;
+  blob.material = 1;
+  terrain::commit(live, terrain::applyBrush(live, blob));
+
+  const gizmo::Ray ray{ { 32.0f, 30.0f, 0.0f }, glm::normalize(glm::vec3(0.0f, -0.5f, 1.0f)) };
+  const auto farGround = terrain::raycast(surface, ray.origin, ray.direction, 1000.0f);
+  ASSERT_TRUE(farGround.has_value());
+
+  const auto hit = strokeCursorHit(surface, live, blob.center, ray, 1000.0f, 12.0f);
+  ASSERT_TRUE(hit.has_value());
+  EXPECT_LT(glm::length(hit->point - blob.center), 12.0f);
+  EXPECT_GT(glm::length(hit->point - farGround->point), 12.0f);
+}
+
+TEST(BrushDiskHitTest, FindsTerrainUnderTheBrushThatTheCursorMisses)
+{
+  terrain::TerrainVolume pillar(1.0f);
+  terrain::commit(pillar, terrain::fillFlat(pillar, { 4, 4 }, 10.0f, 4.0f, 1));
+
+  const gizmo::Ray ray{ { 10.0f, 5.0f, -20.0f }, { 0.0f, 0.0f, 1.0f } };
+  ASSERT_FALSE(terrain::raycast(pillar, ray.origin, ray.direction, 1000.0f).has_value());
+
+  const auto hit = brushDiskHit(pillar, ray, 8.0f, 1000.0f);
+  ASSERT_TRUE(hit.has_value());
+  EXPECT_NEAR(hit->point.x, 10.0f, 1.0e-3f);
+  EXPECT_NEAR(hit->point.y, 5.0f, 1.0e-3f);
+  EXPECT_LT(hit->point.z, 5.0f);
+
+  EXPECT_FALSE(brushDiskHit(pillar, ray, 2.0f, 1000.0f).has_value());
+}
+
+TEST(BrushDiskHitTest, TheCursorsOwnHitWinsOverNearerTerrainAtTheRim)
+{
+  terrain::TerrainVolume ground(1.0f);
+  terrain::commit(ground, terrain::fillFlat(ground, { 64, 64 }, 10.0f, 4.0f, 1));
+  terrain::BrushOp bump;
+  bump.kind = terrain::BrushOp::Kind::add;
+  bump.center = { 37.0f, 18.0f, 32.0f };
+  bump.radius = 3.0f;
+  bump.strength = 1.0f;
+  bump.falloff = 0.0f;
+  bump.material = 1;
+  terrain::commit(ground, terrain::applyBrush(ground, bump));
+
+  const gizmo::Ray down{ { 32.0f, 40.0f, 32.0f }, { 0.0f, -1.0f, 0.0f } };
+  const auto hit = brushDiskHit(ground, down, 6.0f, 1000.0f);
+  ASSERT_TRUE(hit.has_value());
+  EXPECT_NEAR(hit->point.y, 10.0f, 1.0f);
 }

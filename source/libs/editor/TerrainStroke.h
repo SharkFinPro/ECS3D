@@ -55,6 +55,18 @@ public:
     return m_strokeId;
   }
 
+  // The radius every application of the active stroke uses.
+  [[nodiscard]] float radius() const
+  {
+    return m_template.radius;
+  }
+
+  // Where the last application landed, or the first hit; meaningful only while active.
+  [[nodiscard]] glm::vec3 lastPoint() const
+  {
+    return glm::vec3(m_last);
+  }
+
   [[nodiscard]] const terrain::SampleBox& box() const
   {
     return m_box;
@@ -103,6 +115,20 @@ public:
   void breakPath()
   {
     m_pathBroken = m_active;
+  }
+
+  // The pointer is held still over hit: one more application there, which restarts the spacing from it. Nothing when
+  // not active or the hit point is not finite.
+  [[nodiscard]] std::optional<terrain::BrushOp> holdAt(const terrain::RayHit& hit)
+  {
+    if (!m_active || !finite(hit.point))
+    {
+      return std::nullopt;
+    }
+
+    m_last = glm::dvec3(hit.point);
+    m_sinceLast = 0.0;
+    return opAt(hit.point);
   }
 
   // The pointer is over the surface at hit. Returns the applications due since the last one: points spaced

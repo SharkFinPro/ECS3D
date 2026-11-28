@@ -75,6 +75,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainGenerators.h
   terrain/TerrainOps.cpp
   terrain/TerrainOps.h
+  terrain/TerrainParallel.cpp
+  terrain/TerrainParallel.h
   terrain/TerrainPlaySnapshot.cpp
   terrain/TerrainPlaySnapshot.h
   terrain/TerrainRaycast.cpp
@@ -165,6 +167,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DNetProtocol
   ECS3DLog
 )
+
+# terrain/TerrainParallel runs a worker pool.
+find_package(Threads REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads)
 
 if(WIN32)
   # ProjectOrigin asks the system for the Documents folder.

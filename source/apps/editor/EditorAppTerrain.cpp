@@ -242,10 +242,24 @@ namespace {
 
   [[nodiscard]] std::optional<terrain::RayHit> raycastCursor(const TerrainFrame& frame,
                                                              const terrain::TerrainVolume& volume,
-                                                             const gizmo::View& view)
+                                                             const TerrainBrushSession& brush,
+                                                             const gizmo::View& view, const bool searchDisk,
+                                                             const float radius)
   {
     const ImGuiIO& io = ImGui::GetIO();
     const gizmo::Ray ray = rayToLocal(frame, gizmo::mouseRay(view, glm::vec2(io.MousePos.x, io.MousePos.y)));
+
+    if (const auto& surface = brush.strokeSurface())
+    {
+      return strokeCursorHit(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit());
+    }
+
+    // An eraser looks for terrain under its whole brush, not just under the cursor.
+    if (searchDisk)
+    {
+      return brushDiskHit(volume, ray, radius, view.farPlane);
+    }
+
     return terrain::raycast(volume, ray.origin, ray.direction, view.farPlane);
   }
 
@@ -362,7 +376,7 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
       [this, tool] {
         return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
       },
-      [this](const net::Message& message) { sendTerrainEdit(message); });
+      [this](const net::Message& message) { sendTerrainEdit(message); }, std::chrono::steady_clock::now());
   }
   catch (...)
   {
@@ -419,7 +433,10 @@ void EditorApp::updateTerrainMode(const gizmo::View& view, const bool sceneHover
   std::optional<terrain::RayHit> hit;
   if (sceneHovered && !m_viewCameraObject.has_value())
   {
-    hit = raycastCursor(frame, *target.volume, view);
+    const editorTerrainSettings::BrushSettings settings =
+      editorTerrainSettings::readBrush(*m_settings, toolIndex(m_terrainTool.tool()));
+    hit = raycastCursor(frame, *target.volume, m_terrainBrush, view, m_terrainTool.tool() == TerrainTool::subtract,
+                        effectiveBrushRadius(settings.radius, *target.volume));
   }
 
   const TerrainPointer pointer = makeTerrainPointer(pressed, wasPressed, sceneHovered, m_viewCameraObject.has_value(),

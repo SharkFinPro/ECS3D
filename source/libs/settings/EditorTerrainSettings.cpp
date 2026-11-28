@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <string_view>
 
 namespace editorTerrainSettings {
   namespace {
@@ -35,6 +36,11 @@ namespace editorTerrainSettings {
     return clampOrDefault(strength, minStrength, maxStrength, defaultStrength);
   }
 
+  float defaultStrengthFor(const std::size_t tool)
+  {
+    return tool < toolCount && std::string_view(toolIds[tool]) == "subtract" ? defaultSubtractStrength : defaultStrength;
+  }
+
   float clampFalloff(const float falloff)
   {
     return clampOrDefault(falloff, minFalloff, maxFalloff, defaultFalloff);
@@ -49,7 +55,8 @@ namespace editorTerrainSettings {
 
     return {
       clampRadius(settings.get<float>(brushKey(tool, "radius"), defaultRadius)),
-      clampStrength(settings.get<float>(brushKey(tool, "strength"), defaultStrength)),
+      clampOrDefault(settings.get<float>(brushKey(tool, "strength"), defaultStrengthFor(tool)), minStrength, maxStrength,
+                     defaultStrengthFor(tool)),
       clampFalloff(settings.get<float>(brushKey(tool, "falloff"), defaultFalloff))
     };
   }
@@ -62,7 +69,8 @@ namespace editorTerrainSettings {
     }
 
     settings.set(brushKey(tool, "radius"), clampRadius(brush.radius));
-    settings.set(brushKey(tool, "strength"), clampStrength(brush.strength));
+    settings.set(brushKey(tool, "strength"),
+                 clampOrDefault(brush.strength, minStrength, maxStrength, defaultStrengthFor(tool)));
     settings.set(brushKey(tool, "falloff"), clampFalloff(brush.falloff));
   }
 

@@ -2,10 +2,12 @@
 
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainOps.h"
+#include "terrain/TerrainParallel.h"
 #include "terrain/TerrainTypes.h"
 #include "terrain/TerrainVolume.h"
 
 #include <glm/vec3.hpp>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -188,4 +190,91 @@ TEST(TerrainOpsTest, OutOfRangeWritesAreClamped)
   EXPECT_EQ(chunk->materialAt(0, 0, 0), 0);
   EXPECT_EQ(chunk->distanceAt(1, 0, 0), terrain::airDistance);
   EXPECT_EQ(chunk->materialAt(1, 0, 0), 5);
+}
+
+TEST(TerrainOpsTest, UniformHintSkipsWholeChunksAndMatchesTheSampleEdit)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 1, 0, 0 }, ramp());
+  const terrain::SampleBox box{ { 0, 0, 0 }, { terrain::chunkSize * 2, terrain::chunkSize, terrain::chunkSize } };
+  int visited = 0;
+
+  const auto edit = [&visited](glm::ivec3, int16_t& distance, uint8_t& material)
+  {
+    ++visited;
+    distance = -terrain::airDistance;
+    material = 4;
+  };
+  const auto hint = [](const terrain::ChunkCoord, int16_t& distance, uint8_t& material)
+  {
+    distance = -terrain::airDistance;
+    material = 4;
+    return true;
+  };
+
+  const auto hinted = terrain::editSamples(volume, box, edit, hint);
+  EXPECT_EQ(visited, 0);
+
+  const auto sampled = terrain::editSamples(volume, box, edit);
+  EXPECT_EQ(visited, 2 * terrain::samplesPerChunk);
+
+  ASSERT_EQ(hinted.size(), sampled.size());
+  for (size_t index = 0; index < hinted.size(); ++index)
+  {
+    EXPECT_EQ(hinted[index].first, sampled[index].first);
+    EXPECT_EQ(hinted[index].second->hash(), sampled[index].second->hash());
+  }
+}
+
+TEST(TerrainOpsTest, ParallelEditsMatchSerialOnes)
+{
+  terrain::TerrainVolume volume;
+  volume.setChunk({ 1, 0, 0 }, ramp());
+  const terrain::SampleBox box{ { -10, 0, 0 }, { terrain::chunkSize * 4, terrain::chunkSize * 2, terrain::chunkSize } };
+
+  const auto edit = [](const glm::ivec3 sample, int16_t& distance, uint8_t& material)
+  {
+    distance = static_cast<int16_t>((sample.x * 31 + sample.y * 17 + sample.z * 7) % 400 - 200);
+    material = static_cast<uint8_t>(sample.x % 5);
+  };
+
+  const auto serial = terrain::editSamples(volume, box, edit);
+  const auto parallel = terrain::editSamples(volume, box, edit, {}, {}, true);
+
+  ASSERT_EQ(serial.size(), parallel.size());
+  for (size_t index = 0; index < serial.size(); ++index)
+  {
+    EXPECT_EQ(serial[index].first, parallel[index].first);
+    ASSERT_NE(serial[index].second, nullptr);
+    ASSERT_NE(parallel[index].second, nullptr);
+    EXPECT_EQ(serial[index].second->hash(), parallel[index].second->hash());
+  }
+}
+
+TEST(TerrainOpsTest, ParallelForRunsEveryIndexOnceAndRethrows)
+{
+  std::vector<std::atomic<int>> hits(257);
+
+  for (int round = 0; round < 20; ++round)
+  {
+    terrain::parallelFor(static_cast<int>(hits.size()), [&hits](const int index)
+    {
+      ++hits[static_cast<size_t>(index)];
+    });
+  }
+
+  for (const auto& hit : hits)
+  {
+    EXPECT_EQ(hit.load(), 20);
+  }
+
+  EXPECT_THROW(terrain::parallelFor(64, [](const int index)
+  {
+    if (index == 13)
+    {
+      throw std::runtime_error("boom");
+    }
+  }), std::runtime_error);
+
+  terrain::parallelFor(0, [](int) { FAIL(); });
 }
