@@ -8,6 +8,7 @@
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainStore.h>
 #include <SaveUI.h>
+#include <TerrainPaletteUndo.h>
 #include <NetClient.h>
 #include <Log.h>
 #include <nlohmann/json.hpp>
@@ -232,6 +233,17 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
           {
             m_terrainUpload.forget(*outcome.terrainRemoved);
             m_createdTerrains.erase(*outcome.terrainRemoved);
+          }
+
+          // A palette replacement applies here first, so the next undo or redo validates against the palette the
+          // server is about to hold instead of the one from before this one.
+          if (TerrainPaletteUndo::appliesLocally(outcome, *m_terrainStore) &&
+              !replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
+                                                     *m_terrainStore,
+                                                     replication::unpackAddAsset(*outcome.messagePayload), false))
+          {
+            Log::warn(LogCategory::editor, "The terrain palette " + action +
+                                             " could not be applied here; the next undo may be refused.");
           }
 
           m_netClient->send(*outcome.messagePayload);
