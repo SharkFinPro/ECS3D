@@ -159,7 +159,17 @@ void EditorApp::drawTerrainMaterials(const std::shared_ptr<Terrain>& component)
     return drawTerrainMaterialRow(terrainUuid, index, palette, refusal);
   });
 
-  const bool full = palette.size() >= terrain::maxPaletteSize;
+  drawTerrainAddMaterial(terrainUuid, palette.size(), refusal, edited);
+
+  ImGui::PopID();
+
+  drawTerrainPaletteNotes(refusal);
+}
+
+void EditorApp::drawTerrainAddMaterial(const uuids::uuid& terrainUuid, const size_t paletteSize,
+                                       const std::optional<std::string>& refusal, const bool edited)
+{
+  const bool full = paletteSize >= terrain::maxPaletteSize;
 
   ImGui::BeginDisabled(refusal.has_value() || full);
   if (ImGui::Button("Add material") && !edited)
@@ -172,9 +182,10 @@ void EditorApp::drawTerrainMaterials(const std::shared_ptr<Terrain>& component)
   {
     ImGui::SetTooltip("%s", refusal ? refusal->c_str() : "A terrain holds at most 16 materials.");
   }
+}
 
-  ImGui::PopID();
-
+void EditorApp::drawTerrainPaletteNotes(const std::optional<std::string>& refusal) const
+{
   if (refusal)
   {
     ImGui::TextColored(theme::t2, "%s", refusal->c_str());
@@ -196,10 +207,7 @@ bool EditorApp::drawTerrainMaterialRow(const uuids::uuid& terrainUuid, const siz
 
   // Every intent is built from the palette the store holds now, not from this frame's copy, and none runs once an
   // edit has applied this frame.
-  const auto live = [this, &terrainUuid]() -> const std::vector<terrain::TerrainMaterial>& {
-    return paletteOf(*m_terrainStore, terrainUuid);
-  };
-  const auto run = [&](TerrainPaletteEditor::Result result, const TextureModeRows::Change& change = {}) {
+  const TerrainPaletteRun run = [&](TerrainPaletteEditor::Result result, const TextureModeRows::Change& change) {
     if (!edited)
     {
       edited = finishTerrainPaletteEdit(terrainUuid, std::move(result), change);
@@ -227,24 +235,38 @@ bool EditorApp::drawTerrainMaterialRow(const uuids::uuid& terrainUuid, const siz
         return drawNameField(name);
       }))
   {
-    run(TerrainPaletteEditor::rename(live(), commit->index, commit->value));
+    run(TerrainPaletteEditor::rename(paletteOf(*m_terrainStore, terrainUuid), commit->index, commit->value), {});
   }
+
+  drawTerrainMaterialOrder(terrainUuid, index, palette.size(), run);
+  drawTerrainMaterialSurface(terrainUuid, index, material, canEdit, run);
+
+  ImGui::EndDisabled();
+
+  ImGui::PopID();
+  ImGui::Separator();
+
+  return edited;
+}
+
+void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const size_t index, const size_t paletteSize,
+                                         const TerrainPaletteRun& run)
+{
+  const auto& live = paletteOf(*m_terrainStore, terrainUuid);
 
   ImGui::BeginDisabled(index == 0);
   if (ImGui::SmallButton("Up"))
   {
-    run(TerrainPaletteEditor::move(live(), index, index - 1),
-        { TextureModeRows::Change::Kind::move, index, index - 1 });
+    run(TerrainPaletteEditor::move(live, index, index - 1), { TextureModeRows::Change::Kind::move, index, index - 1 });
   }
   ImGui::EndDisabled();
 
   ImGui::SameLine();
 
-  ImGui::BeginDisabled(index + 1 >= palette.size());
+  ImGui::BeginDisabled(index + 1 >= paletteSize);
   if (ImGui::SmallButton("Down"))
   {
-    run(TerrainPaletteEditor::move(live(), index, index + 1),
-        { TextureModeRows::Change::Kind::move, index, index + 1 });
+    run(TerrainPaletteEditor::move(live, index, index + 1), { TextureModeRows::Change::Kind::move, index, index + 1 });
   }
   ImGui::EndDisabled();
 
@@ -252,19 +274,24 @@ bool EditorApp::drawTerrainMaterialRow(const uuids::uuid& terrainUuid, const siz
 
   if (ImGui::SmallButton("Remove"))
   {
-    run(TerrainPaletteEditor::remove(live(), index, [this, &terrainUuid] {
+    run(TerrainPaletteEditor::remove(live, index, [this, &terrainUuid] {
           const auto volume = m_terrainStore->find(terrainUuid);
           return volume ? terrain::materialsInUse(*volume) : std::bitset<256>{};
         }),
         { TextureModeRows::Change::Kind::remove, index, index });
   }
+}
 
+void EditorApp::drawTerrainMaterialSurface(const uuids::uuid& terrainUuid, const size_t index,
+                                           const terrain::TerrainMaterial& material, const bool canEdit,
+                                           const TerrainPaletteRun& run)
+{
   const bool textureMode = !TerrainPaletteEditor::isColorMode(material) || m_terrainTextureModes.contains(index);
 
   if (ImGui::RadioButton("Color", !textureMode) && textureMode)
   {
     m_terrainTextureModes.erase(index);
-    run(TerrainPaletteEditor::useColor(live(), index));
+    run(TerrainPaletteEditor::useColor(paletteOf(*m_terrainStore, terrainUuid), index), {});
   }
 
   ImGui::SameLine();
@@ -282,43 +309,43 @@ bool EditorApp::drawTerrainMaterialRow(const uuids::uuid& terrainUuid, const siz
                                      gc::SecIcon::image, theme::accent };
     if (drawAssetSlot(m_assetCache, m_assetRegistry.get(), albedoSlot, material.albedoTexture, dropped))
     {
-      run(TerrainPaletteEditor::setAlbedo(live(), index, dropped));
+      run(TerrainPaletteEditor::setAlbedo(paletteOf(*m_terrainStore, terrainUuid), index, dropped), {});
     }
   }
   else
   {
-    if (const auto commit = m_terrainMaterialColor.frame(terrainUuid, index, material, canEdit,
-                                                         [this](glm::vec3& color) {
-          MaterialColorField::Report report;
-          report.changed = ImGui::ColorEdit3("##color", &color.x,
-                                             ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-
-          // Only the picker's own widget holds the edit open, not any other active item.
-          const ImGuiID activeId = ImGui::GetActiveID();
-          if (report.changed && activeId != 0)
-          {
-            m_terrainColorWidget = activeId;
-          }
-
-          report.settled = activeId == 0 || activeId != m_terrainColorWidget;
-          return report;
-        }))
-    {
-      run(TerrainPaletteEditor::setColor(live(), commit->index, commit->value));
-    }
+    drawTerrainMaterialColor(terrainUuid, index, material, canEdit, run);
   }
 
   const AssetSlotStyle specularSlot{ "specularSlot", "Specular", assetDragDrop::texture, true,
                                      gc::SecIcon::image, theme::accent };
   if (drawAssetSlot(m_assetCache, m_assetRegistry.get(), specularSlot, material.specularTexture, dropped))
   {
-    run(TerrainPaletteEditor::setSpecular(live(), index, dropped));
+    run(TerrainPaletteEditor::setSpecular(paletteOf(*m_terrainStore, terrainUuid), index, dropped), {});
   }
+}
 
-  ImGui::EndDisabled();
+void EditorApp::drawTerrainMaterialColor(const uuids::uuid& terrainUuid, const size_t index,
+                                         const terrain::TerrainMaterial& material, const bool canEdit,
+                                         const TerrainPaletteRun& run)
+{
+  const auto commit = m_terrainMaterialColor.frame(terrainUuid, index, material, canEdit, [this](glm::vec3& color) {
+    MaterialColorField::Report report;
+    report.changed = ImGui::ColorEdit3("##color", &color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 
-  ImGui::PopID();
-  ImGui::Separator();
+    // Only the picker's own widget holds the edit open, not any other active item.
+    const ImGuiID activeId = ImGui::GetActiveID();
+    if (report.changed && activeId != 0)
+    {
+      m_terrainColorWidget = activeId;
+    }
 
-  return edited;
+    report.settled = activeId == 0 || activeId != m_terrainColorWidget;
+    return report;
+  });
+
+  if (commit)
+  {
+    run(TerrainPaletteEditor::setColor(paletteOf(*m_terrainStore, terrainUuid), commit->index, commit->value), {});
+  }
 }

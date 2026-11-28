@@ -36,6 +36,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -495,6 +496,20 @@ private:
   [[nodiscard]] bool drawTerrainMaterialRow(const uuids::uuid& terrainUuid, size_t index,
                                             const std::vector<terrain::TerrainMaterial>& palette,
                                             const std::optional<std::string>& editRefusal);
+
+  // A palette intent's result for a row to run; the row runs at most one per frame.
+  using TerrainPaletteRun = std::function<void(TerrainPaletteEditor::Result, const TextureModeRows::Change&)>;
+
+  void drawTerrainAddMaterial(const uuids::uuid& terrainUuid, size_t paletteSize,
+                              const std::optional<std::string>& refusal, bool edited);
+  void drawTerrainPaletteNotes(const std::optional<std::string>& refusal) const;
+  void drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, size_t index, size_t paletteSize,
+                                const TerrainPaletteRun& run);
+  // The Color or Texture choice with its color picker or albedo slot, and the specular slot.
+  void drawTerrainMaterialSurface(const uuids::uuid& terrainUuid, size_t index,
+                                  const terrain::TerrainMaterial& material, bool canEdit, const TerrainPaletteRun& run);
+  void drawTerrainMaterialColor(const uuids::uuid& terrainUuid, size_t index, const terrain::TerrainMaterial& material,
+                                bool canEdit, const TerrainPaletteRun& run);
 
   // Commits a material name typed in a block that is no longer drawn.
   void flushTerrainMaterialName();
