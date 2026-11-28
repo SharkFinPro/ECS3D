@@ -5,6 +5,7 @@
 #include "OutlineColors.h"
 #include "RenderComponents.h"
 #include "TerrainSurfacePlan.h"
+#include <terrain/TerrainStore.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/CameraSelection.h>
@@ -96,6 +97,11 @@ namespace {
 
     return layout.capPositions.size() + 1;
   }
+}
+
+void RenderSystem::setTerrainStore(std::shared_ptr<const terrain::TerrainStore> terrainStore)
+{
+  m_terrainStore = std::move(terrainStore);
 }
 
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
@@ -331,8 +337,13 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       {
         const auto& terrainUUID = terrainComponent->getTerrainUUID();
 
+        const auto description = m_terrainStore ? m_terrainStore->description(terrainUUID) : nullptr;
+        const std::span<const terrain::TerrainMaterial> palette =
+          description ? std::span<const terrain::TerrainMaterial>(description->palette)
+                      : std::span<const terrain::TerrainMaterial>();
+
         if (const auto surface = assetCache.getTerrainSurface(terrainUUID, volume,
-                                                            m_terrainSideVotes.openSides(terrainUUID)))
+                                                            m_terrainSideVotes.openSides(terrainUUID), palette))
         {
           m_terrainDraws.push_back({
             surface,
