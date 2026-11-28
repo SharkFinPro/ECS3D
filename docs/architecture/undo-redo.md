@@ -220,7 +220,9 @@ holds the description body before and after (`addTerrainAssetJson`), and undo an
 body, which the server applies as a palette replacement ([replication.md](replication.md)). The registry record does not
 change on a palette edit, so validation compares the live palette in the `TerrainStore` passed to `undo`/`redo`: a null
 store or an unknown terrain is `targetMissing`, and a palette other than the command's after (undo) or before (redo)
-palette is `targetChanged`.
+palette is `targetChanged`. The editor applies an undo or redo payload that is such a replacement of a terrain its store
+holds (`TerrainPaletteUndo::appliesLocally`) to its own store before sending it, as it does for any asset edit, so the
+next undo validates against the palette the server is about to hold and not the one from before this step.
 
 ## Editor wiring
 
