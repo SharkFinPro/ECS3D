@@ -225,10 +225,11 @@ block; an intent's refusal is a `MaterialNote` (`TerrainMaterialPrompts.h`) show
 another material or terrain is selected. After an applied edit `materialSelectionAfter` keeps a moved entry selected
 and hands a removed one's selection to its neighbor.
 
-Remove and the moves keep painted ground looking the same (`EditorAppTerrainMaterialRemove.cpp`). On the click the
-editor scans `materialsInUse`; `TerrainPaletteEditor::remove` and `move` then return, beside the palette, the
-`remapForRemoval` or `remapForMove` table when the ground carries the removed entry or a later one, or an entry the
-move reorders. Removing an entry the ground paints first opens a `MaterialRemovePrompt` modal listing the other
+Remove and the moves keep painted ground looking the same (`EditorAppTerrainMaterialRemove.cpp`).
+`TerrainPaletteEditor::remove` and `move` always return, beside the palette, the `remapForRemoval` or `remapForMove`
+table: `materialsInUse` sees only solid samples, and air samples that a later Add exposes must shift too. A remap that
+changes no chunk records no undo entry. On the click the editor scans `materialsInUse`, and removing an entry solid
+ground paints first opens a `MaterialRemovePrompt` modal listing the other
 materials (swatch and label) for what its ground becomes, defaulting to `defaultReplacement` (the previous entry, or the
 next one for entry 0); the prompt closes without acting if the palette changes underneath it. The last material is
 never removed: a terrain keeps at least one. `finishTerrainPaletteEdit` sends the remap before the palette:

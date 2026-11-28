@@ -586,7 +586,7 @@ TEST(TerrainPaletteRemoval, APaintedRemovalRemapsTheServerAndTwoUndoStepsRestore
 
   const auto used = terrain::materialsInUse(*world.editor.store.find(terrainId));
   ASSERT_TRUE(TerrainPaletteEditor::removeNeedsChoice(3, 1, used));
-  const auto removal = TerrainPaletteEditor::remove(paletteOf(3), 1, used, 0);
+  const auto removal = TerrainPaletteEditor::remove(paletteOf(3), 1, 0);
   ASSERT_TRUE(removal.ok());
   ASSERT_TRUE(removal.remap.has_value());
 

@@ -286,7 +286,7 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
   ImGui::BeginDisabled(index == 0);
   if (ImGui::SmallButton("Move up"))
   {
-    run(TerrainPaletteEditor::move(live, index, index - 1, terrainMaterialsInUse(terrainUuid)),
+    run(TerrainPaletteEditor::move(live, index, index - 1),
         { TextureModeRows::Change::Kind::move, index, index - 1 });
   }
   ImGui::EndDisabled();
@@ -296,7 +296,7 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
   ImGui::BeginDisabled(index + 1 >= paletteSize);
   if (ImGui::SmallButton("Move down"))
   {
-    run(TerrainPaletteEditor::move(live, index, index + 1, terrainMaterialsInUse(terrainUuid)),
+    run(TerrainPaletteEditor::move(live, index, index + 1),
         { TextureModeRows::Change::Kind::move, index, index + 1 });
   }
   ImGui::EndDisabled();

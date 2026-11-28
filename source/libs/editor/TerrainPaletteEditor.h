@@ -104,12 +104,13 @@ public:
     });
   }
 
-  // Removes the entry; refused for the last one, since a terrain keeps at least one material. used is what
-  // materialsInUse reports. When the ground carries the entry or a later one, the result holds the remap that keeps
-  // it looking the same: the entry's samples take replacement (indexed before the removal) and the later ones move
-  // down with their entries.
+  // Removes the entry; refused for the last one, since a terrain keeps at least one material. The result always holds
+  // the remap that keeps the ground looking the same: the entry's samples take replacement (indexed before the
+  // removal) and the later ones move down with their entries. used (materialsInUse) only sees solid samples, and air
+  // samples a later Add exposes must shift too, so the remap is sent even when used shows nothing; a remap that
+  // changes no chunk records no undo entry.
   [[nodiscard]] static Result remove(const std::vector<terrain::TerrainMaterial>& palette, const size_t index,
-                                     const std::bitset<256>& used, const size_t replacement)
+                                     const size_t replacement)
   {
     if (palette.size() == 1 && index == 0)
     {
@@ -120,7 +121,7 @@ public:
       return terrain::eraseMaterial(copy, index);
     });
 
-    if (result.ok() && paintedBetween(used, index, terrain::reservedMaterial - 1))
+    if (result.ok())
     {
       result.remap = terrain::remapForRemoval(palette.size(), index, replacement);
       if (!result.remap)
@@ -146,16 +147,15 @@ public:
     return index > 0 ? index - 1 : 1;
   }
 
-  // When the ground carries an entry the move reorders, the result holds the remap that lets those samples follow
-  // their material.
+  // The result holds the remap that lets samples follow their material, for the same reason remove always does.
   [[nodiscard]] static Result move(const std::vector<terrain::TerrainMaterial>& palette, const size_t from,
-                                   const size_t to, const std::bitset<256>& used)
+                                   const size_t to)
   {
     Result result = run(palette, [&](auto& copy) {
       return terrain::moveMaterial(copy, from, to);
     });
 
-    if (result.ok() && from != to && paintedBetween(used, std::min(from, to), std::max(from, to)))
+    if (result.ok() && from != to)
     {
       result.remap = terrain::remapForMove(palette.size(), from, to);
     }
@@ -200,19 +200,6 @@ public:
   }
 
 private:
-  [[nodiscard]] static bool paintedBetween(const std::bitset<256>& used, const size_t first, const size_t last)
-  {
-    for (size_t index = first; index <= last && index < used.size(); ++index)
-    {
-      if (used.test(index))
-      {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   template <typename EditFn>
   [[nodiscard]] static Result run(const std::vector<terrain::TerrainMaterial>& palette, EditFn&& edit)
   {

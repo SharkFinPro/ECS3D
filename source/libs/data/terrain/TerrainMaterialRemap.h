@@ -33,7 +33,7 @@ namespace terrain
   [[nodiscard]] bool isValidRemap(const MaterialRemap& remap);
 
   // The remap that keeps painted ground looking the same when palette entry removed is erased: its samples take
-  // replacement (as indexed after the removal) and every later index moves down one. nullopt for a palette over
+  // replacement (as indexed before the removal) and every later index moves down one. nullopt for a palette over
   // maxPaletteSize, an index outside it or a replacement equal to removed.
   [[nodiscard]] std::optional<MaterialRemap> remapForRemoval(size_t paletteSize, size_t removed, size_t replacement);
 

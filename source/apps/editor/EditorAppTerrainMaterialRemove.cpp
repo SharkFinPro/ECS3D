@@ -67,7 +67,7 @@ void EditorApp::requestTerrainMaterialRemove(const uuids::uuid& terrainUuid, con
     return;
   }
 
-  run(TerrainPaletteEditor::remove(live, index, used, TerrainPaletteEditor::defaultReplacement(index)),
+  run(TerrainPaletteEditor::remove(live, index, TerrainPaletteEditor::defaultReplacement(index)),
       { TextureModeRows::Change::Kind::remove, index, index });
 }
 
@@ -84,8 +84,7 @@ void EditorApp::confirmTerrainMaterialRemove(const uuids::uuid& terrainUuid)
   }
 
   finishTerrainPaletteEdit(terrainUuid,
-                           TerrainPaletteEditor::remove(livePalette(*m_terrainStore, terrainUuid), index,
-                                                        terrainMaterialsInUse(terrainUuid), replacement),
+                           TerrainPaletteEditor::remove(livePalette(*m_terrainStore, terrainUuid), index, replacement),
                            { TextureModeRows::Change::Kind::remove, index, index });
 }
 

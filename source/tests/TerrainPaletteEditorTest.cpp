@@ -115,47 +115,39 @@ TEST(TerrainPaletteEditorIntents, AddAppendsADefaultNamedEntryAndRefusesThe17th)
   EXPECT_EQ(full.palette, paletteOf(terrain::maxPaletteSize));
 }
 
-TEST(TerrainPaletteEditorIntents, AnUnpaintedRemoveErasesTheEntryWithNoRemap)
+TEST(TerrainPaletteEditorIntents, ARemoveErasesTheEntryAndAlwaysCarriesTheRemapThatShiftsLaterEntries)
 {
-  const auto clear = TerrainPaletteEditor::remove(paletteOf(3), 1, usedOnly(0), 0);
-  ASSERT_TRUE(clear.ok());
-  ASSERT_EQ(clear.palette.size(), 2u);
-  EXPECT_EQ(clear.palette[1].name, "m2");
-  EXPECT_FALSE(clear.remap.has_value());
+  // Air samples a later Add exposes carry indices too, so the remap rides every removal, painted or not.
+  const auto removal = TerrainPaletteEditor::remove(paletteOf(3), 1, 2);
+  ASSERT_TRUE(removal.ok());
+  ASSERT_EQ(removal.palette.size(), 2u);
+  EXPECT_EQ(removal.palette[1].name, "m2");
+  ASSERT_TRUE(removal.remap.has_value());
+  EXPECT_EQ((*removal.remap)[0], 0);
+  EXPECT_EQ((*removal.remap)[1], 1);
+  EXPECT_EQ((*removal.remap)[2], 1);
 
-  EXPECT_FALSE(TerrainPaletteEditor::remove(paletteOf(3), 3, {}, 2).ok());
-}
+  const auto first = TerrainPaletteEditor::remove(paletteOf(3), 0, 1);
+  ASSERT_TRUE(first.ok());
+  ASSERT_TRUE(first.remap.has_value());
+  EXPECT_EQ((*first.remap)[0], 0);
+  EXPECT_EQ((*first.remap)[2], 1);
 
-TEST(TerrainPaletteEditorIntents, APaintedRemoveCarriesTheRemapToItsReplacementAndShiftsLaterEntries)
-{
-  const auto painted = TerrainPaletteEditor::remove(paletteOf(3), 1, usedOnly(1), 2);
-  ASSERT_TRUE(painted.ok());
-  ASSERT_EQ(painted.palette.size(), 2u);
-  EXPECT_EQ(painted.palette[1].name, "m2");
-  ASSERT_TRUE(painted.remap.has_value());
-  EXPECT_EQ((*painted.remap)[1], 1);
-  EXPECT_EQ((*painted.remap)[2], 1);
-  EXPECT_EQ((*painted.remap)[0], 0);
+  EXPECT_FALSE(TerrainPaletteEditor::remove(paletteOf(3), 3, 2).ok());
 
-  // Only a later entry is painted: its samples move down with it.
-  const auto later = TerrainPaletteEditor::remove(paletteOf(3), 0, usedOnly(2), 1);
-  ASSERT_TRUE(later.ok());
-  ASSERT_TRUE(later.remap.has_value());
-  EXPECT_EQ((*later.remap)[2], 1);
-
-  const auto toItself = TerrainPaletteEditor::remove(paletteOf(3), 1, usedOnly(1), 1);
+  const auto toItself = TerrainPaletteEditor::remove(paletteOf(3), 1, 1);
   EXPECT_FALSE(toItself.ok());
   EXPECT_EQ(toItself.palette, paletteOf(3));
 }
 
 TEST(TerrainPaletteEditorIntents, TheLastMaterialIsNeverRemoved)
 {
-  const auto last = TerrainPaletteEditor::remove(paletteOf(1), 0, {}, 1);
+  const auto last = TerrainPaletteEditor::remove(paletteOf(1), 0, 1);
   ASSERT_FALSE(last.ok());
   EXPECT_NE(last.refusal->find("at least one"), std::string::npos);
   EXPECT_EQ(last.palette, paletteOf(1));
 
-  EXPECT_TRUE(TerrainPaletteEditor::remove(paletteOf(2), 0, {}, 1).ok());
+  EXPECT_TRUE(TerrainPaletteEditor::remove(paletteOf(2), 0, 1).ok());
 }
 
 TEST(TerrainPaletteEditorIntents, OnlyARemoveOfAPaintedEntryAsksAndItDefaultsToThePreviousEntry)
@@ -169,27 +161,23 @@ TEST(TerrainPaletteEditorIntents, OnlyARemoveOfAPaintedEntryAsksAndItDefaultsToT
   EXPECT_EQ(TerrainPaletteEditor::defaultReplacement(0), 1u);
 }
 
-TEST(TerrainPaletteEditorIntents, AMoveRemapsOnlyWhenTheGroundCarriesAnEntryItReorders)
+TEST(TerrainPaletteEditorIntents, AMoveAlwaysCarriesTheRemapThatLetsSamplesFollowTheirMaterial)
 {
-  const auto painted = TerrainPaletteEditor::move(paletteOf(3), 1, 2, usedOnly(2));
-  ASSERT_TRUE(painted.ok());
-  ASSERT_TRUE(painted.remap.has_value());
-  EXPECT_EQ((*painted.remap)[1], 2);
-  EXPECT_EQ((*painted.remap)[2], 1);
-
-  const auto unpainted = TerrainPaletteEditor::move(paletteOf(3), 1, 2, usedOnly(0));
-  ASSERT_TRUE(unpainted.ok());
-  EXPECT_FALSE(unpainted.remap.has_value());
-  EXPECT_EQ(unpainted.palette, painted.palette);
+  const auto moved = TerrainPaletteEditor::move(paletteOf(3), 1, 2);
+  ASSERT_TRUE(moved.ok());
+  ASSERT_TRUE(moved.remap.has_value());
+  EXPECT_EQ((*moved.remap)[0], 0);
+  EXPECT_EQ((*moved.remap)[1], 2);
+  EXPECT_EQ((*moved.remap)[2], 1);
 }
 
 TEST(TerrainPaletteEditorIntents, MoveRenameAndTextureEditsChangeOnlyTheirEntry)
 {
-  const auto moved = TerrainPaletteEditor::move(paletteOf(3), 0, 2, {});
+  const auto moved = TerrainPaletteEditor::move(paletteOf(3), 0, 2);
   ASSERT_TRUE(moved.ok());
   EXPECT_EQ(moved.palette[2].name, "m0");
   EXPECT_EQ(moved.palette[0].name, "m1");
-  EXPECT_FALSE(TerrainPaletteEditor::move(paletteOf(3), 0, 3, usedOnly(0)).ok());
+  EXPECT_FALSE(TerrainPaletteEditor::move(paletteOf(3), 0, 3).ok());
 
   const auto renamed = TerrainPaletteEditor::rename(paletteOf(3), 1, "rock");
   ASSERT_TRUE(renamed.ok());
