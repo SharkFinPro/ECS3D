@@ -2,6 +2,7 @@
 #include "TerrainCodec.h"
 #include "TerrainReplication.h"
 #include "WireTypes.h"
+#include <algorithm>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -17,6 +18,8 @@ namespace terrain
                                   3 * sizeof(float) + 3 * sizeof(float);
 
     constexpr size_t boxBytes = 6 * sizeof(int32_t);
+
+    constexpr size_t remapBytes = sizeof(MaterialRemap);
 
     std::shared_ptr<const TerrainChunk> airChunk()
     {
@@ -138,6 +141,13 @@ namespace terrain
     return message;
   }
 
+  net::Message packRemapEdit(const uuids::uuid& terrain, const uint64_t strokeId, const MaterialRemap& remap)
+  {
+    net::Message message = startEdit(terrain, strokeId, TerrainEditKind::remapMaterials, remapBytes);
+    message.appendBytes(remap);
+    return message;
+  }
+
   std::optional<TerrainEditPayload> unpackTerrainEdit(const net::Message& message)
   {
     if (message.getType() != net::MessageType::terrainEdit)
@@ -154,7 +164,7 @@ namespace terrain
       payload.strokeId = reader.read<uint64_t>();
       const auto kind = reader.read<uint8_t>();
 
-      if (payload.terrain.is_nil() || kind > static_cast<uint8_t>(TerrainEditKind::setChunks))
+      if (payload.terrain.is_nil() || kind > static_cast<uint8_t>(TerrainEditKind::remapMaterials))
       {
         return std::nullopt;
       }
@@ -194,6 +204,19 @@ namespace terrain
           }
 
           break;
+
+        case TerrainEditKind::remapMaterials:
+        {
+          const auto bytes = reader.readBytes(remapBytes);
+          std::ranges::copy(bytes, payload.remap.begin());
+
+          if (!isValidRemap(payload.remap) || isIdentity(payload.remap))
+          {
+            return std::nullopt;
+          }
+
+          break;
+        }
       }
 
       if (reader.remaining() != 0)

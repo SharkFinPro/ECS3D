@@ -1,6 +1,8 @@
 #include "RecordTerrainEdits.h"
 #include "TerrainSetChunks.h"
 #include "terrain/TerrainAddition.h"
+#include "terrain/TerrainEdit.h"
+#include "terrain/TerrainOps.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 #include <nlohmann/json.hpp>
@@ -40,6 +42,30 @@ std::optional<EditCommand> commandForTerrainStroke(
   }
 
   return EditCommand::terrainStroke(terrainUUID, std::move(chunks));
+}
+
+std::optional<TerrainRemapPrediction> predictTerrainRemap(const uuids::uuid& terrainUUID,
+                                                         terrain::TerrainVolume& volume,
+                                                         const terrain::MaterialRemap& remap, const uint64_t strokeId)
+{
+  if (!terrain::isValidRemap(remap) || terrain::isIdentity(remap))
+  {
+    return std::nullopt;
+  }
+
+  const auto edits = terrain::remapMaterials(volume, remap);
+
+  std::vector<std::pair<terrain::ChunkCoord, std::shared_ptr<const terrain::TerrainChunk>>> before;
+  before.reserve(edits.size());
+  for (const auto& [coord, chunk] : edits)
+  {
+    before.emplace_back(coord, volume.chunk(coord));
+  }
+
+  terrain::commit(volume, edits);
+
+  return TerrainRemapPrediction{ terrain::packRemapEdit(terrainUUID, strokeId, remap),
+                                 commandForTerrainStroke(terrainUUID, before, volume) };
 }
 
 std::optional<EditCommand> commandForTerrainAdd(const nlohmann::json& asset, const terrain::TerrainStore& store)

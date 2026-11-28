@@ -1,6 +1,7 @@
 #include "TerrainEditApply.h"
 #include "TerrainBrush.h"
 #include "TerrainChunk.h"
+#include "TerrainMaterialRemap.h"
 #include "TerrainOps.h"
 #include "TerrainVolume.h"
 #include <glm/vec3.hpp>
@@ -114,6 +115,14 @@ namespace terrain
 
         break;
       }
+      case TerrainEditKind::remapMaterials:
+        if (!isValidRemap(edit.remap) || isIdentity(edit.remap))
+        {
+          return refused(TerrainEditRefusal::invalidOp);
+        }
+
+        edits = remapMaterials(*volume, edit.remap);
+        break;
       default:
         return refused(TerrainEditRefusal::invalidOp);
     }

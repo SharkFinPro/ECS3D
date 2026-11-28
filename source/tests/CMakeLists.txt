@@ -260,6 +260,7 @@ add_executable(${PROJECT_NAME}
   TerrainFormatTest.cpp
   TerrainGateTest.cpp
   TerrainGeneratorsTest.cpp
+  TerrainMaterialRemapTest.cpp
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
   TerrainPaletteBindingTest.cpp

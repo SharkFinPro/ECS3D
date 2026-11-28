@@ -139,6 +139,12 @@ validation reads a stale volume and refuses. Null and air are the same chunk whe
 refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
 coordinate. `recordBatch` refuses a `terrainStroke`.
 
+A material remap records the same way: `edits::predictTerrainRemap` (`edits/RecordTerrainEdits.h`) remaps the
+editor's volume, captures each changed chunk's pointer from before, and returns the `remapMaterials` message with a
+`terrainStroke` command built by `commandForTerrainStroke` (nullopt when the editor's volume held nothing it changed;
+the message is still worth sending). The palette change is its own `replaceAsset` (`commandForTerrainPalette`), so
+undoing a removal or move is two history entries.
+
 A stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound memory.
 `EditCommand::pinnedBytes()` sums `byteSize()` over those chunks (a terrain asset command counts the chunk map it
 holds; 0 for every other command, no deduplication), and `EditHistory` keeps the total over both stacks exact
