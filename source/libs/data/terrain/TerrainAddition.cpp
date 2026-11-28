@@ -29,6 +29,33 @@ namespace terrain
       return true;
     }
 
+    // A missing "color" is white, so files and bodies written before it existed still load.
+    bool readColor(const Json& entry, glm::vec3& color)
+    {
+      if (!entry.contains("color"))
+      {
+        return true;
+      }
+
+      const Json& value = entry["color"];
+      if (!value.is_array() || value.size() != 3)
+      {
+        return false;
+      }
+
+      for (size_t i = 0; i < 3; ++i)
+      {
+        if (!value[i].is_number())
+        {
+          return false;
+        }
+
+        color[static_cast<glm::length_t>(i)] = static_cast<float>(value[i].get<double>());
+      }
+
+      return true;
+    }
+
     bool readPalette(const Json& value, std::vector<TerrainMaterial>& palette)
     {
       if (!value.is_array() || value.size() > maxPaletteSize)
@@ -42,7 +69,8 @@ namespace terrain
 
         if (!entry.is_object() || !entry.contains("name") || !entry["name"].is_string() ||
             !entry.contains("albedoTexture") || !readUuid(entry["albedoTexture"], material.albedoTexture) ||
-            !entry.contains("specularTexture") || !readUuid(entry["specularTexture"], material.specularTexture))
+            !entry.contains("specularTexture") || !readUuid(entry["specularTexture"], material.specularTexture) ||
+            !readColor(entry, material.color))
         {
           return false;
         }
@@ -66,7 +94,8 @@ namespace terrain
     {
       body["palette"].push_back({ { "name", material.name },
                                   { "albedoTexture", uuids::to_string(material.albedoTexture) },
-                                  { "specularTexture", uuids::to_string(material.specularTexture) } });
+                                  { "specularTexture", uuids::to_string(material.specularTexture) },
+                                  { "color", Json::array({ material.color.r, material.color.g, material.color.b }) } });
     }
 
     return {

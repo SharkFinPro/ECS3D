@@ -134,8 +134,15 @@ namespace {
     {
       case AssetType::Model:
       case AssetType::Texture:
-      case AssetType::Terrain:
         asset["path"] = path;
+        break;
+      case AssetType::Terrain:
+        // A body is a description (terrain/TerrainAddition.h): a palette replacement carries one.
+        asset["path"] = path;
+        if (!body.empty())
+        {
+          asset["body"] = body;
+        }
         break;
       case AssetType::Script:
         asset["path"] = path;
@@ -1174,6 +1181,12 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
         return { ValidationFailure::targetMissing, data.assetUUID };
       }
 
+      if (data.type == AssetType::Terrain)
+      {
+        return record->path == data.afterPath ? validateTerrainPalette(data.assetUUID, data.afterBody, terrains)
+                                              : Validation{ ValidationFailure::targetChanged, data.assetUUID };
+      }
+
       if (record->path != data.afterPath || record->className != data.afterClassName
           || record->body != data.afterBody)
       {
@@ -1452,6 +1465,12 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
       if (!record)
       {
         return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      if (data.type == AssetType::Terrain)
+      {
+        return record->path == data.beforePath ? validateTerrainPalette(data.assetUUID, data.beforeBody, terrains)
+                                               : Validation{ ValidationFailure::targetChanged, data.assetUUID };
       }
 
       if (record->path != data.beforePath || record->className != data.beforeClassName

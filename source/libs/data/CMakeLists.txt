@@ -75,6 +75,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainGenerators.h
   terrain/TerrainOps.cpp
   terrain/TerrainOps.h
+  terrain/TerrainPalette.cpp
+  terrain/TerrainPalette.h
   terrain/TerrainParallel.cpp
   terrain/TerrainParallel.h
   terrain/TerrainPlaySnapshot.cpp

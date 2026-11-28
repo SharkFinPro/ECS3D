@@ -62,4 +62,28 @@ std::optional<EditCommand> commandForTerrainAdd(const nlohmann::json& asset, con
                                std::move(restore));
 }
 
+std::optional<EditCommand> commandForTerrainPalette(const uuids::uuid& terrainUUID, const terrain::TerrainStore& view,
+                                                    std::vector<terrain::TerrainMaterial> palette)
+{
+  const auto* current = view.description(terrainUUID);
+  if (!current || current->palette == palette)
+  {
+    return std::nullopt;
+  }
+
+  auto replaced = *current;
+  replaced.palette = std::move(palette);
+  if (!terrain::isValidDescription(replaced))
+  {
+    return std::nullopt;
+  }
+
+  const auto before = terrain::addTerrainAssetJson(*current);
+  const auto after = terrain::addTerrainAssetJson(replaced);
+  const std::string path = before.value("path", std::string{});
+
+  return EditCommand::replaceAsset(terrainUUID, AssetType::Terrain, path, {}, before.value("body", std::string{}),
+                                   path, {}, after.value("body", std::string{}));
+}
+
 }

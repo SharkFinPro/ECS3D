@@ -215,6 +215,13 @@ Validation is the asset kinds' (record absent or present), plus the store: a com
 `targetChanged` when the store already holds the uuid and `targetMissing` for a null store. Undo of a create does not
 compare the volume, because strokes recorded after it sit above it on the stack and are undone first.
 
+A palette edit is a `replaceAsset` of the terrain record: `commandForTerrainPalette` (`edits/RecordTerrainEdits.h`)
+holds the description body before and after (`addTerrainAssetJson`), and undo and redo send an `addAsset` carrying that
+body, which the server applies as a palette replacement ([replication.md](replication.md)). The registry record does not
+change on a palette edit, so validation compares the live palette in the `TerrainStore` passed to `undo`/`redo`: a null
+store or an unknown terrain is `targetMissing`, and a palette other than the command's after (undo) or before (redo)
+palette is `targetChanged`.
+
 ## Editor wiring
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
