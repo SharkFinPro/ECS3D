@@ -73,6 +73,8 @@ add_library(${PROJECT_NAME}
   terrain/TerrainFormat.h
   terrain/TerrainGenerators.cpp
   terrain/TerrainGenerators.h
+  terrain/TerrainMaterialRemap.cpp
+  terrain/TerrainMaterialRemap.h
   terrain/TerrainOps.cpp
   terrain/TerrainOps.h
   terrain/TerrainPalette.cpp

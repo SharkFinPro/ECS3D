@@ -5,6 +5,7 @@
 #include "terrain/TerrainEdit.h"
 #include "terrain/TerrainEditApply.h"
 #include "terrain/TerrainGenerators.h"
+#include "terrain/TerrainMaterialRemap.h"
 #include "terrain/TerrainOps.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainTypes.h"
@@ -149,6 +150,16 @@ namespace {
     edit.terrain = terrainId;
     edit.kind = terrain::TerrainEditKind::setChunks;
     edit.chunks = std::move(chunks);
+    return edit;
+  }
+
+  terrain::TerrainEditPayload remapEdit(const uint8_t from, const uint8_t to, const uuids::uuid& id = terrainId)
+  {
+    terrain::TerrainEditPayload edit;
+    edit.terrain = id;
+    edit.kind = terrain::TerrainEditKind::remapMaterials;
+    edit.remap = terrain::identityRemap();
+    edit.remap[from] = to;
     return edit;
   }
 
@@ -501,6 +512,47 @@ TEST(TerrainEditApply, RefusesAChangingEditWhenRevisionsAreExhausted)
   const auto unchanged =
     terrain::applyTerrainEdit(env.store, brushEdit(subtractBrush({ 80.0f, 400.0f, 80.0f }, 10.0f)));
   EXPECT_EQ(unchanged.refusal, terrain::TerrainEditRefusal::none);
+}
+
+TEST(TerrainEditApply, RemapChangesEveryPaintedChunkUnderOneFreshRevision)
+{
+  // fillFlat paints material 1 everywhere.
+  Env env(false);
+  const auto expected = terrain::remapMaterials(*env.volume, remapEdit(1, 4).remap);
+  ASSERT_EQ(expected.size(), env.volume->chunks().size());
+  const uint32_t before = env.counter();
+
+  const auto result = terrain::applyTerrainEdit(env.store, remapEdit(1, 4));
+
+  expectApplied(env, expected, result, before);
+  EXPECT_EQ(env.volume->materialAtSample({ 0, 0, 0 }), 4);
+}
+
+TEST(TerrainEditApply, RemapOfAnUnusedMaterialChangesNothingAndTakesNoRevision)
+{
+  Env env(false);
+  const uint32_t before = env.counter();
+  const State state = capture(env);
+
+  const auto result = terrain::applyTerrainEdit(env.store, remapEdit(9, 4));
+
+  EXPECT_EQ(result.refusal, terrain::TerrainEditRefusal::none);
+  EXPECT_TRUE(result.changed.empty());
+  expectSame(state, capture(env));
+  EXPECT_EQ(env.counter(), before + 1);
+
+  EXPECT_FALSE(terrain::applyTerrainEdit(env.store, remapEdit(1, 4)).changed.empty());
+}
+
+TEST(TerrainEditApply, RefusesAnInvalidOrIdentityRemapAndAnUnknownTerrain)
+{
+  Env env(false);
+  expectRefused(env, remapEdit(terrain::reservedMaterial, 0), terrain::TerrainEditRefusal::invalidOp);
+  expectRefused(env, remapEdit(1, terrain::reservedMaterial), terrain::TerrainEditRefusal::invalidOp);
+  expectRefused(env, remapEdit(1, 1), terrain::TerrainEditRefusal::invalidOp);
+  expectRefused(env, remapEdit(1, 4, otherId), terrain::TerrainEditRefusal::unknownTerrain);
+
+  EXPECT_EQ(terrain::applyTerrainEdit(env.store, remapEdit(1, 4)).refusal, terrain::TerrainEditRefusal::none);
 }
 
 TEST(TerrainEditApply, EveryRefusalHasItsOwnText)

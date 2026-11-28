@@ -5,6 +5,7 @@
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainCodec.h"
 #include "terrain/TerrainEdit.h"
+#include "terrain/TerrainMaterialRemap.h"
 #include "terrain/TerrainReplication.h"
 #include "terrain/TerrainTypes.h"
 
@@ -65,6 +66,14 @@ namespace {
     op.planePoint = { 81.0f, 14.0f, 82.0f };
     op.planeNormal = { 0.1f, 1.0f, 0.0f };
     return op;
+  }
+
+  terrain::MaterialRemap sampleRemap()
+  {
+    auto remap = terrain::identityRemap();
+    remap[1] = 3;
+    remap[3] = 1;
+    return remap;
   }
 
   terrain::SampleBox sampleBox()
@@ -227,6 +236,40 @@ TEST(TerrainEdit, SetChunksRoundTripsDenseUniformAndNullEntries)
   EXPECT_EQ(payload->chunks[2].chunk->hash(), air->hash());
 }
 
+TEST(TerrainEdit, RemapRoundTripsTheWholeTable)
+{
+  auto remap = terrain::identityRemap();
+  for (size_t i = 0; i < terrain::reservedMaterial; ++i)
+  {
+    remap[i] = static_cast<uint8_t>(terrain::reservedMaterial - 1 - i);
+  }
+
+  const auto message = terrain::packRemapEdit(terrainUUID, strokeId, remap);
+  EXPECT_EQ(message.bytes().size(), headerBytes + 256);
+
+  const auto payload = terrain::unpackTerrainEdit(message);
+  ASSERT_TRUE(payload.has_value());
+  EXPECT_EQ(payload->kind, terrain::TerrainEditKind::remapMaterials);
+  EXPECT_EQ(payload->terrain, terrainUUID);
+  EXPECT_EQ(payload->strokeId, strokeId);
+  EXPECT_EQ(payload->remap, remap);
+}
+
+TEST(TerrainEdit, RefusesARemapThatMovesTheReservedIndexOrIsTheIdentity)
+{
+  EXPECT_TRUE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, sampleRemap())));
+
+  auto reservedElsewhere = sampleRemap();
+  reservedElsewhere[terrain::reservedMaterial] = 0;
+  EXPECT_FALSE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, reservedElsewhere)));
+
+  auto ontoReserved = sampleRemap();
+  ontoReserved[7] = terrain::reservedMaterial;
+  EXPECT_FALSE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, ontoReserved)));
+
+  EXPECT_FALSE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, terrain::identityRemap())));
+}
+
 TEST(TerrainEdit, PackSetChunksThrowsOnlyAboveTheEntryLimit)
 {
   const auto solid = solidChunk();
@@ -277,7 +320,7 @@ TEST(TerrainEdit, RefusesAnUnknownKind)
   const auto headerOnly = bytesOf(header);
   ASSERT_EQ(headerOnly.size(), headerBytes);
 
-  for (const uint8_t kind : { uint8_t{ 3 }, uint8_t{ 4 }, uint8_t{ 255 } })
+  for (const uint8_t kind : { uint8_t{ 4 }, uint8_t{ 5 }, uint8_t{ 255 } })
   {
     auto bytes = headerOnly;
     bytes[headerBytes - 1] = kind;
@@ -443,6 +486,7 @@ TEST(TerrainEdit, RefusesTrailingBytes)
   const std::vector<net::Message> goods{
     terrain::packBrushEdit(terrainUUID, strokeId, sampleBrush()),
     terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox()),
+    terrain::packRemapEdit(terrainUUID, strokeId, sampleRemap()),
     rawSetChunks({ validRaw() })
   };
 
@@ -461,6 +505,7 @@ TEST(TerrainEdit, RefusesEveryTruncation)
   const std::vector<net::Message> goods{
     terrain::packBrushEdit(terrainUUID, strokeId, sampleBrush()),
     terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox()),
+    terrain::packRemapEdit(terrainUUID, strokeId, sampleRemap()),
     rawSetChunks({ validRaw(), validRaw({ 5, 6, 7 }) })
   };
 

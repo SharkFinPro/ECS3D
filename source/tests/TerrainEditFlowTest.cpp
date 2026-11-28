@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include "edits/EditCommand.h"
+#include "edits/RecordTerrainEdits.h"
+#include "edits/TerrainSetChunks.h"
 #include "scenes/SceneManager.h"
 #include "terrain/TerrainBrush.h"
 #include "terrain/TerrainChunk.h"
@@ -7,6 +10,7 @@
 #include "terrain/TerrainEditApply.h"
 #include "terrain/TerrainEditEcho.h"
 #include "terrain/TerrainGenerators.h"
+#include "terrain/TerrainMaterialRemap.h"
 #include "terrain/TerrainOps.h"
 #include "terrain/TerrainReplication.h"
 #include "terrain/TerrainStore.h"
@@ -429,4 +433,87 @@ TEST(TerrainEditFlow, MalformedAndRefusedEditsLeaveEveryStoreUnchanged)
   EXPECT_FALSE(valid->changed.empty());
   EXPECT_TRUE(flow.echo.pending());
   EXPECT_NE(flow.server.volume->snapshotChunks(), serverBefore);
+}
+
+TEST(TerrainEditFlow, ARemapPredictedByTheSenderIsConfirmedByHashReachesTheOtherViewAndUndoes)
+{
+  Flow flow;
+  const auto original = flow.server.volume->snapshotChunks();
+
+  // fillFlat paints material 1; remove it in favor of material 0.
+  const auto remap = terrain::remapForRemoval(3, 1, 0);
+  ASSERT_TRUE(remap.has_value());
+  const auto prediction = edits::predictTerrainRemap(terrainId, *flow.a.volume, *remap);
+  ASSERT_TRUE(prediction.has_value());
+  ASSERT_TRUE(prediction->command.has_value());
+  const auto predicted = flow.a.volume->snapshotChunks();
+  ASSERT_NE(predicted, original);
+
+  const auto result = flow.serverEdit(prediction->message, connA);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->refusal, terrain::TerrainEditRefusal::none);
+  size_t predictedChanges = 0;
+  for (const auto& [coord, chunk] : predicted)
+  {
+    predictedChanges += chunk->hash() != hashIn(original, coord) ? 1 : 0;
+  }
+  EXPECT_GT(predictedChanges, 0u);
+  EXPECT_EQ(result->changed.size(), predictedChanges);
+
+  flow.deliver();
+
+  EXPECT_TRUE(flow.requests.empty());
+  EXPECT_EQ(flow.fullEntries[connA], 0u);
+  EXPECT_EQ(flow.hashOnlyEntries[connA], result->changed.size());
+  EXPECT_EQ(flow.fullEntries[connB], result->changed.size());
+  for (const auto& [coord, chunk] : predicted)
+  {
+    EXPECT_EQ(flow.b.hashAt(coord), chunk->hash());
+    EXPECT_EQ(flow.a.store.revision(terrainId, coord), flow.server.store.revision(terrainId, coord));
+  }
+  flow.expectConverged();
+
+  // Undo through the terrainStroke command, as the editor's history sends it.
+  const auto undo = prediction->command->buildUndoTerrainChunks();
+  edits::predictSetChunks(*flow.a.volume, undo);
+  for (const net::Message& message : edits::packSetChunksEdits(undo))
+  {
+    const auto undone = flow.serverEdit(message, connA);
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->refusal, terrain::TerrainEditRefusal::none);
+  }
+
+  flow.deliver();
+
+  EXPECT_TRUE(flow.requests.empty());
+  for (const auto& [coord, chunk] : original)
+  {
+    EXPECT_EQ(flow.server.hashAt(coord), chunk->hash());
+  }
+  flow.expectConverged();
+}
+
+TEST(TerrainEditFlow, ARemapThatAnotherEditOvertookStillConverges)
+{
+  Flow flow;
+  auto remap = terrain::identityRemap();
+  remap[1] = 2;
+  remap[7] = 3;
+  const auto prediction = edits::predictTerrainRemap(terrainId, *flow.a.volume, remap);
+  ASSERT_TRUE(prediction.has_value());
+
+  // B paints material 7 before the server sees A's remap, so A predicted from a stale volume.
+  flow.predict(flow.b, bigBrushB);
+  ASSERT_TRUE(flow.serverBrush(bigBrushB, connB).has_value());
+  const auto result = flow.serverEdit(prediction->message, connA);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_FALSE(result->changed.empty());
+
+  flow.deliver();
+  flow.routeRequests();
+  flow.deliver();
+
+  EXPECT_TRUE(flow.requests.empty());
+  EXPECT_GT(flow.fullEntries[connA], 0u);
+  flow.expectConverged();
 }
