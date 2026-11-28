@@ -24,9 +24,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <span>
 #include <memory>
 #include <optional>
+#include <span>
 #include <unordered_set>
 #include <vector>
 #include <uuid.h>
@@ -655,6 +655,21 @@ TEST(TerrainBrushHelpersTest, TheTemplateCarriesTheToolKindAndTheSettings)
   EXPECT_EQ(terrainBrushTemplate(TerrainTool::paint, brush, 0).kind, terrain::BrushOp::Kind::paint);
 }
 
+TEST(TerrainBrushHelpersTest, ThePaintTemplateIgnoresStoredStrengthAndFalloff)
+{
+  editorTerrainSettings::BrushSettings brush;
+  brush.strength = 0.0f;
+  brush.falloff = 0.8f;
+
+  const terrain::BrushOp paint = terrainBrushTemplate(TerrainTool::paint, brush, 2);
+  EXPECT_FLOAT_EQ(paint.strength, 1.0f);
+  EXPECT_FLOAT_EQ(paint.falloff, 0.0f);
+
+  const terrain::BrushOp add = terrainBrushTemplate(TerrainTool::add, brush, 2);
+  EXPECT_FLOAT_EQ(add.strength, 0.0f);
+  EXPECT_FLOAT_EQ(add.falloff, 0.8f);
+}
+
 TEST(TerrainBrushHelpersTest, TheTemplateCarriesTheMaterialForPaintAndAdd)
 {
   const editorTerrainSettings::BrushSettings brush;
@@ -733,6 +748,15 @@ TEST(TerrainBrushSessionTest, APaintStrokeChangesMaterialsAndLeavesEveryDistance
   Env env;
   Recorder recorder;
   TerrainBrushSession session;
+
+  // Halving the distances near the surface leaves a field a redistance would change.
+  const terrain::SampleBox seeded{ { 4, 0, 4 }, { 40, 10, 44 } };
+  const terrain::ChunkEdits seed = terrain::editSamples(
+    *env.volume, seeded, [](const glm::ivec3, int16_t& distance, uint8_t&) { distance = distance / 2; });
+  ASSERT_FALSE(seed.empty());
+  terrain::commit(*env.volume, seed);
+  ASSERT_FALSE(terrain::redistance(*env.volume, seeded).empty());
+
   const terrain::TerrainVolume::ChunkMap before = env.volume->snapshotChunks();
 
   terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);

@@ -2,9 +2,12 @@
 #define TERRAINTOOLSTATE_H
 
 #include <terrain/TerrainBrush.h>
+#include <terrain/TerrainStore.h>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 #include <uuid.h>
 
 enum class TerrainTool : uint8_t { add, subtract, smooth, flatten, paint };
@@ -39,6 +42,29 @@ inline constexpr size_t terrainToolCount = 5;
   }
 
   return paletteSize == 0 ? 0 : static_cast<uint8_t>(paletteSize - 1);
+}
+
+// The renderer draws this many default colors by index when a terrain has no palette.
+inline constexpr size_t defaultMaterialCount = 8;
+
+// How many materials the Material list offers: the palette's entries, or the renderer's defaults for an empty palette.
+[[nodiscard]] inline size_t selectableMaterials(const std::vector<terrain::TerrainMaterial>& palette)
+{
+  return palette.empty() ? defaultMaterialCount : palette.size();
+}
+
+// The Material list's text for an index: "3: Rock", "3: Material 3" for an unnamed entry, "Default 3" without a
+// palette.
+[[nodiscard]] inline std::string materialLabel(const std::vector<terrain::TerrainMaterial>& palette,
+                                              const uint8_t index)
+{
+  if (palette.empty())
+  {
+    return "Default " + std::to_string(index);
+  }
+
+  const std::string& name = palette[clampMaterial(index, palette.size())].name;
+  return std::to_string(index) + ": " + (name.empty() ? "Material " + std::to_string(index) : name);
 }
 
 // Whether terrain mode may be on: an object with a Terrain component is selected, the server accepts edits and the

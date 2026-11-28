@@ -190,16 +190,18 @@ The mode is entered from the Sculpt checkbox the Terrain section draws (`registe
 `drawSculpt` callback, and `EditorApp::drawTerrainSculpt` draws it only for the selected object's own component, so a
 prefab body shows none) or with the `terrainMode` keybind. While it is on, the section shows a radio button per tool
 (Add, Subtract, Smooth, Flatten, Paint) and Radius, Strength and Falloff, all written through
-`editorTerrainSettings::writeBrush` for the current tool (Paint hides Strength and Falloff, which it ignores). Add and
-Paint also show a Material combo over the terrain's palette (the eight renderer default colors when it has none) that
-sets `TerrainToolState::activeMaterial`, a session choice that `clampMaterial` bounds when the stroke template is built;
-a Paint stroke changes materials only, so `strokeRedistances` makes its release send and predict no redistance; the tool keybinds only switch the tool (`writeLastTool`)
-and never enter the mode, and the radius keybinds scale the current tool's radius by 1.25 or 0.8. A brush radius
-above `maxBrushRadiusVoxels` voxels is clamped (`effectiveBrushRadius`) when a stroke begins and when the ring is
+`editorTerrainSettings::writeBrush` for the current tool (Paint hides Strength and Falloff, and its template
+forces strength 1 and falloff 0). Add, Flatten and Paint also show a Material combo over the terrain's palette (the
+eight renderer default colors when it has none; `selectableMaterials`, `materialLabel`) that sets
+`TerrainToolState::activeMaterial`, a session choice that `clampMaterial` bounds when the stroke template is built.
+Add and Flatten write it into the ground they raise and Paint into existing ground. A Paint stroke changes materials
+only, so `strokeRedistances` makes its release send and predict no redistance. The tool keybinds only switch the tool
+(`writeLastTool`) and never enter the mode, and the radius keybinds scale the current tool's radius by 1.25 or 0.8. A brush
+radius above `maxBrushRadiusVoxels` voxels is clamped (`effectiveBrushRadius`) when a stroke begins and when the ring is
 drawn, since the server refuses a larger brush. The headless parts are `TerrainStroke.h` (spacing along the pointer
 path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
 [viewport-gizmos.md](viewport-gizmos.md). A finished stroke is one undo step ([undo-redo.md](undo-redo.md)), and the
-unsaved flag is held for the length of a stroke. A new brush always paints material 0.
+unsaved flag is held for the length of a stroke. A new brush starts on material 0.
 
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`

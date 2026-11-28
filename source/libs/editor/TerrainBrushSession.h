@@ -73,7 +73,8 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
   return std::min(radius, terrain::maxBrushRadiusVoxels * volume.voxelSize());
 }
 
-// The operation a stroke of tool applies at each point; material is what Paint writes and Add's new ground takes.
+// The operation a stroke of tool applies at each point; material is what Paint writes and what the ground Add and
+// Flatten raise takes.
 [[nodiscard]] inline terrain::BrushOp terrainBrushTemplate(const TerrainTool tool,
                                                            const editorTerrainSettings::BrushSettings& brush,
                                                            const uint8_t material)
@@ -82,8 +83,9 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
   op.kind = brushKind(tool);
   op.material = material;
   op.radius = brush.radius;
-  op.strength = brush.strength;
-  op.falloff = brush.falloff;
+  // Paint sets materials at full weight, and a stored strength of 0 would make the brush skip every sample.
+  op.strength = op.kind == terrain::BrushOp::Kind::paint ? 1.0f : brush.strength;
+  op.falloff = op.kind == terrain::BrushOp::Kind::paint ? 0.0f : brush.falloff;
   return op;
 }
 

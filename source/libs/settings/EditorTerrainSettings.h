@@ -5,9 +5,9 @@
 
 class SettingsStore;
 
-// Terrain brush preferences, kept per tool. A tool is a plain index (add, subtract, smooth, flatten, paint, in the editor's
-// TerrainTool order) because settings must not depend on the editor lib or data. Radius is in terrain-local world
-// units, which the engine authors at 5 units per meter.
+// Terrain brush preferences, kept per tool. A tool is a plain index (add, subtract, smooth, flatten, paint, in the
+// editor's TerrainTool order) because settings must not depend on the editor lib or data. Radius is in terrain-local
+// world units, which the engine authors at 5 units per meter.
 namespace editorTerrainSettings {
   inline constexpr std::size_t toolCount = 5;
 

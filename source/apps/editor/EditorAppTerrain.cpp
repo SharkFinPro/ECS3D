@@ -51,8 +51,6 @@ namespace {
     glm::vec4(0.8f, 0.5f, 0.95f, 1.0f)
   };
 
-  // The renderer draws these many default colors by index when a terrain has no palette.
-  constexpr size_t defaultMaterialCount = 8;
 
   constexpr float radiusGrowFactor = 1.25f;
   constexpr float radiusShrinkFactor = 0.8f;
@@ -62,25 +60,12 @@ namespace {
     return static_cast<size_t>(tool);
   }
 
-  // The palette's size, or the renderer's default color count for a terrain without one.
-  [[nodiscard]] size_t selectableMaterials(const terrain::TerrainStore& store, const uuids::uuid& terrainUuid)
+  [[nodiscard]] const std::vector<terrain::TerrainMaterial>& paletteOf(const terrain::TerrainStore& store,
+                                                                       const uuids::uuid& terrainUuid)
   {
+    static const std::vector<terrain::TerrainMaterial> none;
     const terrain::TerrainDescription* description = store.description(terrainUuid);
-    return description && !description->palette.empty() ? description->palette.size() : defaultMaterialCount;
-  }
-
-  [[nodiscard]] std::string materialLabel(const terrain::TerrainStore& store, const uuids::uuid& terrainUuid,
-                                          const uint8_t index)
-  {
-    const terrain::TerrainDescription* description = store.description(terrainUuid);
-
-    if (description && !description->palette.empty())
-    {
-      const std::string& name = description->palette[std::min<size_t>(index, description->palette.size() - 1)].name;
-      return std::to_string(index) + ": " + name;
-    }
-
-    return "Default " + std::to_string(index);
+    return description ? description->palette : none;
   }
 }
 
@@ -374,7 +359,9 @@ void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& compone
                                editorTerrainSettings::maxFalloff);
   }
 
-  if (m_terrainTool.tool() == TerrainTool::add || m_terrainTool.tool() == TerrainTool::paint)
+  // Add and Flatten write the material into the ground they raise; Paint writes it into existing ground.
+  if (const TerrainTool tool = m_terrainTool.tool();
+      tool == TerrainTool::add || tool == TerrainTool::flatten || tool == TerrainTool::paint)
   {
     drawTerrainMaterialSelector(component->getTerrainUUID());
   }
@@ -397,10 +384,11 @@ void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& compone
 
 void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
 {
-  const size_t entries = selectableMaterials(*m_terrainStore, terrainUuid);
+  const std::vector<terrain::TerrainMaterial>& palette = paletteOf(*m_terrainStore, terrainUuid);
+  const size_t entries = selectableMaterials(palette);
   const uint8_t active = clampMaterial(m_terrainTool.activeMaterial(), entries);
 
-  if (!ImGui::BeginCombo("Material", materialLabel(*m_terrainStore, terrainUuid, active).c_str()))
+  if (!ImGui::BeginCombo("Material", materialLabel(palette, active).c_str()))
   {
     return;
   }
@@ -410,7 +398,7 @@ void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
     const auto material = static_cast<uint8_t>(index);
     ImGui::PushID(static_cast<int>(index));
 
-    if (ImGui::Selectable(materialLabel(*m_terrainStore, terrainUuid, material).c_str(), material == active))
+    if (ImGui::Selectable(materialLabel(palette, material).c_str(), material == active))
     {
       m_terrainTool.setActiveMaterial(material);
     }
@@ -437,7 +425,8 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
       terrainUuid, volume, m_serverEditable, pointer, hit,
       [this, tool, terrainUuid] {
         const uint8_t material =
-          clampMaterial(m_terrainTool.activeMaterial(), selectableMaterials(*m_terrainStore, terrainUuid));
+          clampMaterial(m_terrainTool.activeMaterial(),
+                        selectableMaterials(paletteOf(*m_terrainStore, terrainUuid)));
         return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool),
                                     material);
       },

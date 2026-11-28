@@ -6,6 +6,8 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
+#include <vector>
 #include <uuid.h>
 
 namespace {
@@ -225,4 +227,44 @@ TEST(TerrainToolStateTest, ARunningSceneRefusesEntryAndLeavesTheModeWhenPlayStar
   EXPECT_FALSE(state.refresh(contextFor(terrainA)));
   EXPECT_TRUE(state.refresh(running));
   EXPECT_FALSE(state.active());
+}
+
+namespace {
+  std::vector<terrain::TerrainMaterial> paletteOf(const std::vector<std::string>& names)
+  {
+    std::vector<terrain::TerrainMaterial> palette;
+
+    for (const std::string& name : names)
+    {
+      palette.push_back({ name, {}, {} });
+    }
+
+    return palette;
+  }
+}
+
+TEST(TerrainToolStateTest, AnEmptyPaletteOffersTheEightDefaultColors)
+{
+  const std::vector<terrain::TerrainMaterial> none;
+
+  EXPECT_EQ(selectableMaterials(none), 8u);
+  EXPECT_EQ(materialLabel(none, 0), "Default 0");
+  EXPECT_EQ(materialLabel(none, 7), "Default 7");
+}
+
+TEST(TerrainToolStateTest, APaletteOffersItsEntriesLabeledByIndexAndName)
+{
+  const auto palette = paletteOf({ "Grass", "Dirt", "Sand", "Rock" });
+
+  EXPECT_EQ(selectableMaterials(palette), 4u);
+  EXPECT_EQ(materialLabel(palette, 0), "0: Grass");
+  EXPECT_EQ(materialLabel(palette, 3), "3: Rock");
+}
+
+TEST(TerrainToolStateTest, AnUnnamedEntryGetsAFallbackName)
+{
+  const auto palette = paletteOf({ "Grass", "", "Sand", "" });
+
+  EXPECT_EQ(materialLabel(palette, 3), "3: Material 3");
+  EXPECT_EQ(materialLabel(palette, 0), "0: Grass");
 }
