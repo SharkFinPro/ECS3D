@@ -13,7 +13,9 @@ namespace terrain
 {
   class TerrainVolume;
 
-  // Every material index a sample of any held chunk carries. An absent chunk is air and contributes nothing.
+  // Every material index a solid sample (distance <= 0) of any held chunk carries, since the surface takes its
+  // material from the solid side. An absent chunk is air and contributes nothing. It reads every held chunk, so
+  // call it on demand (a remove click), not per frame.
   [[nodiscard]] std::bitset<256> materialsInUse(const TerrainVolume& volume);
 
   // The edits below change a palette copy. Each returns nullopt when it applied, or the reason it was refused, with the

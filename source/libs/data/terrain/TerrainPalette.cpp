@@ -40,9 +40,16 @@ namespace terrain
         continue;
       }
 
-      for (const uint8_t material : chunk->materials())
+      const auto distances = chunk->distances();
+      const auto materials = chunk->materials();
+
+      // A uniform chunk's spans hold one shared sample; air samples carry no visible material.
+      for (size_t i = 0; i < materials.size(); ++i)
       {
-        used.set(material);
+        if (distances[i] <= 0)
+        {
+          used.set(materials[i]);
+        }
       }
     }
 

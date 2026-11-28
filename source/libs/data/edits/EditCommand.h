@@ -184,12 +184,11 @@ public:
                                             std::string path, std::string className, std::string body,
                                             std::optional<TerrainRestore> terrain = std::nullopt);
 
-  // For a Terrain asset the bodies are terrain description bodies (terrain/TerrainAddition.h) and only the palette
-  // differs; validation then compares the live palette instead of the registry record, which a palette edit leaves
-  // alone.
   // Re-registering an existing uuid with a new record: a prefab body edit, or "Save as Prefab" over a
   // name that already exists. Distinct from addAsset because addAsset's reverse is a removeAsset, which
-  // would delete the asset rather than put its previous body back.
+  // would delete the asset rather than put its previous body back. For a Terrain asset the bodies are terrain
+  // description bodies (terrain/TerrainAddition.h) that differ only in the palette; validation then compares the
+  // live palette instead of the registry record, which a palette edit leaves alone.
   [[nodiscard]] static EditCommand replaceAsset(const uuids::uuid& assetUUID, AssetType type,
                                                 std::string beforePath, std::string beforeClassName,
                                                 std::string beforeBody, std::string afterPath,

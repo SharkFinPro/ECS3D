@@ -5,6 +5,7 @@
 #include "assets/AssetRegistry.h"
 #include "edits/EditCommand.h"
 #include "edits/RecordTerrainEdits.h"
+#include "edits/TerrainRestore.h"
 #include "terrain/TerrainAddition.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainPalette.h"
@@ -64,11 +65,15 @@ namespace {
     return description;
   }
 
-  std::shared_ptr<const terrain::TerrainChunk> denseWithMaterials(const uint8_t first, const uint8_t second)
+  // Solid samples carry first, and solidSecond at index 1; the last sample is air carrying airMaterial.
+  std::shared_ptr<const terrain::TerrainChunk> denseWithMaterials(const uint8_t first, const uint8_t solidSecond,
+                                                                  const uint8_t airMaterial)
   {
-    std::vector<int16_t> distances(terrain::samplesPerChunk, 0);
+    std::vector<int16_t> distances(terrain::samplesPerChunk, -1);
     std::vector<uint8_t> materials(terrain::samplesPerChunk, first);
-    materials.back() = second;
+    materials[1] = solidSecond;
+    distances.back() = terrain::airDistance;
+    materials.back() = airMaterial;
 
     return terrain::TerrainChunk::dense(std::move(distances), std::move(materials));
   }
@@ -121,13 +126,17 @@ TEST(TerrainPalette, MaterialsInUseReadsDenseAndUniformChunks)
   terrain::TerrainVolume volume(1.0f);
   EXPECT_TRUE(terrain::materialsInUse(volume).none());
 
-  volume.setChunk({ 0, 0, 0 }, denseWithMaterials(3, 7));
+  volume.setChunk({ 0, 0, 0 }, denseWithMaterials(3, 7, 9));
   volume.setChunk({ 1, 0, 0 }, solid(5));
 
   const auto used = terrain::materialsInUse(volume);
   EXPECT_EQ(used, usedIndices({ 3, 5, 7 }));
-  EXPECT_FALSE(used.test(1));
+  EXPECT_FALSE(used.test(9));
   EXPECT_FALSE(used.test(0));
+
+  // A uniform air chunk carries a material that nothing shows.
+  volume.setChunk({ 2, 0, 0 }, terrain::TerrainChunk::uniform(terrain::airDistance, 4));
+  EXPECT_FALSE(terrain::materialsInUse(volume).test(4));
 }
 
 TEST(TerrainPalette, AddMaterialAppendsAndRefusesAPastTheLimitAndALongName)
@@ -233,6 +242,58 @@ TEST(TerrainPaletteReplacement, ABodyOverAHeldTerrainReplacesOnlyThePalette)
   EXPECT_NE(server.assets.getByUUIDOfType(terrainId, AssetType::Terrain), nullptr);
 }
 
+TEST(TerrainPaletteReplacement, AResentCreateBodyOverAHeldTerrainReplacesOnlyThePalette)
+{
+  Pair pair;
+  auto& server = pair.world.server;
+  const auto volume = server.store.find(terrainId);
+  const auto chunksBefore = volume->snapshotChunks();
+  ASSERT_FALSE(chunksBefore.empty());
+
+  auto resent = *server.store.description(terrainId);
+  resent.palette = paletteOf(2);
+  auto asset = terrain::addTerrainAssetJson(resent);
+  asset["displayName"] = "Again";
+
+  std::optional<terrain::TerrainDescription> created;
+  EXPECT_TRUE(replication::applyAddAssetWithTerrain(server.assets, server.scenes, server.components, server.store,
+                                                    asset, true, &created));
+
+  EXPECT_FALSE(created.has_value());
+  EXPECT_EQ(server.store.description(terrainId)->palette, paletteOf(2));
+  EXPECT_EQ(server.store.find(terrainId), volume);
+  EXPECT_EQ(volume->snapshotChunks(), chunksBefore);
+  EXPECT_FALSE(server.store.expectedChunks(terrainId).has_value());
+}
+
+TEST(TerrainPaletteReplacement, ARestoreOverAHeldTerrainIsRefusedAndTakesNeitherChunksNorPalette)
+{
+  Pair pair;
+  auto& editor = pair.world.editor;
+  pair.setPalette(paletteOf(1));
+
+  const auto volume = editor.store.find(terrainId);
+  const auto chunksBefore = volume->snapshotChunks();
+
+  auto description = *editor.store.description(terrainId);
+  description.palette = paletteOf(3);
+  terrain::TerrainVolume::ChunkMap chunks;
+  chunks[{ 0, 0, 0 }] = noise(77);
+  const auto restore = edits::makeTerrainRestore(description, chunks, "Hills");
+
+  EXPECT_EQ(edits::applyTerrainRestore(editor.assets, editor.scenes, editor.components, editor.store, restore),
+            nullptr);
+  EXPECT_EQ(volume->snapshotChunks(), chunksBefore);
+  EXPECT_EQ(editor.store.description(terrainId)->palette, paletteOf(1));
+
+  // Control: once the terrain is gone the same restore applies.
+  editor.store.remove(terrainId);
+  editor.assets.removeAsset(terrainId);
+  EXPECT_NE(edits::applyTerrainRestore(editor.assets, editor.scenes, editor.components, editor.store, restore),
+            nullptr);
+  EXPECT_EQ(editor.store.description(terrainId)->palette, paletteOf(3));
+}
+
 TEST(TerrainPaletteReplacement, AChangedVoxelSizeOrAnInvalidPaletteIsRefusedWithNothingChanged)
 {
   Pair pair;
@@ -299,7 +360,9 @@ TEST(TerrainPaletteCommand, IsNothingForAnUnknownTerrainAnInvalidOrUnchangedPale
   EXPECT_TRUE(edits::commandForTerrainPalette(terrainId, store, paletteOf(1)).has_value());
 }
 
-TEST(TerrainPaletteCommand, UndoAndRedoCarryThePaletteThroughTheWire)
+// Models an editor that applies the undo and redo payload to its own registry and store before the server
+// gets it.
+TEST(TerrainPaletteCommand, UndoAndRedoCarryThePaletteThroughTheWireWhenTheEditorAppliesThePayloadLocally)
 {
   Pair pair;
   auto& world = pair.world;

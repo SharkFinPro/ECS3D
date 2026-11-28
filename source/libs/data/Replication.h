@@ -259,7 +259,8 @@ bool applyAddAsset(AssetRegistry& assetRegistry,
 // given, receives the description of a terrain that was created. A body over a uuid the registry holds as a Terrain
 // record and the store holds replaces only that terrain's palette: it is refused when the voxel size differs, the
 // volume and chunks are untouched, nothing is expected from an upload and *created stays unset. A terrain addAsset
-// without a body behaves as applyAddAsset does.
+// without a body behaves as applyAddAsset does. A re-sent create body for a terrain both sides already hold is the
+// same replacement: only the palette changes, whatever its chunk count says.
 bool applyAddAssetWithTerrain(AssetRegistry& assetRegistry,
                               SceneManager& sceneManager,
                               const std::shared_ptr<ComponentRegistry>& componentRegistry,
