@@ -4,6 +4,8 @@
 #include "AssetNaming.h"
 #include <WorldUnits.h>
 #include <assets/AssetRegistry.h>
+#include <VulkanEngine/components/assets/volume/VolumeMaterial.h>
+#include <glm/vec3.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <terrain/TerrainAddition.h>
 #include <terrain/TerrainOps.h>
@@ -60,6 +62,11 @@ namespace terrainCreate {
   inline constexpr float flatGroundVoxels = 8.0f;
   inline constexpr float thicknessVoxels = 4.0f;
   inline constexpr uint8_t material = 0;
+
+  // The one palette entry a created terrain starts with, without textures.
+  inline constexpr const char* defaultMaterialName = "Ground";
+  // The renderer's first default color, so a new terrain draws gray.
+  inline const glm::vec3 defaultMaterialColor = vke::s_defaultVolumeColors[0];
 
   // The most chunks the form creates, since generation runs on the frame that presses Create. Well under what one
   // generator call (maxEditChunks) and one addAsset (maxAddedTerrainChunks) accept, which the server keeps.

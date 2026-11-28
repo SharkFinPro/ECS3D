@@ -282,11 +282,17 @@ TEST(TerrainToolStateTest, AnEmptyPaletteSwatchIsTheRenderersDefaultColorWrapped
   EXPECT_NE(materialSwatchColor(none, 0), materialSwatchColor(none, 1));
 }
 
-TEST(TerrainToolStateTest, APaletteEntrySwatchIsNeutral)
+TEST(TerrainToolStateTest, APaletteEntrySwatchIsItsColorUnlessItHasAnAlbedoTexture)
 {
-  const std::vector<terrain::TerrainMaterial> palette(3);
+  std::vector<terrain::TerrainMaterial> palette(3);
+  palette[1].color = glm::vec3(0.2f, 0.4f, 0.6f);
+  palette[2].color = glm::vec3(0.9f, 0.1f, 0.1f);
+  palette[2].albedoTexture = uuids::uuid::from_string("22222222-2222-4222-8222-222222222222").value();
 
+  EXPECT_EQ(materialSwatchColor(palette, 1), glm::vec3(0.2f, 0.4f, 0.6f));
+  EXPECT_NE(materialSwatchColor(palette, 1), materialSwatchColor(palette, 0));
   EXPECT_EQ(materialSwatchColor(palette, 2), glm::vec3(0.5f));
+  EXPECT_EQ(materialSwatchColor(palette, 9), glm::vec3(0.5f));
 }
 
 TEST(TerrainToolStateTest, ButtonsStayOnOneRowWhenTheyFit)

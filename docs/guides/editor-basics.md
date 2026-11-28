@@ -97,6 +97,21 @@ terrain with a brush. It works only while the editor can edit the server.
 - A radius larger than 64 voxels is limited to that size.
 - Undoing strokes is not available yet.
 
+#### Terrain materials
+
+The Terrain section lists the terrain's materials under Materials. A new terrain starts with one, a gray named Ground.
+
+- Add material appends an entry (up to 16) with its own color. Type in a name field to rename it, and use Up and Down
+  to reorder.
+- Each material is either a Color or a Texture. Color shows a color swatch: click it to pick the color. Texture shows an
+  Albedo slot: drag a texture from the Assets panel onto it. Switching to Color removes the albedo texture. Either way,
+  the Specular slot takes a specular map.
+- Click the round button beside a material to paint with it; Add, Flatten and Paint use it.
+- Remove is refused while that material or a later one is painted anywhere on the terrain, since removing it would
+  shift the later materials and recolor the ground. A short message under the list says which one is painted.
+- Materials can be edited only while the editor can edit the server and the scene is stopped. Undo and redo cover
+  every change.
+
 ## Scene Status
 
 The "Scene Status" panel along the top holds the play controls and some view choices. On a narrow window the

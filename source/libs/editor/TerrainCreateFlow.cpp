@@ -294,6 +294,7 @@ namespace terrainCreate
     description.uuid = terrainUUID;
     description.voxelSize = voxelSize;
     description.chunkCount = static_cast<uint32_t>(volume->chunks().size());
+    description.palette.push_back({ defaultMaterialName, {}, {}, defaultMaterialColor });
 
     if (description.chunkCount > terrain::maxAddedTerrainChunks || !terrain::isValidDescription(description))
     {

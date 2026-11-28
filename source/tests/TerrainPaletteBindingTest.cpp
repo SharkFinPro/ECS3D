@@ -3,6 +3,7 @@
 #include "TerrainPaletteBinding.h"
 
 #include <terrain/TerrainStore.h>
+#include <glm/vec3.hpp>
 #include <map>
 #include <memory>
 #include <vector>
@@ -188,6 +189,41 @@ TEST(TerrainPaletteApplication, APaletteThatFailedToApplyIsNotRetriedUntilItChan
 
   EXPECT_FALSE(surface.needsApply(rejected));
   EXPECT_TRUE(surface.needsApply(f.resolve({ material(rockUUID) })));
+}
+
+TEST(TerrainPaletteBinding, EachEntryCarriesItsColorAndASamePaletteNeedsEqualColors)
+{
+  Fixture f;
+  auto first = material(grassUUID);
+  first.color = glm::vec3(0.1f, 0.2f, 0.3f);
+  auto flat = material({});
+  flat.color = glm::vec3(0.9f, 0.8f, 0.7f);
+
+  const Handles base = f.resolve({ first, flat });
+  ASSERT_EQ(base.size(), 2u);
+  EXPECT_EQ(base[0].color, glm::vec3(0.1f, 0.2f, 0.3f));
+  EXPECT_EQ(base[1].color, glm::vec3(0.9f, 0.8f, 0.7f));
+  EXPECT_EQ(base[1].albedo, nullptr);
+
+  EXPECT_TRUE(samePalette(base, f.resolve({ first, flat })));
+
+  auto recolored = flat;
+  recolored.color = glm::vec3(0.9f, 0.8f, 0.6f);
+  EXPECT_FALSE(samePalette(base, f.resolve({ first, recolored })));
+}
+
+TEST(TerrainPaletteInput, AChangedColorIsResolvedAgain)
+{
+  auto entry = material({});
+  const std::vector<terrain::TerrainMaterial> input{ entry };
+  TerrainPaletteInputMemory memory;
+  memory.record(input, false);
+  EXPECT_FALSE(memory.needsResolve(input));
+
+  entry.color = glm::vec3(0.2f);
+  const std::vector<terrain::TerrainMaterial> recolored{ entry };
+  EXPECT_TRUE(memory.needsResolve(recolored));
+  EXPECT_TRUE(memory.inputChanged(recolored));
 }
 
 TEST(TerrainPaletteInput, UnchangedInputResolvedWithoutAPlaceholderIsNotResolvedAgain)

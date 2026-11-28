@@ -134,8 +134,9 @@ volume itself. Bounds are the occupied chunks plus an air sample, rounded to `su
 outgrows them gets a larger surface built behind the drawn one, promoted as soon as its `pendingFraction()` is no
 higher than the drawn surface's (so a terrain whose chunks change every frame still shows its growth), and one past
 `maxSurfaceChunks` is logged once and not drawn or grown. Changed chunks are reported once per frame per terrain. `RenderSystem::setTerrainStore` gives it each terrain's palette, which `GpuAssetCache` resolves through the headless
-`TerrainPaletteBinding.h` (first 16 entries; a nil texture is white, a texture that does not resolve draws
-`missing_texture.png`, logged once per asset) and hands to `VolumeSurface::setPalette` on the drawn and the growing
+`TerrainPaletteBinding.h` (first 16 entries; an entry with no albedo texture draws its flat `TerrainMaterial::color`, handed over as
+`vke::VolumeMaterial::color` and part of the palette comparison, a nil specular is white, and a texture that does not
+resolve draws `missing_texture.png`, logged once per asset) and hands to `VolumeSurface::setPalette` on the drawn and the growing
 surface only when it differs from what that surface was last given. An unchanged palette that resolved without a
 placeholder is not resolved again, and one that used a placeholder is, so a texture that arrives later re-applies
 once. Textures repeat `terrainTextureRepeatsPerUnit` (0.1) times per world unit.

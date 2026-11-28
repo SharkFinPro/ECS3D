@@ -494,7 +494,8 @@ void GpuAssetCache::applyTerrainPalette(const uuids::uuid& terrainUUID, CachedTe
     materials.reserve(resolved.size());
     for (const auto& entry : resolved)
     {
-      materials.push_back({ .albedo = entry.albedo, .specular = entry.specular, .textureScale = entry.textureScale });
+      materials.push_back({ .albedo = entry.albedo, .color = entry.color, .specular = entry.specular,
+                            .textureScale = entry.textureScale });
     }
 
     try
