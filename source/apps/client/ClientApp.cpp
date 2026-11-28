@@ -82,6 +82,7 @@ ClientApp::ClientApp(ConnectOptions options)
     m_assetCache->setProjectRoot(locateProject(m_options.project).root);
   }
   m_renderSystem = std::make_shared<RenderSystem>();
+  m_renderSystem->setTerrainStore(m_terrainStore);
 
   m_netClient = std::make_shared<net::NetClient>(std::make_shared<net::ManagedClientTransport>(m_host));
 

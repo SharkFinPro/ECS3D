@@ -379,6 +379,8 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getLightGizmo(const uuids::uui
   return renderObject;
 }
 
+static_assert(maxTerrainPaletteMaterials == vke::s_maxVolumeMaterials);
+
 namespace {
   vke::VolumeRegion toRegion(const terrain::SampleBox& box)
   {
@@ -414,11 +416,13 @@ void GpuAssetCache::createTerrainSurface(const uuids::uuid& terrainUUID, CachedT
     {
       cached.replacement = std::move(surface);
       cached.replacementBounds = bounds;
+      cached.replacementPalette.reset();
     }
     else
     {
       cached.current = std::move(surface);
       cached.currentBounds = bounds;
+      cached.currentPalette.reset();
     }
 
     cached.failedFor.reset();
@@ -432,8 +436,90 @@ void GpuAssetCache::createTerrainSurface(const uuids::uuid& terrainUUID, CachedT
   }
 }
 
+void GpuAssetCache::applyTerrainPalette(const uuids::uuid& terrainUUID, CachedTerrainSurface& cached,
+                                        const std::span<const terrain::TerrainMaterial> palette)
+{
+  if (!cached.current && !cached.replacement)
+  {
+    return;
+  }
+
+  if (palette.size() > maxTerrainPaletteMaterials && !cached.loggedPaletteTruncated)
+  {
+    cached.loggedPaletteTruncated = true;
+
+    Log::warn(LogCategory::assets, "Terrain " + uuids::to_string(terrainUUID) + " has " +
+      std::to_string(palette.size()) + " palette materials; only the first " +
+      std::to_string(maxTerrainPaletteMaterials) + " are drawn");
+  }
+
+  if (cached.paletteInput.inputChanged(palette))
+  {
+    cached.loggedPaletteFailure = false;
+  }
+
+  if (cached.paletteInput.needsResolve(palette))
+  {
+    bool usedPlaceholder = false;
+
+    cached.resolvedPalette = resolveTerrainPalette<vke::Texture2D>(
+      palette, [this](const uuids::uuid& uuid) { return getTexture(uuid); },
+      [this] {
+        return m_gizmoTextures.get("assets/textures/missing_texture.png", [this] {
+          return m_renderer->getAssetManager()->loadTexture("assets/textures/missing_texture.png");
+        });
+      },
+      [this, &usedPlaceholder](const uuids::uuid& uuid) {
+        usedPlaceholder = true;
+        m_missingAssets.report(uuids::to_string(uuid), describeAsset(uuid, AssetType::Texture));
+      });
+
+    cached.paletteInput.record(palette, usedPlaceholder);
+  }
+
+  const auto& resolved = cached.resolvedPalette;
+
+  const auto applyTo = [&](const std::shared_ptr<vke::VolumeSurface>& surface,
+                           TerrainPaletteApplication<vke::Texture2D>& applied) {
+    if (!surface || !applied.needsApply(resolved))
+    {
+      return;
+    }
+
+    // setPalette throws and changes nothing, so recording first keeps a rejected palette from being retried (and
+    // its texture arrays rebuilt) every frame.
+    applied.markApplied(resolved);
+
+    std::vector<vke::VolumeMaterial> materials;
+    materials.reserve(resolved.size());
+    for (const auto& entry : resolved)
+    {
+      materials.push_back({ .albedo = entry.albedo, .specular = entry.specular, .textureScale = entry.textureScale });
+    }
+
+    try
+    {
+      surface->setPalette(materials);
+    }
+    catch (const std::exception& e)
+    {
+      if (!cached.loggedPaletteFailure)
+      {
+        cached.loggedPaletteFailure = true;
+
+        Log::warn(LogCategory::assets, "Could not apply the palette of terrain " + uuids::to_string(terrainUUID) +
+          ": " + e.what());
+      }
+    }
+  };
+
+  applyTo(cached.current, cached.currentPalette);
+  applyTo(cached.replacement, cached.replacementPalette);
+}
+
 std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
-  const uuids::uuid& terrainUUID, const std::shared_ptr<const terrain::TerrainVolume>& volume, const uint8_t openSides)
+  const uuids::uuid& terrainUUID, const std::shared_ptr<const terrain::TerrainVolume>& volume, const uint8_t openSides,
+  const std::span<const terrain::TerrainMaterial> palette)
 {
   if (!volume)
   {
@@ -503,6 +589,8 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
 
   if (cached.failedFor && terrain::sameBox(*cached.failedFor, cached.desired))
   {
+    applyTerrainPalette(terrainUUID, cached, palette);
+
     return cached.current;
   }
 
@@ -542,6 +630,8 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
 
       cached.current = std::move(cached.replacement);
       cached.currentBounds = cached.replacementBounds;
+      cached.currentPalette = std::move(cached.replacementPalette);
+      cached.replacementPalette.reset();
       cached.replacement.reset();
       break;
     case terrain::SurfaceStep::tooLarge:
@@ -557,6 +647,8 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
     case terrain::SurfaceStep::keep:
       break;
   }
+
+  applyTerrainPalette(terrainUUID, cached, palette);
 
   return cached.current;
 }

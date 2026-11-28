@@ -24,11 +24,19 @@ namespace vke {
   class VulkanEngine;
 }
 
+namespace terrain {
+  class TerrainStore;
+}
+
 class ObjectManager;
 class GpuAssetCache;
 
 class RenderSystem {
 public:
+  // The store whose terrain palettes the terrain surfaces are drawn with; without one every terrain uses the
+  // engine's default flat colors.
+  void setTerrainStore(std::shared_ptr<const terrain::TerrainStore> terrainStore);
+
   // Every object in highlightUUIDs (the editor's selected objects) is outlined. The client passes none.
   void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                       std::span<const uuids::uuid> highlightUUIDs = {});
@@ -157,6 +165,7 @@ private:
   std::vector<TerrainDraw> m_terrainDraws;
   TerrainShadowVotes m_terrainShadowVotes;
   TerrainSideVotes m_terrainSideVotes;
+  std::shared_ptr<const terrain::TerrainStore> m_terrainStore;
 };
 
 
