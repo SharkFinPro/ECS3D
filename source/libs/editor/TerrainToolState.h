@@ -3,6 +3,8 @@
 
 #include <terrain/TerrainBrush.h>
 #include <terrain/TerrainStore.h>
+#include <VulkanEngine/components/assets/volume/VolumeMaterial.h>
+#include <glm/vec3.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -46,6 +48,42 @@ inline constexpr size_t terrainToolCount = 5;
 
 // The renderer draws this many default colors by index when a terrain has no palette.
 inline constexpr size_t defaultMaterialCount = 8;
+static_assert(defaultMaterialCount == vke::s_defaultVolumeColors.size());
+
+// The swatch beside a Material entry: the renderer's default color for a terrain without a palette, which it picks by
+// index modulo the palette size, and a neutral gray for a palette entry, whose look is its textures.
+[[nodiscard]] inline glm::vec3 materialSwatchColor(const std::vector<terrain::TerrainMaterial>& palette,
+                                                   const uint8_t index)
+{
+  return palette.empty() ? vke::s_defaultVolumeColors[index % vke::s_defaultVolumeColors.size()]
+                         : glm::vec3(0.5f);
+}
+
+// For a row of buttons of the given widths, whether each one starts a new row because it does not fit beside the
+// button before it in the available width. The first button never does.
+[[nodiscard]] inline std::vector<bool> buttonRowBreaks(const std::vector<float>& widths, const float spacing,
+                                                       const float available)
+{
+  std::vector<bool> breaks(widths.size(), false);
+  float used = 0.0f;
+
+  for (size_t index = 0; index < widths.size(); ++index)
+  {
+    if (index > 0 && used + spacing + widths[index] > available)
+    {
+      breaks[index] = true;
+      used = 0.0f;
+    }
+    else if (index > 0)
+    {
+      used += spacing;
+    }
+
+    used += widths[index];
+  }
+
+  return breaks;
+}
 
 // How many materials the Material list offers: the palette's entries, or the renderer's defaults for an empty palette.
 [[nodiscard]] inline size_t selectableMaterials(const std::vector<terrain::TerrainMaterial>& palette)

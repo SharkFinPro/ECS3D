@@ -262,7 +262,8 @@ namespace {
 
     if (const auto& surface = brush.strokeSurface())
     {
-      return strokeCursorHit(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit());
+      return strokeAim(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit(),
+                       brush.strokeMovesSurface());
     }
 
     // An eraser looks for terrain under its whole brush, not just under the cursor.
@@ -327,10 +328,20 @@ void EditorApp::drawTerrainSculptToggle()
 void EditorApp::drawTerrainToolStrip()
 {
   const size_t current = toolIndex(m_terrainTool.tool());
+  const ImGuiStyle& style = ImGui::GetStyle();
+
+  std::vector<float> widths;
+  for (const char* label : toolLabels)
+  {
+    widths.push_back(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x);
+  }
+
+  const std::vector<bool> newRow =
+    buttonRowBreaks(widths, style.ItemSpacing.x, ImGui::GetContentRegionAvail().x);
 
   for (size_t tool = 0; tool < terrainToolCount; ++tool)
   {
-    if (tool > 0)
+    if (tool > 0 && !newRow[tool])
     {
       ImGui::SameLine();
     }
@@ -388,7 +399,22 @@ void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
   const size_t entries = selectableMaterials(palette);
   const uint8_t active = clampMaterial(m_terrainTool.activeMaterial(), entries);
 
-  if (!ImGui::BeginCombo("Material", materialLabel(palette, active).c_str()))
+  const float swatch = ImGui::GetFrameHeight() - 6.0f;
+  const std::string indent(4, ' ');
+
+  const auto drawSwatch = [swatch](const ImVec2 min, const glm::vec3& color)
+  {
+    ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + swatch, min.y + swatch),
+                                              ImGui::ColorConvertFloat4ToU32(ImVec4(color.r, color.g, color.b, 1.0f)),
+                                              2.0f);
+  };
+
+  const bool open = ImGui::BeginCombo("Material", (indent + materialLabel(palette, active)).c_str());
+  const ImVec2 previewMin = ImGui::GetItemRectMin();
+  drawSwatch(ImVec2(previewMin.x + ImGui::GetStyle().FramePadding.x, previewMin.y + 3.0f),
+             materialSwatchColor(palette, active));
+
+  if (!open)
   {
     return;
   }
@@ -398,10 +424,15 @@ void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
     const auto material = static_cast<uint8_t>(index);
     ImGui::PushID(static_cast<int>(index));
 
-    if (ImGui::Selectable(materialLabel(palette, material).c_str(), material == active))
+    const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+
+    if (ImGui::Selectable((indent + materialLabel(palette, material)).c_str(), material == active))
     {
       m_terrainTool.setActiveMaterial(material);
     }
+
+    drawSwatch(ImVec2(rowMin.x + ImGui::GetStyle().FramePadding.x, rowMin.y + 1.0f),
+               materialSwatchColor(palette, material));
 
     ImGui::PopID();
   }

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TerrainBrushSession.h"
+#include "TerrainCursor.h"
 
 #include "TerrainBrushSessionTestHelpers.h"
 
@@ -18,6 +19,7 @@
 #include <EditorTerrainSettings.h>
 #include <Protocol.h>
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <chrono>
@@ -785,4 +787,55 @@ TEST(TerrainBrushSessionTest, APaintStrokeChangesMaterialsAndLeavesEveryDistance
   }
 
   EXPECT_TRUE(materialChanged);
+}
+
+TEST(TerrainBrushSessionTest, OnlyAPaintStrokeLeavesTheSurfaceWhereItWas)
+{
+  EXPECT_FALSE(strokeMovesSurface(terrain::BrushOp::Kind::paint));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::add));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::subtract));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::smooth));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::flatten));
+
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::paint),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_FALSE(session.strokeMovesSurface());
+  static_cast<void>(session.end(recorder.sender()));
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_TRUE(session.strokeMovesSurface());
+}
+
+TEST(TerrainBrushSessionTest, AFastPaintDragKeepsPaintingTheGroundAfterAJumpPastTheJumpLimit)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);
+  paint.material = 5;
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, paint, hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+
+  const glm::vec3 eye{ 40.0f, 60.0f, 0.0f };
+  const std::shared_ptr<const terrain::TerrainVolume>& surface = session.strokeSurface();
+  ASSERT_TRUE(surface != nullptr);
+
+  // Frames that each move three jump limits along the ground.
+  for (const float z : { 75.0f, 110.0f, 145.0f })
+  {
+    const glm::vec3 target{ 40.0f, 10.0f, z };
+    const gizmo::Ray ray{ eye, glm::normalize(target - eye) };
+    const auto aim = strokeAim(*surface, *env.volume, session.strokePoint(), ray, 1000.0f, session.strokeJumpLimit(),
+                               session.strokeMovesSurface());
+    ASSERT_TRUE(aim.has_value());
+    EXPECT_NEAR(aim->point.y, 10.0f, 0.5f);
+    EXPECT_GT(session.moveTo(*aim, recorder.sender()), 0u);
+  }
+
+  ASSERT_TRUE(session.end(recorder.sender()).has_value());
+  EXPECT_EQ(env.volume->materialAtSample({ 16, 4, 58 }), 5);
 }

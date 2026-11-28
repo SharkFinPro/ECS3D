@@ -30,6 +30,13 @@
   return kind != terrain::BrushOp::Kind::paint;
 }
 
+// Whether a stroke of this kind changes where the surface is. Paint does not, so the cursor can always aim at the
+// ground it started on: a brush center off the surface paints nothing.
+[[nodiscard]] constexpr bool strokeMovesSurface(const terrain::BrushOp::Kind kind)
+{
+  return kind != terrain::BrushOp::Kind::paint;
+}
+
 // One press-drag-release of a brush.
 class TerrainStroke
 {
