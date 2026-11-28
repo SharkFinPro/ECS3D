@@ -110,14 +110,21 @@ Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `scene
 `renameAsset`, `removeAsset`, `terrainEdit`, and the editor's `terrainChunks` upload) that only a connection
 authorized as `Role::editor` on an `--edit` server may send. A `terrainEdit` message
 (`data/terrain/TerrainEdit.{h,cpp}`) carries the terrain uuid, a stroke id and one operation: a brush, a redistance
-box, a set of whole chunks or a material remap. A remap (`packRemapEdit`) is a 256-byte table
-(`terrain::MaterialRemap`, `data/terrain/TerrainMaterialRemap.h`) giving each old material index its new one;
-`unpackTerrainEdit` refuses a table that moves the reserved index or maps anything onto it, and the identity, since it
-can change nothing. The server applies it to every sample of every held chunk (`remapMaterials`, air samples
-included, distances untouched, no `maxEditChunks` bound), so a palette removal (`remapForRemoval`) or move
-(`remapForMove`) keeps painted ground looking the same on every connection. The editor predicts it with
-`edits::predictTerrainRemap` and holds nothing back from the echo: the echo carries the same result, so its hash-only
-entries confirm the prediction, and an edit another connection made in between mismatches or arrives in full. `unpackTerrainEdit` bounds only what the wire can say (a valid brush, a non-empty box,
+box, a set of whole chunks or a material remap. A remap (`packRemapEdit`) carries a 256-byte table
+(`terrain::MaterialRemap`, `data/terrain/TerrainMaterialRemap.h`) giving each old material index its new one, the
+`terrain::paletteHash` of the palette it was built for and the new palette; `unpackTerrainEdit` refuses a table that
+moves the reserved index or maps anything onto it, the identity (it can change nothing) and a palette over
+`maxPaletteSize`. The server applies it only while the held palette hashes to that value, else refuses it with
+`paletteChanged`; it then remaps every sample of every held chunk (`remapMaterials`, air samples included, distances
+untouched, no `maxEditChunks` bound) and replaces the palette in the same step, so a palette removal
+(`remapForRemoval`) or move (`remapForMove`) keeps painted ground looking the same on every connection and two editors
+racing on one palette cannot both apply. `ServerApp::handleTerrainEdit` then flushes the echo at once and re-snapshots
+(`SnapshotReason::assetChange`), so the chunks reach a view just before the palette. A `paletteChanged` refusal
+(`terrainEditRefusalNeedsResync` in `ServerPolicy.h`) gives every held chunk a fresh revision, sends them all in full to
+the sender and re-snapshots (`ServerApp::resyncTerrainView`), since the sender predicted both halves. The editor
+predicts a remap with `edits::predictTerrainRemap` and holds nothing back from the echo: the echo carries the same
+result, so its hash-only entries confirm the prediction, and an edit another connection made in between mismatches or
+arrives in full. `unpackTerrainEdit` bounds only what the wire can say (a valid brush, a non-empty box,
 at most `maxTerrainChunksEntries` distinct valid coordinates whose chunks decode to the stated hash); limits that
 depend on the volume belong to the apply step. `applyTerrainEdit` (`data/terrain/TerrainEditApply`) bounds the
 operation against the volume, applies it through `TerrainStore::setChunk` with one fresh revision for every changed

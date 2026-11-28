@@ -221,21 +221,26 @@ entries. The headless `TerrainPaletteEditor.h` turns each intent into a new pale
 refusal string with the `TerrainPalette.h` functions (a new entry is "Material N"; Remove scans `materialsInUse` only
 when clicked) and gates editing on an editable connection, a stopped scene and a terrain the store holds: a palette edit
 during Play would outlive Stop on the server while the play history is discarded. The gate's reason shows under the
-block; an intent's refusal is a `MaterialNote` (`TerrainMaterialPrompts.h`) shown beside Remove in the secondary text color, and is cleared once
-another material or terrain is selected. After an applied edit `materialSelectionAfter` keeps a moved entry selected
-and hands a removed one's selection to its neighbor.
+block; an intent's refusal is a `MaterialNote` (`TerrainMaterialPrompts.h`) raised on the material the edit was about,
+shown beside Remove in the secondary text color, and cleared once a frame draws another material or terrain. After an
+applied move or remove of the shown terrain `selectionToFollow` keeps a moved entry selected and hands a removed one's
+selection to its neighbor; no other edit touches the selection. The frame Add material applies skips the details, so a
+pending name or color settles the next frame through `endFrame` rather than being dropped.
 
 Remove and the moves keep painted ground looking the same (`EditorAppTerrainMaterialRemove.cpp`).
 `TerrainPaletteEditor::remove` and `move` always return, beside the palette, the `remapForRemoval` or `remapForMove`
-table: `materialsInUse` sees only solid samples, and air samples that a later Add exposes must shift too. A remap that
-changes no chunk records no undo entry. On the click the editor scans `materialsInUse`, and removing an entry solid
-ground paints first opens a `MaterialRemovePrompt` modal listing the other
+table: `materialsInUse` sees only solid samples, and air samples that a later Add exposes must shift too. Both are
+refused by `TerrainPaletteEditor::remapRefusal` unless the ordinary gate passes, the editor holds the whole terrain (its
+chunk count reaches the description's `chunkCount`, so `materialsInUse` and the undo capture see every chunk) and no
+brush stroke is active or awaiting its final chunks. On the click the editor scans `materialsInUse`, and removing an
+entry solid ground paints first opens a `MaterialRemovePrompt` modal listing the other
 materials (swatch and label) for what its ground becomes, defaulting to `defaultReplacement` (the previous entry, or the
-next one for entry 0); the prompt closes without acting if the palette changes underneath it. The last material is
-never removed: a terrain keeps at least one. `finishTerrainPaletteEdit` sends the remap before the palette:
-`sendTerrainRemap` predicts it on the editor's volume with `edits::predictTerrainRemap`, sends the `remapMaterials`
-terrainEdit and records its `terrainStroke` entry, then the palette applies as any other palette edit, so the change is
-two undo entries ([undo-redo.md](undo-redo.md)). The data side keeps `terrain::removeMaterial`, which refuses a painted
+next one for entry 0); the prompt closes without acting if the palette changes underneath it or a frame does not draw
+the Materials block (`endFrame`). The last material is never removed: a terrain keeps at least one.
+`finishTerrainPaletteEdit` sends a removal or move through `sendTerrainRemap`, which predicts the remap and the new
+palette with `edits::predictTerrainRemap` (refusing a palette that is invalid or unchanged before anything is sent),
+sends the one `remapMaterials` terrainEdit and records its one undo entry ([undo-redo.md](undo-redo.md)); no separate
+palette addAsset is sent. The data side keeps `terrain::removeMaterial`, which refuses a painted
 entry, and adds `eraseMaterial` for the remapped path.
 `EditorApp::applyTerrainPalette` builds the command with `commandForTerrainPalette` from the pre-edit store, applies
 the replacement through `applyAddAssetWithTerrain` (no upload expected), sends the addAsset and records the command.

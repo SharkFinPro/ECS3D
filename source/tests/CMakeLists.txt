@@ -276,6 +276,10 @@ add_executable(${PROJECT_NAME}
   TerrainReadoutTest.cpp
   TerrainRedistanceTest.cpp
   TerrainRegionFormatTest.cpp
+  TerrainRemapCommandTest.cpp
+  TerrainRemapEditTest.cpp
+  TerrainRemapFlowFixtures.h
+  TerrainRemapUndoTest.cpp
   TerrainRestingFixtures.h
   TerrainRestingTest.cpp
   TerrainReplicationTest.cpp

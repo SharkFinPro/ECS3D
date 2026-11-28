@@ -1,6 +1,7 @@
 #include "EditCommand.h"
 #include "TerrainSetChunks.h"
 #include "terrain/TerrainAddition.h"
+#include "terrain/TerrainPalette.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 #include <nlohmann/json.hpp>
@@ -14,6 +15,25 @@
 
 namespace edits {
 
+namespace {
+  void checkStrokeChunks(const std::vector<TerrainStrokeChunk>& chunks)
+  {
+    std::unordered_set<terrain::ChunkCoord> seen;
+    for (const auto& chunk : chunks)
+    {
+      if (!terrain::isValidChunkCoord(chunk.coord))
+      {
+        throw std::invalid_argument("A terrain stroke chunk coordinate is beyond what the wire can carry");
+      }
+
+      if (!seen.insert(chunk.coord).second)
+      {
+        throw std::invalid_argument("A terrain stroke names the same chunk coordinate twice");
+      }
+    }
+  }
+}
+
 EditCommand EditCommand::terrainStroke(const uuids::uuid& terrainUUID, std::vector<TerrainStrokeChunk> chunks)
 {
   if (chunks.empty())
@@ -21,24 +41,28 @@ EditCommand EditCommand::terrainStroke(const uuids::uuid& terrainUUID, std::vect
     throw std::invalid_argument("A terrain stroke needs at least one chunk");
   }
 
-  std::unordered_set<terrain::ChunkCoord> seen;
-  for (const auto& chunk : chunks)
-  {
-    if (!terrain::isValidChunkCoord(chunk.coord))
-    {
-      throw std::invalid_argument("A terrain stroke chunk coordinate is beyond what the wire can carry");
-    }
-
-    if (!seen.insert(chunk.coord).second)
-    {
-      throw std::invalid_argument("A terrain stroke names the same chunk coordinate twice");
-    }
-  }
+  checkStrokeChunks(chunks);
 
   EditCommand command;
   command.m_kind = CommandKind::terrainStroke;
-  command.m_data = TerrainStrokeData{ terrainUUID, std::move(chunks) };
+  command.m_data = TerrainStrokeData{ terrainUUID, std::move(chunks), std::nullopt };
   return command;
+}
+
+EditCommand EditCommand::terrainPaletteRemap(const uuids::uuid& terrainUUID, std::vector<TerrainStrokeChunk> chunks,
+                                             TerrainPaletteRemap palette)
+{
+  checkStrokeChunks(chunks);
+
+  EditCommand command;
+  command.m_kind = CommandKind::terrainStroke;
+  command.m_data = TerrainStrokeData{ terrainUUID, std::move(chunks), std::move(palette) };
+  return command;
+}
+
+std::string EditCommand::terrainStrokeLabel() const
+{
+  return std::get<TerrainStrokeData>(m_data).palette ? "Change Terrain Materials" : "Sculpt Terrain";
 }
 
 const std::vector<TerrainStrokeChunk>* EditCommand::terrainStrokeChunks() const
@@ -113,6 +137,12 @@ Validation EditCommand::validateTerrainStroke(const terrain::TerrainStore* terra
     {
       return { ValidationFailure::targetChanged, data.terrainUUID };
     }
+  }
+
+  const auto* description = terrains->description(data.terrainUUID);
+  if (data.palette && (!description || description->palette != (forUndo ? data.palette->after : data.palette->before)))
+  {
+    return { ValidationFailure::targetChanged, data.terrainUUID };
   }
 
   return {};
@@ -200,6 +230,11 @@ TerrainSetChunks EditCommand::buildUndoTerrainChunks() const
     payload.chunks.push_back({ chunk.coord, chunk.before });
   }
 
+  if (data.palette)
+  {
+    payload.palette = TerrainPaletteStep{ data.palette->before, std::nullopt, 0 };
+  }
+
   return payload;
 }
 
@@ -214,6 +249,12 @@ TerrainSetChunks EditCommand::buildRedoTerrainChunks() const
   for (const auto& chunk : data.chunks)
   {
     payload.chunks.push_back({ chunk.coord, chunk.after });
+  }
+
+  if (data.palette)
+  {
+    payload.palette = TerrainPaletteStep{ data.palette->after, data.palette->remap,
+                                          terrain::paletteHash(data.palette->before) };
   }
 
   return payload;

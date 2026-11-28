@@ -245,8 +245,13 @@ private:
   // Applies an editor's terrain edit between ticks and records the changed chunks for the next echo flush.
   void handleTerrainEdit(const net::Message& message, int32_t senderId);
 
-  // Sends the recorded chunks to the joined connections once terrainEchoInterval has passed since the last flush.
-  void flushTerrainEcho(std::chrono::steady_clock::time_point now);
+  // Sends the recorded chunks to the joined connections once terrainEchoInterval has passed since the last flush, or
+  // now with force.
+  void flushTerrainEcho(std::chrono::steady_clock::time_point now, bool force = false);
+
+  // A refused edit the sender predicted (terrainEditRefusalNeedsResync): every held chunk in full to the sender under a
+  // fresh revision, then a snapshot for the palette.
+  void resyncTerrainView(const uuids::uuid& terrainUuid, int32_t senderId);
 
   // The streams' focus for a restart that has no one connection to look through: the terrain's origin.
   [[nodiscard]] static terrain::TerrainStreamer::FocusFor terrainOriginFocus();

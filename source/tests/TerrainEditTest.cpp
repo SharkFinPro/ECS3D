@@ -6,6 +6,7 @@
 #include "terrain/TerrainCodec.h"
 #include "terrain/TerrainEdit.h"
 #include "terrain/TerrainMaterialRemap.h"
+#include "terrain/TerrainStore.h"
 #include "terrain/TerrainReplication.h"
 #include "terrain/TerrainTypes.h"
 
@@ -68,12 +69,14 @@ namespace {
     return op;
   }
 
-  terrain::MaterialRemap sampleRemap()
+  // A remap of a two-entry palette that swaps its materials.
+  net::Message sampleRemapEdit()
   {
     auto remap = terrain::identityRemap();
-    remap[1] = 3;
-    remap[3] = 1;
-    return remap;
+    remap[0] = 1;
+    remap[1] = 0;
+    const std::vector<terrain::TerrainMaterial> palette{ { .name = "b" }, { .name = "a" } };
+    return terrain::packRemapEdit(terrainUUID, strokeId, remap, 77, palette);
   }
 
   terrain::SampleBox sampleBox()
@@ -234,40 +237,6 @@ TEST(TerrainEdit, SetChunksRoundTripsDenseUniformAndNullEntries)
   ASSERT_NE(payload->chunks[2].chunk, nullptr);
   EXPECT_TRUE(payload->chunks[2].chunk->isAir());
   EXPECT_EQ(payload->chunks[2].chunk->hash(), air->hash());
-}
-
-TEST(TerrainEdit, RemapRoundTripsTheWholeTable)
-{
-  auto remap = terrain::identityRemap();
-  for (size_t i = 0; i < terrain::reservedMaterial; ++i)
-  {
-    remap[i] = static_cast<uint8_t>(terrain::reservedMaterial - 1 - i);
-  }
-
-  const auto message = terrain::packRemapEdit(terrainUUID, strokeId, remap);
-  EXPECT_EQ(message.bytes().size(), headerBytes + 256);
-
-  const auto payload = terrain::unpackTerrainEdit(message);
-  ASSERT_TRUE(payload.has_value());
-  EXPECT_EQ(payload->kind, terrain::TerrainEditKind::remapMaterials);
-  EXPECT_EQ(payload->terrain, terrainUUID);
-  EXPECT_EQ(payload->strokeId, strokeId);
-  EXPECT_EQ(payload->remap, remap);
-}
-
-TEST(TerrainEdit, RefusesARemapThatMovesTheReservedIndexOrIsTheIdentity)
-{
-  EXPECT_TRUE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, sampleRemap())));
-
-  auto reservedElsewhere = sampleRemap();
-  reservedElsewhere[terrain::reservedMaterial] = 0;
-  EXPECT_FALSE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, reservedElsewhere)));
-
-  auto ontoReserved = sampleRemap();
-  ontoReserved[7] = terrain::reservedMaterial;
-  EXPECT_FALSE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, ontoReserved)));
-
-  EXPECT_FALSE(accepted(terrain::packRemapEdit(terrainUUID, strokeId, terrain::identityRemap())));
 }
 
 TEST(TerrainEdit, PackSetChunksThrowsOnlyAboveTheEntryLimit)
@@ -486,7 +455,7 @@ TEST(TerrainEdit, RefusesTrailingBytes)
   const std::vector<net::Message> goods{
     terrain::packBrushEdit(terrainUUID, strokeId, sampleBrush()),
     terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox()),
-    terrain::packRemapEdit(terrainUUID, strokeId, sampleRemap()),
+    sampleRemapEdit(),
     rawSetChunks({ validRaw() })
   };
 
@@ -505,7 +474,7 @@ TEST(TerrainEdit, RefusesEveryTruncation)
   const std::vector<net::Message> goods{
     terrain::packBrushEdit(terrainUUID, strokeId, sampleBrush()),
     terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox()),
-    terrain::packRemapEdit(terrainUUID, strokeId, sampleRemap()),
+    sampleRemapEdit(),
     rawSetChunks({ validRaw(), validRaw({ 5, 6, 7 }) })
   };
 

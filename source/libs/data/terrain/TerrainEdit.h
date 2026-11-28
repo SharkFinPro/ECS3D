@@ -4,6 +4,7 @@
 #include "TerrainBrush.h"
 #include "TerrainChunk.h"
 #include "TerrainMaterialRemap.h"
+#include "TerrainStore.h"
 #include "TerrainTypes.h"
 #include <Protocol.h>
 #include <cstddef>
@@ -36,8 +37,10 @@ namespace terrain
     SampleBox box;
     // setChunks only; a decoded air chunk stays a (non-null) air chunk.
     std::vector<SetChunkEntry> chunks;
-    // remapMaterials only
+    // remapMaterials only: the table, the hash of the palette it was built for and the palette the terrain takes.
     MaterialRemap remap = identityRemap();
+    uint64_t paletteHash = 0;
+    std::vector<TerrainMaterial> palette;
   };
 
   // Fixed bytes per setChunks entry before its encoded bytes: 3 x int32, hash, size.
@@ -52,15 +55,20 @@ namespace terrain
   [[nodiscard]] net::Message packSetChunksEdit(const uuids::uuid& terrain, uint64_t strokeId,
                                                std::span<const SetChunkEntry> chunks);
 
-  // Remaps every sample of the terrain on the server, for a palette removal or move that keeps painted ground looking
-  // the same.
-  [[nodiscard]] net::Message packRemapEdit(const uuids::uuid& terrain, uint64_t strokeId, const MaterialRemap& remap);
+  // Remaps every sample of the terrain on the server and gives it palette in the same step, for a palette removal or
+  // move that keeps painted ground looking the same. fromPaletteHash (paletteHash) names the palette the remap was
+  // built for; the server refuses the edit when it holds another. Throws std::length_error for a palette over
+  // maxPaletteSize.
+  [[nodiscard]] net::Message packRemapEdit(const uuids::uuid& terrain, uint64_t strokeId, const MaterialRemap& remap,
+                                           uint64_t fromPaletteHash, const std::vector<TerrainMaterial>& palette);
 
   // nullopt for any malformed payload: wrong message type, truncated, nil uuid, an unknown kind, a brush a reader
   // cannot trust, an empty redistance box, a setChunks count of 0, above maxTerrainChunksEntries or one the remaining
   // bytes cannot hold, a coordinate beyond maxChunkCoord or repeated in one message, a size over maxEncodedChunkBytes,
   // bytes decodeChunk refuses (an empty entry included), a decoded chunk whose hash() differs from the entry's hash, a
-  // remap isValidRemap refuses or the identity (an edit that can change nothing), or trailing bytes. Limits that depend on the volume (brush radius, box size) are the apply step's to enforce.
+  // remap isValidRemap refuses or the identity (an edit that can change nothing), a remap palette over maxPaletteSize,
+  // or trailing bytes. Limits that depend on the volume (brush radius, box size, a valid palette) are the apply step's
+  // to enforce.
   [[nodiscard]] std::optional<TerrainEditPayload> unpackTerrainEdit(const net::Message& message);
 }
 

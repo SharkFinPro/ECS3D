@@ -2,6 +2,8 @@
 #include "TerrainChunk.h"
 #include "TerrainVolume.h"
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <utility>
 
 namespace terrain
@@ -180,5 +182,45 @@ namespace terrain
     palette[index].color = color;
 
     return std::nullopt;
+  }
+
+  uint64_t paletteHash(const std::vector<TerrainMaterial>& palette)
+  {
+    uint64_t hash = 14695981039346656037ULL;
+
+    const auto feed = [&hash](const uint64_t value, const int bytes)
+    {
+      for (int byte = 0; byte < bytes; ++byte)
+      {
+        hash ^= (value >> (8 * byte)) & 0xFF;
+        hash *= 1099511628211ULL;
+      }
+    };
+
+    feed(palette.size(), 8);
+
+    for (const TerrainMaterial& material : palette)
+    {
+      feed(material.name.size(), 8);
+      for (const char character : material.name)
+      {
+        feed(static_cast<uint8_t>(character), 1);
+      }
+
+      for (const uuids::uuid* texture : { &material.albedoTexture, &material.specularTexture })
+      {
+        for (const std::byte byte : texture->as_bytes())
+        {
+          feed(static_cast<uint8_t>(byte), 1);
+        }
+      }
+
+      for (int component = 0; component < 3; ++component)
+      {
+        feed(std::bit_cast<uint32_t>(material.color[component]), 4);
+      }
+    }
+
+    return hash;
   }
 }

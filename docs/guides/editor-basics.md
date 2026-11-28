@@ -116,8 +116,9 @@ starts with one, a gray named Ground.
   ground and removes the material, and Cancel keeps it. Ground painted with later materials keeps its look. The last
   material cannot be removed.
 - Materials can be edited only while the editor can edit the server and the scene is stopped. Undo and redo cover
-  every change; removing or moving a painted material takes two undo steps, one for the palette and one for the
-  repainted ground.
+  every change; removing or moving a material is one undo step that restores the palette and the painted ground
+  together. Removing or moving a material waits until the whole terrain has arrived from the server and no brush
+  stroke is still finishing.
 
 ## Scene Status
 

@@ -726,7 +726,7 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
     case CommandKind::setSceneScriptFields:
       return "Edit " + sceneScriptLabel(std::get<SetSceneScriptFieldsData>(m_data).className);
     case CommandKind::terrainStroke:
-      return "Sculpt Terrain";
+      return terrainStrokeLabel();
   }
 
   throw std::logic_error("EditCommand::describeForMenu: unhandled kind");

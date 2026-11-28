@@ -243,18 +243,35 @@ TEST(TerrainMaterialRemap, CommitRemapSetsTheChunksItReturns)
   EXPECT_EQ(volume.materialAtSample({ 0, 0, 0 }), 3);
 }
 
-TEST(TerrainMaterialRemap, PredictionRemapsTheViewAndItsCommandHoldsTheBeforeChunks)
+namespace {
+  // A store holding one terrain with a palette of size entries.
+  struct View
+  {
+    terrain::TerrainStore store;
+    std::shared_ptr<terrain::TerrainVolume> volume;
+
+    explicit View(const size_t size)
+    {
+      volume = store.create({ .uuid = terrainId, .palette = palette(size) });
+    }
+  };
+}
+
+TEST(TerrainMaterialRemap, PredictionRemapsTheViewAndItsCommandHoldsTheBeforeChunksAndPalettes)
 {
-  terrain::TerrainVolume volume;
+  View view(8);
   const auto dense = mixedChunk();
   const auto untouched = terrain::TerrainChunk::uniform(-50, 4);
-  volume.setChunk({ 0, 0, 0 }, dense);
-  volume.setChunk({ 2, 0, 0 }, untouched);
+  view.volume->setChunk({ 0, 0, 0 }, dense);
+  view.volume->setChunk({ 2, 0, 0 }, untouched);
+  auto after = palette(8);
+  after[6].name = "renamed";
 
-  const auto prediction = edits::predictTerrainRemap(terrainId, volume, mapping(1, 6), 9);
+  const auto prediction = edits::predictTerrainRemap(terrainId, view.store, mapping(1, 6), after, 9);
   ASSERT_TRUE(prediction.has_value());
-  EXPECT_EQ(volume.materialAtSample({ 1, 0, 0 }), 6);
-  EXPECT_EQ(volume.chunk({ 2, 0, 0 }), untouched);
+  EXPECT_EQ(view.volume->materialAtSample({ 1, 0, 0 }), 6);
+  EXPECT_EQ(view.volume->chunk({ 2, 0, 0 }), untouched);
+  EXPECT_EQ(view.store.description(terrainId)->palette, after);
 
   const auto sent = terrain::unpackTerrainEdit(prediction->message);
   ASSERT_TRUE(sent.has_value());
@@ -262,30 +279,54 @@ TEST(TerrainMaterialRemap, PredictionRemapsTheViewAndItsCommandHoldsTheBeforeChu
   EXPECT_EQ(sent->terrain, terrainId);
   EXPECT_EQ(sent->strokeId, 9u);
   EXPECT_EQ(sent->remap, mapping(1, 6));
+  EXPECT_EQ(sent->paletteHash, terrain::paletteHash(palette(8)));
+  EXPECT_EQ(sent->palette, after);
 
-  ASSERT_TRUE(prediction->command.has_value());
-  const auto* recorded = prediction->command->terrainStrokeChunks();
+  const auto* recorded = prediction->command.terrainStrokeChunks();
   ASSERT_NE(recorded, nullptr);
-  const auto& chunks = *recorded;
-  ASSERT_EQ(chunks.size(), 1u);
-  EXPECT_EQ(chunks[0].coord, (ChunkCoord{ 0, 0, 0 }));
-  EXPECT_EQ(chunks[0].before, dense);
-  EXPECT_EQ(chunks[0].after, volume.chunk({ 0, 0, 0 }));
+  ASSERT_EQ(recorded->size(), 1u);
+  EXPECT_EQ((*recorded)[0].coord, (ChunkCoord{ 0, 0, 0 }));
+  EXPECT_EQ((*recorded)[0].before, dense);
+  EXPECT_EQ((*recorded)[0].after, view.volume->chunk({ 0, 0, 0 }));
 }
 
-TEST(TerrainMaterialRemap, PredictionStillSendsWhenTheViewHoldsNothingToChange)
+TEST(TerrainMaterialRemap, PredictionRecordsAPaletteOnlyEntryWhenTheViewHoldsNothingToChange)
 {
-  terrain::TerrainVolume volume;
-  volume.setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-50, 4));
-  const auto revision = volume.revision();
+  View view(8);
+  view.volume->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-50, 4));
+  const auto revision = view.volume->revision();
+  auto after = palette(8);
+  after[1].name = "moved";
 
-  const auto prediction = edits::predictTerrainRemap(terrainId, volume, mapping(1, 6));
+  const auto prediction = edits::predictTerrainRemap(terrainId, view.store, mapping(1, 6), after);
   ASSERT_TRUE(prediction.has_value());
-  EXPECT_FALSE(prediction->command.has_value());
+  ASSERT_NE(prediction->command.terrainStrokeChunks(), nullptr);
+  EXPECT_TRUE(prediction->command.terrainStrokeChunks()->empty());
   EXPECT_TRUE(terrain::unpackTerrainEdit(prediction->message).has_value());
-  EXPECT_EQ(volume.revision(), revision);
+  EXPECT_EQ(view.volume->revision(), revision);
+  EXPECT_EQ(view.store.description(terrainId)->palette, after);
+}
 
-  EXPECT_FALSE(edits::predictTerrainRemap(terrainId, volume, terrain::identityRemap()).has_value());
-  EXPECT_FALSE(edits::predictTerrainRemap(terrainId, volume, mapping(4, terrain::reservedMaterial)).has_value());
-  EXPECT_EQ(volume.revision(), revision);
+TEST(TerrainMaterialRemap, PredictionRefusesBeforeTouchingTheView)
+{
+  View view(8);
+  view.volume->setChunk({ 0, 0, 0 }, terrain::TerrainChunk::uniform(-50, 1));
+  const auto revision = view.volume->revision();
+  auto after = palette(8);
+  after[0].name = "changed";
+  auto badColor = after;
+  badColor[0].color.r = 2.0f;
+
+  EXPECT_FALSE(edits::predictTerrainRemap(terrainId, view.store, terrain::identityRemap(), after).has_value());
+  EXPECT_FALSE(
+    edits::predictTerrainRemap(terrainId, view.store, mapping(4, terrain::reservedMaterial), after).has_value());
+  EXPECT_FALSE(edits::predictTerrainRemap(terrainId, view.store, mapping(1, 6), palette(8)).has_value());
+  EXPECT_FALSE(edits::predictTerrainRemap(terrainId, view.store, mapping(1, 6), badColor).has_value());
+  const auto other = uuids::uuid::from_string("44444444-4444-4444-4444-444444444444").value();
+  EXPECT_FALSE(edits::predictTerrainRemap(other, view.store, mapping(1, 6), after).has_value());
+  EXPECT_EQ(view.volume->revision(), revision);
+  EXPECT_EQ(view.store.description(terrainId)->palette, palette(8));
+
+  EXPECT_TRUE(edits::predictTerrainRemap(terrainId, view.store, mapping(1, 6), after).has_value());
+  EXPECT_NE(view.volume->revision(), revision);
 }

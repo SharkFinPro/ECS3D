@@ -10,7 +10,15 @@
 
 namespace terrain
 {
-  enum class TerrainEditRefusal : uint8_t { none, unknownTerrain, invalidOp, tooLarge, revisionsExhausted };
+  enum class TerrainEditRefusal : uint8_t
+  {
+    none,
+    unknownTerrain,
+    invalidOp,
+    tooLarge,
+    revisionsExhausted,
+    paletteChanged
+  };
 
   struct TerrainEditResult
   {
@@ -19,12 +27,15 @@ namespace terrain
     uint32_t revision = 0;
     // In the order applied; empty for a refusal or an edit that changed nothing.
     std::vector<ChunkCoord> changed;
+    // A remapMaterials edit gave the terrain its new palette; the caller re-snapshots so every view receives it.
+    bool paletteReplaced = false;
   };
 
   // The server side of a terrainEdit. Bounds the operation against the terrain's volume, applies it through
   // TerrainStore::setChunk with one fresh revision, and changes nothing when it refuses. A setChunks payload must
   // name each coordinate once, as unpackTerrainEdit guarantees; a null or air chunk means air whatever its material. A
-  // remapMaterials edit touches every held chunk, so it is not bounded by maxEditChunks.
+  // remapMaterials edit touches every held chunk, so it is not bounded by maxEditChunks; it is refused with
+  // paletteChanged unless the held palette hashes to its paletteHash, and its chunks and palette apply together.
   [[nodiscard]] TerrainEditResult applyTerrainEdit(TerrainStore& store, const TerrainEditPayload& edit);
 
   // Lower-case phrase for a log line, e.g. "the operation is too large".

@@ -2,6 +2,7 @@
 #define EDITCOMMAND_H
 
 #include "TerrainRestore.h"
+#include "TerrainStrokeTypes.h"
 #include "assets/AssetRegistry.h"
 #include "terrain/TerrainTypes.h"
 #include <nlohmann/json_fwd.hpp>
@@ -89,16 +90,6 @@ struct Validation {
   {
     return failure == ValidationFailure::none;
   }
-};
-
-// One chunk a sculpt stroke changed. Chunks are immutable, so comparing the pointers compares the content a
-// command recorded; null means air.
-struct TerrainStrokeChunk {
-  terrain::ChunkCoord coord;
-  std::shared_ptr<const terrain::TerrainChunk> before;
-  std::shared_ptr<const terrain::TerrainChunk> after;
-
-  friend bool operator==(const TerrainStrokeChunk&, const TerrainStrokeChunk&) = default;
 };
 
 // One editor mutation: what kind it was, the uuid(s) it targets, and its before/after state in
@@ -234,6 +225,11 @@ public:
   // would refuse as a whole.
   [[nodiscard]] static EditCommand terrainStroke(const uuids::uuid& terrainUUID,
                                                  std::vector<TerrainStrokeChunk> chunks);
+  // A terrainStroke that also carries a palette remap: undo restores the chunks and the before palette, redo sends the
+  // remap again, and validation also compares the live palette. The chunk list may be empty; the same throws.
+  [[nodiscard]] static EditCommand terrainPaletteRemap(const uuids::uuid& terrainUUID,
+                                                       std::vector<TerrainStrokeChunk> chunks,
+                                                       TerrainPaletteRemap palette);
 
   [[nodiscard]] CommandKind kind() const;
 
@@ -334,6 +330,7 @@ private:
   [[nodiscard]] nlohmann::json buildSceneScriptUndoJSON() const;
   [[nodiscard]] nlohmann::json buildSceneScriptRedoJSON() const;
   [[nodiscard]] Validation validateTerrainStroke(const terrain::TerrainStore* terrains, bool forUndo) const;
+  [[nodiscard]] std::string terrainStrokeLabel() const;
   [[nodiscard]] Validation validateTerrainReAdd(const uuids::uuid& assetUUID,
                                                 const terrain::TerrainStore* terrains) const;
   [[nodiscard]] static Validation validateTerrainPalette(const uuids::uuid& assetUUID, const std::string& body,
@@ -512,6 +509,7 @@ private:
   struct TerrainStrokeData {
     uuids::uuid terrainUUID;
     std::vector<TerrainStrokeChunk> chunks;
+    std::optional<TerrainPaletteRemap> palette;
 
     friend bool operator==(const TerrainStrokeData&, const TerrainStrokeData&) = default;
   };

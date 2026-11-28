@@ -3,11 +3,15 @@
 #include "TerrainChunk.h"
 #include "TerrainMaterialRemap.h"
 #include "TerrainOps.h"
+#include "TerrainPalette.h"
 #include "TerrainVolume.h"
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace terrain
 {
@@ -54,6 +58,120 @@ namespace terrain
       return extentX * extentY * extentZ > maxEditChunks ? TerrainEditRefusal::tooLarge
                                                          : TerrainEditRefusal::none;
     }
+
+    struct Plan
+    {
+      TerrainEditRefusal refusal = TerrainEditRefusal::none;
+      ChunkEdits edits;
+      // Set for a remap whose palette differs from the held one.
+      std::optional<TerrainDescription> description;
+    };
+
+    Plan refusedPlan(const TerrainEditRefusal refusal)
+    {
+      return { refusal, {}, std::nullopt };
+    }
+
+    Plan planBrush(const TerrainVolume& volume, const BrushOp& brush)
+    {
+      if (dirtyBox(volume, brush).empty())
+      {
+        return refusedPlan(TerrainEditRefusal::invalidOp);
+      }
+
+      return { TerrainEditRefusal::none, applyBrush(volume, brush), std::nullopt };
+    }
+
+    Plan planRedistance(const TerrainVolume& volume, const SampleBox& box)
+    {
+      const TerrainEditRefusal refusal = checkRedistanceBox(box);
+
+      if (refusal != TerrainEditRefusal::none)
+      {
+        return refusedPlan(refusal);
+      }
+
+      return { TerrainEditRefusal::none, redistance(volume, box), std::nullopt };
+    }
+
+    bool sameAsHeld(const std::shared_ptr<const TerrainChunk>& held,
+                    const std::shared_ptr<const TerrainChunk>& incoming)
+    {
+      const bool heldAir = !held || held->isAir();
+      const bool incomingAir = !incoming || incoming->isAir();
+
+      return heldAir ? incomingAir : (!incomingAir && held->hash() == incoming->hash());
+    }
+
+    Plan planSetChunks(const TerrainVolume& volume, const std::vector<SetChunkEntry>& chunks)
+    {
+      if (!std::ranges::all_of(chunks, [](const SetChunkEntry& entry) { return isValidChunkCoord(entry.coord); }))
+      {
+        return refusedPlan(TerrainEditRefusal::invalidOp);
+      }
+
+      Plan plan;
+
+      for (const SetChunkEntry& entry : chunks)
+      {
+        if (!sameAsHeld(volume.chunk(entry.coord), entry.chunk))
+        {
+          const bool air = !entry.chunk || entry.chunk->isAir();
+          plan.edits.emplace_back(entry.coord, air ? nullptr : entry.chunk);
+        }
+      }
+
+      return plan;
+    }
+
+    Plan planEdit(const TerrainVolume& volume, const TerrainEditPayload& edit)
+    {
+      switch (edit.kind)
+      {
+        case TerrainEditKind::brush:
+          return planBrush(volume, edit.brush);
+        case TerrainEditKind::redistance:
+          return planRedistance(volume, edit.box);
+        case TerrainEditKind::setChunks:
+          return planSetChunks(volume, edit.chunks);
+        case TerrainEditKind::remapMaterials:
+          break;
+      }
+
+      return refusedPlan(TerrainEditRefusal::invalidOp);
+    }
+
+    // The palette is checked before the chunks are read, so a refused remap costs no pass over the volume.
+    Plan planRemap(const TerrainStore& store, const TerrainVolume& volume, const TerrainEditPayload& edit)
+    {
+      const TerrainDescription* held = store.description(edit.terrain);
+
+      if (!held || !isValidRemap(edit.remap) || isIdentity(edit.remap))
+      {
+        return refusedPlan(TerrainEditRefusal::invalidOp);
+      }
+
+      if (paletteHash(held->palette) != edit.paletteHash)
+      {
+        return refusedPlan(TerrainEditRefusal::paletteChanged);
+      }
+
+      TerrainDescription replaced = *held;
+      replaced.palette = edit.palette;
+
+      if (!isValidDescription(replaced))
+      {
+        return refusedPlan(TerrainEditRefusal::invalidOp);
+      }
+
+      Plan plan{ TerrainEditRefusal::none, remapMaterials(volume, edit.remap), std::nullopt };
+      if (replaced.palette != held->palette)
+      {
+        plan.description = std::move(replaced);
+      }
+
+      return plan;
+    }
   }
 
   TerrainEditResult applyTerrainEdit(TerrainStore& store, const TerrainEditPayload& edit)
@@ -65,86 +183,31 @@ namespace terrain
       return refused(TerrainEditRefusal::unknownTerrain);
     }
 
-    ChunkEdits edits;
+    Plan plan = edit.kind == TerrainEditKind::remapMaterials ? planRemap(store, *volume, edit)
+                                                             : planEdit(*volume, edit);
 
-    switch (edit.kind)
+    if (plan.refusal != TerrainEditRefusal::none)
     {
-      case TerrainEditKind::brush:
-        if (dirtyBox(*volume, edit.brush).empty())
-        {
-          return refused(TerrainEditRefusal::invalidOp);
-        }
-
-        edits = applyBrush(*volume, edit.brush);
-        break;
-      case TerrainEditKind::redistance:
-      {
-        const TerrainEditRefusal refusal = checkRedistanceBox(edit.box);
-
-        if (refusal != TerrainEditRefusal::none)
-        {
-          return refused(refusal);
-        }
-
-        edits = redistance(*volume, edit.box);
-        break;
-      }
-      case TerrainEditKind::setChunks:
-      {
-        for (const SetChunkEntry& entry : edit.chunks)
-        {
-          if (!isValidChunkCoord(entry.coord))
-          {
-            return refused(TerrainEditRefusal::invalidOp);
-          }
-        }
-
-        for (const SetChunkEntry& entry : edit.chunks)
-        {
-          const auto held = volume->chunk(entry.coord);
-          const bool heldAir = !held || held->isAir();
-          const bool incomingAir = !entry.chunk || entry.chunk->isAir();
-
-          if (heldAir ? incomingAir : (!incomingAir && held->hash() == entry.chunk->hash()))
-          {
-            continue;
-          }
-
-          edits.emplace_back(entry.coord, incomingAir ? nullptr : entry.chunk);
-        }
-
-        break;
-      }
-      case TerrainEditKind::remapMaterials:
-        if (!isValidRemap(edit.remap) || isIdentity(edit.remap))
-        {
-          return refused(TerrainEditRefusal::invalidOp);
-        }
-
-        edits = remapMaterials(*volume, edit.remap);
-        break;
-      default:
-        return refused(TerrainEditRefusal::invalidOp);
+      return refused(plan.refusal);
     }
 
     TerrainEditResult result;
+    const uint32_t revision = plan.edits.empty() ? 0 : store.nextRevision(edit.terrain);
 
-    if (edits.empty())
-    {
-      return result;
-    }
-
-    const uint32_t revision = store.nextRevision(edit.terrain);
-
-    if (revision == 0)
+    if (!plan.edits.empty() && revision == 0)
     {
       return refused(TerrainEditRefusal::revisionsExhausted);
     }
 
-    result.revision = revision;
-    result.changed.reserve(edits.size());
+    if (plan.description)
+    {
+      result.paletteReplaced = store.applyDescription(*plan.description);
+    }
 
-    for (auto& [coord, chunk] : edits)
+    result.revision = revision;
+    result.changed.reserve(plan.edits.size());
+
+    for (auto& [coord, chunk] : plan.edits)
     {
       if (!store.setChunk(edit.terrain, coord, std::move(chunk), revision))
       {
@@ -171,6 +234,8 @@ namespace terrain
         return "the operation is too large";
       case TerrainEditRefusal::revisionsExhausted:
         return "the terrain has no revisions left";
+      case TerrainEditRefusal::paletteChanged:
+        return "the terrain's palette changed since the edit was made";
     }
 
     return "unknown refusal";

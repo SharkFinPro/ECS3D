@@ -5,9 +5,9 @@
 #include <terrain/TerrainVolume.h>
 #include <edits/RecordTerrainEdits.h>
 #include <imgui.h>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,44 +24,40 @@ namespace {
   }
 }
 
-std::bitset<256> EditorApp::terrainMaterialsInUse(const uuids::uuid& terrainUuid) const
+std::optional<std::string> EditorApp::sendTerrainRemap(const uuids::uuid& terrainUuid,
+                                                       const TerrainPaletteEditor::Result& result)
 {
-  const auto volume = m_terrainStore->find(terrainUuid);
-  return volume ? terrain::materialsInUse(*volume) : std::bitset<256>{};
-}
-
-bool EditorApp::sendTerrainRemap(const uuids::uuid& terrainUuid, const terrain::MaterialRemap& remap)
-{
-  const auto volume = m_terrainStore->find(terrainUuid);
-  if (!volume)
+  if (auto refusal = TerrainPaletteEditor::remapRefusal(terrainPaletteContext(terrainUuid)))
   {
-    return false;
+    return refusal;
   }
 
-  auto prediction = edits::predictTerrainRemap(terrainUuid, *volume, remap);
+  auto prediction = edits::predictTerrainRemap(terrainUuid, *m_terrainStore, *result.remap, result.palette);
   if (!prediction)
   {
-    return false;
+    return "That change leaves the materials as they are.";
   }
 
   sendTerrainEdit(prediction->message);
+  m_playHistory.current().record(std::move(prediction->command));
+  noteRecordedEdit();
 
-  if (prediction->command)
-  {
-    m_playHistory.current().record(std::move(*prediction->command));
-    noteRecordedEdit();
-  }
-
-  return true;
+  return std::nullopt;
 }
 
 void EditorApp::requestTerrainMaterialRemove(const uuids::uuid& terrainUuid, const size_t index,
                                              const TerrainPaletteRun& run)
 {
-  const auto& live = livePalette(*m_terrainStore, terrainUuid);
-  const auto used = terrainMaterialsInUse(terrainUuid);
+  if (auto refusal = TerrainPaletteEditor::remapRefusal(terrainPaletteContext(terrainUuid)))
+  {
+    m_terrainPaletteNote.raise(terrainUuid, index, std::move(*refusal));
+    return;
+  }
 
-  if (TerrainPaletteEditor::removeNeedsChoice(live.size(), index, used))
+  const auto& live = livePalette(*m_terrainStore, terrainUuid);
+  const auto volume = m_terrainStore->find(terrainUuid);
+
+  if (TerrainPaletteEditor::removeNeedsChoice(live.size(), index, terrain::materialsInUse(*volume)))
   {
     m_terrainRemovePrompt.open(terrainUuid, live, index);
     return;
@@ -77,13 +73,7 @@ void EditorApp::confirmTerrainMaterialRemove(const uuids::uuid& terrainUuid)
   const size_t replacement = m_terrainRemovePrompt.replacement();
   m_terrainRemovePrompt.close();
 
-  if (const auto refusal = TerrainPaletteEditor::editRefusal(terrainPaletteContext(terrainUuid)))
-  {
-    m_terrainPaletteNote.raise(terrainUuid, index, *refusal);
-    return;
-  }
-
-  finishTerrainPaletteEdit(terrainUuid,
+  finishTerrainPaletteEdit(terrainUuid, index,
                            TerrainPaletteEditor::remove(livePalette(*m_terrainStore, terrainUuid), index, replacement),
                            { TextureModeRows::Change::Kind::remove, index, index });
 }
@@ -92,6 +82,7 @@ void EditorApp::drawTerrainRemovePrompt(const uuids::uuid& terrainUuid)
 {
   const auto& live = livePalette(*m_terrainStore, terrainUuid);
   const bool open = m_terrainRemovePrompt.matches(terrainUuid, live);
+  m_terrainRemovePrompt.markDrawn();
 
   if (open && !ImGui::IsPopupOpen(removePopupId))
   {

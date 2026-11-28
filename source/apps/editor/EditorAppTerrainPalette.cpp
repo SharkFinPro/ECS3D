@@ -53,16 +53,21 @@ namespace {
 
 TerrainPaletteEditor::Context EditorApp::terrainPaletteContext(const uuids::uuid& terrainUuid) const
 {
-  return { m_serverEditable, m_sceneStatus == SceneStatus::stopped,
-           m_terrainStore->description(terrainUuid) != nullptr };
+  const auto* description = m_terrainStore->description(terrainUuid);
+  const auto volume = m_terrainStore->find(terrainUuid);
+  const bool complete = description && volume && volume->chunks().size() >= description->chunkCount;
+  const bool strokeBusy = m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks();
+
+  return { m_serverEditable, m_sceneStatus == SceneStatus::stopped, description != nullptr, complete, strokeBusy };
 }
 
-bool EditorApp::applyTerrainPalette(const uuids::uuid& terrainUuid, std::vector<terrain::TerrainMaterial> palette)
+std::optional<std::string> EditorApp::applyTerrainPalette(const uuids::uuid& terrainUuid,
+                                                          std::vector<terrain::TerrainMaterial> palette)
 {
   auto command = edits::commandForTerrainPalette(terrainUuid, *m_terrainStore, palette);
   if (!command)
   {
-    return false;
+    return "That change leaves the materials as they are.";
   }
 
   auto description = *m_terrainStore->description(terrainUuid);
@@ -72,43 +77,44 @@ bool EditorApp::applyTerrainPalette(const uuids::uuid& terrainUuid, std::vector<
   if (!replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry, *m_terrainStore,
                                              asset, false))
   {
-    return false;
+    return "The editor could not apply the new materials.";
   }
 
   m_netClient->send(replication::packAddAsset(asset));
   m_playHistory.current().record(std::move(*command));
   noteRecordedEdit();
 
-  return true;
+  return std::nullopt;
 }
 
-bool EditorApp::finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, TerrainPaletteEditor::Result result,
-                                         const TextureModeRows::Change& change)
+bool EditorApp::finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, const size_t noteIndex,
+                                         TerrainPaletteEditor::Result result, const TextureModeRows::Change& change)
 {
   const size_t selected = clampMaterial(m_terrainTool.activeMaterial(), paletteOf(*m_terrainStore, terrainUuid).size());
 
-  if (!result.ok())
+  if (!result.refusal)
   {
-    m_terrainPaletteNote.raise(terrainUuid, selected, *result.refusal);
+    // Another view may draw the new palette over the old indices until the remapped chunks arrive; the server sends
+    // the chunks first, so that lasts at most as long as the two messages take.
+    result.refusal = result.remap ? sendTerrainRemap(terrainUuid, result)
+                                  : applyTerrainPalette(terrainUuid, result.palette);
+  }
+
+  if (result.refusal)
+  {
+    m_terrainPaletteNote.raise(terrainUuid, noteIndex, std::move(*result.refusal));
     return false;
   }
 
   m_terrainPaletteNote.clear();
+  m_terrainTextureModes.follow(change, result.palette);
 
-  // The samples move first, so the ground never shows the new palette over the old indices.
-  if (result.remap && !sendTerrainRemap(terrainUuid, *result.remap))
+  const auto shown = selectedTerrain();
+  if (const auto follow = selectionToFollow(change, terrainUuid, shown ? shown->getTerrainUUID() : uuids::uuid{},
+                                            selected, result.palette.size()))
   {
-    return false;
+    m_terrainTool.setActiveMaterial(static_cast<uint8_t>(*follow));
   }
-
-  const auto after = result.palette;
-  if (!applyTerrainPalette(terrainUuid, std::move(result.palette)))
-  {
-    return false;
-  }
-
-  m_terrainTextureModes.follow(change, after);
-  m_terrainTool.setActiveMaterial(static_cast<uint8_t>(materialSelectionAfter(change, selected, after.size())));
 
   return true;
 }
@@ -123,19 +129,17 @@ void EditorApp::flushTerrainMaterialName()
     return index < palette.size() ? std::optional<terrain::TerrainMaterial>(palette[index]) : std::nullopt;
   };
 
-  const auto colorCommit = m_terrainMaterialColor.endFrame(canSend, materialAt);
+  m_terrainRemovePrompt.endFrame();
 
-  if (colorCommit)
+  if (const auto commit = m_terrainMaterialColor.endFrame(canSend, materialAt))
   {
-    finishTerrainPaletteEdit(colorCommit->terrain, TerrainPaletteEditor::setColor(
-      paletteOf(*m_terrainStore, colorCommit->terrain), colorCommit->index, colorCommit->value));
+    finishTerrainPaletteEdit(commit->terrain, commit->index, TerrainPaletteEditor::setColor(
+      paletteOf(*m_terrainStore, commit->terrain), commit->index, commit->value));
   }
 
-  const auto commit = m_terrainMaterialName.endFrame(canSend, materialAt);
-
-  if (commit)
+  if (const auto commit = m_terrainMaterialName.endFrame(canSend, materialAt))
   {
-    finishTerrainPaletteEdit(commit->terrain, TerrainPaletteEditor::rename(
+    finishTerrainPaletteEdit(commit->terrain, commit->index, TerrainPaletteEditor::rename(
       paletteOf(*m_terrainStore, commit->terrain), commit->index, commit->value));
   }
 }
@@ -168,11 +172,12 @@ void EditorApp::drawTerrainMaterials(const std::shared_ptr<Terrain>& component)
     }
 
     const size_t selected = clampMaterial(m_terrainTool.activeMaterial(), palette.size());
-    const bool added = drawTerrainAddMaterial(terrainUuid, palette.size(), refusal);
 
-    if (!palette.empty())
+    // The details are skipped the frame Add applies, so a pending name or color settles next frame through endFrame
+    // against the palette the add left, instead of being dropped as this frame's second edit.
+    if (!drawTerrainAddMaterial(terrainUuid, palette.size(), refusal) && !palette.empty())
     {
-      drawTerrainMaterialDetails(terrainUuid, selected, palette, refusal, added);
+      drawTerrainMaterialDetails(terrainUuid, selected, palette, refusal);
     }
 
     if (refusal)
@@ -226,7 +231,9 @@ bool EditorApp::drawTerrainAddMaterial(const uuids::uuid& terrainUuid, const siz
   ImGui::BeginDisabled(refusal.has_value() || full);
   if (ImGui::Button("Add material"))
   {
-    added = finishTerrainPaletteEdit(terrainUuid, TerrainPaletteEditor::add(paletteOf(*m_terrainStore, terrainUuid)));
+    const auto& live = paletteOf(*m_terrainStore, terrainUuid);
+    added = finishTerrainPaletteEdit(terrainUuid, clampMaterial(m_terrainTool.activeMaterial(), live.size()),
+                                     TerrainPaletteEditor::add(live));
   }
   ImGui::EndDisabled();
 
@@ -245,18 +252,18 @@ bool EditorApp::drawTerrainAddMaterial(const uuids::uuid& terrainUuid, const siz
 
 void EditorApp::drawTerrainMaterialDetails(const uuids::uuid& terrainUuid, const size_t index,
                                            const std::vector<terrain::TerrainMaterial>& palette,
-                                           const std::optional<std::string>& editRefusal, const bool edited)
+                                           const std::optional<std::string>& editRefusal)
 {
   const terrain::TerrainMaterial& material = palette[index];
   const bool canEdit = !editRefusal.has_value();
-  bool applied = edited;
+  bool applied = false;
 
   // Every intent is built from the palette the store holds now, not from this frame's copy, and none runs once an
   // edit has applied this frame.
   const TerrainPaletteRun run = [&](TerrainPaletteEditor::Result result, const TextureModeRows::Change& change) {
     if (!applied)
     {
-      applied = finishTerrainPaletteEdit(terrainUuid, std::move(result), change);
+      applied = finishTerrainPaletteEdit(terrainUuid, index, std::move(result), change);
     }
   };
 

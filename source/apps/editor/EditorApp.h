@@ -28,13 +28,11 @@
 #include <TerrainUndoState.h>
 #include <scenes/SceneManager.h>
 #include <terrain/TerrainBinding.h>
-#include <terrain/TerrainMaterialRemap.h>
 #include <terrain/TerrainUpload.h>
 #include <terrain/TerrainViewSync.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
 #include <array>
-#include <bitset>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -506,7 +504,7 @@ private:
 
   void drawTerrainMaterialDetails(const uuids::uuid& terrainUuid, size_t index,
                                   const std::vector<terrain::TerrainMaterial>& palette,
-                                  const std::optional<std::string>& editRefusal, bool edited);
+                                  const std::optional<std::string>& editRefusal);
   // Returns whether the add applied.
   bool drawTerrainAddMaterial(const uuids::uuid& terrainUuid, size_t paletteSize,
                               const std::optional<std::string>& refusal);
@@ -527,21 +525,20 @@ private:
   void drawTerrainRemovePromptBody(const uuids::uuid& terrainUuid,
                                    const std::vector<terrain::TerrainMaterial>& palette);
   void drawTerrainRemoveChoices(const std::vector<terrain::TerrainMaterial>& palette);
-  // Scans every held chunk, so it runs on a click, not per frame.
-  [[nodiscard]] std::bitset<256> terrainMaterialsInUse(const uuids::uuid& terrainUuid) const;
-  // Predicts the remap on the editor's volume, sends it and records its terrainStroke undo entry. False when there is
-  // no volume or nothing to send.
-  bool sendTerrainRemap(const uuids::uuid& terrainUuid, const terrain::MaterialRemap& remap);
+  // Predicts a removal's or move's remap and palette here, sends them as one edit and records one undo entry.
+  [[nodiscard]] std::optional<std::string> sendTerrainRemap(const uuids::uuid& terrainUuid,
+                                                            const TerrainPaletteEditor::Result& result);
 
   // Commits a material name typed in a block that is no longer drawn.
   void flushTerrainMaterialName();
 
-  // Applies a new palette to the terrain here, sends it and records it for undo. False when it changes nothing.
-  bool applyTerrainPalette(const uuids::uuid& terrainUuid, std::vector<terrain::TerrainMaterial> palette);
+  // Applies a new palette to the terrain here, sends it and records it for undo; the refusal when it cannot.
+  [[nodiscard]] std::optional<std::string> applyTerrainPalette(const uuids::uuid& terrainUuid,
+                                                               std::vector<terrain::TerrainMaterial> palette);
 
-  // Runs a palette intent's result: applies it and keeps the selection on its material, or keeps the refusal for the
-  // details panel to show. True when it applied.
-  bool finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, TerrainPaletteEditor::Result result,
+  // Runs a palette intent's result: applies it and keeps the selection on its material, or raises the refusal on
+  // noteIndex, the material the edit was about. True when it applied.
+  bool finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, size_t noteIndex, TerrainPaletteEditor::Result result,
                                 const TextureModeRows::Change& change = {});
 
   [[nodiscard]] TerrainPaletteEditor::Context terrainPaletteContext(const uuids::uuid& terrainUuid) const;
@@ -569,6 +566,9 @@ private:
   // Shared tail of undo()/redo(): sends whichever payload the outcome carries through the normal send
   // path, or logs why nothing was sent. isUndo only picks the wording ("undo" vs. "redo") for the log.
   void reportHistoryOutcome(const edits::HistoryOutcome& outcome, bool isUndo);
+  // Its messagePayload and terrainPayload branches; false when the history had to be cleared.
+  bool sendHistoryMessage(const edits::HistoryOutcome& outcome, const std::string& action);
+  bool sendHistoryTerrainStep(const edits::TerrainSetChunks& payload, const std::string& action);
 
   // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
   // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if

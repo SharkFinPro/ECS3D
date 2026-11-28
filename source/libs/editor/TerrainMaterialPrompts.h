@@ -4,13 +4,14 @@
 #include "TerrainPaletteEditor.h"
 #include <terrain/TerrainStore.h>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 #include <uuid.h>
 
-// A refusal the Materials block shows beside the selected material's Remove button. It belongs to the selection it
-// was raised for and is cleared once another material or another terrain is selected.
+// A refusal the Materials block shows beside the selected material's Remove button. It is raised for the material the
+// edit was about and is cleared once a frame draws another material or another terrain.
 class MaterialNote {
 public:
   void raise(const uuids::uuid& terrain, const size_t index, std::string text)
@@ -61,6 +62,22 @@ public:
     m_open = false;
   }
 
+  // The prompt was drawn this frame.
+  void markDrawn()
+  {
+    m_drawn = true;
+  }
+
+  // Once per UI frame, before the block draws: a prompt the last frame did not draw (the Materials block was not
+  // shown) closes, so it never reappears later over a palette the user has stopped looking at.
+  void endFrame()
+  {
+    if (!std::exchange(m_drawn, false))
+    {
+      m_open = false;
+    }
+  }
+
   [[nodiscard]] bool isOpen() const
   {
     return m_open;
@@ -107,6 +124,22 @@ private:
   size_t m_index = 0;
   size_t m_replacement = 0;
   bool m_open = false;
+  bool m_drawn = false;
 };
+
+// The selection after an edit of editedTerrain's palette: it moves only for a move or remove of the terrain whose
+// materials the block shows; nullopt leaves it alone.
+[[nodiscard]] inline std::optional<size_t> selectionToFollow(const TextureModeRows::Change& change,
+                                                             const uuids::uuid& editedTerrain,
+                                                             const uuids::uuid& shownTerrain, const size_t selected,
+                                                             const size_t paletteSize)
+{
+  if (change.kind == TextureModeRows::Change::Kind::none || editedTerrain != shownTerrain)
+  {
+    return std::nullopt;
+  }
+
+  return materialSelectionAfter(change, selected, paletteSize);
+}
 
 #endif //TERRAINMATERIALPROMPTS_H

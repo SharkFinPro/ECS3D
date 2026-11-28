@@ -43,6 +43,7 @@ add_library(${PROJECT_NAME}
   edits/TerrainRestore.h
   edits/TerrainSetChunks.cpp
   edits/TerrainSetChunks.h
+  edits/TerrainStrokeTypes.h
   scenes/SceneManager.cpp
   scenes/SceneManager.h
   scenes/SceneAsset.cpp

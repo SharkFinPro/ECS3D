@@ -24,13 +24,17 @@ public:
     bool editable = false;
     bool sceneStopped = true;
     bool terrainKnown = false;
+    // The view holds at least the description's chunkCount chunks, so materialsInUse and an undo capture see them all.
+    bool terrainComplete = false;
+    // A brush stroke is active or awaits its final chunks, so the view's chunks are a prediction.
+    bool strokeBusy = false;
   };
 
   struct Result {
     std::vector<terrain::TerrainMaterial> palette;
     std::optional<std::string> refusal;
-    // The remap of the painted samples to send before the palette, so the ground keeps its look; nullopt when no
-    // painted sample is affected.
+    // The remap of the painted samples that travels with the palette as one remapMaterials edit, so the ground keeps
+    // its look; set for every removal and move.
     std::optional<terrain::MaterialRemap> remap;
 
     [[nodiscard]] bool ok() const
@@ -59,6 +63,22 @@ public:
     }
 
     return std::nullopt;
+  }
+
+  // Why a removal or move, which remaps the painted samples, cannot run now; nullopt when it can.
+  [[nodiscard]] static std::optional<std::string> remapRefusal(const Context& context)
+  {
+    if (auto refusal = editRefusal(context))
+    {
+      return refusal;
+    }
+
+    if (!context.terrainComplete)
+    {
+      return "Wait for the whole terrain to arrive from the server.";
+    }
+
+    return context.strokeBusy ? std::optional<std::string>("Wait for the terrain stroke to finish.") : std::nullopt;
   }
 
   [[nodiscard]] static std::string defaultName(const size_t index)
@@ -107,8 +127,7 @@ public:
   // Removes the entry; refused for the last one, since a terrain keeps at least one material. The result always holds
   // the remap that keeps the ground looking the same: the entry's samples take replacement (indexed before the
   // removal) and the later ones move down with their entries. used (materialsInUse) only sees solid samples, and air
-  // samples a later Add exposes must shift too, so the remap is sent even when used shows nothing; a remap that
-  // changes no chunk records no undo entry.
+  // samples a later Add exposes must shift too, so the remap is sent even when used shows nothing.
   [[nodiscard]] static Result remove(const std::vector<terrain::TerrainMaterial>& palette, const size_t index,
                                      const size_t replacement)
   {

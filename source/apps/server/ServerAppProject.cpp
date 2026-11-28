@@ -15,6 +15,7 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <chrono>
 #include <exception>
 #include <string>
 #include <vector>
@@ -244,6 +245,12 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
   {
     Log::warn(LogCategory::server, "Refused a terrain edit for terrain " + uuids::to_string(edit->terrain)
       + " from connection " + connection + ": " + std::string(terrain::refusalText(result.refusal)));
+
+    if (terrainEditRefusalNeedsResync(result.refusal))
+    {
+      resyncTerrainView(edit->terrain, senderId);
+    }
+
     return;
   }
 
@@ -251,6 +258,34 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
   {
     m_terrainEcho.recordEdit(edit->terrain, result.changed, senderId);
   }
+
+  // The chunks go out before the snapshot that carries the palette, so a view never pairs one with the other's
+  // previous state for longer than the two messages take to arrive.
+  if (result.paletteReplaced)
+  {
+    flushTerrainEcho(std::chrono::steady_clock::now(), true);
+    broadcastSnapshot(net::SnapshotReason::assetChange);
+  }
+}
+
+void ServerApp::resyncTerrainView(const uuids::uuid& terrainUuid, const int32_t senderId)
+{
+  // Fresh revisions, so the full chunks replace the prediction the sender holds under the revisions it already had.
+  if (const auto volume = m_terrainStore->find(terrainUuid); volume && m_terrainStore->stampAllChunks(terrainUuid) != 0)
+  {
+    std::vector<terrain::ChunkCoord> coords;
+    coords.reserve(volume->chunks().size());
+
+    for (const auto& entry : volume->chunks())
+    {
+      coords.push_back(entry.first);
+    }
+
+    m_terrainEcho.requestFull(terrainUuid, coords, senderId);
+  }
+
+  flushTerrainEcho(std::chrono::steady_clock::now(), true);
+  broadcastSnapshot(net::SnapshotReason::editRefusedResync);
 }
 
 void ServerApp::finishProjectLoad()

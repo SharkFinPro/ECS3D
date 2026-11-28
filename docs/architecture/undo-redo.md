@@ -139,14 +139,18 @@ validation reads a stale volume and refuses. Null and air are the same chunk whe
 refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
 coordinate. `recordBatch` refuses a `terrainStroke`.
 
-A material remap records the same way: `edits::predictTerrainRemap` (`edits/RecordTerrainEdits.h`) remaps the
-editor's volume, captures each changed chunk's pointer from before, and returns the `remapMaterials` message with a
-`terrainStroke` command built by `commandForTerrainStroke` (nullopt when the editor's volume held nothing it changed;
-the message is still worth sending). The palette change is its own `replaceAsset` (`commandForTerrainPalette`), so
-undoing a removal or move is two history entries. The editor records the remap first and the palette second
-(`EditorApp::finishTerrainPaletteEdit`), so the first undo brings the palette back over the remapped samples and the
-second sends the remap's chunks back as a setChunks; `TerrainPaletteRemoval` in `TerrainPaletteTest.cpp` walks both
-steps against a server store.
+A material removal or move is one entry for both halves: `edits::predictTerrainRemap` (`edits/RecordTerrainEdits.h`)
+remaps the editor's volume and applies the new palette, capturing each changed chunk's pointer from before, and returns
+the `remapMaterials` message with an `EditCommand::terrainPaletteRemap`: a `terrainStroke` whose data also holds a
+`TerrainPaletteRemap` (the palette before and after and the table, `edits/TerrainStrokeTypes.h`). Its chunk list may
+be empty. Validation also compares the live palette with the after (undo) or before (redo) palette, so an entry whose
+palette or chunks changed underneath is refused and dropped whole. The payload's `TerrainSetChunks::palette`
+(`TerrainPaletteStep`) carries the palette the step leaves; a redo also carries the table and the hash of the before
+palette. `edits::packTerrainStep` packs an undo as the setChunks messages followed by the palette addAsset and a redo
+as the one `remapMaterials` edit, and `edits::predictTerrainStep` applies either to the editor's store first
+(`EditorApp::sendHistoryTerrainStep`). Such a step is answered by a snapshot, so it does not stage a terrain on
+`TerrainUndoState`. A trim drops the whole entry, and `pinnedBytes` counts its chunks like any stroke's;
+`TerrainRemapUndoTest.cpp` walks both directions against a server.
 
 A stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound memory.
 `EditCommand::pinnedBytes()` sums `byteSize()` over those chunks (a terrain asset command counts the chunk map it

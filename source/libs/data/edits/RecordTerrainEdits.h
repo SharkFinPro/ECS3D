@@ -34,21 +34,24 @@ namespace edits {
 
 // What the editor sends and records for a palette removal or move whose painted samples must follow their material.
 struct TerrainRemapPrediction {
-  // The remapMaterials terrainEdit to send the server.
+  // The remapMaterials terrainEdit to send the server: the table, the hash of the palette it was built for and the
+  // new palette, which the server applies together or not at all.
   net::Message message;
-  // The terrainStroke that undoes the remap of the samples; nullopt when the volume held nothing it changed. The
-  // palette change is its own replaceAsset command.
-  std::optional<EditCommand> command;
+  // The one undo entry for both halves (EditCommand::terrainPaletteRemap).
+  EditCommand command;
 };
 
-// Predicts a remap on the editor's own volume, the way the server will apply it, and returns the message and the undo
-// command built from the chunks as they were before (commandForTerrainStroke). No hold is needed: the server's echo
+// Predicts a remap and its new palette on the editor's own store, the way the server will apply them, and returns
+// the message and the undo command built from the chunks as they were before. No hold is needed: the server's echo
 // carries the same result, so the sender's hash-only entries match the prediction, and any other outcome (an edit
-// another connection made in between) mismatches and is fetched in full. nullopt, with the volume untouched, for an
-// invalid or identity remap: there is nothing to send.
+// another connection made in between) mismatches and is fetched in full; a palette that changed underneath is
+// refused by the server, which then sends the terrain again. The caller must hold every chunk of the terrain, or the
+// undo entry misses chunks the server remaps. nullopt, with the store untouched, for an unknown terrain, an invalid
+// or identity remap, or a palette that is invalid or equal to the current one: there is nothing to send.
 [[nodiscard]] std::optional<TerrainRemapPrediction> predictTerrainRemap(const uuids::uuid& terrainUUID,
-                                                                       terrain::TerrainVolume& volume,
+                                                                       terrain::TerrainStore& view,
                                                                        const terrain::MaterialRemap& remap,
+                                                                       std::vector<terrain::TerrainMaterial> palette,
                                                                        uint64_t strokeId = 0);
 
 // The command for an addAsset that creates a terrain the store already holds: the description the asset carries (its

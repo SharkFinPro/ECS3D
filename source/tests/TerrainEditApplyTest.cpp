@@ -5,7 +5,6 @@
 #include "terrain/TerrainEdit.h"
 #include "terrain/TerrainEditApply.h"
 #include "terrain/TerrainGenerators.h"
-#include "terrain/TerrainMaterialRemap.h"
 #include "terrain/TerrainOps.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainTypes.h"
@@ -150,16 +149,6 @@ namespace {
     edit.terrain = terrainId;
     edit.kind = terrain::TerrainEditKind::setChunks;
     edit.chunks = std::move(chunks);
-    return edit;
-  }
-
-  terrain::TerrainEditPayload remapEdit(const uint8_t from, const uint8_t to, const uuids::uuid& id = terrainId)
-  {
-    terrain::TerrainEditPayload edit;
-    edit.terrain = id;
-    edit.kind = terrain::TerrainEditKind::remapMaterials;
-    edit.remap = terrain::identityRemap();
-    edit.remap[from] = to;
     return edit;
   }
 
@@ -514,59 +503,19 @@ TEST(TerrainEditApply, RefusesAChangingEditWhenRevisionsAreExhausted)
   EXPECT_EQ(unchanged.refusal, terrain::TerrainEditRefusal::none);
 }
 
-TEST(TerrainEditApply, RemapChangesEveryPaintedChunkUnderOneFreshRevision)
-{
-  // fillFlat paints material 1 everywhere.
-  Env env(false);
-  const auto expected = terrain::remapMaterials(*env.volume, remapEdit(1, 4).remap);
-  ASSERT_EQ(expected.size(), env.volume->chunks().size());
-  const uint32_t before = env.counter();
-
-  const auto result = terrain::applyTerrainEdit(env.store, remapEdit(1, 4));
-
-  expectApplied(env, expected, result, before);
-  EXPECT_EQ(env.volume->materialAtSample({ 0, 0, 0 }), 4);
-}
-
-TEST(TerrainEditApply, RemapOfAnUnusedMaterialChangesNothingAndTakesNoRevision)
-{
-  Env env(false);
-  const uint32_t before = env.counter();
-  const State state = capture(env);
-
-  const auto result = terrain::applyTerrainEdit(env.store, remapEdit(9, 4));
-
-  EXPECT_EQ(result.refusal, terrain::TerrainEditRefusal::none);
-  EXPECT_TRUE(result.changed.empty());
-  expectSame(state, capture(env));
-  EXPECT_EQ(env.counter(), before + 1);
-
-  EXPECT_FALSE(terrain::applyTerrainEdit(env.store, remapEdit(1, 4)).changed.empty());
-}
-
-TEST(TerrainEditApply, RefusesAnInvalidOrIdentityRemapAndAnUnknownTerrain)
-{
-  Env env(false);
-  expectRefused(env, remapEdit(terrain::reservedMaterial, 0), terrain::TerrainEditRefusal::invalidOp);
-  expectRefused(env, remapEdit(1, terrain::reservedMaterial), terrain::TerrainEditRefusal::invalidOp);
-  expectRefused(env, remapEdit(1, 1), terrain::TerrainEditRefusal::invalidOp);
-  expectRefused(env, remapEdit(1, 4, otherId), terrain::TerrainEditRefusal::unknownTerrain);
-
-  EXPECT_EQ(terrain::applyTerrainEdit(env.store, remapEdit(1, 4)).refusal, terrain::TerrainEditRefusal::none);
-}
-
 TEST(TerrainEditApply, EveryRefusalHasItsOwnText)
 {
   std::set<std::string_view> texts;
 
   for (const auto refusal : { terrain::TerrainEditRefusal::none, terrain::TerrainEditRefusal::unknownTerrain,
                               terrain::TerrainEditRefusal::invalidOp, terrain::TerrainEditRefusal::tooLarge,
-                              terrain::TerrainEditRefusal::revisionsExhausted })
+                              terrain::TerrainEditRefusal::revisionsExhausted,
+                              terrain::TerrainEditRefusal::paletteChanged })
   {
     const std::string_view text = terrain::refusalText(refusal);
     EXPECT_FALSE(text.empty());
     texts.insert(text);
   }
 
-  EXPECT_EQ(texts.size(), 5u);
+  EXPECT_EQ(texts.size(), 6u);
 }
