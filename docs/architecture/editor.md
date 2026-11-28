@@ -230,8 +230,10 @@ pending name or color settles the next frame through `endFrame` rather than bein
 Remove and the moves keep painted ground looking the same (`EditorAppTerrainMaterialRemove.cpp`).
 `TerrainPaletteEditor::remove` and `move` always return, beside the palette, the `remapForRemoval` or `remapForMove`
 table: `materialsInUse` sees only solid samples, and air samples that a later Add exposes must shift too. Both are
-refused by `TerrainPaletteEditor::remapRefusal` unless the ordinary gate passes, the editor holds the whole terrain (its
-chunk count reaches the description's `chunkCount`, so `materialsInUse` and the undo capture see every chunk) and no
+refused by `TerrainPaletteEditor::remapRefusal` unless the ordinary gate passes, the view has received the whole terrain
+once (`TerrainViewSync::hasWholeTerrain`: its volume reached the description's `chunkCount`, so `materialsInUse` and
+the undo capture see every chunk; carving chunks to air afterward does not undo it, and a new load or a replaced volume
+does) and no
 brush stroke is active or awaiting its final chunks. On the click the editor scans `materialsInUse`, and removing an
 entry solid ground paints first opens a `MaterialRemovePrompt` modal listing the other
 materials (swatch and label) for what its ground becomes, defaulting to `defaultReplacement` (the previous entry, or the

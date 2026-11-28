@@ -24,7 +24,8 @@ public:
     bool editable = false;
     bool sceneStopped = true;
     bool terrainKnown = false;
-    // The view holds at least the description's chunkCount chunks, so materialsInUse and an undo capture see them all.
+    // The view has received the whole terrain (TerrainViewSync::hasWholeTerrain), so materialsInUse and an undo capture
+    // see every chunk.
     bool terrainComplete = false;
     // A brush stroke is active or awaits its final chunks, so the view's chunks are a prediction.
     bool strokeBusy = false;

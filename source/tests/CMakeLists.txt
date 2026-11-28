@@ -301,6 +301,7 @@ add_executable(${PROJECT_NAME}
   TerrainUndoStateTest.cpp
   TerrainUploadTest.cpp
   TerrainViewSyncTest.cpp
+  TerrainWholeTerrainTest.cpp
   TerrainVolumeSourceTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp

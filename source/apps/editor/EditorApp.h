@@ -541,7 +541,7 @@ private:
   bool finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, size_t noteIndex, TerrainPaletteEditor::Result result,
                                 const TextureModeRows::Change& change = {});
 
-  [[nodiscard]] TerrainPaletteEditor::Context terrainPaletteContext(const uuids::uuid& terrainUuid) const;
+  [[nodiscard]] TerrainPaletteEditor::Context terrainPaletteContext(const uuids::uuid& terrainUuid);
 
   // Feeds one frame's pointer to the stroke and makes the terrain's bounds follow what it changed.
   void driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,

@@ -51,11 +51,10 @@ namespace {
   }
 }
 
-TerrainPaletteEditor::Context EditorApp::terrainPaletteContext(const uuids::uuid& terrainUuid) const
+TerrainPaletteEditor::Context EditorApp::terrainPaletteContext(const uuids::uuid& terrainUuid)
 {
   const auto* description = m_terrainStore->description(terrainUuid);
-  const auto volume = m_terrainStore->find(terrainUuid);
-  const bool complete = description && volume && volume->chunks().size() >= description->chunkCount;
+  const bool complete = m_terrainSync.hasWholeTerrain(*m_terrainStore, terrainUuid);
   const bool strokeBusy = m_terrainBrush.active() || m_terrainBrush.awaitingFinalChunks();
 
   return { m_serverEditable, m_sceneStatus == SceneStatus::stopped, description != nullptr, complete, strokeBusy };

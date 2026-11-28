@@ -2,9 +2,12 @@
 #define TERRAINVIEWSYNC_H
 
 #include "TerrainReplication.h"
+#include "TerrainVolume.h"
 #include <Protocol.h>
 #include <LogEntry.h>
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -60,11 +63,18 @@ namespace terrain
     ViewApplyOutcome apply(TerrainStore& store, const SceneManager& scenes, const TerrainChunksPayload& payload,
                            const ChunkHold* hold = nullptr);
 
+    // Whether this view has held the whole terrain (its description's chunkCount chunks) at least once in its current
+    // volume, recording it when the volume holds that many now. Chunks carved to air afterward do not undo it, since
+    // the count a snapshot carries is not refreshed by edits; a new load, reset() or a replaced volume (the terrain
+    // streams again) does.
+    [[nodiscard]] bool hasWholeTerrain(const TerrainStore& store, const uuids::uuid& terrain);
+
   private:
     void forgetCompletionIfIncomplete(const TerrainStore& store, const uuids::uuid& terrain);
 
     std::optional<uuids::uuid> m_loadId;
     std::set<uuids::uuid> m_completed;
+    std::map<uuids::uuid, std::weak_ptr<const TerrainVolume>> m_whole;
   };
 }
 
