@@ -567,6 +567,31 @@ namespace {
   {
     return store.find(terrainId)->chunk(coord)->materials().front();
   }
+
+  // The remap first (its terrainStroke entry), then the palette without the entry (its replaceAsset entry).
+  void removeAsTheEditorDoes(Pair& pair, const size_t index, const size_t replacement)
+  {
+    auto& world = pair.world;
+    const auto removal = TerrainPaletteEditor::remove(world.editor.store.description(terrainId)->palette, index,
+                                                      replacement);
+    ASSERT_TRUE(removal.ok());
+    ASSERT_TRUE(removal.remap.has_value());
+
+    auto prediction = edits::predictTerrainRemap(terrainId, *world.editor.store.find(terrainId), *removal.remap);
+    ASSERT_TRUE(prediction.has_value());
+    ASSERT_TRUE(prediction->command.has_value());
+    world.history.record(*prediction->command);
+    sendTerrainEdit(world.server, prediction->message);
+
+    const auto paletteCommand = edits::commandForTerrainPalette(terrainId, world.editor.store, removal.palette);
+    ASSERT_TRUE(paletteCommand.has_value());
+    world.history.record(*paletteCommand);
+    auto description = *world.editor.store.description(terrainId);
+    description.palette = removal.palette;
+    const auto asset = terrain::addTerrainAssetJson(description);
+    ASSERT_TRUE(applyReplacement(world.editor, asset));
+    world.sendAddAsset(replication::packAddAsset(asset));
+  }
 }
 
 // What the editor does for Remove on a painted material: the remap first (its terrainStroke entry), then the palette
@@ -586,24 +611,7 @@ TEST(TerrainPaletteRemoval, APaintedRemovalRemapsTheServerAndTwoUndoStepsRestore
 
   const auto used = terrain::materialsInUse(*world.editor.store.find(terrainId));
   ASSERT_TRUE(TerrainPaletteEditor::removeNeedsChoice(3, 1, used));
-  const auto removal = TerrainPaletteEditor::remove(paletteOf(3), 1, 0);
-  ASSERT_TRUE(removal.ok());
-  ASSERT_TRUE(removal.remap.has_value());
-
-  auto prediction = edits::predictTerrainRemap(terrainId, *world.editor.store.find(terrainId), *removal.remap);
-  ASSERT_TRUE(prediction.has_value());
-  ASSERT_TRUE(prediction->command.has_value());
-  world.history.record(*prediction->command);
-  sendTerrainEdit(world.server, prediction->message);
-
-  const auto paletteCommand = edits::commandForTerrainPalette(terrainId, world.editor.store, removal.palette);
-  ASSERT_TRUE(paletteCommand.has_value());
-  world.history.record(*paletteCommand);
-  auto description = *world.editor.store.description(terrainId);
-  description.palette = removal.palette;
-  const auto asset = terrain::addTerrainAssetJson(description);
-  ASSERT_TRUE(applyReplacement(world.editor, asset));
-  world.sendAddAsset(replication::packAddAsset(asset));
+  ASSERT_NO_FATAL_FAILURE(removeAsTheEditorDoes(pair, 1, 0));
 
   EXPECT_EQ(pair.serverPalette().size(), 2u);
   EXPECT_EQ(pair.serverPalette()[1].name, "m2");
