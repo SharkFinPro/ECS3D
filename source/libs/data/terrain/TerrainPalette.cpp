@@ -153,4 +153,22 @@ namespace terrain
 
     return std::nullopt;
   }
+
+  std::optional<std::string> setMaterialColor(std::vector<TerrainMaterial>& palette, const size_t index,
+                                              const glm::vec3& color)
+  {
+    if (const auto reason = checkIndex(palette, index))
+    {
+      return reason;
+    }
+
+    if (!isValidColor(color))
+    {
+      return "A material color needs every component between 0 and 1";
+    }
+
+    palette[index].color = color;
+
+    return std::nullopt;
+  }
 }

@@ -1,3 +1,5 @@
+#include <glm/vec3.hpp>
+#include <limits>
 #include <gtest/gtest.h>
 
 #include "ComponentRegistration.h"
@@ -101,7 +103,7 @@ namespace {
     return net::Message(net::MessageType::snapshot, prefix);
   }
 
-  net::Message withOneTerrain(const float voxelSize, const uint32_t paletteSize)
+  net::Message withOneTerrain(const float voxelSize, const uint32_t paletteSize, const float red = 1.0f)
   {
     auto message = snapshotWithoutTerrainSection();
     message.write(static_cast<uint32_t>(1));
@@ -114,6 +116,9 @@ namespace {
       message.writeString("m");
       message.write(uuids::uuid{});
       message.write(uuids::uuid{});
+      message.write(red);
+      message.write(1.0f);
+      message.write(1.0f);
     }
 
     return message;
@@ -227,7 +232,7 @@ TEST(TerrainSnapshot, OnlyTheDescriptionsRideTheSnapshotNeverChunkData)
 
   const size_t uuidSize = sizeof(uuids::uuid);
   const size_t header = uuidSize + sizeof(float) + 2 * sizeof(uint32_t);
-  const size_t grass = sizeof(uint32_t) + std::string("grass").size() + 2 * uuidSize;
+  const size_t grass = sizeof(uint32_t) + std::string("grass").size() + 2 * uuidSize + 3 * sizeof(float);
   const size_t descriptions = header + grass + header;
 
   EXPECT_EQ(withTerrain - plain, descriptions);
@@ -429,4 +434,40 @@ TEST(TerrainSnapshot, ATerrainAwaitingItsUploadPacksTheExpectedChunkCount)
   Project again;
   again.packer.unpack(packed(sender.packer));
   EXPECT_EQ(again.store.description(firstUUID)->chunkCount, 1u);
+}
+
+TEST(TerrainSnapshot, AMaterialColorCrossesTheWire)
+{
+  Project sender;
+  fillSender(sender);
+  auto description = *sender.store.description(firstUUID);
+  description.palette[0].color = glm::vec3(0.2f, 0.4f, 0.6f);
+  ASSERT_TRUE(sender.store.applyDescription(description));
+
+  Project receiver;
+  receiver.assetRegistry.registerAsset(terrainRecord(firstUUID));
+  receiver.packer.unpack(packed(sender.packer));
+
+  const auto* received = receiver.store.description(firstUUID);
+  ASSERT_NE(received, nullptr);
+  ASSERT_EQ(received->palette.size(), 1u);
+  EXPECT_EQ(received->palette[0].color, glm::vec3(0.2f, 0.4f, 0.6f));
+}
+
+TEST(TerrainSnapshot, AnInvalidMaterialColorMakesUnpackThrowAndLeavesTheLiveProjectUntouched)
+{
+  {
+    GuardedReceiver control;
+    control.project.packer.unpack(withOneTerrain(4.0f, 1, 0.5f));
+    ASSERT_NE(control.project.store.description(firstUUID), nullptr);
+  }
+
+  for (const float red : { 1.5f, -0.1f, std::numeric_limits<float>::quiet_NaN() })
+  {
+    GuardedReceiver receiver;
+
+    EXPECT_THROW(receiver.project.packer.unpack(withOneTerrain(4.0f, 1, red)), std::exception);
+
+    receiver.expectUntouched();
+  }
 }

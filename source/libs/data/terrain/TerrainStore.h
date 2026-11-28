@@ -2,6 +2,7 @@
 #define TERRAINSTORE_H
 
 #include "TerrainVolume.h"
+#include <glm/vec3.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -21,6 +22,8 @@ namespace terrain
     // A nil uuid means no texture.
     uuids::uuid albedoTexture;
     uuids::uuid specularTexture;
+    // Linear RGB in [0,1], drawn as the flat albedo when albedoTexture is nil; a textured material ignores it.
+    glm::vec3 color{ 1.0f };
 
     bool operator==(const TerrainMaterial&) const = default;
   };
@@ -42,6 +45,9 @@ namespace terrain
   // The most materials the renderer can show at once.
   inline constexpr size_t maxPaletteSize = 16;
   inline constexpr size_t maxMaterialNameLength = 256;
+
+  // Every component finite and in [0,1].
+  [[nodiscard]] bool isValidColor(const glm::vec3& color);
 
   [[nodiscard]] bool isValidDescription(const TerrainDescription& description);
 

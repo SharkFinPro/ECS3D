@@ -329,3 +329,45 @@ TEST(TerrainFormatTest, FailedParseAndDecodeLeaveTheirOutputUntouched)
   ASSERT_TRUE(terrain::decodeRegion(bytes, { 0, 0, 0 }, recordFor(chunks), decoded, error)) << error;
   EXPECT_EQ(decoded.size(), 3u);
 }
+
+TEST(TerrainFormatTest, MaterialColorRoundTripsAndAMissingColorReadsAsWhite)
+{
+  auto source = makeIndex();
+  source.description.palette[0].color = glm::vec3(0.25f, 0.1f, 0.75f);
+
+  terrain::TerrainIndex parsed;
+  std::string error;
+  ASSERT_TRUE(terrain::parseIndex(bytesOf(terrain::writeIndex(source).value()), terrainUuid, parsed, error)) << error;
+  EXPECT_EQ(parsed.description.palette[0].color, glm::vec3(0.25f, 0.1f, 0.75f));
+  EXPECT_EQ(parsed.description.palette[1].color, glm::vec3(1.0f));
+
+  const auto older = editedIndexBytes([](nlohmann::json& json) {
+    for (auto& entry : json["palette"])
+    {
+      entry.erase("color");
+    }
+  });
+  terrain::TerrainIndex legacy;
+  ASSERT_TRUE(terrain::parseIndex(older, terrainUuid, legacy, error)) << error;
+  EXPECT_EQ(legacy.description.palette[0].color, glm::vec3(1.0f));
+  EXPECT_EQ(legacy.description.palette[1].color, glm::vec3(1.0f));
+}
+
+TEST(TerrainFormatTest, AMalformedOrOutOfRangeColorFails)
+{
+  for (const auto& bad : { nlohmann::json("red"), nlohmann::json::array({ 1, 2 }), nlohmann::json::array({ 1, 2, "x" }),
+                           nlohmann::json::array({ 1, 2, 3, 4 }), nlohmann::json::array({ 1, 2, nullptr }) })
+  {
+    expectIndexRejected(editedIndexBytes([&bad](nlohmann::json& json) { json["palette"][0]["color"] = bad; }),
+                        "palette");
+  }
+
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) { json["palette"][0]["color"] = { 1.5, 0, 0 }; }),
+                      "description is invalid");
+  expectIndexRejected(editedIndexBytes([](nlohmann::json& json) { json["palette"][0]["color"] = { 0, -0.1, 0 }; }),
+                      "description is invalid");
+
+  auto nan = makeIndex();
+  nan.description.palette[0].color.g = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_FALSE(terrain::writeIndex(nan).has_value());
+}

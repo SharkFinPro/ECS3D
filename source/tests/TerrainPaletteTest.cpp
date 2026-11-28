@@ -12,7 +12,10 @@
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 
+#include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <cmath>
+#include <limits>
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
@@ -432,4 +435,101 @@ TEST(TerrainPaletteCommand, UndoAndRedoAreRefusedWhenTheLivePaletteDiffers)
   EXPECT_EQ(noStore.failure, edits::ValidationFailure::targetMissing);
 
   EXPECT_EQ(world.undo().result, edits::HistoryResult::targetChanged);
+}
+
+TEST(TerrainPalette, MaterialColorIsValidatedAndSetOnAnExistingEntry)
+{
+  auto palette = paletteOf(2);
+  EXPECT_EQ(palette[0].color, glm::vec3(1.0f));
+
+  EXPECT_FALSE(terrain::setMaterialColor(palette, 1, glm::vec3(0.0f, 0.5f, 1.0f)).has_value());
+  EXPECT_EQ(palette[1].color, glm::vec3(0.0f, 0.5f, 1.0f));
+  EXPECT_EQ(palette[0].color, glm::vec3(1.0f));
+
+  const auto before = palette;
+  EXPECT_TRUE(terrain::setMaterialColor(palette, 2, glm::vec3(0.5f)).has_value());
+  EXPECT_TRUE(terrain::setMaterialColor(palette, 0, glm::vec3(1.5f, 0.0f, 0.0f)).has_value());
+  EXPECT_TRUE(terrain::setMaterialColor(palette, 0, glm::vec3(0.0f, -0.1f, 0.0f)).has_value());
+  EXPECT_TRUE(terrain::setMaterialColor(palette, 0, glm::vec3(0.0f, 0.0f, std::nanf(""))).has_value());
+  EXPECT_EQ(palette, before);
+
+  EXPECT_FALSE(terrain::addMaterial(palette, { "tint", {}, {}, glm::vec3(0.3f, 0.2f, 0.1f) }).has_value());
+  EXPECT_EQ(palette.back().color, glm::vec3(0.3f, 0.2f, 0.1f));
+}
+
+TEST(TerrainPalette, AnInvalidColorMakesTheDescriptionAndTheBodyInvalid)
+{
+  for (const float bad : { 1.5f, -0.1f, std::numeric_limits<float>::quiet_NaN(),
+                           std::numeric_limits<float>::infinity() })
+  {
+    auto palette = paletteOf(1);
+    palette[0].color.b = bad;
+    EXPECT_FALSE(terrain::isValidDescription(descriptionWith(terrainId, palette)));
+  }
+
+  EXPECT_TRUE(terrain::isValidDescription(descriptionWith(terrainId, paletteOf(1))));
+
+  auto asset = terrain::addTerrainAssetJson(descriptionWith(terrainId, paletteOf(1)));
+  for (const auto& bad : { nlohmann::json("red"), nlohmann::json::array({ 1, 2 }), nlohmann::json::array({ 1, 2, "x" }),
+                           nlohmann::json::array({ 1.5, 0, 0 }), nlohmann::json::array({ 0, -0.1, 0 }) })
+  {
+    auto body = nlohmann::json::parse(asset["body"].get<std::string>());
+    body["palette"][0]["color"] = bad;
+    auto edited = asset;
+    edited["body"] = body.dump();
+    EXPECT_FALSE(terrain::parseAddedTerrain(edited).has_value()) << bad;
+  }
+}
+
+TEST(TerrainPalette, ABodyRoundTripsTheColorAndAMissingColorReadsAsWhite)
+{
+  auto palette = paletteOf(2);
+  palette[1].color = glm::vec3(0.25f, 0.5f, 0.125f);
+
+  auto asset = terrain::addTerrainAssetJson(descriptionWith(terrainId, palette));
+  const auto parsed = terrain::parseAddedTerrain(asset);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_EQ(parsed->palette, palette);
+
+  auto body = nlohmann::json::parse(asset["body"].get<std::string>());
+  for (auto& entry : body["palette"])
+  {
+    entry.erase("color");
+  }
+  asset["body"] = body.dump();
+
+  const auto older = terrain::parseAddedTerrain(asset);
+  ASSERT_TRUE(older.has_value());
+  EXPECT_EQ(older->palette[0].color, glm::vec3(1.0f));
+  EXPECT_EQ(older->palette[1].color, glm::vec3(1.0f));
+}
+
+TEST(TerrainPaletteReplacement, AColorEditReplacesAndUndoRestoresThePreviousColor)
+{
+  Pair pair;
+  auto& world = pair.world;
+  auto first = paletteOf(2);
+  first[0].color = glm::vec3(0.1f, 0.2f, 0.3f);
+  pair.setPalette(first);
+
+  auto second = first;
+  ASSERT_FALSE(terrain::setMaterialColor(second, 0, glm::vec3(0.9f, 0.8f, 0.7f)).has_value());
+
+  const auto command = edits::commandForTerrainPalette(terrainId, world.editor.store, second);
+  ASSERT_TRUE(command.has_value());
+  world.history.record(*command);
+
+  auto description = *world.editor.store.description(terrainId);
+  description.palette = second;
+  const auto asset = terrain::addTerrainAssetJson(description);
+  ASSERT_TRUE(applyReplacement(world.editor, asset));
+  world.sendAddAsset(replication::packAddAsset(asset));
+  EXPECT_EQ(pair.serverPalette()[0].color, glm::vec3(0.9f, 0.8f, 0.7f));
+
+  const auto undone = world.undo();
+  ASSERT_TRUE(undone.ok());
+  ASSERT_TRUE(applyReplacement(world.editor, replication::unpackAddAsset(*undone.messagePayload)));
+  world.sendAddAsset(*undone.messagePayload);
+  EXPECT_EQ(pair.serverPalette(), first);
+  EXPECT_EQ(world.editor.store.description(terrainId)->palette, first);
 }
