@@ -262,7 +262,8 @@ namespace {
 
     if (const auto& surface = brush.strokeSurface())
     {
-      return strokeCursorHit(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit());
+      return strokeAim(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit(),
+                       brush.strokeMovesSurface());
     }
 
     // An eraser looks for terrain under its whole brush, not just under the cursor.
@@ -327,10 +328,20 @@ void EditorApp::drawTerrainSculptToggle()
 void EditorApp::drawTerrainToolStrip()
 {
   const size_t current = toolIndex(m_terrainTool.tool());
+  const ImGuiStyle& style = ImGui::GetStyle();
+
+  std::vector<float> widths;
+  for (const char* label : toolLabels)
+  {
+    widths.push_back(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x);
+  }
+
+  const std::vector<bool> newRow =
+    buttonRowBreaks(widths, style.ItemSpacing.x, ImGui::GetContentRegionAvail().x);
 
   for (size_t tool = 0; tool < terrainToolCount; ++tool)
   {
-    if (tool > 0)
+    if (tool > 0 && !newRow[tool])
     {
       ImGui::SameLine();
     }
@@ -388,25 +399,45 @@ void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
   const size_t entries = selectableMaterials(palette);
   const uint8_t active = clampMaterial(m_terrainTool.activeMaterial(), entries);
 
-  if (!ImGui::BeginCombo("Material", materialLabel(palette, active).c_str()))
-  {
-    return;
-  }
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float side = ImGui::GetFrameHeight();
+  const std::vector<float> widths(entries, side);
+  const std::vector<bool> newRow = buttonRowBreaks(widths, style.ItemSpacing.x, ImGui::GetContentRegionAvail().x);
+
+  ImGui::TextUnformatted("Material");
 
   for (size_t index = 0; index < entries; ++index)
   {
+    if (index > 0 && !newRow[index])
+    {
+      ImGui::SameLine();
+    }
+
     const auto material = static_cast<uint8_t>(index);
+    const glm::vec3 color = materialSwatchColor(palette, material);
     ImGui::PushID(static_cast<int>(index));
 
-    if (ImGui::Selectable(materialLabel(palette, material).c_str(), material == active))
+    if (ImGui::ColorButton("##material", ImVec4(color.r, color.g, color.b, 1.0f),
+                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop |
+                             ImGuiColorEditFlags_NoAlpha,
+                           ImVec2(side, side)))
     {
       m_terrainTool.setActiveMaterial(material);
     }
 
+    if (material == active)
+    {
+      ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                          ImGui::ColorConvertFloat4ToU32(theme::accent), 2.0f, 0, 2.0f);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+      ImGui::SetTooltip("%s", materialLabel(palette, material).c_str());
+    }
+
     ImGui::PopID();
   }
-
-  ImGui::EndCombo();
 }
 
 void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,

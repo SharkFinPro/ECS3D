@@ -268,3 +268,48 @@ TEST(TerrainToolStateTest, AnUnnamedEntryGetsAFallbackName)
   EXPECT_EQ(materialLabel(palette, 3), "3: Material 3");
   EXPECT_EQ(materialLabel(palette, 0), "0: Grass");
 }
+
+TEST(TerrainToolStateTest, AnEmptyPaletteSwatchIsTheRenderersDefaultColorWrappedByIndex)
+{
+  const std::vector<terrain::TerrainMaterial> none;
+
+  for (uint8_t index = 0; index < 8; ++index)
+  {
+    EXPECT_EQ(materialSwatchColor(none, index), vke::s_defaultVolumeColors[index]);
+  }
+
+  EXPECT_EQ(materialSwatchColor(none, 9), vke::s_defaultVolumeColors[1]);
+  EXPECT_NE(materialSwatchColor(none, 0), materialSwatchColor(none, 1));
+}
+
+TEST(TerrainToolStateTest, APaletteEntrySwatchIsNeutral)
+{
+  const std::vector<terrain::TerrainMaterial> palette(3);
+
+  EXPECT_EQ(materialSwatchColor(palette, 2), glm::vec3(0.5f));
+}
+
+TEST(TerrainToolStateTest, ButtonsStayOnOneRowWhenTheyFit)
+{
+  const std::vector<float> widths = { 40.0f, 60.0f, 50.0f };
+
+  EXPECT_EQ(buttonRowBreaks(widths, 10.0f, 180.0f), (std::vector<bool>{ false, false, false }));
+  EXPECT_EQ(buttonRowBreaks(widths, 10.0f, 170.0f), (std::vector<bool>{ false, false, false }));
+}
+
+TEST(TerrainToolStateTest, AButtonThatDoesNotFitStartsANewRow)
+{
+  const std::vector<float> widths = { 40.0f, 60.0f, 50.0f, 30.0f };
+
+  EXPECT_EQ(buttonRowBreaks(widths, 10.0f, 169.0f), (std::vector<bool>{ false, false, true, false }));
+  EXPECT_EQ(buttonRowBreaks(widths, 10.0f, 110.0f), (std::vector<bool>{ false, false, true, false }));
+  EXPECT_EQ(buttonRowBreaks(widths, 10.0f, 60.0f), (std::vector<bool>{ false, true, true, true }));
+}
+
+TEST(TerrainToolStateTest, AButtonWiderThanTheRowStillGetsItsOwnRowAndTheFirstNeverBreaks)
+{
+  const std::vector<float> widths = { 90.0f, 20.0f };
+
+  EXPECT_EQ(buttonRowBreaks(widths, 5.0f, 50.0f), (std::vector<bool>{ false, true }));
+  EXPECT_TRUE(buttonRowBreaks({}, 5.0f, 50.0f).empty());
+}

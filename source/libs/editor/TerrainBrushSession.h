@@ -133,6 +133,13 @@ public:
     return m_surface;
   }
 
+  // Whether the active stroke changes the surface; false for a Paint stroke, which the cursor follows along the ground
+  // however fast it moves.
+  [[nodiscard]] bool strokeMovesSurface() const
+  {
+    return m_movesSurface;
+  }
+
   // Where the active stroke's last application landed.
   [[nodiscard]] glm::vec3 strokePoint() const
   {
@@ -257,6 +264,7 @@ public:
     m_terrain = terrainUuid;
     m_volume = volume;
     m_redistances = strokeRedistances(templateOp.kind);
+    m_movesSurface = ::strokeMovesSurface(templateOp.kind);
     // Subtract only ever takes material away, so it cannot climb toward the camera; it aims at the live terrain, so
     // erasing reaches whatever is still there, nearer than the press or not.
     m_surface = templateOp.kind == terrain::BrushOp::Kind::subtract ? nullptr : snapshotSurface(*volume);
@@ -557,6 +565,7 @@ private:
   std::chrono::steady_clock::time_point m_awaitingSince;
   terrain::ChunkHold m_hold;
   bool m_redistances = true;
+  bool m_movesSurface = true;
   uint64_t m_nextStrokeId = 1;
 };
 

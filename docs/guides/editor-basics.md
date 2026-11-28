@@ -78,7 +78,7 @@ Select one object that has a Terrain collider and check Sculpt in its Terrain se
 terrain with a brush. It works only while the editor can edit the server.
 
 - Pick Add, Subtract, Smooth, Flatten or Paint in the Terrain section, or press Alt+1 to Alt+5. Radius, Strength and
-  Falloff are remembered for each tool. Add, Flatten and Paint use the material chosen in the Material list: Add and
+  Falloff are remembered for each tool. Add, Flatten and Paint use the material chosen in the Material swatches: Add and
   Flatten give the ground they raise that material, and Paint recolors existing ground without changing its shape.
   PageUp and PageDown grow and shrink the current tool's radius.
 - A ring follows the cursor on the terrain. Left-drag to sculpt; Flatten levels to the height where you press. A
