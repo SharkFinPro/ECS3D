@@ -22,16 +22,19 @@
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <TerrainBrushSession.h>
+#include <TerrainMaterialPrompts.h>
 #include <TerrainPaletteEditor.h>
 #include <TerrainToolState.h>
 #include <TerrainUndoState.h>
 #include <scenes/SceneManager.h>
 #include <terrain/TerrainBinding.h>
+#include <terrain/TerrainMaterialRemap.h>
 #include <terrain/TerrainUpload.h>
 #include <terrain/TerrainViewSync.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
 #include <array>
+#include <bitset>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -311,6 +314,7 @@ private:
   // The widget the color picker last changed under, so only it holds a color edit open.
   uint32_t m_terrainColorWidget = 0;
   MaterialNote m_terrainPaletteNote;
+  MaterialRemovePrompt m_terrainRemovePrompt;
   TerrainBrushSession m_terrainBrush;
   bool m_terrainPointerWasDown = false;
 
@@ -513,6 +517,21 @@ private:
                                   const terrain::TerrainMaterial& material, bool canEdit, const TerrainPaletteRun& run);
   void drawTerrainMaterialColor(const uuids::uuid& terrainUuid, size_t index, const terrain::TerrainMaterial& material,
                                 bool canEdit, const TerrainPaletteRun& run);
+
+  // Remove on the details panel: an entry the ground paints opens the prompt for what it becomes; any other removes
+  // now, with the remap that shifts later painted entries down when there is one.
+  void requestTerrainMaterialRemove(const uuids::uuid& terrainUuid, size_t index, const TerrainPaletteRun& run);
+  void confirmTerrainMaterialRemove(const uuids::uuid& terrainUuid);
+  // The modal that asks what a removed material's painted ground becomes.
+  void drawTerrainRemovePrompt(const uuids::uuid& terrainUuid);
+  void drawTerrainRemovePromptBody(const uuids::uuid& terrainUuid,
+                                   const std::vector<terrain::TerrainMaterial>& palette);
+  void drawTerrainRemoveChoices(const std::vector<terrain::TerrainMaterial>& palette);
+  // Scans every held chunk, so it runs on a click, not per frame.
+  [[nodiscard]] std::bitset<256> terrainMaterialsInUse(const uuids::uuid& terrainUuid) const;
+  // Predicts the remap on the editor's volume, sends it and records its terrainStroke undo entry. False when there is
+  // no volume or nothing to send.
+  bool sendTerrainRemap(const uuids::uuid& terrainUuid, const terrain::MaterialRemap& remap);
 
   // Commits a material name typed in a block that is no longer drawn.
   void flushTerrainMaterialName();

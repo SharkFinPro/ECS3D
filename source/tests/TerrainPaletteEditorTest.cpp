@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "TerrainMaterialPrompts.h"
 #include "TerrainPaletteEditor.h"
 #include "terrain/TerrainStore.h"
 
@@ -114,45 +115,81 @@ TEST(TerrainPaletteEditorIntents, AddAppendsADefaultNamedEntryAndRefusesThe17th)
   EXPECT_EQ(full.palette, paletteOf(terrain::maxPaletteSize));
 }
 
-TEST(TerrainPaletteEditorIntents, RemoveIsRefusedWhileTheEntryOrALaterOneIsPainted)
+TEST(TerrainPaletteEditorIntents, AnUnpaintedRemoveErasesTheEntryWithNoRemap)
 {
-  const auto painted = TerrainPaletteEditor::remove(paletteOf(3), 1, [] { return usedOnly(2); });
-  ASSERT_FALSE(painted.ok());
-  EXPECT_NE(painted.refusal->find("Material 2 is painted"), std::string::npos);
-  EXPECT_EQ(painted.palette, paletteOf(3));
-
-  const auto clear = TerrainPaletteEditor::remove(paletteOf(3), 1, [] { return usedOnly(0); });
+  const auto clear = TerrainPaletteEditor::remove(paletteOf(3), 1, usedOnly(0), 0);
   ASSERT_TRUE(clear.ok());
   ASSERT_EQ(clear.palette.size(), 2u);
   EXPECT_EQ(clear.palette[1].name, "m2");
+  EXPECT_FALSE(clear.remap.has_value());
 
-  EXPECT_FALSE(TerrainPaletteEditor::remove(paletteOf(3), 3, [] { return std::bitset<256>{}; }).ok());
+  EXPECT_FALSE(TerrainPaletteEditor::remove(paletteOf(3), 3, {}, 2).ok());
 }
 
-TEST(TerrainPaletteEditorIntents, TheInUseScanRunsOnlyForARemove)
+TEST(TerrainPaletteEditorIntents, APaintedRemoveCarriesTheRemapToItsReplacementAndShiftsLaterEntries)
 {
-  int scans = 0;
-  const auto inUse = [&scans] {
-    ++scans;
-    return std::bitset<256>{};
-  };
+  const auto painted = TerrainPaletteEditor::remove(paletteOf(3), 1, usedOnly(1), 2);
+  ASSERT_TRUE(painted.ok());
+  ASSERT_EQ(painted.palette.size(), 2u);
+  EXPECT_EQ(painted.palette[1].name, "m2");
+  ASSERT_TRUE(painted.remap.has_value());
+  EXPECT_EQ((*painted.remap)[1], 1);
+  EXPECT_EQ((*painted.remap)[2], 1);
+  EXPECT_EQ((*painted.remap)[0], 0);
 
-  static_cast<void>(TerrainPaletteEditor::add(paletteOf(1)));
-  static_cast<void>(TerrainPaletteEditor::move(paletteOf(2), 0, 1));
-  static_cast<void>(TerrainPaletteEditor::rename(paletteOf(2), 0, "x"));
-  EXPECT_EQ(scans, 0);
+  // Only a later entry is painted: its samples move down with it.
+  const auto later = TerrainPaletteEditor::remove(paletteOf(3), 0, usedOnly(2), 1);
+  ASSERT_TRUE(later.ok());
+  ASSERT_TRUE(later.remap.has_value());
+  EXPECT_EQ((*later.remap)[2], 1);
 
-  static_cast<void>(TerrainPaletteEditor::remove(paletteOf(2), 0, inUse));
-  EXPECT_EQ(scans, 1);
+  const auto toItself = TerrainPaletteEditor::remove(paletteOf(3), 1, usedOnly(1), 1);
+  EXPECT_FALSE(toItself.ok());
+  EXPECT_EQ(toItself.palette, paletteOf(3));
+}
+
+TEST(TerrainPaletteEditorIntents, TheLastMaterialIsNeverRemoved)
+{
+  const auto last = TerrainPaletteEditor::remove(paletteOf(1), 0, {}, 1);
+  ASSERT_FALSE(last.ok());
+  EXPECT_NE(last.refusal->find("at least one"), std::string::npos);
+  EXPECT_EQ(last.palette, paletteOf(1));
+
+  EXPECT_TRUE(TerrainPaletteEditor::remove(paletteOf(2), 0, {}, 1).ok());
+}
+
+TEST(TerrainPaletteEditorIntents, OnlyARemoveOfAPaintedEntryAsksAndItDefaultsToThePreviousEntry)
+{
+  EXPECT_TRUE(TerrainPaletteEditor::removeNeedsChoice(3, 1, usedOnly(1)));
+  EXPECT_FALSE(TerrainPaletteEditor::removeNeedsChoice(3, 1, usedOnly(2)));
+  EXPECT_FALSE(TerrainPaletteEditor::removeNeedsChoice(1, 0, usedOnly(0)));
+  EXPECT_FALSE(TerrainPaletteEditor::removeNeedsChoice(3, 3, usedOnly(3)));
+
+  EXPECT_EQ(TerrainPaletteEditor::defaultReplacement(2), 1u);
+  EXPECT_EQ(TerrainPaletteEditor::defaultReplacement(0), 1u);
+}
+
+TEST(TerrainPaletteEditorIntents, AMoveRemapsOnlyWhenTheGroundCarriesAnEntryItReorders)
+{
+  const auto painted = TerrainPaletteEditor::move(paletteOf(3), 1, 2, usedOnly(2));
+  ASSERT_TRUE(painted.ok());
+  ASSERT_TRUE(painted.remap.has_value());
+  EXPECT_EQ((*painted.remap)[1], 2);
+  EXPECT_EQ((*painted.remap)[2], 1);
+
+  const auto unpainted = TerrainPaletteEditor::move(paletteOf(3), 1, 2, usedOnly(0));
+  ASSERT_TRUE(unpainted.ok());
+  EXPECT_FALSE(unpainted.remap.has_value());
+  EXPECT_EQ(unpainted.palette, painted.palette);
 }
 
 TEST(TerrainPaletteEditorIntents, MoveRenameAndTextureEditsChangeOnlyTheirEntry)
 {
-  const auto moved = TerrainPaletteEditor::move(paletteOf(3), 0, 2);
+  const auto moved = TerrainPaletteEditor::move(paletteOf(3), 0, 2, {});
   ASSERT_TRUE(moved.ok());
   EXPECT_EQ(moved.palette[2].name, "m0");
   EXPECT_EQ(moved.palette[0].name, "m1");
-  EXPECT_FALSE(TerrainPaletteEditor::move(paletteOf(3), 0, 3).ok());
+  EXPECT_FALSE(TerrainPaletteEditor::move(paletteOf(3), 0, 3, usedOnly(0)).ok());
 
   const auto renamed = TerrainPaletteEditor::rename(paletteOf(3), 1, "rock");
   ASSERT_TRUE(renamed.ok());
@@ -552,3 +589,42 @@ TEST(TextureModeRowsTest, AnUnrelatedEditKeepsTheRowsAndPickingATextureEndsOnlyT
   EXPECT_FALSE(rows.contains(2));
 }
 
+TEST(MaterialRemovePromptTest, ThePromptDefaultsToTheNeighborAndNeverChoosesTheRemovedEntry)
+{
+  MaterialRemovePrompt prompt;
+  EXPECT_FALSE(prompt.isOpen());
+
+  prompt.open(terrainId, paletteOf(3), 0);
+  ASSERT_TRUE(prompt.isOpen());
+  EXPECT_EQ(prompt.index(), 0u);
+  EXPECT_EQ(prompt.replacement(), 1u);
+
+  prompt.choose(0);
+  EXPECT_EQ(prompt.replacement(), 1u);
+  prompt.choose(3);
+  EXPECT_EQ(prompt.replacement(), 1u);
+  prompt.choose(2);
+  EXPECT_EQ(prompt.replacement(), 2u);
+
+  prompt.close();
+  EXPECT_FALSE(prompt.isOpen());
+}
+
+TEST(MaterialRemovePromptTest, APaletteThatChangedUnderneathOrAnotherTerrainClosesThePrompt)
+{
+  MaterialRemovePrompt prompt;
+  prompt.open(terrainId, paletteOf(3), 2);
+  EXPECT_TRUE(prompt.matches(terrainId, paletteOf(3)));
+  EXPECT_TRUE(prompt.isOpen());
+
+  EXPECT_FALSE(prompt.matches(terrainId, paletteOf(4)));
+  EXPECT_FALSE(prompt.isOpen());
+  EXPECT_FALSE(prompt.matches(terrainId, paletteOf(3)));
+
+  prompt.open(terrainId, paletteOf(3), 2);
+  EXPECT_FALSE(prompt.matches(terrainB, paletteOf(3)));
+
+  // A palette with nothing to fall back to never opens.
+  prompt.open(terrainId, paletteOf(1), 0);
+  EXPECT_FALSE(prompt.isOpen());
+}

@@ -13,7 +13,6 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/vec3.hpp>
-#include <bitset>
 #include <cfloat>
 #include <cstddef>
 #include <cstdint>
@@ -96,6 +95,12 @@ bool EditorApp::finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, Terrain
 
   m_terrainPaletteNote.clear();
 
+  // The samples move first, so the ground never shows the new palette over the old indices.
+  if (result.remap && !sendTerrainRemap(terrainUuid, *result.remap))
+  {
+    return false;
+  }
+
   const auto after = result.palette;
   if (!applyTerrainPalette(terrainUuid, std::move(result.palette)))
   {
@@ -175,6 +180,8 @@ void EditorApp::drawTerrainMaterials(const std::shared_ptr<Terrain>& component)
       ImGui::TextColored(theme::t2, "%s", refusal->c_str());
     }
   }
+
+  drawTerrainRemovePrompt(terrainUuid);
 
   ImGui::PopID();
 }
@@ -279,7 +286,8 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
   ImGui::BeginDisabled(index == 0);
   if (ImGui::SmallButton("Move up"))
   {
-    run(TerrainPaletteEditor::move(live, index, index - 1), { TextureModeRows::Change::Kind::move, index, index - 1 });
+    run(TerrainPaletteEditor::move(live, index, index - 1, terrainMaterialsInUse(terrainUuid)),
+        { TextureModeRows::Change::Kind::move, index, index - 1 });
   }
   ImGui::EndDisabled();
 
@@ -288,7 +296,8 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
   ImGui::BeginDisabled(index + 1 >= paletteSize);
   if (ImGui::SmallButton("Move down"))
   {
-    run(TerrainPaletteEditor::move(live, index, index + 1), { TextureModeRows::Change::Kind::move, index, index + 1 });
+    run(TerrainPaletteEditor::move(live, index, index + 1, terrainMaterialsInUse(terrainUuid)),
+        { TextureModeRows::Change::Kind::move, index, index + 1 });
   }
   ImGui::EndDisabled();
 
@@ -296,11 +305,7 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
 
   if (ImGui::SmallButton("Remove"))
   {
-    run(TerrainPaletteEditor::remove(live, index, [this, &terrainUuid] {
-          const auto volume = m_terrainStore->find(terrainUuid);
-          return volume ? terrain::materialsInUse(*volume) : std::bitset<256>{};
-        }),
-        { TextureModeRows::Change::Kind::remove, index, index });
+    requestTerrainMaterialRemove(terrainUuid, index, run);
   }
 
   if (const std::string& note = m_terrainPaletteNote.textFor(terrainUuid, index); !note.empty())

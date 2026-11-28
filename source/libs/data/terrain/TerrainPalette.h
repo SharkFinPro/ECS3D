@@ -27,6 +27,10 @@ namespace terrain
   std::optional<std::string> removeMaterial(std::vector<TerrainMaterial>& palette, size_t index,
                                             const std::bitset<256>& inUse);
 
+  // Removes the entry whatever the ground carries, for a removal whose painted samples a remapForRemoval has already
+  // moved off it and its later entries. Refused only for an index out of range.
+  std::optional<std::string> eraseMaterial(std::vector<TerrainMaterial>& palette, size_t index);
+
   std::optional<std::string> renameMaterial(std::vector<TerrainMaterial>& palette, size_t index,
                                             const std::string& name);
 

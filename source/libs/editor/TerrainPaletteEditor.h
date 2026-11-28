@@ -1,6 +1,7 @@
 #ifndef TERRAINPALETTEEDITOR_H
 #define TERRAINPALETTEEDITOR_H
 
+#include <terrain/TerrainMaterialRemap.h>
 #include <terrain/TerrainPalette.h>
 #include <terrain/TerrainStore.h>
 #include <VulkanEngine/components/assets/volume/VolumeMaterial.h>
@@ -28,6 +29,9 @@ public:
   struct Result {
     std::vector<terrain::TerrainMaterial> palette;
     std::optional<std::string> refusal;
+    // The remap of the painted samples to send before the palette, so the ground keeps its look; nullopt when no
+    // painted sample is affected.
+    std::optional<terrain::MaterialRemap> remap;
 
     [[nodiscard]] bool ok() const
     {
@@ -100,22 +104,63 @@ public:
     });
   }
 
-  // inUse is read only when the intent is a remove, since computing it walks every chunk the terrain holds.
-  template <typename InUseFn>
+  // Removes the entry; refused for the last one, since a terrain keeps at least one material. used is what
+  // materialsInUse reports. When the ground carries the entry or a later one, the result holds the remap that keeps
+  // it looking the same: the entry's samples take replacement (indexed before the removal) and the later ones move
+  // down with their entries.
   [[nodiscard]] static Result remove(const std::vector<terrain::TerrainMaterial>& palette, const size_t index,
-                                     InUseFn&& inUse)
+                                     const std::bitset<256>& used, const size_t replacement)
   {
-    return run(palette, [&](auto& copy) {
-      return terrain::removeMaterial(copy, index, inUse());
+    if (palette.size() == 1 && index == 0)
+    {
+      return { palette, "A terrain keeps at least one material.", std::nullopt };
+    }
+
+    Result result = run(palette, [&](auto& copy) {
+      return terrain::eraseMaterial(copy, index);
     });
+
+    if (result.ok() && paintedBetween(used, index, terrain::reservedMaterial - 1))
+    {
+      result.remap = terrain::remapForRemoval(palette.size(), index, replacement);
+      if (!result.remap)
+      {
+        return { palette, "Choose another material for the painted ground.", std::nullopt };
+      }
+    }
+
+    return result;
   }
 
-  [[nodiscard]] static Result move(const std::vector<terrain::TerrainMaterial>& palette, const size_t from,
-                                   const size_t to)
+  // Whether removing the entry must first ask what its painted ground becomes.
+  [[nodiscard]] static bool removeNeedsChoice(const size_t paletteSize, const size_t index,
+                                              const std::bitset<256>& used)
   {
-    return run(palette, [&](auto& copy) {
+    return paletteSize > 1 && index < paletteSize && used.test(index);
+  }
+
+  // The material a removed entry's painted ground becomes unless another is chosen: the previous entry, or the next
+  // one when the first is removed.
+  [[nodiscard]] static size_t defaultReplacement(const size_t index)
+  {
+    return index > 0 ? index - 1 : 1;
+  }
+
+  // When the ground carries an entry the move reorders, the result holds the remap that lets those samples follow
+  // their material.
+  [[nodiscard]] static Result move(const std::vector<terrain::TerrainMaterial>& palette, const size_t from,
+                                   const size_t to, const std::bitset<256>& used)
+  {
+    Result result = run(palette, [&](auto& copy) {
       return terrain::moveMaterial(copy, from, to);
     });
+
+    if (result.ok() && from != to && paintedBetween(used, std::min(from, to), std::max(from, to)))
+    {
+      result.remap = terrain::remapForMove(palette.size(), from, to);
+    }
+
+    return result;
   }
 
   [[nodiscard]] static Result rename(const std::vector<terrain::TerrainMaterial>& palette, const size_t index,
@@ -155,10 +200,23 @@ public:
   }
 
 private:
+  [[nodiscard]] static bool paintedBetween(const std::bitset<256>& used, const size_t first, const size_t last)
+  {
+    for (size_t index = first; index <= last && index < used.size(); ++index)
+    {
+      if (used.test(index))
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   template <typename EditFn>
   [[nodiscard]] static Result run(const std::vector<terrain::TerrainMaterial>& palette, EditFn&& edit)
   {
-    Result result{ palette, std::nullopt };
+    Result result{ palette, std::nullopt, std::nullopt };
     result.refusal = edit(result.palette);
 
     if (result.refusal)
@@ -427,38 +485,5 @@ private:
 
   return paletteSize == 0 ? 0 : std::min(kept, paletteSize - 1);
 }
-
-// A refusal the Materials block shows beside the selected material's Remove button. It belongs to the selection it
-// was raised for and is cleared once another material or another terrain is selected.
-class MaterialNote {
-public:
-  void raise(const uuids::uuid& terrain, const size_t index, std::string text)
-  {
-    m_terrain = terrain;
-    m_index = index;
-    m_text = std::move(text);
-  }
-
-  void clear()
-  {
-    m_text.clear();
-  }
-
-  // The note for the selection drawn now, empty when there is none; a note raised for another selection is cleared.
-  [[nodiscard]] const std::string& textFor(const uuids::uuid& terrain, const size_t index)
-  {
-    if (terrain != m_terrain || index != m_index)
-    {
-      m_text.clear();
-    }
-
-    return m_text;
-  }
-
-private:
-  uuids::uuid m_terrain;
-  size_t m_index = 0;
-  std::string m_text;
-};
 
 #endif //TERRAINPALETTEEDITOR_H

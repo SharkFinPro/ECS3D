@@ -1,13 +1,18 @@
 #include <gtest/gtest.h>
 
 #include "TerrainAssetUndoFixtures.h"
+#include "TerrainPaletteEditor.h"
 #include "Replication.h"
 #include "assets/AssetRegistry.h"
 #include "edits/EditCommand.h"
 #include "edits/RecordTerrainEdits.h"
+#include "edits/TerrainSetChunks.h"
 #include "edits/TerrainRestore.h"
 #include "terrain/TerrainAddition.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainEdit.h"
+#include "terrain/TerrainEditApply.h"
+#include "terrain/TerrainMaterialRemap.h"
 #include "terrain/TerrainPalette.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
@@ -182,6 +187,22 @@ TEST(TerrainPalette, RemoveMaterialRefusesAnyIndexAtOrBelowAPaintedOne)
   EXPECT_FALSE(terrain::removeMaterial(palette, 0, {}).has_value());
   ASSERT_EQ(palette.size(), 2u);
   EXPECT_EQ(palette[0].name, "m1");
+}
+
+TEST(TerrainPalette, EraseMaterialRemovesAPaintedEntryThatRemoveMaterialRefuses)
+{
+  auto refused = paletteOf(3);
+  EXPECT_TRUE(terrain::removeMaterial(refused, 1, usedIndices({ 1 })).has_value());
+  EXPECT_EQ(refused, paletteOf(3));
+
+  auto erased = paletteOf(3);
+  EXPECT_FALSE(terrain::eraseMaterial(erased, 1).has_value());
+  ASSERT_EQ(erased.size(), 2u);
+  EXPECT_EQ(erased[0].name, "m0");
+  EXPECT_EQ(erased[1].name, "m2");
+
+  EXPECT_TRUE(terrain::eraseMaterial(erased, 2).has_value());
+  EXPECT_EQ(erased.size(), 2u);
 }
 
 TEST(TerrainPalette, RenameMoveAndTextureEditsApplyAndRefuseBadInput)
@@ -532,4 +553,86 @@ TEST(TerrainPaletteReplacement, AColorEditReplacesAndUndoRestoresThePreviousColo
   world.sendAddAsset(*undone.messagePayload);
   EXPECT_EQ(pair.serverPalette(), first);
   EXPECT_EQ(world.editor.store.description(terrainId)->palette, first);
+}
+
+namespace {
+  void sendTerrainEdit(Side& server, const net::Message& message)
+  {
+    const auto edit = terrain::unpackTerrainEdit(message);
+    ASSERT_TRUE(edit.has_value());
+    EXPECT_EQ(terrain::applyTerrainEdit(server.store, *edit).refusal, terrain::TerrainEditRefusal::none);
+  }
+
+  uint8_t materialAt(const terrain::TerrainStore& store, const terrain::ChunkCoord coord)
+  {
+    return store.find(terrainId)->chunk(coord)->materials().front();
+  }
+}
+
+// What the editor does for Remove on a painted material: the remap first (its terrainStroke entry), then the palette
+// without the entry (its replaceAsset entry), and two undo steps back.
+TEST(TerrainPaletteRemoval, APaintedRemovalRemapsTheServerAndTwoUndoStepsRestoreChunksAndPalette)
+{
+  Pair pair;
+  auto& world = pair.world;
+  pair.setPalette(paletteOf(3));
+
+  // The created chunks paint material 1; this one paints material 2, which shifts down.
+  const terrain::ChunkCoord shifted{ createdChunks, 0, 0 };
+  world.editor.store.find(terrainId)->setChunk(shifted, solid(2));
+  world.server.store.setChunk(terrainId, shifted, solid(2), world.server.store.nextRevision(terrainId));
+  const Hashes originalChunks = hashesOf(world.server.store, terrainId);
+  ASSERT_EQ(hashesOf(world.editor.store, terrainId), originalChunks);
+
+  const auto used = terrain::materialsInUse(*world.editor.store.find(terrainId));
+  ASSERT_TRUE(TerrainPaletteEditor::removeNeedsChoice(3, 1, used));
+  const auto removal = TerrainPaletteEditor::remove(paletteOf(3), 1, used, 0);
+  ASSERT_TRUE(removal.ok());
+  ASSERT_TRUE(removal.remap.has_value());
+
+  auto prediction = edits::predictTerrainRemap(terrainId, *world.editor.store.find(terrainId), *removal.remap);
+  ASSERT_TRUE(prediction.has_value());
+  ASSERT_TRUE(prediction->command.has_value());
+  world.history.record(*prediction->command);
+  sendTerrainEdit(world.server, prediction->message);
+
+  const auto paletteCommand = edits::commandForTerrainPalette(terrainId, world.editor.store, removal.palette);
+  ASSERT_TRUE(paletteCommand.has_value());
+  world.history.record(*paletteCommand);
+  auto description = *world.editor.store.description(terrainId);
+  description.palette = removal.palette;
+  const auto asset = terrain::addTerrainAssetJson(description);
+  ASSERT_TRUE(applyReplacement(world.editor, asset));
+  world.sendAddAsset(replication::packAddAsset(asset));
+
+  EXPECT_EQ(pair.serverPalette().size(), 2u);
+  EXPECT_EQ(pair.serverPalette()[1].name, "m2");
+  EXPECT_EQ(materialAt(world.server.store, { 0, 0, 0 }), 0);
+  EXPECT_EQ(materialAt(world.server.store, shifted), 1);
+  EXPECT_EQ(hashesOf(world.editor.store, terrainId), hashesOf(world.server.store, terrainId));
+  EXPECT_NE(hashesOf(world.server.store, terrainId), originalChunks);
+
+  // First undo: the palette comes back and the samples still carry the remapped indices.
+  const auto paletteUndo = world.undo();
+  ASSERT_TRUE(paletteUndo.ok());
+  ASSERT_TRUE(paletteUndo.messagePayload.has_value());
+  ASSERT_TRUE(applyReplacement(world.editor, replication::unpackAddAsset(*paletteUndo.messagePayload)));
+  world.sendAddAsset(*paletteUndo.messagePayload);
+  EXPECT_EQ(pair.serverPalette(), paletteOf(3));
+  EXPECT_EQ(materialAt(world.server.store, shifted), 1);
+
+  // Second undo: the remap's chunks come back.
+  const auto remapUndo = world.undo();
+  ASSERT_TRUE(remapUndo.ok());
+  ASSERT_TRUE(remapUndo.terrainPayload.has_value());
+  edits::predictSetChunks(*world.editor.store.find(terrainId), *remapUndo.terrainPayload);
+  for (const net::Message& message : edits::packSetChunksEdits(*remapUndo.terrainPayload))
+  {
+    sendTerrainEdit(world.server, message);
+  }
+
+  EXPECT_EQ(hashesOf(world.server.store, terrainId), originalChunks);
+  EXPECT_EQ(hashesOf(world.editor.store, terrainId), originalChunks);
+  EXPECT_EQ(pair.serverPalette(), paletteOf(3));
+  EXPECT_EQ(world.editor.store.description(terrainId)->palette, paletteOf(3));
 }

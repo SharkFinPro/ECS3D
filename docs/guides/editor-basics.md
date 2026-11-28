@@ -107,15 +107,17 @@ starts with one, a gray named Ground.
 - Click a line to select it. The selected material is the one Add, Flatten and Paint use, and its details show below
   the list: its name, Color or Texture, its textures, Move up, Move down and Remove.
 - Add material appends an entry (up to 16) with its own color and selects it. Type in the name field to rename the
-  selected material, and use Move up and Move down to reorder it.
+  selected material, and use Move up and Move down to reorder it. Painted ground keeps its look when materials move.
 - Each material is either a Color or a Texture. Color shows a color swatch: click it to pick the color. Texture shows an
   Albedo slot: drag a texture from the Assets panel onto it. Switching to Color removes the albedo texture. Either way,
   the Specular slot takes a specular map.
-- Remove deletes the selected material and selects its neighbor. It is refused while that material or a later one is
-  painted anywhere on the terrain, since removing it would shift the later materials and recolor the ground; a short
-  message beside Remove says which one is painted.
+- Remove deletes the selected material and selects its neighbor. If the material is painted on the terrain, a window
+  asks what the painted ground becomes (the material before it, unless you pick another); Remove there repaints that
+  ground and removes the material, and Cancel keeps it. Ground painted with later materials keeps its look. The last
+  material cannot be removed.
 - Materials can be edited only while the editor can edit the server and the scene is stopped. Undo and redo cover
-  every change.
+  every change; removing or moving a painted material takes two undo steps, one for the palette and one for the
+  repainted ground.
 
 ## Scene Status
 

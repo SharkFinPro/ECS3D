@@ -143,7 +143,10 @@ A material remap records the same way: `edits::predictTerrainRemap` (`edits/Reco
 editor's volume, captures each changed chunk's pointer from before, and returns the `remapMaterials` message with a
 `terrainStroke` command built by `commandForTerrainStroke` (nullopt when the editor's volume held nothing it changed;
 the message is still worth sending). The palette change is its own `replaceAsset` (`commandForTerrainPalette`), so
-undoing a removal or move is two history entries.
+undoing a removal or move is two history entries. The editor records the remap first and the palette second
+(`EditorApp::finishTerrainPaletteEdit`), so the first undo brings the palette back over the remapped samples and the
+second sends the remap's chunks back as a setChunks; `TerrainPaletteRemoval` in `TerrainPaletteTest.cpp` walks both
+steps against a server store.
 
 A stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound memory.
 `EditCommand::pinnedBytes()` sums `byteSize()` over those chunks (a terrain asset command counts the chunk map it

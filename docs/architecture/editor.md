@@ -221,9 +221,21 @@ entries. The headless `TerrainPaletteEditor.h` turns each intent into a new pale
 refusal string with the `TerrainPalette.h` functions (a new entry is "Material N"; Remove scans `materialsInUse` only
 when clicked) and gates editing on an editable connection, a stopped scene and a terrain the store holds: a palette edit
 during Play would outlive Stop on the server while the play history is discarded. The gate's reason shows under the
-block; an intent's refusal is a `MaterialNote` shown beside Remove in the secondary text color, and is cleared once
+block; an intent's refusal is a `MaterialNote` (`TerrainMaterialPrompts.h`) shown beside Remove in the secondary text color, and is cleared once
 another material or terrain is selected. After an applied edit `materialSelectionAfter` keeps a moved entry selected
 and hands a removed one's selection to its neighbor.
+
+Remove and the moves keep painted ground looking the same (`EditorAppTerrainMaterialRemove.cpp`). On the click the
+editor scans `materialsInUse`; `TerrainPaletteEditor::remove` and `move` then return, beside the palette, the
+`remapForRemoval` or `remapForMove` table when the ground carries the removed entry or a later one, or an entry the
+move reorders. Removing an entry the ground paints first opens a `MaterialRemovePrompt` modal listing the other
+materials (swatch and label) for what its ground becomes, defaulting to `defaultReplacement` (the previous entry, or the
+next one for entry 0); the prompt closes without acting if the palette changes underneath it. The last material is
+never removed: a terrain keeps at least one. `finishTerrainPaletteEdit` sends the remap before the palette:
+`sendTerrainRemap` predicts it on the editor's volume with `edits::predictTerrainRemap`, sends the `remapMaterials`
+terrainEdit and records its `terrainStroke` entry, then the palette applies as any other palette edit, so the change is
+two undo entries ([undo-redo.md](undo-redo.md)). The data side keeps `terrain::removeMaterial`, which refuses a painted
+entry, and adds `eraseMaterial` for the remapped path.
 `EditorApp::applyTerrainPalette` builds the command with `commandForTerrainPalette` from the pre-edit store, applies
 the replacement through `applyAddAssetWithTerrain` (no upload expected), sends the addAsset and records the command.
 Every intent is built from the palette the store holds when it runs, and once one edit has applied in a frame (Add

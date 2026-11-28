@@ -89,6 +89,16 @@ namespace terrain
       }
     }
 
+    return eraseMaterial(palette, index);
+  }
+
+  std::optional<std::string> eraseMaterial(std::vector<TerrainMaterial>& palette, const size_t index)
+  {
+    if (const auto reason = checkIndex(palette, index))
+    {
+      return reason;
+    }
+
     palette.erase(palette.begin() + static_cast<std::ptrdiff_t>(index));
 
     return std::nullopt;
