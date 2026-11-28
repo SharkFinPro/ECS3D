@@ -78,12 +78,14 @@ machine; it also serves a remote `--host` editor, so it stays where telling a sp
 A terrain created while a project is open arrives as an `addAsset` with `assetType` `"terrain"`, the canonical record
 path (`terrainAssetPath`) and a `body` holding the description as JSON (`terrain::addTerrainAssetJson`,
 `data/terrain/TerrainAddition.{h,cpp}`): `voxelSize`, `chunkCount` and a `palette` of `name`, `albedoTexture` and
-`specularTexture`, the field names of the terrain index file. The wire has no terrain field, so the existing `body`
+`specularTexture` and `color` (linear RGB in [0,1], the flat albedo of a material with no albedo texture; a missing
+`color` reads as white), the field names of the terrain index file. The wire has no terrain field, so the existing `body`
 string carries it; the registry record never holds a body. `applyAddAssetWithTerrain` (`Replication.h`), which the
 server and the creating editor both call, parses the body once (`parseAddedTerrain`: every field of the right JSON
 type, a voxel size inside `minVoxelSize`..`maxVoxelSize`, a valid description, a chunk count of at most
 `maxAddedTerrainChunks`) and refuses, changing neither registry nor store, when the body is unusable, the store holds
-a terrain under that uuid or the registry holds the uuid as any other asset type. Then it registers the record and, only
+a terrain under that uuid (unless it is a palette replacement, below) or the registry holds the uuid as any other asset
+type. Then it registers the record and, only
 if the registry really holds a Terrain record under the uuid, `applyAddedTerrain` creates the empty volume. Only the
 server asks for the upload expectation (`expectUpload`, for a positive chunk count); the editor's store keeps the
 description, so its own Play gate (`incompleteTerrainReason`) waits for the fill. A terrain `addAsset` with no body only
@@ -94,6 +96,16 @@ connection (`TerrainUploadOwners`): the loadProject sender for every terrain tha
 the terrain it created. An owner's disconnect drops only the expectations of its own terrains, and the owner entry ends
 when the upload completes. The editor then uploads the chunks as for a project load; the snapshot that follows the add
 reports the description, and Play is refused until the upload completes.
+
+A palette edit is the same `addAsset` over a uuid the registry holds as a Terrain record and the store holds, the rule
+a prefab body replacement follows. `applyAddAssetWithTerrain` then replaces only the palette of the held description
+(`maxPaletteSize`, 16, the renderer's limit) and keeps the registry record, the voxel size, the chunk count and the
+volume; a body with another voxel size or an invalid palette is refused with nothing changed. It sets no upload
+expectation and leaves `*created` unset, and the server re-snapshots as for any addAsset, so every client receives the
+new palette. Only an editor connection may send it, like every asset mutation. `data/terrain/TerrainPalette.h` holds the
+pure palette edits and `materialsInUse`; removing a material is refused while it or any later one is painted, since the
+later entries shift down.
+
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`, `addAsset`,
 `renameAsset`, `removeAsset`, `terrainEdit`, and the editor's `terrainChunks` upload) that only a connection
 authorized as `Role::editor` on an `--edit` server may send. A `terrainEdit` message

@@ -1,10 +1,13 @@
 #include "EditCommand.h"
 #include "TerrainSetChunks.h"
+#include "terrain/TerrainAddition.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
+#include <nlohmann/json.hpp>
 #include <cstddef>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -123,6 +126,26 @@ Validation EditCommand::validateTerrainReAdd(const uuids::uuid& assetUUID, const
   }
 
   if (terrains->find(assetUUID))
+  {
+    return { ValidationFailure::targetChanged, assetUUID };
+  }
+
+  return {};
+}
+
+Validation EditCommand::validateTerrainPalette(const uuids::uuid& assetUUID, const std::string& body,
+                                               const terrain::TerrainStore* terrains)
+{
+  const auto* live = terrains ? terrains->description(assetUUID) : nullptr;
+  if (!live)
+  {
+    return { ValidationFailure::targetMissing, assetUUID };
+  }
+
+  const auto expected = terrain::parseAddedTerrain({ { "assetType", "terrain" },
+                                                     { "uuid", uuids::to_string(assetUUID) },
+                                                     { "body", body } });
+  if (!expected || expected->palette != live->palette)
   {
     return { ValidationFailure::targetChanged, assetUUID };
   }

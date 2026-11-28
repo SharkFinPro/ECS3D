@@ -36,18 +36,21 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace {
-  constexpr std::array<const char*, terrainToolCount> toolLabels = { "Add", "Subtract", "Smooth", "Flatten" };
+  constexpr std::array<const char*, terrainToolCount> toolLabels = { "Add", "Subtract", "Smooth", "Flatten", "Paint" };
 
   const std::array<glm::vec4, terrainToolCount> toolColors = {
     glm::vec4(0.35f, 0.9f, 0.45f, 1.0f),
     glm::vec4(0.95f, 0.4f, 0.35f, 1.0f),
     glm::vec4(0.4f, 0.7f, 1.0f, 1.0f),
-    glm::vec4(1.0f, 0.75f, 0.3f, 1.0f)
+    glm::vec4(1.0f, 0.75f, 0.3f, 1.0f),
+    glm::vec4(0.8f, 0.5f, 0.95f, 1.0f)
   };
+
 
   constexpr float radiusGrowFactor = 1.25f;
   constexpr float radiusShrinkFactor = 0.8f;
@@ -55,6 +58,14 @@ namespace {
   [[nodiscard]] size_t toolIndex(const TerrainTool tool)
   {
     return static_cast<size_t>(tool);
+  }
+
+  [[nodiscard]] const std::vector<terrain::TerrainMaterial>& paletteOf(const terrain::TerrainStore& store,
+                                                                       const uuids::uuid& terrainUuid)
+  {
+    static const std::vector<terrain::TerrainMaterial> none;
+    const terrain::TerrainDescription* description = store.description(terrainUuid);
+    return description ? description->palette : none;
   }
 }
 
@@ -251,7 +262,8 @@ namespace {
 
     if (const auto& surface = brush.strokeSurface())
     {
-      return strokeCursorHit(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit());
+      return strokeAim(*surface, volume, brush.strokePoint(), ray, view.farPlane, brush.strokeJumpLimit(),
+                       brush.strokeMovesSurface());
     }
 
     // An eraser looks for terrain under its whole brush, not just under the cursor.
@@ -316,10 +328,20 @@ void EditorApp::drawTerrainSculptToggle()
 void EditorApp::drawTerrainToolStrip()
 {
   const size_t current = toolIndex(m_terrainTool.tool());
+  const ImGuiStyle& style = ImGui::GetStyle();
+
+  std::vector<float> widths;
+  for (const char* label : toolLabels)
+  {
+    widths.push_back(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x);
+  }
+
+  const std::vector<bool> newRow =
+    buttonRowBreaks(widths, style.ItemSpacing.x, ImGui::GetContentRegionAvail().x);
 
   for (size_t tool = 0; tool < terrainToolCount; ++tool)
   {
-    if (tool > 0)
+    if (tool > 0 && !newRow[tool])
     {
       ImGui::SameLine();
     }
@@ -338,10 +360,22 @@ void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& compone
   bool edited = false;
 
   edited |= gc::labeledDrag("Radius", &brush.radius, 0.25f);
-  edited |= gc::accentSlider("Strength", &brush.strength, editorTerrainSettings::minStrength,
-                             editorTerrainSettings::maxStrength);
-  edited |= gc::accentSlider("Falloff", &brush.falloff, editorTerrainSettings::minFalloff,
-                             editorTerrainSettings::maxFalloff);
+
+  // Paint sets materials inside the radius at full weight, so strength and falloff would change nothing.
+  if (m_terrainTool.tool() != TerrainTool::paint)
+  {
+    edited |= gc::accentSlider("Strength", &brush.strength, editorTerrainSettings::minStrength,
+                               editorTerrainSettings::maxStrength);
+    edited |= gc::accentSlider("Falloff", &brush.falloff, editorTerrainSettings::minFalloff,
+                               editorTerrainSettings::maxFalloff);
+  }
+
+  // Add and Flatten write the material into the ground they raise; Paint writes it into existing ground.
+  if (const TerrainTool tool = m_terrainTool.tool();
+      tool == TerrainTool::add || tool == TerrainTool::flatten || tool == TerrainTool::paint)
+  {
+    drawTerrainMaterialSelector(component->getTerrainUUID());
+  }
 
   if (edited)
   {
@@ -359,6 +393,53 @@ void EditorApp::drawTerrainBrushControls(const std::shared_ptr<Terrain>& compone
   }
 }
 
+void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
+{
+  const std::vector<terrain::TerrainMaterial>& palette = paletteOf(*m_terrainStore, terrainUuid);
+  const size_t entries = selectableMaterials(palette);
+  const uint8_t active = clampMaterial(m_terrainTool.activeMaterial(), entries);
+
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float side = ImGui::GetFrameHeight();
+  const std::vector<float> widths(entries, side);
+  const std::vector<bool> newRow = buttonRowBreaks(widths, style.ItemSpacing.x, ImGui::GetContentRegionAvail().x);
+
+  ImGui::TextUnformatted("Material");
+
+  for (size_t index = 0; index < entries; ++index)
+  {
+    if (index > 0 && !newRow[index])
+    {
+      ImGui::SameLine();
+    }
+
+    const auto material = static_cast<uint8_t>(index);
+    const glm::vec3 color = materialSwatchColor(palette, material);
+    ImGui::PushID(static_cast<int>(index));
+
+    if (ImGui::ColorButton("##material", ImVec4(color.r, color.g, color.b, 1.0f),
+                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop |
+                             ImGuiColorEditFlags_NoAlpha,
+                           ImVec2(side, side)))
+    {
+      m_terrainTool.setActiveMaterial(material);
+    }
+
+    if (material == active)
+    {
+      ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                          ImGui::ColorConvertFloat4ToU32(theme::accent), 2.0f, 0, 2.0f);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+      ImGui::SetTooltip("%s", materialLabel(palette, material).c_str());
+    }
+
+    ImGui::PopID();
+  }
+}
+
 void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
                                   const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit)
 {
@@ -373,8 +454,12 @@ void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::sha
   {
     advanced = m_terrainBrush.advance(
       terrainUuid, volume, m_serverEditable, pointer, hit,
-      [this, tool] {
-        return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool));
+      [this, tool, terrainUuid] {
+        const uint8_t material =
+          clampMaterial(m_terrainTool.activeMaterial(),
+                        selectableMaterials(paletteOf(*m_terrainStore, terrainUuid)));
+        return terrainBrushTemplate(m_terrainTool.tool(), editorTerrainSettings::readBrush(*m_settings, tool),
+                                    material);
       },
       [this](const net::Message& message) { sendTerrainEdit(message); }, std::chrono::steady_clock::now());
   }

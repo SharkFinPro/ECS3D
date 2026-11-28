@@ -218,3 +218,33 @@ TEST(BrushDiskHitTest, TheCursorsOwnHitWinsOverNearerTerrainAtTheRim)
   ASSERT_TRUE(hit.has_value());
   EXPECT_NEAR(hit->point.y, 10.0f, 1.0f);
 }
+
+TEST(StrokeAimTest, APaintStrokeFollowsTheGroundAcrossAJumpThatSendsOtherStrokesToTheUprightPlane)
+{
+  terrain::TerrainVolume ground(2.5f);
+  terrain::commit(ground, terrain::fillFlat(ground, { 64, 64 }, 10.0f, 20.0f, 1));
+
+  const glm::vec3 anchor{ 40.0f, 10.0f, 40.0f };
+  const glm::vec3 target{ 40.0f, 10.0f, 100.0f };
+  const glm::vec3 eye{ 40.0f, 60.0f, 0.0f };
+  const gizmo::Ray ray{ eye, glm::normalize(target - eye) };
+  constexpr float maxJump = 20.0f;
+
+  // The cursor moved three jump limits in one frame, so the raising strokes' aim lands on the plane over the anchor,
+  // well above the ground, where the paint brush reaches no surface sample.
+  const auto raising = strokeAim(ground, ground, anchor, ray, 1000.0f, maxJump, true);
+  ASSERT_TRUE(raising.has_value());
+  EXPECT_GT(raising->point.y, 30.0f);
+  EXPECT_NEAR(raising->point.z, anchor.z, 1.0e-3f);
+
+  const auto painting = strokeAim(ground, ground, anchor, ray, 1000.0f, maxJump, false);
+  ASSERT_TRUE(painting.has_value());
+  EXPECT_NEAR(painting->point.x, target.x, 0.5f);
+  EXPECT_NEAR(painting->point.y, target.y, 0.5f);
+  EXPECT_NEAR(painting->point.z, target.z, 0.5f);
+
+  // Over the sky there is no ground, so a paint stroke has no hit instead of a plane point.
+  const gizmo::Ray sky{ eye, glm::normalize(glm::vec3(0.0f, 0.5f, 1.0f)) };
+  EXPECT_FALSE(strokeAim(ground, ground, anchor, sky, 1000.0f, maxJump, false).has_value());
+  EXPECT_TRUE(strokeAim(ground, ground, anchor, sky, 1000.0f, maxJump, true).has_value());
+}

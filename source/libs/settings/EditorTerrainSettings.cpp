@@ -8,7 +8,7 @@
 
 namespace editorTerrainSettings {
   namespace {
-    constexpr std::array<const char*, toolCount> toolIds = { "add", "subtract", "smooth", "flatten" };
+    constexpr std::array<const char*, toolCount> toolIds = { "add", "subtract", "smooth", "flatten", "paint" };
 
     std::string brushKey(const std::size_t tool, const char* field)
     {

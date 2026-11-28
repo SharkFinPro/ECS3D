@@ -85,6 +85,19 @@ namespace terrain
     }
   }
 
+  bool isValidColor(const glm::vec3& color)
+  {
+    for (int i = 0; i < 3; ++i)
+    {
+      if (!std::isfinite(color[i]) || color[i] < 0.0f || color[i] > 1.0f)
+      {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   bool isValidDescription(const TerrainDescription& description)
   {
     if (description.uuid.is_nil() || !std::isfinite(description.voxelSize) || description.voxelSize < minVoxelSize ||
@@ -94,7 +107,8 @@ namespace terrain
     }
 
     return std::ranges::all_of(description.palette, [](const TerrainMaterial& material) {
-      return material.name.size() <= maxMaterialNameLength && isValidName(material.name);
+      return material.name.size() <= maxMaterialNameLength && isValidName(material.name) &&
+             isValidColor(material.color);
     });
   }
 
