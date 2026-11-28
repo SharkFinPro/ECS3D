@@ -65,6 +65,7 @@ add_library(${PROJECT_NAME}
   TerrainReadout.h
   TerrainBrushSession.h
   TerrainCursor.h
+  TerrainPaletteUndo.h
   TerrainStroke.h
   TerrainToolState.h
   TerrainUndoState.h
