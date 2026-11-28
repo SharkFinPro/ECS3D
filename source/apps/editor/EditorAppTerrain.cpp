@@ -399,45 +399,45 @@ void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
   const size_t entries = selectableMaterials(palette);
   const uint8_t active = clampMaterial(m_terrainTool.activeMaterial(), entries);
 
-  const float swatch = ImGui::GetFrameHeight() - 6.0f;
-  const std::string indent(4, ' ');
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float side = ImGui::GetFrameHeight();
+  const std::vector<float> widths(entries, side);
+  const std::vector<bool> newRow = buttonRowBreaks(widths, style.ItemSpacing.x, ImGui::GetContentRegionAvail().x);
 
-  const auto drawSwatch = [swatch](const ImVec2 min, const glm::vec3& color)
-  {
-    ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + swatch, min.y + swatch),
-                                              ImGui::ColorConvertFloat4ToU32(ImVec4(color.r, color.g, color.b, 1.0f)),
-                                              2.0f);
-  };
-
-  const bool open = ImGui::BeginCombo("Material", (indent + materialLabel(palette, active)).c_str());
-  const ImVec2 previewMin = ImGui::GetItemRectMin();
-  drawSwatch(ImVec2(previewMin.x + ImGui::GetStyle().FramePadding.x, previewMin.y + 3.0f),
-             materialSwatchColor(palette, active));
-
-  if (!open)
-  {
-    return;
-  }
+  ImGui::TextUnformatted("Material");
 
   for (size_t index = 0; index < entries; ++index)
   {
+    if (index > 0 && !newRow[index])
+    {
+      ImGui::SameLine();
+    }
+
     const auto material = static_cast<uint8_t>(index);
+    const glm::vec3 color = materialSwatchColor(palette, material);
     ImGui::PushID(static_cast<int>(index));
 
-    const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-
-    if (ImGui::Selectable((indent + materialLabel(palette, material)).c_str(), material == active))
+    if (ImGui::ColorButton("##material", ImVec4(color.r, color.g, color.b, 1.0f),
+                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop |
+                             ImGuiColorEditFlags_NoAlpha,
+                           ImVec2(side, side)))
     {
       m_terrainTool.setActiveMaterial(material);
     }
 
-    drawSwatch(ImVec2(rowMin.x + ImGui::GetStyle().FramePadding.x, rowMin.y + 1.0f),
-               materialSwatchColor(palette, material));
+    if (material == active)
+    {
+      ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                          ImGui::ColorConvertFloat4ToU32(theme::accent), 2.0f, 0, 2.0f);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+      ImGui::SetTooltip("%s", materialLabel(palette, material).c_str());
+    }
 
     ImGui::PopID();
   }
-
-  ImGui::EndCombo();
 }
 
 void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,

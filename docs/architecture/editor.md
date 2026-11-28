@@ -191,15 +191,16 @@ The mode is entered from the Sculpt checkbox the Terrain section draws (`registe
 prefab body shows none) or with the `terrainMode` keybind. While it is on, the section shows a radio button per tool
 (Add, Subtract, Smooth, Flatten, Paint) and Radius, Strength and Falloff, all written through
 `editorTerrainSettings::writeBrush` for the current tool (Paint hides Strength and Falloff, and its template
-forces strength 1 and falloff 0). Add, Flatten and Paint also show a Material combo over the terrain's palette (the
-eight renderer default colors when it has none; `selectableMaterials`, `materialLabel`) that sets
-`TerrainToolState::activeMaterial`, a session choice that `clampMaterial` bounds when the stroke template is built.
-Add and Flatten write it into the ground they raise and Paint into existing ground. A Paint stroke changes materials
-only, so `strokeRedistances` makes its release send and predict no redistance, and `strokeAim` keeps its cursor on
-the starting surface however far it jumps (the upright-plane fallback would land off the ground, where it paints
-nothing). Each Material entry has a swatch (`materialSwatchColor`: the renderer's default color for an empty palette,
-wrapped by index). The tool radio buttons wrap onto further rows when the section is narrow (`buttonRowBreaks`). The tool keybinds only switch the tool
-(`writeLastTool`) and never enter the mode, and the radius keybinds scale the current tool's radius by 1.25 or 0.8. A brush
+forces strength 1 and falloff 0). Add, Flatten and Paint also show a Material row of color swatches, one per entry of the terrain's
+palette (the eight renderer default colors when it has none; `selectableMaterials`) that sets `TerrainToolState::activeMaterial`,
+a session choice that `clampMaterial` bounds when the stroke template is built. The row wraps like the tool buttons,
+the active swatch has an accent outline and the tooltip is the `materialLabel`. `materialSwatchColor` alone decides a
+swatch: the renderer's default color (wrapped by index) for an empty palette, else neutral gray. Add and Flatten write
+the material into the ground they raise and Paint into existing ground. A Paint stroke changes materials only, so
+`strokeRedistances` makes its release send and predict no redistance, and `strokeAim` keeps its cursor on the starting
+surface however far it jumps (the upright-plane fallback would land off the ground, where it paints nothing). The tool
+radio buttons wrap onto further rows when the section is narrow (`buttonRowBreaks`).
+The tool keybinds only switch the tool (`writeLastTool`) and never enter the mode, and the radius keybinds scale the current tool's radius by 1.25 or 0.8. A brush
 radius above `maxBrushRadiusVoxels` voxels is clamped (`effectiveBrushRadius`) when a stroke begins and when the ring is
 drawn, since the server refuses a larger brush. The headless parts are `TerrainStroke.h` (spacing along the pointer
 path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
