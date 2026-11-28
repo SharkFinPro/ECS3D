@@ -13,11 +13,6 @@
 #include <uuid.h>
 #include <vector>
 
-namespace terrain {
-  class TerrainStore;
-  class TerrainVolume;
-}
-
 namespace edits {
 
 // The palette half of an undo or redo of a material removal or move (EditCommand::terrainPaletteRemap).

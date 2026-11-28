@@ -257,3 +257,49 @@ TEST(TerrainRemapApply, OnlyAPaletteMismatchSendsTheSenderTheTerrainAgain)
     EXPECT_FALSE(terrainEditRefusalNeedsResync(refusal));
   }
 }
+
+TEST(TerrainRemapApply, ARefusedRemapRestampsOnlyTheChunksItWouldHaveChanged)
+{
+  Env env;
+  const auto chunks = env.volume->snapshotChunks();
+  const auto expected = terrain::remapMaterials(*env.volume, swapRemap(1, 2));
+  ASSERT_FALSE(expected.empty());
+  const uint32_t before = env.store.nextRevision(terrainId);
+
+  auto refused = env.swap(env.swappedPalette());
+  refused.paletteHash ^= 1;
+  const auto coords = terrain::restampRefusedRemap(env.store, refused);
+
+  ASSERT_EQ(coords.size(), expected.size());
+  for (size_t i = 0; i < coords.size(); ++i)
+  {
+    EXPECT_EQ(coords[i], expected[i].first);
+    EXPECT_EQ(env.store.revision(terrainId, coords[i]), before + 1);
+  }
+  EXPECT_EQ(env.volume->snapshotChunks(), chunks);
+  EXPECT_EQ(env.store.nextRevision(terrainId), before + 2);
+
+  // Nothing to repair: a remap no sample uses, another kind or an unknown terrain stamps nothing.
+  auto unused = refused;
+  unused.remap = swapRemap(5, 6);
+  EXPECT_TRUE(terrain::restampRefusedRemap(env.store, unused).empty());
+  auto brush = refused;
+  brush.kind = terrain::TerrainEditKind::brush;
+  EXPECT_TRUE(terrain::restampRefusedRemap(env.store, brush).empty());
+  auto unknown = refused;
+  unknown.terrain = textureId;
+  EXPECT_TRUE(terrain::restampRefusedRemap(env.store, unknown).empty());
+  EXPECT_EQ(env.store.nextRevision(terrainId), before + 3);
+}
+
+TEST(TerrainPaletteHash, NegativeZeroHashesAsZero)
+{
+  auto negative = paletteOf(2);
+  negative[0].color = glm::vec3(-0.0f, 0.5f, 0.5f);
+  auto positive = paletteOf(2);
+  positive[0].color = glm::vec3(0.0f, 0.5f, 0.5f);
+
+  EXPECT_EQ(terrain::paletteHash(negative), terrain::paletteHash(positive));
+  positive[0].color.g = 0.0f;
+  EXPECT_NE(terrain::paletteHash(negative), terrain::paletteHash(positive));
+}

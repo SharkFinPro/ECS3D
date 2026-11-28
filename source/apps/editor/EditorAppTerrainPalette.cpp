@@ -93,8 +93,8 @@ bool EditorApp::finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, const s
 
   if (!result.refusal)
   {
-    // Another view may draw the new palette over the old indices until the remapped chunks arrive; the server sends
-    // the chunks first, so that lasts at most as long as the two messages take.
+    // The server sends the remapped chunks before the snapshot that carries the new palette, so another view may
+    // draw the old palette over the new indices for as long as the two messages take to arrive.
     result.refusal = result.remap ? sendTerrainRemap(terrainUuid, result)
                                   : applyTerrainPalette(terrainUuid, result.palette);
   }

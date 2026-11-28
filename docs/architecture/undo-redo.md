@@ -152,6 +152,11 @@ as the one `remapMaterials` edit, and `edits::predictTerrainStep` applies either
 `TerrainUndoState`. A trim drops the whole entry, and `pinnedBytes` counts its chunks like any stroke's;
 `TerrainRemapUndoTest.cpp` walks both directions against a server.
 
+Limitations: only the remap itself carries the hash of its base palette. Plain palette edits (`replaceAsset`) and the
+undo of a removal or move (setChunks then a palette addAsset) are validated in the editor against its own view, so
+concurrent palette edits from two editors can race, and the last writer wins, until every palette operation carries a
+base-palette hash end to end.
+
 A stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound memory.
 `EditCommand::pinnedBytes()` sums `byteSize()` over those chunks (a terrain asset command counts the chunk map it
 holds; 0 for every other command, no deduplication), and `EditHistory` keeps the total over both stacks exact

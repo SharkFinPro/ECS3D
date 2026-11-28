@@ -6,6 +6,7 @@
 #include "terrain/TerrainBrush.h"
 #include "terrain/TerrainEdit.h"
 #include "terrain/TerrainEditApply.h"
+#include "terrain/TerrainOps.h"
 #include "terrain/TerrainStore.h"
 
 #include <glm/vec3.hpp>
@@ -157,5 +158,31 @@ TEST(TerrainRemapUndo, ARemoveAndAMoveRacingFromTwoEditorsRefuseTheSecondAndItsV
   EXPECT_TRUE(flow.step(flow.a, connA, true).ok());
   flow.settle();
   EXPECT_EQ(flow.server.palette(), namedPalette(4));
+  flow.expectConverged();
+}
+
+TEST(TerrainRemapUndo, ARemapABrushOvertookOnTheSamePaletteStillConverges)
+{
+  RemapFlow flow;
+  const auto moveResult = TerrainPaletteEditor::move(flow.a.palette(), 1, 3);
+  auto prediction = edits::predictTerrainRemap(terrainId, flow.a.store, *moveResult.remap, moveResult.palette);
+  ASSERT_TRUE(prediction.has_value());
+  flow.a.history.record(std::move(prediction->command));
+
+  // B adds material 3 before the server sees A's move, so A predicted from a volume the server no longer holds.
+  terrain::BrushOp add = paintBrush(3);
+  add.kind = terrain::BrushOp::Kind::add;
+  terrain::commit(*flow.b.volume, terrain::applyBrush(*flow.b.volume, add));
+  ASSERT_EQ(flow.send(connB, terrain::packBrushEdit(terrainId, 1, add)), terrain::TerrainEditRefusal::none);
+  EXPECT_EQ(flow.send(connA, prediction->message), terrain::TerrainEditRefusal::none);
+  flow.settle();
+
+  EXPECT_TRUE(flow.requests.empty());
+  EXPECT_GT(flow.fullEntries[connA], 0u);
+  EXPECT_EQ(flow.server.palette()[3].name, "m1");
+  flow.expectConverged();
+
+  // A's entry was recorded from the stale volume, so it no longer describes the terrain and is refused whole.
+  EXPECT_EQ(flow.step(flow.a, connA, true).result, edits::HistoryResult::targetChanged);
   flow.expectConverged();
 }

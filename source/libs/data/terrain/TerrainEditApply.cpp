@@ -220,6 +220,35 @@ namespace terrain
     return result;
   }
 
+  std::vector<ChunkCoord> restampRefusedRemap(TerrainStore& store, const TerrainEditPayload& edit)
+  {
+    const auto volume = store.find(edit.terrain);
+    if (!volume || edit.kind != TerrainEditKind::remapMaterials)
+    {
+      return {};
+    }
+
+    const ChunkEdits wouldChange = remapMaterials(*volume, edit.remap);
+    const uint32_t revision = wouldChange.empty() ? 0 : store.nextRevision(edit.terrain);
+    std::vector<ChunkCoord> coords;
+
+    if (revision == 0)
+    {
+      return coords;
+    }
+
+    coords.reserve(wouldChange.size());
+    for (const auto& entry : wouldChange)
+    {
+      if (store.setChunk(edit.terrain, entry.first, volume->chunk(entry.first), revision))
+      {
+        coords.push_back(entry.first);
+      }
+    }
+
+    return coords;
+  }
+
   std::string_view refusalText(const TerrainEditRefusal refusal)
   {
     switch (refusal)

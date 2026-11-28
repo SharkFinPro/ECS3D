@@ -91,6 +91,7 @@ namespace remapFlowFixtures
     Node b;
     terrain::TerrainEditEcho echo;
     std::vector<std::pair<int32_t, net::Message>> requests;
+    std::map<int32_t, size_t> fullEntries;
 
     RemapFlow()
     {
@@ -140,7 +141,8 @@ namespace remapFlowFixtures
       }
     }
 
-    // ServerApp::handleTerrainEdit (with resyncTerrainView) and handleAddAsset (a palette replacement).
+    // ServerApp::handleTerrainEdit (with resyncTerrainView) and handleAddAsset (a palette replacement), each flushing
+    // the echo before its snapshot.
     terrain::TerrainEditRefusal send(const int32_t connId, const net::Message& message)
     {
       if (message.getType() == net::MessageType::addAsset)
@@ -149,6 +151,7 @@ namespace remapFlowFixtures
         auto description = *server.store.description(terrainId);
         description.palette = parsed ? parsed->palette : description.palette;
         EXPECT_TRUE(parsed.has_value() && server.store.applyDescription(description));
+        deliver();
         snapshot();
         return terrain::TerrainEditRefusal::none;
       }
@@ -165,14 +168,7 @@ namespace remapFlowFixtures
 
       if (result.refusal == terrain::TerrainEditRefusal::paletteChanged)
       {
-        EXPECT_NE(server.store.stampAllChunks(terrainId), 0u);
-        std::vector<terrain::ChunkCoord> coords;
-        for (const auto& entry : server.volume->chunks())
-        {
-          coords.push_back(entry.first);
-        }
-
-        echo.requestFull(terrainId, coords, connId);
+        echo.requestFull(terrainId, terrain::restampRefusedRemap(server.store, *edit), connId);
       }
 
       if (result.paletteReplaced || result.refusal == terrain::TerrainEditRefusal::paletteChanged)
@@ -191,6 +187,12 @@ namespace remapFlowFixtures
       echo.flush(server.store, connections, [this](const int32_t connId, const net::Message& message)
       {
         Node& view = connId == connA ? a : b;
+        const auto payload = terrain::unpackTerrainChunks(message);
+        for (const auto& entry : payload ? payload->entries : std::vector<terrain::ReceivedChunk>{})
+        {
+          fullEntries[connId] += entry.chunk ? 1 : 0;
+        }
+
         auto outcome = view.sync.apply(view.store, scenes, message);
         if (outcome.request)
         {

@@ -120,8 +120,11 @@ untouched, no `maxEditChunks` bound) and replaces the palette in the same step, 
 (`remapForRemoval`) or move (`remapForMove`) keeps painted ground looking the same on every connection and two editors
 racing on one palette cannot both apply. `ServerApp::handleTerrainEdit` then flushes the echo at once and re-snapshots
 (`SnapshotReason::assetChange`), so the chunks reach a view just before the palette. A `paletteChanged` refusal
-(`terrainEditRefusalNeedsResync` in `ServerPolicy.h`) gives every held chunk a fresh revision, sends them all in full to
-the sender and re-snapshots (`ServerApp::resyncTerrainView`), since the sender predicted both halves. The editor
+(`terrainEditRefusalNeedsResync` in `ServerPolicy.h`) gives the chunks the refused remap would have changed on the
+server's volume a fresh revision (`terrain::restampRefusedRemap`), sends those in full to the sender and re-snapshots
+(`ServerApp::resyncTerrainView`), since the sender predicted both halves; any other chunk it predicted from a view that
+differs from the server is repaired by the echo as usual. `handleAddAsset` also flushes the echo before its snapshot,
+so a palette undo's setChunks reaches the views before its palette. The editor
 predicts a remap with `edits::predictTerrainRemap` and holds nothing back from the echo: the echo carries the same
 result, so its hash-only entries confirm the prediction, and an edit another connection made in between mismatches or
 arrives in full. `unpackTerrainEdit` bounds only what the wire can say (a valid brush, a non-empty box,

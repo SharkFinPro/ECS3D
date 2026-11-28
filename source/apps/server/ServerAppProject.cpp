@@ -248,7 +248,7 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
 
     if (terrainEditRefusalNeedsResync(result.refusal))
     {
-      resyncTerrainView(edit->terrain, senderId);
+      resyncTerrainView(*edit, senderId);
     }
 
     return;
@@ -259,8 +259,8 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
     m_terrainEcho.recordEdit(edit->terrain, result.changed, senderId);
   }
 
-  // The chunks go out before the snapshot that carries the palette, so a view never pairs one with the other's
-  // previous state for longer than the two messages take to arrive.
+  // The chunks go out before the snapshot that carries the palette, so another view draws the old palette over the
+  // new indices only for as long as the two messages take to arrive.
   if (result.paletteReplaced)
   {
     flushTerrainEcho(std::chrono::steady_clock::now(), true);
@@ -268,20 +268,12 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
   }
 }
 
-void ServerApp::resyncTerrainView(const uuids::uuid& terrainUuid, const int32_t senderId)
+void ServerApp::resyncTerrainView(const terrain::TerrainEditPayload& edit, const int32_t senderId)
 {
-  // Fresh revisions, so the full chunks replace the prediction the sender holds under the revisions it already had.
-  if (const auto volume = m_terrainStore->find(terrainUuid); volume && m_terrainStore->stampAllChunks(terrainUuid) != 0)
+  const auto coords = terrain::restampRefusedRemap(*m_terrainStore, edit);
+  if (!coords.empty())
   {
-    std::vector<terrain::ChunkCoord> coords;
-    coords.reserve(volume->chunks().size());
-
-    for (const auto& entry : volume->chunks())
-    {
-      coords.push_back(entry.first);
-    }
-
-    m_terrainEcho.requestFull(terrainUuid, coords, senderId);
+    m_terrainEcho.requestFull(edit.terrain, coords, senderId);
   }
 
   flushTerrainEcho(std::chrono::steady_clock::now(), true);

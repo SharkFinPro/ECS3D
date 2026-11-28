@@ -38,6 +38,13 @@ namespace terrain
   // paletteChanged unless the held palette hashes to its paletteHash, and its chunks and palette apply together.
   [[nodiscard]] TerrainEditResult applyTerrainEdit(TerrainStore& store, const TerrainEditPayload& edit);
 
+  // The repair for a remapMaterials edit refused with paletteChanged, whose sender already predicted it: the chunks the
+  // remap would have changed on the server's volume, in z, y, x order, each given one fresh revision so a full send
+  // replaces the sender's prediction held under an older one. The caller sends them in full to the sender alone;
+  // chunks the sender predicted from a view that differs from the server are left to the echo's ordinary repair.
+  // Empty, stamping nothing, for another kind, an unknown terrain, an invalid remap or an exhausted counter.
+  [[nodiscard]] std::vector<ChunkCoord> restampRefusedRemap(TerrainStore& store, const TerrainEditPayload& edit);
+
   // Lower-case phrase for a log line, e.g. "the operation is too large".
   [[nodiscard]] std::string_view refusalText(TerrainEditRefusal refusal);
 }

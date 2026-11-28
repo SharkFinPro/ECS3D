@@ -3,6 +3,7 @@
 #include "TerrainVolume.h"
 #include <algorithm>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 
@@ -217,7 +218,9 @@ namespace terrain
 
       for (int component = 0; component < 3; ++component)
       {
-        feed(std::bit_cast<uint32_t>(material.color[component]), 4);
+        // -0 and 0 are the same color; NaN never reaches here, since it is not a valid one.
+        const float value = material.color[component] == 0.0f ? 0.0f : material.color[component];
+        feed(std::bit_cast<uint32_t>(value), 4);
       }
     }
 
