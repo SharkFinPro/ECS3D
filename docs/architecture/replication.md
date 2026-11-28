@@ -78,7 +78,8 @@ machine; it also serves a remote `--host` editor, so it stays where telling a sp
 A terrain created while a project is open arrives as an `addAsset` with `assetType` `"terrain"`, the canonical record
 path (`terrainAssetPath`) and a `body` holding the description as JSON (`terrain::addTerrainAssetJson`,
 `data/terrain/TerrainAddition.{h,cpp}`): `voxelSize`, `chunkCount` and a `palette` of `name`, `albedoTexture` and
-`specularTexture`, the field names of the terrain index file. The wire has no terrain field, so the existing `body`
+`specularTexture` and `color` (linear RGB in [0,1], the flat albedo of a material with no albedo texture; a missing
+`color` reads as white), the field names of the terrain index file. The wire has no terrain field, so the existing `body`
 string carries it; the registry record never holds a body. `applyAddAssetWithTerrain` (`Replication.h`), which the
 server and the creating editor both call, parses the body once (`parseAddedTerrain`: every field of the right JSON
 type, a voxel size inside `minVoxelSize`..`maxVoxelSize`, a valid description, a chunk count of at most

@@ -53,6 +53,9 @@ void ProjectPacker::pack(net::Message& message) const
       message.writeString(material.name);
       message.write(material.albedoTexture);
       message.write(material.specularTexture);
+      message.write(material.color.r);
+      message.write(material.color.g);
+      message.write(material.color.b);
     }
   }
 }
@@ -126,6 +129,9 @@ void ProjectPacker::unpack(const net::Message& message)
       material.name = reader.readString();
       material.albedoTexture = reader.read<uuids::uuid>();
       material.specularTexture = reader.read<uuids::uuid>();
+      material.color.r = reader.read<float>();
+      material.color.g = reader.read<float>();
+      material.color.b = reader.read<float>();
       description.palette.push_back(std::move(material));
     }
 

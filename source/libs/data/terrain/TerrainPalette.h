@@ -33,6 +33,10 @@ namespace terrain
   // Painted samples keep their index, so they show whichever entry now sits there.
   std::optional<std::string> moveMaterial(std::vector<TerrainMaterial>& palette, size_t from, size_t to);
 
+  // Refused for an index out of range or a component that is not finite and inside [0,1].
+  std::optional<std::string> setMaterialColor(std::vector<TerrainMaterial>& palette, size_t index,
+                                              const glm::vec3& color);
+
   std::optional<std::string> setMaterialTextures(std::vector<TerrainMaterial>& palette, size_t index,
                                                  const uuids::uuid& albedo, const uuids::uuid& specular);
 }
