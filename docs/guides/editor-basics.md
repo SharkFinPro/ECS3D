@@ -97,6 +97,29 @@ terrain with a brush. It works only while the editor can edit the server.
 - A radius larger than 64 voxels is limited to that size.
 - Undoing strokes is not available yet.
 
+#### Terrain materials
+
+The Terrain section lists the terrain's materials under Materials, a header you can click to collapse. A new terrain
+starts with one, a gray named Ground.
+
+- Each line shows a material's swatch (its color, or a thumbnail of its texture) and its name. The list scrolls once it
+  holds more than eight.
+- Click a line to select it. The selected material is the one Add, Flatten and Paint use, and its details show below
+  the list: its name, Color or Texture, its textures, Move up, Move down and Remove.
+- Add material appends an entry (up to 16) with its own color and selects it. Type in the name field to rename the
+  selected material, and use Move up and Move down to reorder it. Painted ground keeps its look when materials move.
+- Each material is either a Color or a Texture. Color shows a color swatch: click it to pick the color. Texture shows an
+  Albedo slot: drag a texture from the Assets panel onto it. Switching to Color removes the albedo texture. Either way,
+  the Specular slot takes a specular map.
+- Remove deletes the selected material and selects its neighbor. If the material is painted on the terrain, a window
+  asks what the painted ground becomes (the material before it, unless you pick another); Remove there repaints that
+  ground and removes the material, and Cancel keeps it. Ground painted with later materials keeps its look. The last
+  material cannot be removed.
+- Materials can be edited only while the editor can edit the server and the scene is stopped. Undo and redo cover
+  every change; removing or moving a material is one undo step that restores the palette and the painted ground
+  together. Removing or moving a material waits until the whole terrain has arrived from the server and no brush
+  stroke is still finishing.
+
 ## Scene Status
 
 The "Scene Status" panel along the top holds the play controls and some view choices. On a narrow window the

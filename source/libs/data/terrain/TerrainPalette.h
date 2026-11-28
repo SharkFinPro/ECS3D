@@ -4,6 +4,7 @@
 #include "TerrainStore.h"
 #include <bitset>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <uuid.h>
@@ -27,6 +28,10 @@ namespace terrain
   std::optional<std::string> removeMaterial(std::vector<TerrainMaterial>& palette, size_t index,
                                             const std::bitset<256>& inUse);
 
+  // Removes the entry whatever the ground carries, for a removal whose painted samples a remapForRemoval has already
+  // moved off it and its later entries. Refused only for an index out of range.
+  std::optional<std::string> eraseMaterial(std::vector<TerrainMaterial>& palette, size_t index);
+
   std::optional<std::string> renameMaterial(std::vector<TerrainMaterial>& palette, size_t index,
                                             const std::string& name);
 
@@ -39,6 +44,10 @@ namespace terrain
 
   std::optional<std::string> setMaterialTextures(std::vector<TerrainMaterial>& palette, size_t index,
                                                  const uuids::uuid& albedo, const uuids::uuid& specular);
+
+  // A 64-bit FNV-1a over every field of every entry in order, with each name length-prefixed, so two palettes hash
+  // equally only when they are equal (up to collisions). It ties a remap to the palette it was built for.
+  [[nodiscard]] uint64_t paletteHash(const std::vector<TerrainMaterial>& palette);
 }
 
 #endif //TERRAINPALETTE_H

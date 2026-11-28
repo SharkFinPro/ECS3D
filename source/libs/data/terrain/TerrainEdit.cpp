@@ -2,6 +2,7 @@
 #include "TerrainCodec.h"
 #include "TerrainReplication.h"
 #include "WireTypes.h"
+#include <algorithm>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -17,6 +18,8 @@ namespace terrain
                                   3 * sizeof(float) + 3 * sizeof(float);
 
     constexpr size_t boxBytes = 6 * sizeof(int32_t);
+
+    constexpr size_t remapBytes = sizeof(MaterialRemap);
 
     std::shared_ptr<const TerrainChunk> airChunk()
     {
@@ -86,6 +89,56 @@ namespace terrain
 
       return true;
     }
+    bool unpackRemap(net::MessageReader& reader, TerrainEditPayload& payload)
+    {
+      std::ranges::copy(reader.readBytes(remapBytes), payload.remap.begin());
+      payload.paletteHash = reader.read<uint64_t>();
+      const auto count = reader.read<uint32_t>();
+
+      if (!isValidRemap(payload.remap) || isIdentity(payload.remap) || count > maxPaletteSize)
+      {
+        return false;
+      }
+
+      payload.palette.resize(count);
+
+      for (TerrainMaterial& material : payload.palette)
+      {
+        material.name = reader.readString();
+        material.albedoTexture = reader.read<uuids::uuid>();
+        material.specularTexture = reader.read<uuids::uuid>();
+        material.color.r = reader.read<float>();
+        material.color.g = reader.read<float>();
+        material.color.b = reader.read<float>();
+      }
+
+      return true;
+    }
+
+    bool unpackBody(net::MessageReader& reader, TerrainEditPayload& payload)
+    {
+      switch (payload.kind)
+      {
+        case TerrainEditKind::brush:
+        {
+          const auto brush = unpackBrushOp(reader);
+          payload.brush = brush.value_or(BrushOp{});
+          return brush.has_value();
+        }
+        case TerrainEditKind::redistance:
+        {
+          const auto box = unpackBox(reader);
+          payload.box = box.value_or(SampleBox{});
+          return box.has_value();
+        }
+        case TerrainEditKind::setChunks:
+          return unpackSetChunks(reader, payload);
+        case TerrainEditKind::remapMaterials:
+          return unpackRemap(reader, payload);
+      }
+
+      return false;
+    }
   }
 
   net::Message packBrushEdit(const uuids::uuid& terrain, const uint64_t strokeId, const BrushOp& op)
@@ -138,6 +191,30 @@ namespace terrain
     return message;
   }
 
+  net::Message packRemapEdit(const uuids::uuid& terrain, const uint64_t strokeId, const MaterialRemap& remap,
+                             const uint64_t fromPaletteHash, const std::vector<TerrainMaterial>& palette)
+  {
+    if (palette.size() > maxPaletteSize)
+    {
+      throw std::length_error("Too many terrain materials for one palette");
+    }
+
+    net::Message message = startEdit(terrain, strokeId, TerrainEditKind::remapMaterials,
+                                     remapBytes + sizeof(uint64_t) + sizeof(uint32_t));
+    message.appendBytes(remap);
+    message.write(fromPaletteHash);
+    message.write(static_cast<uint32_t>(palette.size()));
+
+    for (const TerrainMaterial& material : palette)
+    {
+      message.writeString(material.name);
+      message.write(material.albedoTexture).write(material.specularTexture);
+      message.write(material.color.r).write(material.color.g).write(material.color.b);
+    }
+
+    return message;
+  }
+
   std::optional<TerrainEditPayload> unpackTerrainEdit(const net::Message& message)
   {
     if (message.getType() != net::MessageType::terrainEdit)
@@ -154,49 +231,14 @@ namespace terrain
       payload.strokeId = reader.read<uint64_t>();
       const auto kind = reader.read<uint8_t>();
 
-      if (payload.terrain.is_nil() || kind > static_cast<uint8_t>(TerrainEditKind::setChunks))
+      if (payload.terrain.is_nil() || kind > static_cast<uint8_t>(TerrainEditKind::remapMaterials))
       {
         return std::nullopt;
       }
 
       payload.kind = static_cast<TerrainEditKind>(kind);
 
-      switch (payload.kind)
-      {
-        case TerrainEditKind::brush:
-        {
-          const auto brush = unpackBrushOp(reader);
-          if (!brush)
-          {
-            return std::nullopt;
-          }
-
-          payload.brush = *brush;
-          break;
-        }
-
-        case TerrainEditKind::redistance:
-        {
-          const auto box = unpackBox(reader);
-          if (!box)
-          {
-            return std::nullopt;
-          }
-
-          payload.box = *box;
-          break;
-        }
-
-        case TerrainEditKind::setChunks:
-          if (!unpackSetChunks(reader, payload))
-          {
-            return std::nullopt;
-          }
-
-          break;
-      }
-
-      if (reader.remaining() != 0)
+      if (!unpackBody(reader, payload) || reader.remaining() != 0)
       {
         return std::nullopt;
       }

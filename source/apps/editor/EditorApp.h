@@ -22,6 +22,8 @@
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <TerrainBrushSession.h>
+#include <TerrainMaterialPrompts.h>
+#include <TerrainPaletteEditor.h>
 #include <TerrainToolState.h>
 #include <TerrainUndoState.h>
 #include <scenes/SceneManager.h>
@@ -35,6 +37,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -303,6 +306,13 @@ private:
   // Terrain mode: the viewport brush for the one selected terrain object, and the stroke it is drawing. The
   // brush's volume is the editor's own store volume, edited ahead of the server's echo.
   TerrainToolState m_terrainTool;
+  MaterialNameField m_terrainMaterialName;
+  MaterialColorField m_terrainMaterialColor;
+  TextureModeRows m_terrainTextureModes;
+  // The widget the color picker last changed under, so only it holds a color edit open.
+  uint32_t m_terrainColorWidget = 0;
+  MaterialNote m_terrainPaletteNote;
+  MaterialRemovePrompt m_terrainRemovePrompt;
   TerrainBrushSession m_terrainBrush;
   bool m_terrainPointerWasDown = false;
 
@@ -480,6 +490,58 @@ private:
   // The brush sliders and, when the terrain's voxel size caps the radius, the note saying so.
   void drawTerrainBrushControls(const std::shared_ptr<Terrain>& component);
   void drawTerrainMaterialSelector(const uuids::uuid& terrainUuid);
+  // A material's swatch button of side x side: its texture's thumbnail when it has one loaded, else its color, with
+  // the accent outline when active and the tooltip on hover. Returns whether it was clicked.
+  bool drawTerrainMaterialSwatch(const MaterialSwatch& swatch, float side, bool active, const std::string& tooltip);
+
+  // The Materials block of the Terrain section: a collapsible list of the palette's entries, Add material, and the
+  // selected entry's details with its name, surface, textures, move and remove.
+  void drawTerrainMaterials(const std::shared_ptr<Terrain>& component);
+  void drawTerrainMaterialList(const std::vector<terrain::TerrainMaterial>& palette);
+
+  // A palette intent's result for the details panel to run; at most one runs per frame.
+  using TerrainPaletteRun = std::function<void(TerrainPaletteEditor::Result, const TextureModeRows::Change&)>;
+
+  void drawTerrainMaterialDetails(const uuids::uuid& terrainUuid, size_t index,
+                                  const std::vector<terrain::TerrainMaterial>& palette,
+                                  const std::optional<std::string>& editRefusal);
+  // Returns whether the add applied.
+  bool drawTerrainAddMaterial(const uuids::uuid& terrainUuid, size_t paletteSize,
+                              const std::optional<std::string>& refusal);
+  void drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, size_t index, size_t paletteSize,
+                                const TerrainPaletteRun& run);
+  // The Color or Texture choice with its color picker or albedo slot, and the specular slot.
+  void drawTerrainMaterialSurface(const uuids::uuid& terrainUuid, size_t index,
+                                  const terrain::TerrainMaterial& material, bool canEdit, const TerrainPaletteRun& run);
+  void drawTerrainMaterialColor(const uuids::uuid& terrainUuid, size_t index, const terrain::TerrainMaterial& material,
+                                bool canEdit, const TerrainPaletteRun& run);
+
+  // Remove on the details panel: an entry the ground paints opens the prompt for what it becomes; any other removes
+  // now, with the remap that shifts later painted entries down when there is one.
+  void requestTerrainMaterialRemove(const uuids::uuid& terrainUuid, size_t index, const TerrainPaletteRun& run);
+  void confirmTerrainMaterialRemove(const uuids::uuid& terrainUuid);
+  // The modal that asks what a removed material's painted ground becomes.
+  void drawTerrainRemovePrompt(const uuids::uuid& terrainUuid);
+  void drawTerrainRemovePromptBody(const uuids::uuid& terrainUuid,
+                                   const std::vector<terrain::TerrainMaterial>& palette);
+  void drawTerrainRemoveChoices(const std::vector<terrain::TerrainMaterial>& palette);
+  // Predicts a removal's or move's remap and palette here, sends them as one edit and records one undo entry.
+  [[nodiscard]] std::optional<std::string> sendTerrainRemap(const uuids::uuid& terrainUuid,
+                                                            const TerrainPaletteEditor::Result& result);
+
+  // Commits a material name typed in a block that is no longer drawn.
+  void flushTerrainMaterialName();
+
+  // Applies a new palette to the terrain here, sends it and records it for undo; the refusal when it cannot.
+  [[nodiscard]] std::optional<std::string> applyTerrainPalette(const uuids::uuid& terrainUuid,
+                                                               std::vector<terrain::TerrainMaterial> palette);
+
+  // Runs a palette intent's result: applies it and keeps the selection on its material, or raises the refusal on
+  // noteIndex, the material the edit was about. True when it applied.
+  bool finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, size_t noteIndex, TerrainPaletteEditor::Result result,
+                                const TextureModeRows::Change& change = {});
+
+  [[nodiscard]] TerrainPaletteEditor::Context terrainPaletteContext(const uuids::uuid& terrainUuid);
 
   // Feeds one frame's pointer to the stroke and makes the terrain's bounds follow what it changed.
   void driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
@@ -504,6 +566,9 @@ private:
   // Shared tail of undo()/redo(): sends whichever payload the outcome carries through the normal send
   // path, or logs why nothing was sent. isUndo only picks the wording ("undo" vs. "redo") for the log.
   void reportHistoryOutcome(const edits::HistoryOutcome& outcome, bool isUndo);
+  // Its messagePayload and terrainPayload branches; false when the history had to be cleared.
+  bool sendHistoryMessage(const edits::HistoryOutcome& outcome, const std::string& action);
+  bool sendHistoryTerrainStep(const edits::TerrainSetChunks& payload, const std::string& action);
 
   // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
   // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if

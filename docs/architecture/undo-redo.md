@@ -139,6 +139,24 @@ validation reads a stale volume and refuses. Null and air are the same chunk whe
 refuses a setChunks message with either as a whole; `commandForTerrainStroke` keeps the first entry of a repeated
 coordinate. `recordBatch` refuses a `terrainStroke`.
 
+A material removal or move is one entry for both halves: `edits::predictTerrainRemap` (`edits/RecordTerrainEdits.h`)
+remaps the editor's volume and applies the new palette, capturing each changed chunk's pointer from before, and returns
+the `remapMaterials` message with an `EditCommand::terrainPaletteRemap`: a `terrainStroke` whose data also holds a
+`TerrainPaletteRemap` (the palette before and after and the table, `edits/TerrainStrokeTypes.h`). Its chunk list may
+be empty. Validation also compares the live palette with the after (undo) or before (redo) palette, so an entry whose
+palette or chunks changed underneath is refused and dropped whole. The payload's `TerrainSetChunks::palette`
+(`TerrainPaletteStep`) carries the palette the step leaves; a redo also carries the table and the hash of the before
+palette. `edits::packTerrainStep` packs an undo as the setChunks messages followed by the palette addAsset and a redo
+as the one `remapMaterials` edit, and `edits::predictTerrainStep` applies either to the editor's store first
+(`EditorApp::sendHistoryTerrainStep`). Such a step is answered by a snapshot, so it does not stage a terrain on
+`TerrainUndoState`. A trim drops the whole entry, and `pinnedBytes` counts its chunks like any stroke's;
+`TerrainRemapUndoTest.cpp` walks both directions against a server.
+
+Limitations: only the remap itself carries the hash of its base palette. Plain palette edits (`replaceAsset`) and the
+undo of a removal or move (setChunks then a palette addAsset) are validated in the editor against its own view, so
+concurrent palette edits from two editors can race, and the last writer wins, until every palette operation carries a
+base-palette hash end to end.
+
 A stroke entry pins every chunk it touched, before and after, so the depth limit alone does not bound memory.
 `EditCommand::pinnedBytes()` sums `byteSize()` over those chunks (a terrain asset command counts the chunk map it
 holds; 0 for every other command, no deduplication), and `EditHistory` keeps the total over both stacks exact

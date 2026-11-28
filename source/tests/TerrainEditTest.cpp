@@ -5,6 +5,8 @@
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainCodec.h"
 #include "terrain/TerrainEdit.h"
+#include "terrain/TerrainMaterialRemap.h"
+#include "terrain/TerrainStore.h"
 #include "terrain/TerrainReplication.h"
 #include "terrain/TerrainTypes.h"
 
@@ -65,6 +67,16 @@ namespace {
     op.planePoint = { 81.0f, 14.0f, 82.0f };
     op.planeNormal = { 0.1f, 1.0f, 0.0f };
     return op;
+  }
+
+  // A remap of a two-entry palette that swaps its materials.
+  net::Message sampleRemapEdit()
+  {
+    auto remap = terrain::identityRemap();
+    remap[0] = 1;
+    remap[1] = 0;
+    const std::vector<terrain::TerrainMaterial> palette{ { .name = "b" }, { .name = "a" } };
+    return terrain::packRemapEdit(terrainUUID, strokeId, remap, 77, palette);
   }
 
   terrain::SampleBox sampleBox()
@@ -277,7 +289,7 @@ TEST(TerrainEdit, RefusesAnUnknownKind)
   const auto headerOnly = bytesOf(header);
   ASSERT_EQ(headerOnly.size(), headerBytes);
 
-  for (const uint8_t kind : { uint8_t{ 3 }, uint8_t{ 4 }, uint8_t{ 255 } })
+  for (const uint8_t kind : { uint8_t{ 4 }, uint8_t{ 5 }, uint8_t{ 255 } })
   {
     auto bytes = headerOnly;
     bytes[headerBytes - 1] = kind;
@@ -443,6 +455,7 @@ TEST(TerrainEdit, RefusesTrailingBytes)
   const std::vector<net::Message> goods{
     terrain::packBrushEdit(terrainUUID, strokeId, sampleBrush()),
     terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox()),
+    sampleRemapEdit(),
     rawSetChunks({ validRaw() })
   };
 
@@ -461,6 +474,7 @@ TEST(TerrainEdit, RefusesEveryTruncation)
   const std::vector<net::Message> goods{
     terrain::packBrushEdit(terrainUUID, strokeId, sampleBrush()),
     terrain::packRedistanceEdit(terrainUUID, strokeId, sampleBox()),
+    sampleRemapEdit(),
     rawSetChunks({ validRaw(), validRaw({ 5, 6, 7 }) })
   };
 

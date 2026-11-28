@@ -509,12 +509,13 @@ TEST(TerrainEditApply, EveryRefusalHasItsOwnText)
 
   for (const auto refusal : { terrain::TerrainEditRefusal::none, terrain::TerrainEditRefusal::unknownTerrain,
                               terrain::TerrainEditRefusal::invalidOp, terrain::TerrainEditRefusal::tooLarge,
-                              terrain::TerrainEditRefusal::revisionsExhausted })
+                              terrain::TerrainEditRefusal::revisionsExhausted,
+                              terrain::TerrainEditRefusal::paletteChanged })
   {
     const std::string_view text = terrain::refusalText(refusal);
     EXPECT_FALSE(text.empty());
     texts.insert(text);
   }
 
-  EXPECT_EQ(texts.size(), 5u);
+  EXPECT_EQ(texts.size(), 6u);
 }

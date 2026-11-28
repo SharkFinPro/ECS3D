@@ -158,8 +158,7 @@ The headless `TerrainCreateFlow.h` holds the request, its validation, the height
   derive from the same cap, and the form shows the estimated chunks and a memory ceiling.
 - The decode uses `stbi_load_16` forced to one channel, with 8-bit scaled by 257. A picked path is UTF-8
   (`pathFromUtf8`).
-- The volume is `fillFlat` over a few voxels of solid, or `fillFromHeightmap`, with an empty palette like every
-  other terrain description.
+- The volume is `fillFlat` over a few voxels of solid, or `fillFromHeightmap`, and the description holds one palette entry, "Ground", a flat gray (0.6) without textures.
 
 Create sends the terrain through `EditorApp::onCreateTerrain`:
 
@@ -194,8 +193,11 @@ prefab body shows none) or with the `terrainMode` keybind. While it is on, the s
 forces strength 1 and falloff 0). Add, Flatten and Paint also show a Material row of color swatches, one per entry of the terrain's
 palette (the eight renderer default colors when it has none; `selectableMaterials`) that sets `TerrainToolState::activeMaterial`,
 a session choice that `clampMaterial` bounds when the stroke template is built. The row wraps like the tool buttons,
-the active swatch has an accent outline and the tooltip is the `materialLabel`. `materialSwatchColor` alone decides a
-swatch: the renderer's default color (wrapped by index) for an empty palette, else neutral gray. Add and Flatten write
+the active swatch has an accent outline and the tooltip is the `materialLabel`. `materialSwatch` alone decides a
+swatch: the renderer's default color (wrapped by index) for an empty palette, an entry's flat color, or its albedo
+texture, which `EditorApp::drawTerrainMaterialSwatch` draws as an `ImGui::ImageButton` of the thumbnail
+`textureThumbnail` (`components/AssetSlot.h`) gets from `GpuAssetCache`, falling back to a neutral gray while the
+thumbnail is not available. Add and Flatten write
 the material into the ground they raise and Paint into existing ground. A Paint stroke changes materials only, so
 `strokeRedistances` makes its release send and predict no redistance, and `strokeAim` keeps its cursor on the starting
 surface however far it jumps (the upright-plane fallback would land off the ground, where it paints nothing). The tool
@@ -206,6 +208,61 @@ drawn, since the server refuses a larger brush. The headless parts are `TerrainS
 path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
 [viewport-gizmos.md](viewport-gizmos.md). A finished stroke is one undo step ([undo-redo.md](undo-redo.md)), and the
 unsaved flag is held for the length of a stroke. A new brush starts on material 0.
+
+The Terrain section also draws a Materials block, through a second `registerColliderEditors` callback
+(`drawMaterials`, `EditorApp::drawTerrainMaterials`, in `EditorAppTerrainPalette.cpp`), whether or not Sculpt is on. It is
+an `ImGui::CollapsingHeader`, open by default, holding a bordered list of one line per palette entry (its swatch and
+its `materialLabel` as a Selectable) whose height `TerrainPaletteEditor::listHeight` caps at `maxVisibleRows` (8) lines,
+scrolling beyond. The selected entry is `TerrainToolState::activeMaterial` (clamped), so clicking a line also picks the
+paint material, and the toolbar swatches move the selection too. Add material sits under the list and selects the new
+entry. Only the selected entry's details are drawn below it: a name field, a Color or Texture choice, a specular
+texture slot (`drawAssetSlot`), Move up, Move down and Remove; Add material is disabled at `terrain::maxPaletteSize`
+entries. The headless `TerrainPaletteEditor.h` turns each intent into a new palette or a
+refusal string with the `TerrainPalette.h` functions (a new entry is "Material N"; Remove scans `materialsInUse` only
+when clicked) and gates editing on an editable connection, a stopped scene and a terrain the store holds: a palette edit
+during Play would outlive Stop on the server while the play history is discarded. The gate's reason shows under the
+block; an intent's refusal is a `MaterialNote` (`TerrainMaterialPrompts.h`) raised on the material the edit was about,
+shown beside Remove in the secondary text color, and cleared once a frame draws another material or terrain. After an
+applied move or remove of the shown terrain `selectionToFollow` keeps a moved entry selected and hands a removed one's
+selection to its neighbor; no other edit touches the selection. The frame Add material applies skips the details, so a
+pending name or color settles the next frame through `endFrame` rather than being dropped.
+
+Remove and the moves keep painted ground looking the same (`EditorAppTerrainMaterialRemove.cpp`).
+`TerrainPaletteEditor::remove` and `move` always return, beside the palette, the `remapForRemoval` or `remapForMove`
+table: `materialsInUse` sees only solid samples, and air samples that a later Add exposes must shift too. Both are
+refused by `TerrainPaletteEditor::remapRefusal` unless the ordinary gate passes, the view has received the whole terrain
+once (`TerrainViewSync::hasWholeTerrain`: its volume reached the description's `chunkCount`, so `materialsInUse` and
+the undo capture see every chunk; carving chunks to air afterward does not undo it, and a new load or a replaced volume
+does) and no
+brush stroke is active or awaiting its final chunks. On the click the editor scans `materialsInUse`, and removing an
+entry solid ground paints first opens a `MaterialRemovePrompt` modal listing the other
+materials (swatch and label) for what its ground becomes, defaulting to `defaultReplacement` (the previous entry, or the
+next one for entry 0); the prompt closes without acting if the palette changes underneath it or a frame does not draw
+the Materials block (`endFrame`). The last material is never removed: a terrain keeps at least one.
+`finishTerrainPaletteEdit` sends a removal or move through `sendTerrainRemap`, which predicts the remap and the new
+palette with `edits::predictTerrainRemap` (refusing a palette that is invalid or unchanged before anything is sent),
+sends the one `remapMaterials` terrainEdit and records its one undo entry ([undo-redo.md](undo-redo.md)); no separate
+palette addAsset is sent. The data side keeps `terrain::removeMaterial`, which refuses a painted
+entry, and adds `eraseMaterial` for the remapped path.
+`EditorApp::applyTerrainPalette` builds the command with `commandForTerrainPalette` from the pre-edit store, applies
+the replacement through `applyAddAssetWithTerrain` (no upload expected), sends the addAsset and records the command.
+Every intent is built from the palette the store holds when it runs, and once one edit has applied in a frame (Add
+material, or one in the details) no other runs that frame, so two edits never race on a stale copy. Undo and redo
+apply the palette payload locally first ([undo-redo.md](undo-redo.md)).
+
+A name or a dragged color is a `PendingField` (`MaterialNameField`, `MaterialColorField`): it commits one palette edit
+when it settles (the field is left, the picker's own widget is released), compares colors with a small tolerance, and
+belongs to the material it started on. It settles as soon as a frame draws without its details (another terrain,
+another material selected, the block collapsed), and it is dropped when the material at its index is no longer the one
+it started on.
+
+A material is a flat Color while its albedo texture is nil (derived, not stored): Color shows an `ImGui::ColorEdit3` and
+Texture shows the albedo slot. Switching to Color clears the albedo and keeps the color and specular. A row switched to
+Texture before a texture is picked is held by `TextureModeRows`: it follows its material through the block's own moves
+and removes, ends when the row gets an albedo, and is dropped when the palette changes any other way (undo, redo,
+snapshot) or another terrain is shown. New entries take `vke::s_defaultVolumeColors` by index, and the swatches in the
+list and the toolbar show an entry's color or its albedo texture's thumbnail. A terrain created
+from the asset browser starts with one gray "Ground" entry without textures.
 
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`

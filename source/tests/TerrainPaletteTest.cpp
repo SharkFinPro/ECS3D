@@ -1,13 +1,18 @@
 #include <gtest/gtest.h>
 
 #include "TerrainAssetUndoFixtures.h"
+#include "TerrainPaletteEditor.h"
 #include "Replication.h"
 #include "assets/AssetRegistry.h"
 #include "edits/EditCommand.h"
 #include "edits/RecordTerrainEdits.h"
+#include "edits/TerrainSetChunks.h"
 #include "edits/TerrainRestore.h"
 #include "terrain/TerrainAddition.h"
 #include "terrain/TerrainChunk.h"
+#include "terrain/TerrainEdit.h"
+#include "terrain/TerrainEditApply.h"
+#include "terrain/TerrainMaterialRemap.h"
 #include "terrain/TerrainPalette.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
@@ -182,6 +187,22 @@ TEST(TerrainPalette, RemoveMaterialRefusesAnyIndexAtOrBelowAPaintedOne)
   EXPECT_FALSE(terrain::removeMaterial(palette, 0, {}).has_value());
   ASSERT_EQ(palette.size(), 2u);
   EXPECT_EQ(palette[0].name, "m1");
+}
+
+TEST(TerrainPalette, EraseMaterialRemovesAPaintedEntryThatRemoveMaterialRefuses)
+{
+  auto refused = paletteOf(3);
+  EXPECT_TRUE(terrain::removeMaterial(refused, 1, usedIndices({ 1 })).has_value());
+  EXPECT_EQ(refused, paletteOf(3));
+
+  auto erased = paletteOf(3);
+  EXPECT_FALSE(terrain::eraseMaterial(erased, 1).has_value());
+  ASSERT_EQ(erased.size(), 2u);
+  EXPECT_EQ(erased[0].name, "m0");
+  EXPECT_EQ(erased[1].name, "m2");
+
+  EXPECT_TRUE(terrain::eraseMaterial(erased, 2).has_value());
+  EXPECT_EQ(erased.size(), 2u);
 }
 
 TEST(TerrainPalette, RenameMoveAndTextureEditsApplyAndRefuseBadInput)

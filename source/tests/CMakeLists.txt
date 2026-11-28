@@ -260,9 +260,11 @@ add_executable(${PROJECT_NAME}
   TerrainFormatTest.cpp
   TerrainGateTest.cpp
   TerrainGeneratorsTest.cpp
+  TerrainMaterialRemapTest.cpp
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
   TerrainPaletteBindingTest.cpp
+  TerrainPaletteEditorTest.cpp
   TerrainPaletteTest.cpp
   TerrainPaletteUndoApplyTest.cpp
   TerrainPhysicsTest.cpp
@@ -274,6 +276,10 @@ add_executable(${PROJECT_NAME}
   TerrainReadoutTest.cpp
   TerrainRedistanceTest.cpp
   TerrainRegionFormatTest.cpp
+  TerrainRemapCommandTest.cpp
+  TerrainRemapEditTest.cpp
+  TerrainRemapFlowFixtures.h
+  TerrainRemapUndoTest.cpp
   TerrainRestingFixtures.h
   TerrainRestingTest.cpp
   TerrainReplicationTest.cpp
@@ -295,6 +301,7 @@ add_executable(${PROJECT_NAME}
   TerrainUndoStateTest.cpp
   TerrainUploadTest.cpp
   TerrainViewSyncTest.cpp
+  TerrainWholeTerrainTest.cpp
   TerrainVolumeSourceTest.cpp
   TerrainVolumeTest.cpp
   ProjectFingerprintTest.cpp

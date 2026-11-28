@@ -21,8 +21,9 @@ Related design notes: [undo-redo.md](../../../docs/architecture/undo-redo.md),
   `PrefabBodyEdits.h`, `KeybindRebindFlow.h`, `AssetCreateFlow.h`, `ProfilerPanelState.h`, `ProfilerServerLane.h`,
   `ProfilerReadout.h`, `TerrainReadout.h`, `ProfilerCapture.h`, `EditorConnectionState.h`, `DockLayoutFit.h`,
   `DefaultDockLayout.h`, `PickClick.h`, `GizmoVisibility.h`, `TerrainStroke.h`, `TerrainToolState.h`,
-  `TerrainBrushSession.h`, `TerrainCursor.h`, `TerrainCreateFlow.h`, `TerrainPaletteUndo.h`) so the
-  test suite compiles them without ImGui. The ImGui code draws.
+  `TerrainBrushSession.h`, `TerrainCursor.h`, `TerrainCreateFlow.h`, `TerrainPaletteEditor.h`,
+  `TerrainMaterialPrompts.h`, `TerrainPaletteUndo.h`) so the test suite compiles them without ImGui. The ImGui code
+  draws.
 - Numeric widgets come from `GuiComponents`, which refuse a non-finite entry.
 - Preferences read and write `ECS3DSettings` directly; they are local, not replicated.
 - A file that uses ImGui internals such as `ImGui::GetActiveID` includes `<imgui_internal.h>` itself. MSVC compiles

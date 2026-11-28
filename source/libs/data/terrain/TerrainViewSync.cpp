@@ -15,6 +15,7 @@ namespace terrain
     {
       store.resetVolumes();
       m_completed.clear();
+      m_whole.clear();
     }
 
     return changed;
@@ -24,6 +25,31 @@ namespace terrain
   {
     m_loadId.reset();
     m_completed.clear();
+    m_whole.clear();
+  }
+
+  bool TerrainViewSync::hasWholeTerrain(const TerrainStore& store, const uuids::uuid& terrain)
+  {
+    const TerrainDescription* description = store.description(terrain);
+    const std::shared_ptr<const TerrainVolume> volume = store.find(terrain);
+    if (!description || !volume)
+    {
+      return false;
+    }
+
+    const auto recorded = m_whole.find(terrain);
+    if (recorded != m_whole.end() && recorded->second.lock() == volume)
+    {
+      return true;
+    }
+
+    if (volume->chunks().size() < description->chunkCount)
+    {
+      return false;
+    }
+
+    m_whole[terrain] = volume;
+    return true;
   }
 
   ViewApplyOutcome TerrainViewSync::apply(TerrainStore& store, const SceneManager& scenes, const net::Message& message,
@@ -70,6 +96,8 @@ namespace terrain
     {
       invalidateTerrainBounds(scenes, payload.terrain);
     }
+
+    static_cast<void>(hasWholeTerrain(store, payload.terrain));
 
     const TerrainDescription* description = store.description(payload.terrain);
     const auto volume = store.find(payload.terrain);

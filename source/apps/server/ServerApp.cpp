@@ -528,9 +528,9 @@ terrain::TerrainStreamer::FocusFor ServerApp::terrainOriginFocus()
   };
 }
 
-void ServerApp::flushTerrainEcho(const std::chrono::steady_clock::time_point now)
+void ServerApp::flushTerrainEcho(const std::chrono::steady_clock::time_point now, const bool force)
 {
-  if (!terrainEchoDue(m_terrainEcho.pending(), now - m_lastTerrainEchoTime))
+  if (!terrainEchoDue(m_terrainEcho.pending(), force ? terrain::terrainEchoInterval : now - m_lastTerrainEchoTime))
   {
     return;
   }

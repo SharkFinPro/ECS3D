@@ -5,6 +5,7 @@
 #include <objects/components/Component.h>
 #include <edits/EditHistory.h>
 #include <edits/TerrainSetChunks.h>
+#include <Replication.h>
 #include <terrain/TerrainBinding.h>
 #include <terrain/TerrainStore.h>
 #include <SaveUI.h>
@@ -27,6 +28,41 @@ namespace {
   std::string conflictLabel(const std::optional<uuids::uuid>& conflict)
   {
     return conflict ? uuids::to_string(*conflict) : std::string("the target");
+  }
+
+  // Why an undo or redo sent nothing, for the log.
+  std::string historyRefusalText(const edits::HistoryOutcome& outcome, const std::string& action)
+  {
+    switch (outcome.result)
+    {
+      case edits::HistoryResult::applied:
+      case edits::HistoryResult::historyEmpty:
+        break;
+      case edits::HistoryResult::notUndoable:
+        return "Can't " + action + ": that command has no reverse yet.";
+      case edits::HistoryResult::targetMissing:
+        return "Can't " + action + ": " + conflictLabel(outcome.conflict) + " no longer exists.";
+      case edits::HistoryResult::targetChanged:
+        return "Can't " + action + ": " + conflictLabel(outcome.conflict) + " has changed since that edit.";
+      case edits::HistoryResult::targetActive:
+        return "Can't " + action + ": that scene is active; load another scene first.";
+    }
+
+    return "Nothing to " + action + ".";
+  }
+
+  // The server's copy of a terrain whose restore failed after the addAsset went out.
+  void removeServerTerrainCopy(net::NetClient& client, const uuids::uuid& terrainUuid)
+  {
+    try
+    {
+      client.send(replication::packRemoveAsset(replication::buildRemoveAsset(terrainUuid)));
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::editor, std::string("The server's copy of the terrain could not be removed: ") +
+                                        e.what());
+    }
   }
 }
 
@@ -180,144 +216,126 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
 {
   const std::string action = isUndo ? "undo" : "redo";
 
-  switch (outcome.result)
+  if (!outcome.ok())
   {
-    case edits::HistoryResult::applied:
-      // Exactly one of these is set (see HistoryOutcome), fixed per command kind by payloadForm(): a
-      // component value edit or asset op is the networkMessage form (editComponent/addAsset/
-      // replaceAsset/renameAsset/removeAsset), every structural kind (addObject, removeObject,
-      // reparentObject, reorderObject, renameObject, addComponent, removeComponent, duplicateObject,
-      // instantiatePrefab) is the sceneEdit json form - a single command's own op, or one replication::
-      // buildBatch of a grouped entry's ops (see EditHistory::undo/redo) - chunked into a sceneEdit
-      // message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit, and a terrain
-      // stroke is the terrainChunks form: setChunks terrainEdit messages. They are packed first, so a pack
-      // failure leaves the view and the server untouched; then applied to the editor's own volume as the
-      // prediction the server's hash-only echo confirms; then sent. A send that fails partway leaves the
-      // view ahead of the server, which the echo's hash mismatch repairs with a full chunk request.
-      if (outcome.messagePayload)
-      {
-        // A terrain comes back through the same steps as a create: the editor's own registry and store first, so the
-        // snapshot that follows keeps the description and chunks, then the addAsset, then the chunk upload the server
-        // holds Play for. A failure rolls the editor back and clears the history, since the entry cannot be replayed.
-        if (outcome.terrainRestore)
-        {
-          const auto result = restoreTerrain(*outcome.terrainRestore,
-                                             [this, &outcome] { m_netClient->send(*outcome.messagePayload); });
-          if (result != edits::TerrainRestoreResult::applied)
-          {
-            if (result == edits::TerrainRestoreResult::failedAfterSend)
-            {
-              try
-              {
-                m_netClient->send(replication::packRemoveAsset(
-                  replication::buildRemoveAsset(outcome.terrainRestore->description.uuid)));
-              }
-              catch (const std::exception& e)
-              {
-                Log::error(LogCategory::editor, std::string("The server's copy of the terrain could not be removed: ") +
-                                                  e.what());
-              }
-            }
-
-            logMessage("Error", "The terrain " + action + " could not be applied (" +
-                                  (result == edits::TerrainRestoreResult::refused ? "the editor refused the terrain"
-                                                                                   : "it failed and was rolled back") +
-                                  "); clearing the edit history.");
-            m_playHistory.current().clear();
-            break;
-          }
-        }
-        else
-        {
-          if (outcome.terrainRemoved)
-          {
-            m_terrainUpload.forget(*outcome.terrainRemoved);
-            m_createdTerrains.erase(*outcome.terrainRemoved);
-          }
-
-          // A palette replacement applies here first, so the next undo or redo validates against the palette the
-          // server is about to hold instead of the one from before this one.
-          if (TerrainPaletteUndo::appliesLocally(outcome, *m_terrainStore) &&
-              !replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry,
-                                                     *m_terrainStore,
-                                                     replication::unpackAddAsset(*outcome.messagePayload), false))
-          {
-            Log::warn(LogCategory::editor, "The terrain palette " + action +
-                                             " could not be applied here; the next undo may be refused.");
-          }
-
-          m_netClient->send(*outcome.messagePayload);
-        }
-      }
-      else if (outcome.jsonPayload)
-      {
-        const auto payload = outcome.jsonPayload->dump();
-        net::Message message(net::MessageType::sceneEdit);
-        for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-        {
-          message.write(chunk);
-        }
-        m_netClient->send(message);
-      }
-      else if (outcome.terrainPayload)
-      {
-        const edits::TerrainSetChunks& payload = *outcome.terrainPayload;
-
-        std::vector<net::Message> messages;
-        try
-        {
-          messages = edits::packSetChunksEdits(payload);
-        }
-        catch (const std::exception& e)
-        {
-          logMessage("Error", "The terrain " + action + " could not be packed (" + e.what() +
-                              "); clearing the edit history.");
-          m_playHistory.current().clear();
-          break;
-        }
-
-        if (const auto volume = m_terrainStore->find(payload.terrain))
-        {
-          edits::predictSetChunks(*volume, payload);
-          terrain::invalidateTerrainBounds(*m_sceneManager, payload.terrain);
-        }
-
-        m_terrainUndo.stage(payload.terrain);
-
-        try
-        {
-          for (const net::Message& message : messages)
-          {
-            m_netClient->send(message);
-          }
-        }
-        catch (const std::exception& e)
-        {
-          logMessage("Error", "The terrain " + action + " could not be sent in full (" + e.what() +
-                              "); the server's terrain may differ from this view until its chunks arrive.");
-        }
-      }
-      noteRecordedEdit();
-      break;
-
-    case edits::HistoryResult::historyEmpty:
-      logMessage("Info", "Nothing to " + action + ".");
-      break;
-
-    case edits::HistoryResult::notUndoable:
-      logMessage("Info", "Can't " + action + ": that command has no reverse yet.");
-      break;
-
-    case edits::HistoryResult::targetMissing:
-      logMessage("Info", "Can't " + action + ": " + conflictLabel(outcome.conflict) + " no longer exists.");
-      break;
-
-    case edits::HistoryResult::targetChanged:
-      logMessage("Info", "Can't " + action + ": " + conflictLabel(outcome.conflict) + " has changed since that edit.");
-      break;
-
-    case edits::HistoryResult::targetActive:
-      logMessage("Info", "Can't " + action + ": that scene is active; load another scene first.");
-      break;
+    logMessage("Info", historyRefusalText(outcome, action));
+    return;
   }
+
+  // Exactly one payload is set, fixed per command kind by payloadForm(): an asset or component message, a terrain
+  // step (sendHistoryTerrainStep) or the sceneEdit json of one command or a grouped entry, chunked into a sceneEdit
+  // message the same way EditorApp::onSceneEdit sends a normal edit.
+  if (outcome.messagePayload ? !sendHistoryMessage(outcome, action)
+                             : outcome.terrainPayload && !sendHistoryTerrainStep(*outcome.terrainPayload, action))
+  {
+    return;
+  }
+
+  if (outcome.jsonPayload)
+  {
+    const auto payload = outcome.jsonPayload->dump();
+    net::Message message(net::MessageType::sceneEdit);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
+  }
+
+  noteRecordedEdit();
+}
+
+bool EditorApp::sendHistoryMessage(const edits::HistoryOutcome& outcome, const std::string& action)
+{
+  // A terrain comes back through the same steps as a create: the editor's own registry and store first, so the
+  // snapshot that follows keeps the description and chunks, then the addAsset, then the chunk upload the server
+  // holds Play for. A failure rolls the editor back and clears the history, since the entry cannot be replayed.
+  if (outcome.terrainRestore)
+  {
+    const auto result = restoreTerrain(*outcome.terrainRestore,
+                                       [this, &outcome] { m_netClient->send(*outcome.messagePayload); });
+    if (result == edits::TerrainRestoreResult::applied)
+    {
+      return true;
+    }
+
+    if (result == edits::TerrainRestoreResult::failedAfterSend)
+    {
+      removeServerTerrainCopy(*m_netClient, outcome.terrainRestore->description.uuid);
+    }
+
+    logMessage("Error", "The terrain " + action + " could not be applied (" +
+                          (result == edits::TerrainRestoreResult::refused ? "the editor refused the terrain"
+                                                                           : "it failed and was rolled back") +
+                          "); clearing the edit history.");
+    m_playHistory.current().clear();
+    return false;
+  }
+
+  if (outcome.terrainRemoved)
+  {
+    m_terrainUpload.forget(*outcome.terrainRemoved);
+    m_createdTerrains.erase(*outcome.terrainRemoved);
+  }
+
+  // A palette replacement applies here first, so the next undo or redo validates against the palette the server is
+  // about to hold instead of the one from before this one.
+  if (TerrainPaletteUndo::appliesLocally(outcome, *m_terrainStore) &&
+      !replication::applyAddAssetWithTerrain(*m_assetRegistry, *m_sceneManager, m_componentRegistry, *m_terrainStore,
+                                             replication::unpackAddAsset(*outcome.messagePayload), false))
+  {
+    Log::warn(LogCategory::editor, "The terrain palette " + action +
+                                     " could not be applied here; the next undo may be refused.");
+  }
+
+  m_netClient->send(*outcome.messagePayload);
+  return true;
+}
+
+// The messages are packed first, so a pack failure leaves the view and the server untouched; then the step is applied
+// to the editor's own store as the prediction the server's echo confirms; then sent. A send that fails partway leaves
+// the view ahead of the server, which the echo's hash mismatch repairs with a full chunk request. A material remap's
+// step is answered by a snapshot (it replaces the palette), which ends the in-flight gate, so it stages no terrain.
+bool EditorApp::sendHistoryTerrainStep(const edits::TerrainSetChunks& payload, const std::string& action)
+{
+  std::vector<net::Message> messages;
+  try
+  {
+    messages = edits::packTerrainStep(payload, *m_terrainStore);
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", "The terrain " + action + " could not be packed (" + e.what() +
+                        "); clearing the edit history.");
+    m_playHistory.current().clear();
+    return false;
+  }
+
+  if (!edits::predictTerrainStep(*m_terrainStore, payload))
+  {
+    Log::warn(LogCategory::editor, "The terrain " + action +
+                                     " could not be applied here; the server's chunks repair it.");
+  }
+
+  terrain::invalidateTerrainBounds(*m_sceneManager, payload.terrain);
+
+  if (!payload.palette)
+  {
+    m_terrainUndo.stage(payload.terrain);
+  }
+
+  try
+  {
+    for (const net::Message& message : messages)
+    {
+      m_netClient->send(message);
+    }
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", "The terrain " + action + " could not be sent in full (" + e.what() +
+                        "); the server's terrain may differ from this view until its chunks arrive.");
+  }
+
+  return true;
 }

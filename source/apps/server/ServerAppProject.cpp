@@ -15,6 +15,7 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <chrono>
 #include <exception>
 #include <string>
 #include <vector>
@@ -244,6 +245,12 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
   {
     Log::warn(LogCategory::server, "Refused a terrain edit for terrain " + uuids::to_string(edit->terrain)
       + " from connection " + connection + ": " + std::string(terrain::refusalText(result.refusal)));
+
+    if (terrainEditRefusalNeedsResync(result.refusal))
+    {
+      resyncTerrainView(*edit, senderId);
+    }
+
     return;
   }
 
@@ -251,6 +258,26 @@ void ServerApp::handleTerrainEdit(const net::Message& message, const int32_t sen
   {
     m_terrainEcho.recordEdit(edit->terrain, result.changed, senderId);
   }
+
+  // The chunks go out before the snapshot that carries the palette, so another view draws the old palette over the
+  // new indices only for as long as the two messages take to arrive.
+  if (result.paletteReplaced)
+  {
+    flushTerrainEcho(std::chrono::steady_clock::now(), true);
+    broadcastSnapshot(net::SnapshotReason::assetChange);
+  }
+}
+
+void ServerApp::resyncTerrainView(const terrain::TerrainEditPayload& edit, const int32_t senderId)
+{
+  const auto coords = terrain::restampRefusedRemap(*m_terrainStore, edit);
+  if (!coords.empty())
+  {
+    m_terrainEcho.requestFull(edit.terrain, coords, senderId);
+  }
+
+  flushTerrainEcho(std::chrono::steady_clock::now(), true);
+  broadcastSnapshot(net::SnapshotReason::editRefusedResync);
 }
 
 void ServerApp::finishProjectLoad()

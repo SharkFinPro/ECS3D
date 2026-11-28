@@ -6,6 +6,7 @@
 #include <RemoteLogSink.h>
 #include <ServerLog.h>
 #include <scenes/SceneManager.h>
+#include <terrain/TerrainEditApply.h>
 #include <terrain/TerrainEditEcho.h>
 #include <chrono>
 #include <cmath>
@@ -45,6 +46,13 @@ inline constexpr auto serverStatsPeriod = std::chrono::milliseconds(250);
                                             const std::chrono::steady_clock::duration sinceLastFlush) noexcept
 {
   return pending && sinceLastFlush >= terrain::terrainEchoInterval;
+}
+
+// A remap refused for a palette the sender no longer shares was already predicted by the sender, chunks and palette
+// alike, and no echo will describe what the server kept, so the sender is sent the terrain again.
+[[nodiscard]] constexpr bool terrainEditRefusalNeedsResync(const terrain::TerrainEditRefusal refusal) noexcept
+{
+  return refusal == terrain::TerrainEditRefusal::paletteChanged;
 }
 
 // Hot reload is polled only where fixedUpdate never runs: an edit-mode server whose scene is stopped. A play

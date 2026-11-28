@@ -11,6 +11,8 @@ add_executable(${PROJECT_NAME}
   EditorAppPanels.cpp
   EditorAppProfiler.cpp
   EditorAppTerrain.cpp
+  EditorAppTerrainMaterialRemove.cpp
+  EditorAppTerrainPalette.cpp
   EditorAppUndoMenu.cpp
   EditorApp.h
   DarkTitleBar.cpp

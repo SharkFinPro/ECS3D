@@ -16,6 +16,7 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <chrono>
 #include <exception>
 #include <optional>
 #include <string>
@@ -225,6 +226,8 @@ void ServerApp::handleAddAsset(const net::Message& message, const int32_t sender
     Log::warn(LogCategory::server, "Refused to add an asset (" + type + ").");
   }
 
+  // A palette undo sends its setChunks just before this addAsset, so the chunks go out first, as they do for a remap.
+  flushTerrainEcho(std::chrono::steady_clock::now(), true);
   broadcastSnapshot(net::SnapshotReason::assetChange);
 }
 

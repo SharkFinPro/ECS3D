@@ -414,31 +414,18 @@ void EditorApp::drawTerrainMaterialSelector(const uuids::uuid& terrainUuid)
     }
 
     const auto material = static_cast<uint8_t>(index);
-    const glm::vec3 color = materialSwatchColor(palette, material);
     ImGui::PushID(static_cast<int>(index));
 
-    if (ImGui::ColorButton("##material", ImVec4(color.r, color.g, color.b, 1.0f),
-                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop |
-                             ImGuiColorEditFlags_NoAlpha,
-                           ImVec2(side, side)))
+    if (drawTerrainMaterialSwatch(materialSwatch(palette, material), side, material == active,
+                                  materialLabel(palette, material)))
     {
       m_terrainTool.setActiveMaterial(material);
-    }
-
-    if (material == active)
-    {
-      ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-                                          ImGui::ColorConvertFloat4ToU32(theme::accent), 2.0f, 0, 2.0f);
-    }
-
-    if (ImGui::IsItemHovered())
-    {
-      ImGui::SetTooltip("%s", materialLabel(palette, material).c_str());
     }
 
     ImGui::PopID();
   }
 }
+
 
 void EditorApp::driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,
                                   const TerrainPointer& pointer, const std::optional<terrain::RayHit>& hit)

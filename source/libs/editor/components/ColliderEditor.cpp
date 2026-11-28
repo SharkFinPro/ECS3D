@@ -366,10 +366,12 @@ namespace {
   // The terrain asset is shown as its uuid until the asset registry names terrains.
   void registerTerrainEditor(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
                              const terrain::TerrainStore* terrainStore,
-                             std::function<void(const std::shared_ptr<Terrain>&)> drawSculpt)
+                             std::function<void(const std::shared_ptr<Terrain>&)> drawSculpt,
+                             std::function<void(const std::shared_ptr<Terrain>&)> drawMaterials)
   {
     componentEditor.registerHandler("Terrain",
-      [assetCache = std::move(assetCache), terrainStore, drawSculpt = std::move(drawSculpt)](
+      [assetCache = std::move(assetCache), terrainStore, drawSculpt = std::move(drawSculpt),
+       drawMaterials = std::move(drawMaterials)](
         const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
       const auto terrain = std::dynamic_pointer_cast<Terrain>(component);
       if (!terrain)
@@ -410,6 +412,11 @@ namespace {
         if (drawSculpt)
         {
           drawSculpt(terrain);
+        }
+
+        if (drawMaterials)
+        {
+          drawMaterials(terrain);
         }
 
         bool collisionEnabled = terrain->getCollisionEnabled();
@@ -460,10 +467,12 @@ namespace {
 
 void registerColliderEditors(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
                              const AssetRegistry* assetRegistry, const terrain::TerrainStore* terrainStore,
-                             std::function<void(const std::shared_ptr<Terrain>&)> drawSculpt)
+                             std::function<void(const std::shared_ptr<Terrain>&)> drawSculpt,
+                             std::function<void(const std::shared_ptr<Terrain>&)> drawMaterials)
 {
   registerConvexMeshEditor(componentEditor, assetCache, assetRegistry);
-  registerTerrainEditor(componentEditor, std::move(assetCache), terrainStore, std::move(drawSculpt));
+  registerTerrainEditor(componentEditor, std::move(assetCache), terrainStore, std::move(drawSculpt),
+                        std::move(drawMaterials));
 
   // Keyed by display name (componentTypeToString), since both colliders share a component type and
   // differ only by subType.

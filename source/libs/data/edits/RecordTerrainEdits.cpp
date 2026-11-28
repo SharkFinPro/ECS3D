@@ -1,6 +1,9 @@
 #include "RecordTerrainEdits.h"
 #include "TerrainSetChunks.h"
 #include "terrain/TerrainAddition.h"
+#include "terrain/TerrainEdit.h"
+#include "terrain/TerrainMaterialRemap.h"
+#include "terrain/TerrainPalette.h"
 #include "terrain/TerrainStore.h"
 #include "terrain/TerrainVolume.h"
 #include <nlohmann/json.hpp>
@@ -40,6 +43,45 @@ std::optional<EditCommand> commandForTerrainStroke(
   }
 
   return EditCommand::terrainStroke(terrainUUID, std::move(chunks));
+}
+
+std::optional<TerrainRemapPrediction> predictTerrainRemap(const uuids::uuid& terrainUUID, terrain::TerrainStore& view,
+                                                         const terrain::MaterialRemap& remap,
+                                                         std::vector<terrain::TerrainMaterial> palette,
+                                                         const uint64_t strokeId)
+{
+  const auto volume = view.find(terrainUUID);
+  const auto* held = view.description(terrainUUID);
+  if (!volume || !held || !terrain::isValidRemap(remap) || terrain::isIdentity(remap) || held->palette == palette)
+  {
+    return std::nullopt;
+  }
+
+  auto described = *held;
+  described.palette = palette;
+  if (!terrain::isValidDescription(described))
+  {
+    return std::nullopt;
+  }
+
+  TerrainPaletteRemap recorded{ held->palette, std::move(palette), remap };
+  auto message = terrain::packRemapEdit(terrainUUID, strokeId, remap, terrain::paletteHash(recorded.before),
+                                        recorded.after);
+
+  auto remapped = terrain::remapMaterials(*volume, remap);
+  std::vector<TerrainStrokeChunk> chunks;
+  chunks.reserve(remapped.size());
+
+  for (auto& [coord, chunk] : remapped)
+  {
+    chunks.push_back({ coord, volume->chunk(coord), chunk });
+    volume->setChunk(coord, std::move(chunk));
+  }
+
+  view.applyDescription(described);
+
+  auto command = EditCommand::terrainPaletteRemap(terrainUUID, std::move(chunks), std::move(recorded));
+  return TerrainRemapPrediction{ std::move(message), std::move(command) };
 }
 
 std::optional<EditCommand> commandForTerrainAdd(const nlohmann::json& asset, const terrain::TerrainStore& store)
