@@ -478,6 +478,7 @@ void EditorApp::run()
     }
 
     refreshTerrainMode();
+    flushTerrainMaterialName();
 
     {
       ECS3D_PROFILE_SCOPE("Input");
@@ -566,7 +567,8 @@ void EditorApp::registerEditors()
   registerModelRendererEditor(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerLightRendererEditor(*m_componentEditor);
   registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get(), m_terrainStore.get(),
-                          [this](const std::shared_ptr<Terrain>& component) { drawTerrainSculpt(component); });
+                          [this](const std::shared_ptr<Terrain>& component) { drawTerrainSculpt(component); },
+                          [this](const std::shared_ptr<Terrain>& component) { drawTerrainMaterials(component); });
   registerScriptEditor(*m_componentEditor, m_assetRegistry.get(), m_assetCache);
   registerPlayerControllerEditor(*m_componentEditor);
   registerCameraEditor(*m_componentEditor);

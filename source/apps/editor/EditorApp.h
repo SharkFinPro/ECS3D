@@ -22,6 +22,7 @@
 #include <DockLayoutFit.h>
 #include <EditorConnectionState.h>
 #include <TerrainBrushSession.h>
+#include <TerrainPaletteEditor.h>
 #include <TerrainToolState.h>
 #include <TerrainUndoState.h>
 #include <scenes/SceneManager.h>
@@ -303,6 +304,12 @@ private:
   // Terrain mode: the viewport brush for the one selected terrain object, and the stroke it is drawing. The
   // brush's volume is the editor's own store volume, edited ahead of the server's echo.
   TerrainToolState m_terrainTool;
+  MaterialNameField m_terrainMaterialName;
+  MaterialColorField m_terrainMaterialColor;
+  TextureModeRows m_terrainTextureModes;
+  // The widget the color picker last changed under, so only it holds a color edit open.
+  uint32_t m_terrainColorWidget = 0;
+  std::string m_terrainPaletteMessage;
   TerrainBrushSession m_terrainBrush;
   bool m_terrainPointerWasDown = false;
 
@@ -480,6 +487,26 @@ private:
   // The brush sliders and, when the terrain's voxel size caps the radius, the note saying so.
   void drawTerrainBrushControls(const std::shared_ptr<Terrain>& component);
   void drawTerrainMaterialSelector(const uuids::uuid& terrainUuid);
+
+  // The Materials block of the Terrain section: the palette's entries with their textures, and add, move and remove.
+  void drawTerrainMaterials(const std::shared_ptr<Terrain>& component);
+
+  // Returns whether an edit applied; the block then stops drawing rows for the frame.
+  [[nodiscard]] bool drawTerrainMaterialRow(const uuids::uuid& terrainUuid, size_t index,
+                                            const std::vector<terrain::TerrainMaterial>& palette,
+                                            const std::optional<std::string>& editRefusal);
+
+  // Commits a material name typed in a block that is no longer drawn.
+  void flushTerrainMaterialName();
+
+  // Applies a new palette to the terrain here, sends it and records it for undo. False when it changes nothing.
+  bool applyTerrainPalette(const uuids::uuid& terrainUuid, std::vector<terrain::TerrainMaterial> palette);
+
+  // Runs a palette intent's result: applies it, or keeps the refusal for the block to show. True when it applied.
+  bool finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, TerrainPaletteEditor::Result result,
+                                const TextureModeRows::Change& change = {});
+
+  [[nodiscard]] TerrainPaletteEditor::Context terrainPaletteContext(const uuids::uuid& terrainUuid) const;
 
   // Feeds one frame's pointer to the stroke and makes the terrain's bounds follow what it changed.
   void driveTerrainBrush(const uuids::uuid& terrainUuid, const std::shared_ptr<terrain::TerrainVolume>& volume,

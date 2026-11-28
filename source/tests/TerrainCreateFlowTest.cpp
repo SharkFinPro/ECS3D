@@ -183,7 +183,12 @@ TEST(TerrainCreateGenerate, AFlatTerrainHasTheRequestedVoxelSizeAChunkCountAndAF
 
   EXPECT_EQ(generated.description.uuid, newTerrainUUID);
   EXPECT_FLOAT_EQ(generated.description.voxelSize, 0.5f * worldUnitsPerMeter);
-  EXPECT_TRUE(generated.description.palette.empty());
+  ASSERT_EQ(generated.description.palette.size(), 1u);
+  EXPECT_EQ(generated.description.palette[0].name, "Ground");
+  EXPECT_EQ(generated.description.palette[0].color, glm::vec3(0.6f));
+  EXPECT_EQ(generated.description.palette[0].color, vke::s_defaultVolumeColors[0]);
+  EXPECT_TRUE(generated.description.palette[0].albedoTexture.is_nil());
+  EXPECT_TRUE(generated.description.palette[0].specularTexture.is_nil());
   EXPECT_TRUE(terrain::isValidDescription(generated.description));
   EXPECT_EQ(generated.displayName, "Ground");
 
@@ -379,6 +384,9 @@ TEST(TerrainCreateEndToEnd, TheGeneratedTerrainReachesAFreshServerStoreWithMatch
   const auto serverVolume = serverStore.find(newTerrainUUID);
   ASSERT_NE(serverVolume, nullptr);
   ASSERT_EQ(serverVolume->chunks().size(), generated.volume->chunks().size());
+  ASSERT_NE(serverStore.description(newTerrainUUID), nullptr);
+  EXPECT_EQ(serverStore.description(newTerrainUUID)->palette, generated.description.palette);
+  EXPECT_EQ(editor.store.description(newTerrainUUID)->palette, generated.description.palette);
 
   for (const auto& [coord, chunk] : generated.volume->chunks())
   {

@@ -2,6 +2,7 @@
 #define TERRAINPALETTEBINDING_H
 
 #include <terrain/TerrainStore.h>
+#include <glm/vec3.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -21,6 +22,8 @@ struct TerrainMaterialHandles {
   std::shared_ptr<Texture> albedo;
   std::shared_ptr<Texture> specular;
   float textureScale = terrainTextureRepeatsPerUnit;
+  // The flat albedo while albedo is null.
+  glm::vec3 color{ 1.0f };
 
   [[nodiscard]] bool operator==(const TerrainMaterialHandles&) const = default;
 };
@@ -28,8 +31,9 @@ struct TerrainMaterialHandles {
 template <typename Texture>
 using TerrainPaletteHandles = std::vector<TerrainMaterialHandles<Texture>>;
 
-// A nil uuid is no texture (null, drawn white). A uuid the resolver cannot resolve draws the placeholder, which is
-// asked for only then, and is passed to onMissing. Entries past the engine's limit are dropped.
+// A nil uuid is no texture (null): an albedo draws the entry's flat color, a specular draws white. A uuid the
+// resolver cannot resolve draws the placeholder, which is asked for only then, and is passed to onMissing. Entries
+// past the engine's limit are dropped.
 template <typename Texture, typename Resolver, typename Placeholder, typename OnMissing>
 [[nodiscard]] TerrainPaletteHandles<Texture> resolveTerrainPalette(std::span<const terrain::TerrainMaterial> palette,
                                                                    const Resolver& resolve,
@@ -58,7 +62,7 @@ template <typename Texture, typename Resolver, typename Placeholder, typename On
   for (std::size_t i = 0; i < count; ++i)
   {
     resolved.push_back({ slot(palette[i].albedoTexture), slot(palette[i].specularTexture),
-                         terrainTextureRepeatsPerUnit });
+                         terrainTextureRepeatsPerUnit, palette[i].color });
   }
 
   return resolved;

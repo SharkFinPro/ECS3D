@@ -158,8 +158,7 @@ The headless `TerrainCreateFlow.h` holds the request, its validation, the height
   derive from the same cap, and the form shows the estimated chunks and a memory ceiling.
 - The decode uses `stbi_load_16` forced to one channel, with 8-bit scaled by 257. A picked path is UTF-8
   (`pathFromUtf8`).
-- The volume is `fillFlat` over a few voxels of solid, or `fillFromHeightmap`, with an empty palette like every
-  other terrain description.
+- The volume is `fillFlat` over a few voxels of solid, or `fillFromHeightmap`, and the description holds one palette entry, "Ground", a flat gray (0.6) without textures.
 
 Create sends the terrain through `EditorApp::onCreateTerrain`:
 
@@ -206,6 +205,33 @@ drawn, since the server refuses a larger brush. The headless parts are `TerrainS
 path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
 [viewport-gizmos.md](viewport-gizmos.md). A finished stroke is one undo step ([undo-redo.md](undo-redo.md)), and the
 unsaved flag is held for the length of a stroke. A new brush starts on material 0.
+
+The Terrain section also draws a Materials block, through a second `registerColliderEditors` callback
+(`drawMaterials`, `EditorApp::drawTerrainMaterials`, in `EditorAppTerrainPalette.cpp`), whether or not Sculpt is on. One row
+per palette entry has a radio button that sets `TerrainToolState::activeMaterial`, a name field, a Color or Texture choice,
+a specular texture slot (`drawAssetSlot`), Up, Down and Remove, and an Add material button that is disabled at
+`terrain::maxPaletteSize` entries. The headless `TerrainPaletteEditor.h` turns each intent into a new palette or a
+refusal string with the `TerrainPalette.h` functions (a new entry is "Material N"; Remove scans `materialsInUse` only
+when clicked) and gates editing on an editable connection, a stopped scene and a terrain the store holds: a palette edit
+during Play would outlive Stop on the server while the play history is discarded. A refusal shows under the block.
+`EditorApp::applyTerrainPalette` builds the command with `commandForTerrainPalette` from the pre-edit store, applies
+the replacement through `applyAddAssetWithTerrain` (no upload expected), sends the addAsset and records the command.
+Every intent is built from the palette the store holds when it runs, and the block stops drawing rows once one edit has
+applied in a frame (`forEachRowUntilEdit`), so two edits never race on a stale copy. Undo and redo apply the palette
+payload locally first ([undo-redo.md](undo-redo.md)).
+
+A name or a dragged color is a `PendingField` (`MaterialNameField`, `MaterialColorField`): it commits one palette edit
+when it settles (the field is left, the picker's own widget is released), compares colors with a small tolerance, and
+belongs to the material it started on. It settles as soon as a frame draws without its row (another terrain, another
+row set, the block hidden), and it is dropped when the material at its index is no longer the one it started on.
+
+A material is a flat Color while its albedo texture is nil (derived, not stored): Color shows an `ImGui::ColorEdit3` and
+Texture shows the albedo slot. Switching to Color clears the albedo and keeps the color and specular. A row switched to
+Texture before a texture is picked is held by `TextureModeRows`: it follows its material through the block's own moves
+and removes, ends when the row gets an albedo, and is dropped when the palette changes any other way (undo, redo,
+snapshot) or another terrain is shown. New entries take `vke::s_defaultVolumeColors` by index, and the swatches in the
+toolbar show an entry's color (a neutral gray for a texture entry, whose look a swatch cannot show). A terrain created
+from the asset browser starts with one gray "Ground" entry without textures.
 
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.
 `EditorApp` runs ImGui without an ini file and keeps the ini text in `ECS3DSettings` under `editor.layout.imgui`
