@@ -39,7 +39,7 @@ namespace {
           const auto it = known.find(uuid);
           return it == known.end() ? std::shared_ptr<FakeTexture>() : it->second;
         },
-        placeholder, [this](const uuids::uuid& uuid) { missing.push_back(uuid); });
+        [this] { return placeholder; }, [this](const uuids::uuid& uuid) { missing.push_back(uuid); });
     }
   };
 
@@ -188,4 +188,67 @@ TEST(TerrainPaletteApplication, APaletteThatFailedToApplyIsNotRetriedUntilItChan
 
   EXPECT_FALSE(surface.needsApply(rejected));
   EXPECT_TRUE(surface.needsApply(f.resolve({ material(rockUUID) })));
+}
+
+TEST(TerrainPaletteInput, UnchangedInputResolvedWithoutAPlaceholderIsNotResolvedAgain)
+{
+  const std::vector<terrain::TerrainMaterial> input{ material(grassUUID) };
+  TerrainPaletteInputMemory memory;
+
+  ASSERT_TRUE(memory.needsResolve(input));
+  memory.record(input, false);
+
+  EXPECT_FALSE(memory.needsResolve(input));
+  EXPECT_FALSE(memory.inputChanged(input));
+}
+
+TEST(TerrainPaletteInput, ChangedInputIsResolved)
+{
+  const std::vector<terrain::TerrainMaterial> input{ material(grassUUID) };
+  TerrainPaletteInputMemory memory;
+  memory.record(input, false);
+
+  const std::vector<terrain::TerrainMaterial> other{ material(rockUUID) };
+  const std::vector<terrain::TerrainMaterial> longer{ material(grassUUID), material(grassUUID) };
+
+  EXPECT_TRUE(memory.needsResolve(other));
+  EXPECT_TRUE(memory.inputChanged(other));
+  EXPECT_TRUE(memory.needsResolve(longer));
+  EXPECT_TRUE(memory.needsResolve({}));
+}
+
+TEST(TerrainPaletteInput, UnchangedInputThatUsedAPlaceholderIsResolvedAgain)
+{
+  const std::vector<terrain::TerrainMaterial> input{ material(lostUUID) };
+  TerrainPaletteInputMemory memory;
+  memory.record(input, true);
+
+  EXPECT_TRUE(memory.needsResolve(input));
+  EXPECT_FALSE(memory.inputChanged(input));
+
+  memory.record(input, false);
+  EXPECT_FALSE(memory.needsResolve(input));
+}
+
+TEST(TerrainPaletteBinding, ThePlaceholderIsOnlyAskedForWhenAnEntryIsUnresolved)
+{
+  Fixture f;
+  int asked = 0;
+  const auto resolver = [&](const uuids::uuid& uuid) {
+    const auto it = f.known.find(uuid);
+    return it == f.known.end() ? std::shared_ptr<FakeTexture>() : it->second;
+  };
+  const auto placeholder = [&] {
+    ++asked;
+    return f.placeholder;
+  };
+  const auto onMissing = [](const uuids::uuid&) {};
+
+  const std::vector<terrain::TerrainMaterial> resolvable{ material(grassUUID, rockUUID), material({}) };
+  (void)resolveTerrainPalette<FakeTexture>(resolvable, resolver, placeholder, onMissing);
+  EXPECT_EQ(asked, 0);
+
+  const std::vector<terrain::TerrainMaterial> unresolvable{ material(lostUUID) };
+  (void)resolveTerrainPalette<FakeTexture>(unresolvable, resolver, placeholder, onMissing);
+  EXPECT_EQ(asked, 1);
 }

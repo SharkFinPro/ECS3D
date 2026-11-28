@@ -262,6 +262,7 @@ add_executable(${PROJECT_NAME}
   TerrainGeneratorsTest.cpp
   TerrainMeasurementTest.cpp
   TerrainOpsTest.cpp
+  TerrainPaletteBindingTest.cpp
   TerrainPhysicsTest.cpp
   TerrainPlaySnapshotTest.cpp
   TerrainPredictionTest.cpp
@@ -285,7 +286,6 @@ add_executable(${PROJECT_NAME}
   TerrainStreamFocusTest.cpp
   TerrainStreamPlanTest.cpp
   TerrainStreamerLifecycleTest.cpp
-  TerrainPaletteBindingTest.cpp
   TerrainStreamerTest.cpp
   TerrainStrokeEchoTest.cpp
   TerrainStrokeTest.cpp

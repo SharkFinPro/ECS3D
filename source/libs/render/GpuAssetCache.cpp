@@ -453,15 +453,31 @@ void GpuAssetCache::applyTerrainPalette(const uuids::uuid& terrainUUID, CachedTe
       std::to_string(maxTerrainPaletteMaterials) + " are drawn");
   }
 
-  const auto placeholder = m_gizmoTextures.get("assets/textures/missing_texture.png", [this] {
-    return m_renderer->getAssetManager()->loadTexture("assets/textures/missing_texture.png");
-  });
+  if (cached.paletteInput.inputChanged(palette))
+  {
+    cached.loggedPaletteFailure = false;
+  }
 
-  const auto resolved = resolveTerrainPalette<vke::Texture2D>(
-    palette, [this](const uuids::uuid& uuid) { return getTexture(uuid); }, placeholder,
-    [this](const uuids::uuid& uuid) {
-      m_missingAssets.report(uuids::to_string(uuid), describeAsset(uuid, AssetType::Texture));
-    });
+  if (cached.paletteInput.needsResolve(palette))
+  {
+    bool usedPlaceholder = false;
+
+    cached.resolvedPalette = resolveTerrainPalette<vke::Texture2D>(
+      palette, [this](const uuids::uuid& uuid) { return getTexture(uuid); },
+      [this] {
+        return m_gizmoTextures.get("assets/textures/missing_texture.png", [this] {
+          return m_renderer->getAssetManager()->loadTexture("assets/textures/missing_texture.png");
+        });
+      },
+      [this, &usedPlaceholder](const uuids::uuid& uuid) {
+        usedPlaceholder = true;
+        m_missingAssets.report(uuids::to_string(uuid), describeAsset(uuid, AssetType::Texture));
+      });
+
+    cached.paletteInput.record(palette, usedPlaceholder);
+  }
+
+  const auto& resolved = cached.resolvedPalette;
 
   const auto applyTo = [&](const std::shared_ptr<vke::VolumeSurface>& surface,
                            TerrainPaletteApplication<vke::Texture2D>& applied) {
@@ -470,6 +486,8 @@ void GpuAssetCache::applyTerrainPalette(const uuids::uuid& terrainUUID, CachedTe
       return;
     }
 
+    // setPalette throws and changes nothing, so recording first keeps a rejected palette from being retried (and
+    // its texture arrays rebuilt) every frame.
     applied.markApplied(resolved);
 
     std::vector<vke::VolumeMaterial> materials;
@@ -571,6 +589,8 @@ std::shared_ptr<vke::VolumeSurface> GpuAssetCache::getTerrainSurface(
 
   if (cached.failedFor && terrain::sameBox(*cached.failedFor, cached.desired))
   {
+    applyTerrainPalette(terrainUUID, cached, palette);
+
     return cached.current;
   }
 

@@ -147,6 +147,8 @@ private:
     std::optional<terrain::SampleBox> failedFor;
     TerrainPaletteApplication<vke::Texture2D> currentPalette;
     TerrainPaletteApplication<vke::Texture2D> replacementPalette;
+    TerrainPaletteInputMemory paletteInput;
+    TerrainPaletteHandles<vke::Texture2D> resolvedPalette;
     bool loggedPaletteTruncated = false;
     bool loggedPaletteFailure = false;
   };
