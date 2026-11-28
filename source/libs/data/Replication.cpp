@@ -1787,6 +1787,23 @@ bool applyAddAssetWithTerrain(AssetRegistry& assetRegistry,
   // Checked first so a refusal leaves neither the registry nor the store changed.
   const auto description = terrain::parseAddedTerrain(asset);
   const auto* owner = description ? assetRegistry.getByUUID(description->uuid) : nullptr;
+  const auto* held = description ? terrainStore.description(description->uuid) : nullptr;
+
+  if (description && held != nullptr && owner != nullptr && owner->type == AssetType::Terrain)
+  {
+    // A body over a terrain both sides hold replaces its palette; the registry record and the volume stay.
+    if (description->voxelSize != held->voxelSize)
+    {
+      Log::warn(LogCategory::assets, "Ignored a terrain palette replacement: it changes the voxel size.");
+      return false;
+    }
+
+    auto replaced = *held;
+    replaced.palette = description->palette;
+
+    return terrainStore.applyDescription(replaced);
+  }
+
   if (!description || terrainStore.find(description->uuid) != nullptr ||
       (owner != nullptr && owner->type != AssetType::Terrain))
   {
