@@ -420,23 +420,48 @@ TEST(MaterialColorFieldTest, AClickWithoutMovingOrAnUnsendableColorCommitsNothin
   EXPECT_FALSE(dragColor(unsendable, material, glm::vec3(0.1f), false, true, false).has_value());
 }
 
-TEST(TerrainPaletteEditorFrame, RowsAreDrawnOnlyUntilTheFirstEditApplies)
+TEST(TerrainPaletteEditorList, TheListGrowsWithItsEntriesUpToEightLinesThenScrolls)
 {
-  std::vector<size_t> visited;
-  const bool applied = TerrainPaletteEditor::forEachRowUntilEdit(5, [&visited](const size_t index) {
-    visited.push_back(index);
-    return index == 2;
-  });
+  EXPECT_FLOAT_EQ(TerrainPaletteEditor::listHeight(3, 20.0f, 6.0f), 66.0f);
+  EXPECT_FLOAT_EQ(TerrainPaletteEditor::listHeight(8, 20.0f, 6.0f), 166.0f);
+  EXPECT_FLOAT_EQ(TerrainPaletteEditor::listHeight(16, 20.0f, 6.0f), 166.0f);
+  EXPECT_FLOAT_EQ(TerrainPaletteEditor::listHeight(0, 20.0f, 6.0f), 26.0f);
+}
 
-  EXPECT_TRUE(applied);
-  EXPECT_EQ(visited, (std::vector<size_t>{ 0, 1, 2 }));
+TEST(TerrainPaletteEditorList, AMovedMaterialStaysSelectedAndARemovedOneSelectsItsNeighbor)
+{
+  using Kind = TextureModeRows::Change::Kind;
 
-  visited.clear();
-  EXPECT_FALSE(TerrainPaletteEditor::forEachRowUntilEdit(3, [&visited](const size_t index) {
-    visited.push_back(index);
-    return false;
-  }));
-  EXPECT_EQ(visited, (std::vector<size_t>{ 0, 1, 2 }));
+  EXPECT_EQ(materialSelectionAfter({ Kind::move, 2, 1 }, 2, 4), 1u);
+  EXPECT_EQ(materialSelectionAfter({ Kind::move, 2, 3 }, 2, 4), 3u);
+  EXPECT_EQ(materialSelectionAfter({ Kind::move, 0, 1 }, 1, 4), 0u);
+
+  EXPECT_EQ(materialSelectionAfter({ Kind::remove, 1, 1 }, 1, 3), 1u);
+  EXPECT_EQ(materialSelectionAfter({ Kind::remove, 3, 3 }, 3, 3), 2u);
+  EXPECT_EQ(materialSelectionAfter({ Kind::remove, 0, 0 }, 2, 3), 1u);
+  EXPECT_EQ(materialSelectionAfter({ Kind::remove, 0, 0 }, 0, 0), 0u);
+
+  // An edit that keeps the order keeps the selection.
+  EXPECT_EQ(materialSelectionAfter({}, 2, 4), 2u);
+}
+
+TEST(MaterialNoteTest, ARefusalShowsForItsSelectionAndIsClearedWhenTheSelectionChanges)
+{
+  MaterialNote note;
+  note.raise(terrainId, 2, "Material 2 is painted on the terrain");
+  EXPECT_EQ(note.textFor(terrainId, 2), "Material 2 is painted on the terrain");
+  EXPECT_EQ(note.textFor(terrainId, 2), "Material 2 is painted on the terrain");
+
+  EXPECT_TRUE(note.textFor(terrainId, 1).empty());
+  EXPECT_TRUE(note.textFor(terrainId, 2).empty());
+
+  note.raise(terrainId, 2, "refused");
+  EXPECT_TRUE(note.textFor(terrainB, 2).empty());
+  EXPECT_TRUE(note.textFor(terrainId, 2).empty());
+
+  note.raise(terrainId, 0, "refused");
+  note.clear();
+  EXPECT_TRUE(note.textFor(terrainId, 0).empty());
 }
 
 namespace {

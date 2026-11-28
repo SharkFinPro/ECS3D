@@ -310,7 +310,7 @@ private:
   TextureModeRows m_terrainTextureModes;
   // The widget the color picker last changed under, so only it holds a color edit open.
   uint32_t m_terrainColorWidget = 0;
-  std::string m_terrainPaletteMessage;
+  MaterialNote m_terrainPaletteNote;
   TerrainBrushSession m_terrainBrush;
   bool m_terrainPointerWasDown = false;
 
@@ -488,21 +488,24 @@ private:
   // The brush sliders and, when the terrain's voxel size caps the radius, the note saying so.
   void drawTerrainBrushControls(const std::shared_ptr<Terrain>& component);
   void drawTerrainMaterialSelector(const uuids::uuid& terrainUuid);
+  // A material's swatch button of side x side: its texture's thumbnail when it has one loaded, else its color, with
+  // the accent outline when active and the tooltip on hover. Returns whether it was clicked.
+  bool drawTerrainMaterialSwatch(const MaterialSwatch& swatch, float side, bool active, const std::string& tooltip);
 
-  // The Materials block of the Terrain section: the palette's entries with their textures, and add, move and remove.
+  // The Materials block of the Terrain section: a collapsible list of the palette's entries, Add material, and the
+  // selected entry's details with its name, surface, textures, move and remove.
   void drawTerrainMaterials(const std::shared_ptr<Terrain>& component);
+  void drawTerrainMaterialList(const std::vector<terrain::TerrainMaterial>& palette);
 
-  // Returns whether an edit applied; the block then stops drawing rows for the frame.
-  [[nodiscard]] bool drawTerrainMaterialRow(const uuids::uuid& terrainUuid, size_t index,
-                                            const std::vector<terrain::TerrainMaterial>& palette,
-                                            const std::optional<std::string>& editRefusal);
-
-  // A palette intent's result for a row to run; the row runs at most one per frame.
+  // A palette intent's result for the details panel to run; at most one runs per frame.
   using TerrainPaletteRun = std::function<void(TerrainPaletteEditor::Result, const TextureModeRows::Change&)>;
 
-  void drawTerrainAddMaterial(const uuids::uuid& terrainUuid, size_t paletteSize,
-                              const std::optional<std::string>& refusal, bool edited);
-  void drawTerrainPaletteNotes(const std::optional<std::string>& refusal) const;
+  void drawTerrainMaterialDetails(const uuids::uuid& terrainUuid, size_t index,
+                                  const std::vector<terrain::TerrainMaterial>& palette,
+                                  const std::optional<std::string>& editRefusal, bool edited);
+  // Returns whether the add applied.
+  bool drawTerrainAddMaterial(const uuids::uuid& terrainUuid, size_t paletteSize,
+                              const std::optional<std::string>& refusal);
   void drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, size_t index, size_t paletteSize,
                                 const TerrainPaletteRun& run);
   // The Color or Texture choice with its color picker or albedo slot, and the specular slot.
@@ -517,7 +520,8 @@ private:
   // Applies a new palette to the terrain here, sends it and records it for undo. False when it changes nothing.
   bool applyTerrainPalette(const uuids::uuid& terrainUuid, std::vector<terrain::TerrainMaterial> palette);
 
-  // Runs a palette intent's result: applies it, or keeps the refusal for the block to show. True when it applied.
+  // Runs a palette intent's result: applies it and keeps the selection on its material, or keeps the refusal for the
+  // details panel to show. True when it applied.
   bool finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, TerrainPaletteEditor::Result result,
                                 const TextureModeRows::Change& change = {});
 

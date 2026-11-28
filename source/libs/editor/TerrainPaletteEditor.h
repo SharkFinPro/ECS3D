@@ -144,20 +144,14 @@ public:
     });
   }
 
-  // Draws the rows in order and stops after the first one whose edit applied: a second edit built in the same
-  // frame would race the first. row(index) returns whether an edit applied. Returns whether one did.
-  template <typename RowFn>
-  static bool forEachRowUntilEdit(const size_t count, RowFn&& row)
-  {
-    for (size_t index = 0; index < count; ++index)
-    {
-      if (row(index))
-      {
-        return true;
-      }
-    }
+  // The Materials list shows this many lines before it scrolls.
+  static constexpr size_t maxVisibleRows = 8;
 
-    return false;
+  // The list's height for count lines of rowPitch each, capped at maxVisibleRows, plus the frame's own padding.
+  [[nodiscard]] static float listHeight(const size_t count, const float rowPitch, const float padding)
+  {
+    const size_t rows = std::clamp<size_t>(count, 1, maxVisibleRows);
+    return static_cast<float>(rows) * rowPitch + padding;
   }
 
 private:
@@ -200,12 +194,12 @@ private:
 }
 
 // One field of the Materials block that is edited over several frames (a typed name, a dragged color) and becomes one
-// palette edit when it settles. Only one row is edited at a time, so one pending value serves the block.
+// palette edit when it settles. Only the selected material's details are drawn, so one pending value serves the block.
 //
 // The edit belongs to the material it started on: if that material is not the one at the row's index when the edit
 // settles (a reorder, an undo or a snapshot changed it underneath), the edit is dropped. A pending edit is also
-// settled as soon as a frame draws without its row (another terrain, another row set, the block hidden), so it never
-// outlives the row it was typed into.
+// settled as soon as a frame draws without its row (another terrain, another material selected, the block collapsed),
+// so it never outlives the details it was typed into.
 template <typename Value, Value (*Get)(const terrain::TerrainMaterial&)>
 class PendingField {
 public:
@@ -382,10 +376,8 @@ public:
     m_known = after;
   }
 
-private:
-  uuids::uuid m_terrain;
-  std::vector<terrain::TerrainMaterial> m_known;
-  std::vector<size_t> m_rows;
+  // Where the entry at row is after change; a removed entry maps to removedRow.
+  static constexpr size_t removedRow = static_cast<size_t>(-1);
 
   [[nodiscard]] static size_t rowAfter(const Change& change, const size_t row)
   {
@@ -410,7 +402,7 @@ private:
     {
       if (row == change.from)
       {
-        return static_cast<size_t>(-1);
+        return removedRow;
       }
 
       return row > change.from ? row - 1 : row;
@@ -418,6 +410,55 @@ private:
 
     return row;
   }
+
+private:
+  uuids::uuid m_terrain;
+  std::vector<terrain::TerrainMaterial> m_known;
+  std::vector<size_t> m_rows;
+};
+
+// The material the Materials block keeps selected after one of its own edits applied: a moved one stays selected,
+// and a removed one hands the selection to its neighbor (the entry that took its place, else the new last one).
+[[nodiscard]] inline size_t materialSelectionAfter(const TextureModeRows::Change& change, const size_t selected,
+                                                   const size_t paletteSize)
+{
+  const size_t row = TextureModeRows::rowAfter(change, selected);
+  const size_t kept = row == TextureModeRows::removedRow ? change.from : row;
+
+  return paletteSize == 0 ? 0 : std::min(kept, paletteSize - 1);
+}
+
+// A refusal the Materials block shows beside the selected material's Remove button. It belongs to the selection it
+// was raised for and is cleared once another material or another terrain is selected.
+class MaterialNote {
+public:
+  void raise(const uuids::uuid& terrain, const size_t index, std::string text)
+  {
+    m_terrain = terrain;
+    m_index = index;
+    m_text = std::move(text);
+  }
+
+  void clear()
+  {
+    m_text.clear();
+  }
+
+  // The note for the selection drawn now, empty when there is none; a note raised for another selection is cleared.
+  [[nodiscard]] const std::string& textFor(const uuids::uuid& terrain, const size_t index)
+  {
+    if (terrain != m_terrain || index != m_index)
+    {
+      m_text.clear();
+    }
+
+    return m_text;
+  }
+
+private:
+  uuids::uuid m_terrain;
+  size_t m_index = 0;
+  std::string m_text;
 };
 
 #endif //TERRAINPALETTEEDITOR_H

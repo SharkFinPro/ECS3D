@@ -19,6 +19,10 @@ struct AssetSlotStyle {
   ImVec4 iconColor;
 };
 
+// The texture's GPU image for a thumbnail, or 0 while the cache cannot give one (no cache, an unknown uuid, a load
+// that failed).
+[[nodiscard]] ImTextureID textureThumbnail(const std::shared_ptr<GpuAssetCache>& cache, const uuids::uuid& texture);
+
 // An asset reference slot: shows the assigned asset's thumbnail or icon and filename, and accepts an asset
 // of style.payloadId dropped onto it. Returns true (and fills outUUID) when something is dropped this
 // frame. cache and registry may be null, in which case the slot shows the type icon. A mixed slot (the

@@ -86,13 +86,15 @@ bool EditorApp::applyTerrainPalette(const uuids::uuid& terrainUuid, std::vector<
 bool EditorApp::finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, TerrainPaletteEditor::Result result,
                                          const TextureModeRows::Change& change)
 {
+  const size_t selected = clampMaterial(m_terrainTool.activeMaterial(), paletteOf(*m_terrainStore, terrainUuid).size());
+
   if (!result.ok())
   {
-    m_terrainPaletteMessage = *result.refusal;
+    m_terrainPaletteNote.raise(terrainUuid, selected, *result.refusal);
     return false;
   }
 
-  m_terrainPaletteMessage.clear();
+  m_terrainPaletteNote.clear();
 
   const auto after = result.palette;
   if (!applyTerrainPalette(terrainUuid, std::move(result.palette)))
@@ -101,6 +103,7 @@ bool EditorApp::finishTerrainPaletteEdit(const uuids::uuid& terrainUuid, Terrain
   }
 
   m_terrainTextureModes.follow(change, after);
+  m_terrainTool.setActiveMaterial(static_cast<uint8_t>(materialSelectionAfter(change, selected, after.size())));
 
   return true;
 }
@@ -146,35 +149,77 @@ void EditorApp::drawTerrainMaterials(const std::shared_ptr<Terrain>& component)
   m_terrainTextureModes.sync(terrainUuid, palette);
 
   ImGui::Spacing();
-  ImGui::TextUnformatted("Materials");
-
-  if (palette.empty())
-  {
-    ImGui::TextColored(theme::t2, "No palette: the default colors are used.");
-  }
-
   ImGui::PushID("terrainMaterials");
 
-  const bool edited = TerrainPaletteEditor::forEachRowUntilEdit(palette.size(), [&](const size_t index) {
-    return drawTerrainMaterialRow(terrainUuid, index, palette, refusal);
-  });
+  if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen))
+  {
+    if (palette.empty())
+    {
+      ImGui::TextColored(theme::t2, "No palette: the default colors are used.");
+    }
+    else
+    {
+      drawTerrainMaterialList(palette);
+    }
 
-  drawTerrainAddMaterial(terrainUuid, palette.size(), refusal, edited);
+    const size_t selected = clampMaterial(m_terrainTool.activeMaterial(), palette.size());
+    const bool added = drawTerrainAddMaterial(terrainUuid, palette.size(), refusal);
+
+    if (!palette.empty())
+    {
+      drawTerrainMaterialDetails(terrainUuid, selected, palette, refusal, added);
+    }
+
+    if (refusal)
+    {
+      ImGui::TextColored(theme::t2, "%s", refusal->c_str());
+    }
+  }
 
   ImGui::PopID();
-
-  drawTerrainPaletteNotes(refusal);
 }
 
-void EditorApp::drawTerrainAddMaterial(const uuids::uuid& terrainUuid, const size_t paletteSize,
-                                       const std::optional<std::string>& refusal, const bool edited)
+void EditorApp::drawTerrainMaterialList(const std::vector<terrain::TerrainMaterial>& palette)
+{
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float side = ImGui::GetTextLineHeight();
+  const float height = TerrainPaletteEditor::listHeight(palette.size(), side + style.ItemSpacing.y,
+                                                        style.WindowPadding.y * 2.0f - style.ItemSpacing.y);
+  const uint8_t selected = clampMaterial(m_terrainTool.activeMaterial(), palette.size());
+
+  ImGui::BeginChild("materialList", ImVec2(0.0f, height), true);
+
+  for (size_t index = 0; index < palette.size(); ++index)
+  {
+    const auto material = static_cast<uint8_t>(index);
+    const std::string label = materialLabel(palette, material);
+    ImGui::PushID(static_cast<int>(index));
+
+    bool clicked = drawTerrainMaterialSwatch(materialSwatch(palette, material), side, false, label);
+    ImGui::SameLine();
+    clicked |= ImGui::Selectable((label + "###row").c_str(), material == selected);
+
+    if (clicked)
+    {
+      m_terrainTool.setActiveMaterial(material);
+    }
+
+    ImGui::PopID();
+  }
+
+  ImGui::EndChild();
+}
+
+bool EditorApp::drawTerrainAddMaterial(const uuids::uuid& terrainUuid, const size_t paletteSize,
+                                       const std::optional<std::string>& refusal)
 {
   const bool full = paletteSize >= terrain::maxPaletteSize;
+  bool added = false;
 
   ImGui::BeginDisabled(refusal.has_value() || full);
-  if (ImGui::Button("Add material") && !edited)
+  if (ImGui::Button("Add material"))
   {
-    finishTerrainPaletteEdit(terrainUuid, TerrainPaletteEditor::add(paletteOf(*m_terrainStore, terrainUuid)));
+    added = finishTerrainPaletteEdit(terrainUuid, TerrainPaletteEditor::add(paletteOf(*m_terrainStore, terrainUuid)));
   }
   ImGui::EndDisabled();
 
@@ -182,53 +227,34 @@ void EditorApp::drawTerrainAddMaterial(const uuids::uuid& terrainUuid, const siz
   {
     ImGui::SetTooltip("%s", refusal ? refusal->c_str() : "A terrain holds at most 16 materials.");
   }
-}
 
-void EditorApp::drawTerrainPaletteNotes(const std::optional<std::string>& refusal) const
-{
-  if (refusal)
+  if (added)
   {
-    ImGui::TextColored(theme::t2, "%s", refusal->c_str());
+    m_terrainTool.setActiveMaterial(static_cast<uint8_t>(paletteOf(*m_terrainStore, terrainUuid).size() - 1));
   }
 
-  if (!m_terrainPaletteMessage.empty())
-  {
-    ImGui::TextColored(theme::t2, "%s", m_terrainPaletteMessage.c_str());
-  }
+  return added;
 }
 
-bool EditorApp::drawTerrainMaterialRow(const uuids::uuid& terrainUuid, const size_t index,
-                                       const std::vector<terrain::TerrainMaterial>& palette,
-                                       const std::optional<std::string>& editRefusal)
+void EditorApp::drawTerrainMaterialDetails(const uuids::uuid& terrainUuid, const size_t index,
+                                           const std::vector<terrain::TerrainMaterial>& palette,
+                                           const std::optional<std::string>& editRefusal, const bool edited)
 {
   const terrain::TerrainMaterial& material = palette[index];
   const bool canEdit = !editRefusal.has_value();
-  bool edited = false;
+  bool applied = edited;
 
   // Every intent is built from the palette the store holds now, not from this frame's copy, and none runs once an
   // edit has applied this frame.
   const TerrainPaletteRun run = [&](TerrainPaletteEditor::Result result, const TextureModeRows::Change& change) {
-    if (!edited)
+    if (!applied)
     {
-      edited = finishTerrainPaletteEdit(terrainUuid, std::move(result), change);
+      applied = finishTerrainPaletteEdit(terrainUuid, std::move(result), change);
     }
   };
 
+  ImGui::Separator();
   ImGui::PushID(static_cast<int>(index));
-
-  const bool active = clampMaterial(m_terrainTool.activeMaterial(), palette.size()) == index;
-  if (ImGui::RadioButton("##use", active) && !active)
-  {
-    m_terrainTool.setActiveMaterial(static_cast<uint8_t>(index));
-  }
-
-  if (ImGui::IsItemHovered())
-  {
-    ImGui::SetTooltip("%s", "Paint with this material.");
-  }
-
-  ImGui::SameLine();
-
   ImGui::BeginDisabled(!canEdit);
 
   if (const auto commit = m_terrainMaterialName.frame(terrainUuid, index, material, canEdit, [](std::string& name) {
@@ -238,15 +264,11 @@ bool EditorApp::drawTerrainMaterialRow(const uuids::uuid& terrainUuid, const siz
     run(TerrainPaletteEditor::rename(paletteOf(*m_terrainStore, terrainUuid), commit->index, commit->value), {});
   }
 
-  drawTerrainMaterialOrder(terrainUuid, index, palette.size(), run);
   drawTerrainMaterialSurface(terrainUuid, index, material, canEdit, run);
+  drawTerrainMaterialOrder(terrainUuid, index, palette.size(), run);
 
   ImGui::EndDisabled();
-
   ImGui::PopID();
-  ImGui::Separator();
-
-  return edited;
 }
 
 void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const size_t index, const size_t paletteSize,
@@ -255,7 +277,7 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
   const auto& live = paletteOf(*m_terrainStore, terrainUuid);
 
   ImGui::BeginDisabled(index == 0);
-  if (ImGui::SmallButton("Up"))
+  if (ImGui::SmallButton("Move up"))
   {
     run(TerrainPaletteEditor::move(live, index, index - 1), { TextureModeRows::Change::Kind::move, index, index - 1 });
   }
@@ -264,7 +286,7 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
   ImGui::SameLine();
 
   ImGui::BeginDisabled(index + 1 >= paletteSize);
-  if (ImGui::SmallButton("Down"))
+  if (ImGui::SmallButton("Move down"))
   {
     run(TerrainPaletteEditor::move(live, index, index + 1), { TextureModeRows::Change::Kind::move, index, index + 1 });
   }
@@ -279,6 +301,14 @@ void EditorApp::drawTerrainMaterialOrder(const uuids::uuid& terrainUuid, const s
           return volume ? terrain::materialsInUse(*volume) : std::bitset<256>{};
         }),
         { TextureModeRows::Change::Kind::remove, index, index });
+  }
+
+  if (const std::string& note = m_terrainPaletteNote.textFor(terrainUuid, index); !note.empty())
+  {
+    ImGui::SameLine();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextColored(theme::t2, "%s", note.c_str());
+    ImGui::PopTextWrapPos();
   }
 }
 
@@ -348,4 +378,44 @@ void EditorApp::drawTerrainMaterialColor(const uuids::uuid& terrainUuid, const s
   {
     run(TerrainPaletteEditor::setColor(paletteOf(*m_terrainStore, terrainUuid), commit->index, commit->value), {});
   }
+}
+
+bool EditorApp::drawTerrainMaterialSwatch(const MaterialSwatch& swatch, const float side, const bool active,
+                                          const std::string& tooltip)
+{
+  ImTextureID thumb = 0;
+  if (!swatch.texture.is_nil())
+  {
+    thumb = textureThumbnail(m_assetCache, swatch.texture);
+  }
+
+  bool clicked = false;
+
+  if (thumb != 0)
+  {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+    clicked = ImGui::ImageButton("##material", thumb, ImVec2(side, side));
+    ImGui::PopStyleVar();
+  }
+  else
+  {
+    const glm::vec3& color = swatch.color;
+    clicked = ImGui::ColorButton("##material", ImVec4(color.r, color.g, color.b, 1.0f),
+                                 ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop |
+                                   ImGuiColorEditFlags_NoAlpha,
+                                 ImVec2(side, side));
+  }
+
+  if (active)
+  {
+    ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                        ImGui::ColorConvertFloat4ToU32(theme::accent), 2.0f, 0, 2.0f);
+  }
+
+  if (ImGui::IsItemHovered())
+  {
+    ImGui::SetTooltip("%s", tooltip.c_str());
+  }
+
+  return clicked;
 }

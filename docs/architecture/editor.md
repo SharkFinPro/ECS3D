@@ -193,8 +193,11 @@ prefab body shows none) or with the `terrainMode` keybind. While it is on, the s
 forces strength 1 and falloff 0). Add, Flatten and Paint also show a Material row of color swatches, one per entry of the terrain's
 palette (the eight renderer default colors when it has none; `selectableMaterials`) that sets `TerrainToolState::activeMaterial`,
 a session choice that `clampMaterial` bounds when the stroke template is built. The row wraps like the tool buttons,
-the active swatch has an accent outline and the tooltip is the `materialLabel`. `materialSwatchColor` alone decides a
-swatch: the renderer's default color (wrapped by index) for an empty palette, else neutral gray. Add and Flatten write
+the active swatch has an accent outline and the tooltip is the `materialLabel`. `materialSwatch` alone decides a
+swatch: the renderer's default color (wrapped by index) for an empty palette, an entry's flat color, or its albedo
+texture, which `EditorApp::drawTerrainMaterialSwatch` draws as an `ImGui::ImageButton` of the thumbnail
+`textureThumbnail` (`components/AssetSlot.h`) gets from `GpuAssetCache`, falling back to a neutral gray while the
+thumbnail is not available. Add and Flatten write
 the material into the ground they raise and Paint into existing ground. A Paint stroke changes materials only, so
 `strokeRedistances` makes its release send and predict no redistance, and `strokeAim` keeps its cursor on the starting
 surface however far it jumps (the upright-plane fallback would land off the ground, where it paints nothing). The tool
@@ -207,30 +210,38 @@ path), `TerrainBrushSession.h` and `TerrainCursor.h`; the viewport side is in
 unsaved flag is held for the length of a stroke. A new brush starts on material 0.
 
 The Terrain section also draws a Materials block, through a second `registerColliderEditors` callback
-(`drawMaterials`, `EditorApp::drawTerrainMaterials`, in `EditorAppTerrainPalette.cpp`), whether or not Sculpt is on. One row
-per palette entry has a radio button that sets `TerrainToolState::activeMaterial`, a name field, a Color or Texture choice,
-a specular texture slot (`drawAssetSlot`), Up, Down and Remove, and an Add material button that is disabled at
-`terrain::maxPaletteSize` entries. The headless `TerrainPaletteEditor.h` turns each intent into a new palette or a
+(`drawMaterials`, `EditorApp::drawTerrainMaterials`, in `EditorAppTerrainPalette.cpp`), whether or not Sculpt is on. It is
+an `ImGui::CollapsingHeader`, open by default, holding a bordered list of one line per palette entry (its swatch and
+its `materialLabel` as a Selectable) whose height `TerrainPaletteEditor::listHeight` caps at `maxVisibleRows` (8) lines,
+scrolling beyond. The selected entry is `TerrainToolState::activeMaterial` (clamped), so clicking a line also picks the
+paint material, and the toolbar swatches move the selection too. Add material sits under the list and selects the new
+entry. Only the selected entry's details are drawn below it: a name field, a Color or Texture choice, a specular
+texture slot (`drawAssetSlot`), Move up, Move down and Remove; Add material is disabled at `terrain::maxPaletteSize`
+entries. The headless `TerrainPaletteEditor.h` turns each intent into a new palette or a
 refusal string with the `TerrainPalette.h` functions (a new entry is "Material N"; Remove scans `materialsInUse` only
 when clicked) and gates editing on an editable connection, a stopped scene and a terrain the store holds: a palette edit
-during Play would outlive Stop on the server while the play history is discarded. A refusal shows under the block.
+during Play would outlive Stop on the server while the play history is discarded. The gate's reason shows under the
+block; an intent's refusal is a `MaterialNote` shown beside Remove in the secondary text color, and is cleared once
+another material or terrain is selected. After an applied edit `materialSelectionAfter` keeps a moved entry selected
+and hands a removed one's selection to its neighbor.
 `EditorApp::applyTerrainPalette` builds the command with `commandForTerrainPalette` from the pre-edit store, applies
 the replacement through `applyAddAssetWithTerrain` (no upload expected), sends the addAsset and records the command.
-Every intent is built from the palette the store holds when it runs, and the block stops drawing rows once one edit has
-applied in a frame (`forEachRowUntilEdit`), so two edits never race on a stale copy. Undo and redo apply the palette
-payload locally first ([undo-redo.md](undo-redo.md)).
+Every intent is built from the palette the store holds when it runs, and once one edit has applied in a frame (Add
+material, or one in the details) no other runs that frame, so two edits never race on a stale copy. Undo and redo
+apply the palette payload locally first ([undo-redo.md](undo-redo.md)).
 
 A name or a dragged color is a `PendingField` (`MaterialNameField`, `MaterialColorField`): it commits one palette edit
 when it settles (the field is left, the picker's own widget is released), compares colors with a small tolerance, and
-belongs to the material it started on. It settles as soon as a frame draws without its row (another terrain, another
-row set, the block hidden), and it is dropped when the material at its index is no longer the one it started on.
+belongs to the material it started on. It settles as soon as a frame draws without its details (another terrain,
+another material selected, the block collapsed), and it is dropped when the material at its index is no longer the one
+it started on.
 
 A material is a flat Color while its albedo texture is nil (derived, not stored): Color shows an `ImGui::ColorEdit3` and
 Texture shows the albedo slot. Switching to Color clears the albedo and keeps the color and specular. A row switched to
 Texture before a texture is picked is held by `TextureModeRows`: it follows its material through the block's own moves
 and removes, ends when the row gets an albedo, and is dropped when the palette changes any other way (undo, redo,
 snapshot) or another terrain is shown. New entries take `vke::s_defaultVolumeColors` by index, and the swatches in the
-toolbar show an entry's color (a neutral gray for a texture entry, whose look a swatch cannot show). A terrain created
+list and the toolbar show an entry's color or its albedo texture's thumbnail. A terrain created
 from the asset browser starts with one gray "Ground" entry without textures.
 
 The panel layout (window placement, detached panels and the dock tree) is a user preference, not project data.

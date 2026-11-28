@@ -275,24 +275,29 @@ TEST(TerrainToolStateTest, AnEmptyPaletteSwatchIsTheRenderersDefaultColorWrapped
 
   for (uint8_t index = 0; index < 8; ++index)
   {
-    EXPECT_EQ(materialSwatchColor(none, index), vke::s_defaultVolumeColors[index]);
+    EXPECT_EQ(materialSwatch(none, index).color, vke::s_defaultVolumeColors[index]);
+    EXPECT_TRUE(materialSwatch(none, index).texture.is_nil());
   }
 
-  EXPECT_EQ(materialSwatchColor(none, 9), vke::s_defaultVolumeColors[1]);
-  EXPECT_NE(materialSwatchColor(none, 0), materialSwatchColor(none, 1));
+  EXPECT_EQ(materialSwatch(none, 9).color, vke::s_defaultVolumeColors[1]);
+  EXPECT_NE(materialSwatch(none, 0).color, materialSwatch(none, 1).color);
 }
 
-TEST(TerrainToolStateTest, APaletteEntrySwatchIsItsColorUnlessItHasAnAlbedoTexture)
+TEST(TerrainToolStateTest, APaletteEntrySwatchIsItsColorOrItsAlbedoTextureOverGray)
 {
+  const auto albedo = uuids::uuid::from_string("22222222-2222-4222-8222-222222222222").value();
   std::vector<terrain::TerrainMaterial> palette(3);
   palette[1].color = glm::vec3(0.2f, 0.4f, 0.6f);
   palette[2].color = glm::vec3(0.9f, 0.1f, 0.1f);
-  palette[2].albedoTexture = uuids::uuid::from_string("22222222-2222-4222-8222-222222222222").value();
+  palette[2].albedoTexture = albedo;
 
-  EXPECT_EQ(materialSwatchColor(palette, 1), glm::vec3(0.2f, 0.4f, 0.6f));
-  EXPECT_NE(materialSwatchColor(palette, 1), materialSwatchColor(palette, 0));
-  EXPECT_EQ(materialSwatchColor(palette, 2), glm::vec3(0.5f));
-  EXPECT_EQ(materialSwatchColor(palette, 9), glm::vec3(0.5f));
+  EXPECT_EQ(materialSwatch(palette, 1).color, glm::vec3(0.2f, 0.4f, 0.6f));
+  EXPECT_TRUE(materialSwatch(palette, 1).texture.is_nil());
+  EXPECT_NE(materialSwatch(palette, 1).color, materialSwatch(palette, 0).color);
+
+  EXPECT_EQ(materialSwatch(palette, 2).texture, albedo);
+  EXPECT_EQ(materialSwatch(palette, 2).color, glm::vec3(0.5f));
+  EXPECT_EQ(materialSwatch(palette, 9).texture, albedo);
 }
 
 TEST(TerrainToolStateTest, ButtonsStayOnOneRowWhenTheyFit)

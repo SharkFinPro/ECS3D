@@ -50,20 +50,32 @@ inline constexpr size_t terrainToolCount = 5;
 inline constexpr size_t defaultMaterialCount = 8;
 static_assert(defaultMaterialCount == vke::s_defaultVolumeColors.size());
 
-// The swatch beside a Material entry: the renderer's default color for a terrain without a palette, which it picks by
-// index modulo the palette size, a palette entry's flat color, and a neutral gray for an entry with an albedo texture,
-// whose look the swatch cannot show.
-[[nodiscard]] inline glm::vec3 materialSwatchColor(const std::vector<terrain::TerrainMaterial>& palette,
+// What a material's swatch shows: the thumbnail of texture when it is not nil, else a flat color. color is also what a
+// texture swatch falls back to while its thumbnail is not available.
+struct MaterialSwatch
+{
+  glm::vec3 color{ 0.5f };
+  uuids::uuid texture;
+};
+
+// The swatch for a Material entry: the renderer's default color for a terrain without a palette, which it picks by
+// index modulo the palette size, a palette entry's flat color, or an entry's albedo texture over a neutral gray.
+[[nodiscard]] inline MaterialSwatch materialSwatch(const std::vector<terrain::TerrainMaterial>& palette,
                                                    const uint8_t index)
 {
   if (palette.empty())
   {
-    return vke::s_defaultVolumeColors[index % vke::s_defaultVolumeColors.size()];
+    return { vke::s_defaultVolumeColors[index % vke::s_defaultVolumeColors.size()], {} };
   }
 
   const terrain::TerrainMaterial& material = palette[clampMaterial(index, palette.size())];
 
-  return material.albedoTexture.is_nil() ? material.color : glm::vec3(0.5f);
+  if (material.albedoTexture.is_nil())
+  {
+    return { material.color, {} };
+  }
+
+  return { glm::vec3(0.5f), material.albedoTexture };
 }
 
 // For a row of buttons of the given widths, whether each one starts a new row because it does not fit beside the

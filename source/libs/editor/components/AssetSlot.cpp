@@ -7,6 +7,28 @@
 #include <exception>
 #include <string>
 
+ImTextureID textureThumbnail(const std::shared_ptr<GpuAssetCache>& cache, const uuids::uuid& texture)
+{
+  if (!cache)
+  {
+    return 0;
+  }
+
+  try
+  {
+    if (const auto loaded = cache->getTexture(texture))
+    {
+      return loaded->getImGuiTexture();
+    }
+  }
+  catch (const std::exception&)
+  {
+    // the caller falls back to its icon or color
+  }
+
+  return 0;
+}
+
 bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegistry* registry,
                    const AssetSlotStyle& style, const uuids::uuid& current, uuids::uuid& outUUID, const bool mixed)
 {
@@ -19,19 +41,9 @@ bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegis
     {
       name = assetDisplay::name(*record);
 
-      if (style.isTexture && cache)
+      if (style.isTexture)
       {
-        try
-        {
-          if (const auto texture = cache->getTexture(current))
-          {
-            thumb = texture->getImGuiTexture();
-          }
-        }
-        catch (const std::exception&)
-        {
-          // fall back to the type icon
-        }
+        thumb = textureThumbnail(cache, current);
       }
     }
   }
