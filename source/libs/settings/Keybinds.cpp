@@ -200,6 +200,7 @@ const std::array<EditorActionInfo, editorActionCount>& editorActions()
     set(EditorAction::terrainSubtract, "terrainSubtract", "Terrain: Subtract", parseChord("Alt+2"));
     set(EditorAction::terrainSmooth, "terrainSmooth", "Terrain: Smooth", parseChord("Alt+3"));
     set(EditorAction::terrainFlatten, "terrainFlatten", "Terrain: Flatten", parseChord("Alt+4"));
+    set(EditorAction::terrainPaint, "terrainPaint", "Terrain: Paint", parseChord("Alt+5"));
     set(EditorAction::terrainRadiusUp, "terrainRadiusUp", "Terrain: Grow Brush", parseChord("PageUp"));
     set(EditorAction::terrainRadiusDown, "terrainRadiusDown", "Terrain: Shrink Brush", parseChord("PageDown"));
 

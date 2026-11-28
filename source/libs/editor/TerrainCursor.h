@@ -140,6 +140,23 @@ struct TerrainFrame
   return best ? best : onSurface;
 }
 
+// The cursor's hit during a stroke. A stroke that moves the surface aims by strokeCursorHit. One that does not (Paint)
+// aims at the starting surface wherever the cursor is: the fallbacks above land off the ground, where the brush
+// paints nothing and the anchor moves with it, so a fast drag would leave the stroke stuck above the terrain.
+[[nodiscard]] inline std::optional<terrain::RayHit> strokeAim(const terrain::TerrainVolume& surface,
+                                                              const terrain::TerrainVolume& live,
+                                                              const glm::vec3& anchor, const gizmo::Ray& ray,
+                                                              const float maxDistance, const float maxJump,
+                                                              const bool movesSurface)
+{
+  if (!movesSurface)
+  {
+    return terrain::raycast(surface, ray.origin, ray.direction, maxDistance);
+  }
+
+  return strokeCursorHit(surface, live, anchor, ray, maxDistance, maxJump);
+}
+
 // Like terrain::raycast for a brush of radius around the cursor. The cursor's own hit wins whenever there is one, so
 // the brush digs where it points, along the view, rather than snapping to a slope at its rim. Only when the cursor
 // points past all terrain are rays offset across the brush's disk cast, so terrain anywhere under the ring is still

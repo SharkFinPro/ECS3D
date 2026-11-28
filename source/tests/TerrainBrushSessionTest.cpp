@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TerrainBrushSession.h"
+#include "TerrainCursor.h"
 
 #include "TerrainBrushSessionTestHelpers.h"
 
@@ -18,6 +19,7 @@
 #include <EditorTerrainSettings.h>
 #include <Protocol.h>
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <chrono>
@@ -26,6 +28,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <unordered_set>
 #include <vector>
 #include <uuid.h>
@@ -642,13 +645,197 @@ TEST(TerrainBrushHelpersTest, TheTemplateCarriesTheToolKindAndTheSettings)
   brush.strength = 0.3f;
   brush.falloff = 0.9f;
 
-  const terrain::BrushOp smooth = terrainBrushTemplate(TerrainTool::smooth, brush);
+  const terrain::BrushOp smooth = terrainBrushTemplate(TerrainTool::smooth, brush, 0);
   EXPECT_EQ(smooth.kind, terrain::BrushOp::Kind::smooth);
   EXPECT_FLOAT_EQ(smooth.radius, 7.0f);
   EXPECT_FLOAT_EQ(smooth.strength, 0.3f);
   EXPECT_FLOAT_EQ(smooth.falloff, 0.9f);
 
-  EXPECT_EQ(terrainBrushTemplate(TerrainTool::subtract, brush).kind, terrain::BrushOp::Kind::subtract);
-  EXPECT_EQ(terrainBrushTemplate(TerrainTool::flatten, brush).kind, terrain::BrushOp::Kind::flatten);
-  EXPECT_EQ(terrainBrushTemplate(TerrainTool::add, brush).kind, terrain::BrushOp::Kind::add);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::subtract, brush, 0).kind, terrain::BrushOp::Kind::subtract);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::flatten, brush, 0).kind, terrain::BrushOp::Kind::flatten);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::add, brush, 0).kind, terrain::BrushOp::Kind::add);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::paint, brush, 0).kind, terrain::BrushOp::Kind::paint);
+}
+
+TEST(TerrainBrushHelpersTest, ThePaintTemplateIgnoresStoredStrengthAndFalloff)
+{
+  editorTerrainSettings::BrushSettings brush;
+  brush.strength = 0.0f;
+  brush.falloff = 0.8f;
+
+  const terrain::BrushOp paint = terrainBrushTemplate(TerrainTool::paint, brush, 2);
+  EXPECT_FLOAT_EQ(paint.strength, 1.0f);
+  EXPECT_FLOAT_EQ(paint.falloff, 0.0f);
+
+  const terrain::BrushOp add = terrainBrushTemplate(TerrainTool::add, brush, 2);
+  EXPECT_FLOAT_EQ(add.strength, 0.0f);
+  EXPECT_FLOAT_EQ(add.falloff, 0.8f);
+}
+
+TEST(TerrainBrushHelpersTest, TheTemplateCarriesTheMaterialForPaintAndAdd)
+{
+  const editorTerrainSettings::BrushSettings brush;
+
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::paint, brush, 6).material, 6);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::add, brush, 3).material, 3);
+  EXPECT_EQ(terrainBrushTemplate(TerrainTool::subtract, brush, 5).material, 5);
+}
+
+namespace {
+  size_t countOfKind(const Recorder& recorder, const terrain::TerrainEditKind kind)
+  {
+    size_t count = 0;
+
+    for (const auto& payload : recorder.payloads())
+    {
+      count += payload.kind == kind ? 1 : 0;
+    }
+
+    return count;
+  }
+
+  size_t chunkRequests(const Recorder& recorder)
+  {
+    size_t count = 0;
+
+    for (const net::Message& message : recorder.sent)
+    {
+      count += message.getType() == net::MessageType::terrainChunks ? 1 : 0;
+    }
+
+    return count;
+  }
+}
+
+TEST(TerrainBrushSessionTest, AStrokeRedistancesAtReleaseUnlessItIsAPaintStroke)
+{
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::add));
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::subtract));
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::smooth));
+  EXPECT_TRUE(strokeRedistances(terrain::BrushOp::Kind::flatten));
+  EXPECT_FALSE(strokeRedistances(terrain::BrushOp::Kind::paint));
+}
+
+TEST(TerrainBrushSessionTest, APaintStrokeSendsNoRedistanceButStillRequestsItsChunksAndAwaitsThem)
+{
+  Env added;
+  Recorder addRecorder;
+  TerrainBrushSession addSession;
+  drag(addSession, added, templateOp(terrain::BrushOp::Kind::add), addRecorder);
+  ASSERT_TRUE(addSession.end(addRecorder.sender()).has_value());
+  ASSERT_GT(countOfKind(addRecorder, terrain::TerrainEditKind::redistance), 0u);
+
+  Env painted;
+  Recorder recorder;
+  TerrainBrushSession session;
+  terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);
+  paint.material = 5;
+  drag(session, painted, paint, recorder);
+  const size_t brushes = countOfKind(recorder, terrain::TerrainEditKind::brush);
+  ASSERT_GT(brushes, 0u);
+
+  const std::optional<TerrainStroke::Finished> finished = session.end(recorder.sender());
+
+  ASSERT_TRUE(finished.has_value());
+  EXPECT_TRUE(finished->predicted);
+  EXPECT_EQ(countOfKind(recorder, terrain::TerrainEditKind::redistance), 0u);
+  EXPECT_EQ(countOfKind(recorder, terrain::TerrainEditKind::brush), brushes);
+  EXPECT_GT(chunkRequests(recorder), 0u);
+  EXPECT_TRUE(session.awaitingFinalChunks());
+  EXPECT_EQ(requestedCoords(recorder).size(), finished->before.size());
+}
+
+TEST(TerrainBrushSessionTest, APaintStrokeChangesMaterialsAndLeavesEveryDistanceBitIdentical)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+
+  // Halving the distances near the surface leaves a field a redistance would change.
+  const terrain::SampleBox seeded{ { 4, 0, 4 }, { 40, 10, 44 } };
+  const terrain::ChunkEdits seed = terrain::editSamples(
+    *env.volume, seeded, [](const glm::ivec3, int16_t& distance, uint8_t&) { distance = distance / 2; });
+  ASSERT_FALSE(seed.empty());
+  terrain::commit(*env.volume, seed);
+  ASSERT_FALSE(terrain::redistance(*env.volume, seeded).empty());
+
+  const terrain::TerrainVolume::ChunkMap before = env.volume->snapshotChunks();
+
+  terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);
+  paint.material = 5;
+  drag(session, env, paint, recorder);
+  ASSERT_TRUE(session.end(recorder.sender()).has_value());
+
+  const terrain::TerrainVolume::ChunkMap after = env.volume->snapshotChunks();
+  ASSERT_EQ(after.size(), before.size());
+
+  bool materialChanged = false;
+
+  for (const auto& [coord, chunk] : before)
+  {
+    const auto match = after.find(coord);
+    ASSERT_NE(match, after.end());
+
+    const std::span<const int16_t> oldDistances = chunk->distances();
+    const std::span<const int16_t> newDistances = match->second->distances();
+    ASSERT_EQ(oldDistances.size(), newDistances.size());
+    EXPECT_TRUE(std::equal(oldDistances.begin(), oldDistances.end(), newDistances.begin()));
+
+    const std::span<const uint8_t> oldMaterials = chunk->materials();
+    const std::span<const uint8_t> newMaterials = match->second->materials();
+    materialChanged |= !std::equal(oldMaterials.begin(), oldMaterials.end(), newMaterials.begin());
+  }
+
+  EXPECT_TRUE(materialChanged);
+}
+
+TEST(TerrainBrushSessionTest, OnlyAPaintStrokeLeavesTheSurfaceWhereItWas)
+{
+  EXPECT_FALSE(strokeMovesSurface(terrain::BrushOp::Kind::paint));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::add));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::subtract));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::smooth));
+  EXPECT_TRUE(strokeMovesSurface(terrain::BrushOp::Kind::flatten));
+
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::paint),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_FALSE(session.strokeMovesSurface());
+  static_cast<void>(session.end(recorder.sender()));
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, templateOp(terrain::BrushOp::Kind::add),
+                            hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+  EXPECT_TRUE(session.strokeMovesSurface());
+}
+
+TEST(TerrainBrushSessionTest, AFastPaintDragKeepsPaintingTheGroundAfterAJumpPastTheJumpLimit)
+{
+  Env env;
+  Recorder recorder;
+  TerrainBrushSession session;
+  terrain::BrushOp paint = templateOp(terrain::BrushOp::Kind::paint);
+  paint.material = 5;
+
+  ASSERT_TRUE(session.begin(terrainId, env.volume, paint, hitAt({ 40.0f, 10.0f, 40.0f }), recorder.sender()));
+
+  const glm::vec3 eye{ 40.0f, 60.0f, 0.0f };
+  const std::shared_ptr<const terrain::TerrainVolume>& surface = session.strokeSurface();
+  ASSERT_TRUE(surface != nullptr);
+
+  // Frames that each move three jump limits along the ground.
+  for (const float z : { 75.0f, 110.0f, 145.0f })
+  {
+    const glm::vec3 target{ 40.0f, 10.0f, z };
+    const gizmo::Ray ray{ eye, glm::normalize(target - eye) };
+    const auto aim = strokeAim(*surface, *env.volume, session.strokePoint(), ray, 1000.0f, session.strokeJumpLimit(),
+                               session.strokeMovesSurface());
+    ASSERT_TRUE(aim.has_value());
+    EXPECT_NEAR(aim->point.y, 10.0f, 0.5f);
+    EXPECT_GT(session.moveTo(*aim, recorder.sender()), 0u);
+  }
+
+  ASSERT_TRUE(session.end(recorder.sender()).has_value());
+  EXPECT_EQ(env.volume->materialAtSample({ 16, 4, 58 }), 5);
 }

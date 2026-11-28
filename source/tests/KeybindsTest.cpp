@@ -549,6 +549,7 @@ TEST_F(Keybinds, TerrainActionsAppendAfterTheProfilerWithTheirIdsLabelsAndChords
     { EditorAction::terrainSubtract, "terrainSubtract", "Terrain: Subtract", "Alt+2" },
     { EditorAction::terrainSmooth, "terrainSmooth", "Terrain: Smooth", "Alt+3" },
     { EditorAction::terrainFlatten, "terrainFlatten", "Terrain: Flatten", "Alt+4" },
+    { EditorAction::terrainPaint, "terrainPaint", "Terrain: Paint", "Alt+5" },
     { EditorAction::terrainRadiusUp, "terrainRadiusUp", "Terrain: Grow Brush", "PageUp" },
     { EditorAction::terrainRadiusDown, "terrainRadiusDown", "Terrain: Shrink Brush", "PageDown" }
   };
@@ -581,10 +582,12 @@ TEST_F(Keybinds, LoadingAnEmptyStoreBindsEveryTerrainActionToItsDefault)
   EXPECT_EQ(table.binding(EditorAction::terrainSubtract), parseChord("Alt+2"));
   EXPECT_EQ(table.binding(EditorAction::terrainSmooth), parseChord("Alt+3"));
   EXPECT_EQ(table.binding(EditorAction::terrainFlatten), parseChord("Alt+4"));
+  EXPECT_EQ(table.binding(EditorAction::terrainPaint), parseChord("Alt+5"));
   EXPECT_EQ(table.binding(EditorAction::terrainRadiusUp), parseChord("PageUp"));
   EXPECT_EQ(table.binding(EditorAction::terrainRadiusDown), parseChord("PageDown"));
 
   EXPECT_EQ(table.actionFor(*parseChord("Alt+1")), EditorAction::terrainAdd);
+  EXPECT_EQ(table.actionFor(*parseChord("Alt+5")), EditorAction::terrainPaint);
   EXPECT_EQ(table.actionFor(*parseChord("1")), EditorAction::gizmoTranslate);
 }
 

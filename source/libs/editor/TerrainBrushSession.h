@@ -73,15 +73,19 @@ enum class TerrainStrokeStep : uint8_t { none, begin, move, end };
   return std::min(radius, terrain::maxBrushRadiusVoxels * volume.voxelSize());
 }
 
-// The operation a stroke of tool applies at each point; the material is the first palette entry.
+// The operation a stroke of tool applies at each point; material is what Paint writes and what the ground Add and
+// Flatten raise takes.
 [[nodiscard]] inline terrain::BrushOp terrainBrushTemplate(const TerrainTool tool,
-                                                           const editorTerrainSettings::BrushSettings& brush)
+                                                           const editorTerrainSettings::BrushSettings& brush,
+                                                           const uint8_t material)
 {
   terrain::BrushOp op;
   op.kind = brushKind(tool);
+  op.material = material;
   op.radius = brush.radius;
-  op.strength = brush.strength;
-  op.falloff = brush.falloff;
+  // Paint sets materials at full weight, and a stored strength of 0 would make the brush skip every sample.
+  op.strength = op.kind == terrain::BrushOp::Kind::paint ? 1.0f : brush.strength;
+  op.falloff = op.kind == terrain::BrushOp::Kind::paint ? 0.0f : brush.falloff;
   return op;
 }
 
@@ -127,6 +131,13 @@ public:
   [[nodiscard]] const std::shared_ptr<const terrain::TerrainVolume>& strokeSurface() const
   {
     return m_surface;
+  }
+
+  // Whether the active stroke changes the surface; false for a Paint stroke, which the cursor follows along the ground
+  // however fast it moves.
+  [[nodiscard]] bool strokeMovesSurface() const
+  {
+    return m_movesSurface;
   }
 
   // Where the active stroke's last application landed.
@@ -252,6 +263,8 @@ public:
 
     m_terrain = terrainUuid;
     m_volume = volume;
+    m_redistances = strokeRedistances(templateOp.kind);
+    m_movesSurface = ::strokeMovesSurface(templateOp.kind);
     // Subtract only ever takes material away, so it cannot climb toward the camera; it aims at the live terrain, so
     // erasing reaches whatever is still there, nearer than the press or not.
     m_surface = templateOp.kind == terrain::BrushOp::Kind::subtract ? nullptr : snapshotSurface(*volume);
@@ -429,7 +442,10 @@ private:
     std::vector<terrain::ChunkCoord> requested = touched;
     std::unordered_set<terrain::ChunkCoord> known(touched.begin(), touched.end());
 
-    for (const terrain::SampleBox& piece : redistanceBoxes(finished->box, touched))
+    const std::vector<terrain::SampleBox> pieces =
+      m_redistances ? redistanceBoxes(finished->box, touched) : std::vector<terrain::SampleBox>{};
+
+    for (const terrain::SampleBox& piece : pieces)
     {
       if (commitLocally)
       {
@@ -548,6 +564,8 @@ private:
   std::shared_ptr<terrain::TerrainVolume> m_awaitingVolume;
   std::chrono::steady_clock::time_point m_awaitingSince;
   terrain::ChunkHold m_hold;
+  bool m_redistances = true;
+  bool m_movesSurface = true;
   uint64_t m_nextStrokeId = 1;
 };
 
